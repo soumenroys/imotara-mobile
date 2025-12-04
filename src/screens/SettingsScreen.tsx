@@ -3,10 +3,13 @@ import React from "react";
 import { View, Text, TouchableOpacity, Alert } from "react-native";
 import { useHistoryStore } from "../state/HistoryContext";
 import colors from "../theme/colors";
-import { fetchRemoteHistory } from "../api/historyClient";
+import {
+    fetchRemoteHistory,
+    pushRemoteHistory,
+} from "../api/historyClient";
 
 export default function SettingsScreen() {
-    const { clearHistory } = useHistoryStore();
+    const { history, clearHistory, addToHistory } = useHistoryStore();
 
     const handleClearHistory = () => {
         Alert.alert(
@@ -40,6 +43,84 @@ export default function SettingsScreen() {
             Alert.alert(
                 "Remote history error",
                 "Could not connect to the Imotara backend right now. Please check your network or try again later.",
+                [{ text: "OK" }]
+            );
+        }
+    };
+
+    const handlePushLocalHistory = async () => {
+        try {
+            const result = await pushRemoteHistory(history);
+
+            if (!result.ok) {
+                Alert.alert(
+                    "Cloud sync debug",
+                    `Could not push history to the backend. Please check your connection or try again later.\n\n${result.errorMessage || "Network request failed"
+                    }`,
+                    [{ text: "OK" }]
+                );
+                return;
+            }
+
+            Alert.alert(
+                "Cloud sync debug",
+                `Pushed ${result.pushed} item(s) to the backend.\n\nStatus: ${result.status ?? "unknown"
+                }`,
+                [{ text: "OK" }]
+            );
+        } catch (error) {
+            console.error("Failed to push remote history:", error);
+            Alert.alert(
+                "Cloud sync debug",
+                "Could not push history to the backend. Please check your connection or try again later.\n\nNetwork request failed",
+                [{ text: "OK" }]
+            );
+        }
+    };
+
+    // One-tap sync: push local → fetch remote → merge into local
+    const handleSyncNow = async () => {
+        try {
+            // 1) Push local history
+            const pushResult = await pushRemoteHistory(history);
+
+            // 2) Fetch latest remote history
+            const remote = await fetchRemoteHistory();
+            const remoteCount = Array.isArray(remote) ? remote.length : 0;
+
+            // 3) Merge into local (no duplicates)
+            const existingIds = new Set(history.map((h) => h.id));
+            let addedCount = 0;
+
+            remote.forEach((item) => {
+                if (!existingIds.has(item.id)) {
+                    addToHistory(item);
+                    existingIds.add(item.id);
+                    addedCount += 1;
+                }
+            });
+
+            // 4) Summary
+            const pushedText = pushResult.ok
+                ? `Pushed ${pushResult.pushed} item(s) to the backend.`
+                : `Push failed: ${pushResult.errorMessage || "Network / backend error"
+                }`;
+
+            const mergedText =
+                remoteCount === 0
+                    ? "No remote items found."
+                    : addedCount === 0
+                        ? `No new remote items. Local history already had all ${remoteCount} item(s).`
+                        : `Merged ${addedCount} new remote item(s) from backend.`;
+
+            Alert.alert("Sync summary", `${pushedText}\n\n${mergedText}`, [
+                { text: "OK" },
+            ]);
+        } catch (error) {
+            console.error("handleSyncNow error:", error);
+            Alert.alert(
+                "Sync error",
+                "Full sync (push + fetch) failed. Please check your connection and try again.",
                 [{ text: "OK" }]
             );
         }
@@ -134,7 +215,7 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
             </View>
 
-            {/* Remote debug card */}
+            {/* Remote debug + sync card */}
             <View
                 style={{
                     backgroundColor: colors.surfaceSoft,
@@ -163,10 +244,12 @@ export default function SettingsScreen() {
                         marginBottom: 12,
                     }}
                 >
-                    Test connection to the Imotara backend and see how many history items
-                    the server reports. This does not modify your local history.
+                    Test connection to the Imotara backend, push your local history, and
+                    optionally merge remote items back into this device. This is a
+                    developer preview for the future sync engine.
                 </Text>
 
+                {/* Test fetch */}
                 <TouchableOpacity
                     onPress={handleTestRemoteHistory}
                     style={{
@@ -177,6 +260,7 @@ export default function SettingsScreen() {
                         borderWidth: 1,
                         borderColor: colors.primary,
                         backgroundColor: "rgba(56, 189, 248, 0.16)",
+                        marginBottom: 8,
                     }}
                 >
                     <Text
@@ -187,6 +271,55 @@ export default function SettingsScreen() {
                         }}
                     >
                         Test Remote History Fetch
+                    </Text>
+                </TouchableOpacity>
+
+                {/* Push only */}
+                <TouchableOpacity
+                    onPress={handlePushLocalHistory}
+                    style={{
+                        alignSelf: "flex-start",
+                        paddingHorizontal: 16,
+                        paddingVertical: 8,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: colors.primary,
+                        backgroundColor: "rgba(56, 189, 248, 0.12)",
+                        marginBottom: 8,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            fontWeight: "600",
+                            color: colors.textPrimary,
+                        }}
+                    >
+                        Push Local History to Cloud
+                    </Text>
+                </TouchableOpacity>
+
+                {/* Full sync: push + fetch + merge */}
+                <TouchableOpacity
+                    onPress={handleSyncNow}
+                    style={{
+                        alignSelf: "flex-start",
+                        paddingHorizontal: 16,
+                        paddingVertical: 8,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: "#a5b4fc",
+                        backgroundColor: "rgba(129, 140, 248, 0.16)",
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            fontWeight: "600",
+                            color: colors.textPrimary,
+                        }}
+                    >
+                        Sync Now (push + fetch)
                     </Text>
                 </TouchableOpacity>
             </View>

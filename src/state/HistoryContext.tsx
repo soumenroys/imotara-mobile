@@ -5,6 +5,10 @@ import React, {
     useState,
     type ReactNode,
 } from "react";
+import {
+    pushRemoteHistory,
+    type PushRemoteHistoryResult,
+} from "../api/historyClient";
 
 export type HistoryItem = {
     id: string;
@@ -17,6 +21,12 @@ type HistoryContextValue = {
     history: HistoryItem[];
     addToHistory: (item: HistoryItem) => void;
     clearHistory: () => void;
+
+    /**
+     * Best-effort sync of current in-memory history to the backend.
+     * Never throws; returns a small status object instead.
+     */
+    pushHistoryToRemote: () => Promise<PushRemoteHistoryResult>;
 };
 
 const HistoryContext = createContext<HistoryContextValue | undefined>(
@@ -34,8 +44,15 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         setHistory([]);
     };
 
+    const pushHistoryToRemote = async (): Promise<PushRemoteHistoryResult> => {
+        // For now, we simply push the entire current in-memory history.
+        return pushRemoteHistory(history);
+    };
+
     return (
-        <HistoryContext.Provider value={{ history, addToHistory, clearHistory }}>
+        <HistoryContext.Provider
+            value={{ history, addToHistory, clearHistory, pushHistoryToRemote }}
+        >
             {children}
         </HistoryContext.Provider>
     );

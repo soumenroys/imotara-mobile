@@ -9,27 +9,64 @@ const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
 const BOT_BUBBLE_BG = colors.surfaceSoft;
 
 export default function HistoryScreen() {
-    const { history, clearHistory, addToHistory } = useHistoryStore();
+    const { history, addToHistory } = useHistoryStore();
 
-    // Debug-only: load remote history from backend and show it
+    // Debug-only: load remote history from backend and merge it into local history
     const handleLoadRemote = async () => {
-        const remote = await fetchRemoteHistory();
+        try {
+            const remote = await fetchRemoteHistory();
 
-        if (!Array.isArray(remote)) {
-            Alert.alert("Remote fetch", "Unexpected response format.");
-            return;
+            if (!Array.isArray(remote)) {
+                Alert.alert("Remote fetch", "Unexpected response format.");
+                return;
+            }
+
+            if (remote.length === 0) {
+                Alert.alert(
+                    "Remote history",
+                    "No items found on the backend yet.",
+                    [{ text: "OK" }]
+                );
+                return;
+            }
+
+            // Merge without duplicates (by id)
+            const existingIds = new Set(history.map((h) => h.id));
+            let addedCount = 0;
+
+            remote.forEach((item) => {
+                if (!existingIds.has(item.id)) {
+                    addToHistory(item);
+                    existingIds.add(item.id);
+                    addedCount += 1;
+                }
+            });
+
+            Alert.alert(
+                "Remote history loaded",
+                addedCount === 0
+                    ? `No new items. Local history already contains all ${remote.length} remote item(s).`
+                    : `Merged ${addedCount} new remote item(s) into local history.`,
+                [{ text: "OK" }]
+            );
+        } catch (error) {
+            console.warn("handleLoadRemote error:", error);
+            Alert.alert(
+                "Remote history error",
+                "Could not load remote history right now. Please try again later.",
+                [{ text: "OK" }]
+            );
         }
-
-        // Replace local history with remote preview
-        clearHistory();
-        remote.forEach((item) => addToHistory(item));
-
-        Alert.alert(
-            "Remote history loaded",
-            `Loaded ${remote.length} item(s) into the preview.`,
-            [{ text: "OK" }]
-        );
     };
+
+    // Always show history in chronological order (oldest first)
+    const sortedHistory = React.useMemo(
+        () =>
+            [...history].sort(
+                (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
+            ),
+        [history]
+    );
 
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -76,7 +113,7 @@ export default function HistoryScreen() {
                     </Text>
                 </TouchableOpacity>
 
-                {history.length === 0 && (
+                {sortedHistory.length === 0 && (
                     <Text
                         style={{
                             fontSize: 14,
@@ -88,7 +125,7 @@ export default function HistoryScreen() {
                     </Text>
                 )}
 
-                {history.map((item) => (
+                {sortedHistory.map((item) => (
                     <View
                         key={item.id}
                         style={{
