@@ -113,7 +113,60 @@ function formatDateLabel(timestamp: number): string {
 
 export default function HistoryScreen() {
     const { history, addToHistory } = useHistoryStore();
-    const { lastSyncAt } = useSettings();
+    const { lastSyncAt, lastSyncStatus } = useSettings();
+
+    const hasSyncError = React.useMemo(() => {
+        const lower = (lastSyncStatus || "").toLowerCase();
+        return lower.includes("failed") || lower.includes("error");
+    }, [lastSyncStatus]);
+
+    const formattedLastSync = lastSyncAt
+        ? new Date(lastSyncAt).toLocaleString()
+        : null;
+
+    // NEW: how many messages are still local-only (not synced)
+    const unsyncedCount = React.useMemo(
+        () => history.filter((h) => !h.isSynced).length,
+        [history]
+    );
+
+    // Compute a compact sync-status chip (top of screen)
+    const syncChipMeta = React.useMemo(() => {
+        // Defaults: never synced
+        let label = "Sync status: never synced";
+        let bg = "rgba(148, 163, 184, 0.20)"; // slate-400-ish
+        let border = "#9ca3af";
+        let textColor = colors.textSecondary;
+
+        if (!lastSyncAt) {
+            return { label, bg, border, textColor };
+        }
+
+        const lower = (lastSyncStatus || "").toLowerCase();
+
+        if (lower.includes("failed") || lower.includes("error")) {
+            label = "Sync issue · history is only on this device";
+            bg = "rgba(248, 113, 113, 0.16)"; // soft red
+            border = "#fca5a5";
+            textColor = "#fecaca";
+        } else if (
+            lower.includes("pushed") ||
+            lower.includes("merged") ||
+            lower.includes("synced")
+        ) {
+            label = "Synced · recent history backed up";
+            bg = "rgba(56, 189, 248, 0.16)"; // aurora cyan
+            border = colors.primary;
+            textColor = colors.textPrimary;
+        } else {
+            label = "Sync checked recently";
+            bg = "rgba(148, 163, 184, 0.20)";
+            border = "#9ca3af";
+            textColor = colors.textSecondary;
+        }
+
+        return { label, bg, border, textColor };
+    }, [lastSyncAt, lastSyncStatus]);
 
     // Debug-only: load remote history from backend and merge it into local history
     const handleLoadRemote = async () => {
@@ -170,10 +223,7 @@ export default function HistoryScreen() {
 
     // Always show history in chronological order (oldest first)
     const sortedHistory = React.useMemo(
-        () =>
-            [...history].sort(
-                (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
-            ),
+        () => [...history].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)),
         [history]
     );
 
@@ -208,10 +258,6 @@ export default function HistoryScreen() {
         return groups;
     }, [sortedHistory]);
 
-    const formattedLastSync = lastSyncAt
-        ? new Date(lastSyncAt).toLocaleString()
-        : null;
-
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
             <ScrollView
@@ -242,15 +288,58 @@ export default function HistoryScreen() {
                     device.
                 </Text>
 
+                {/* Sync status chip (top, subtle but visible) */}
+                <View
+                    style={{
+                        alignSelf: "flex-start",
+                        marginTop: 4,
+                        marginBottom: 6,
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: syncChipMeta.border,
+                        backgroundColor: syncChipMeta.bg,
+                        shadowColor: syncChipMeta.bg,
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: 0.7,
+                        shadowRadius: 6,
+                        elevation: 2,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 11,
+                            fontWeight: "600",
+                            color: syncChipMeta.textColor,
+                        }}
+                    >
+                        {syncChipMeta.label}
+                    </Text>
+                </View>
+
                 {formattedLastSync && (
                     <Text
                         style={{
                             fontSize: 12,
                             color: colors.textSecondary,
-                            marginBottom: 8,
+                            marginBottom: 4,
                         }}
                     >
                         Last sync: {formattedLastSync}
+                    </Text>
+                )}
+
+                {/* NEW: unsynced count summary (only if there are any) */}
+                {unsyncedCount > 0 && (
+                    <Text
+                        style={{
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                            marginBottom: 8,
+                        }}
+                    >
+                        Unsynced messages on this device: {unsyncedCount}
                     </Text>
                 )}
 
@@ -316,12 +405,36 @@ export default function HistoryScreen() {
                             let showSessionDivider = false;
                             if (index > 0) {
                                 const prev = group.items[index - 1];
-                                const gap =
-                                    item.timestamp - (prev.timestamp ?? 0);
+                                const gap = item.timestamp - (prev.timestamp ?? 0);
                                 if (gap > SESSION_GAP_MS) {
                                     showSessionDivider = true;
                                 }
                             }
+
+                            // Bubble-level sync styling
+                            const bubbleBorderColor = item.isSynced
+                                ? colors.primary
+                                : hasSyncError
+                                    ? "#fca5a5"
+                                    : "transparent";
+
+                            const statusLabel = item.isSynced
+                                ? "Synced to cloud"
+                                : hasSyncError
+                                    ? "Sync issue · on this device only"
+                                    : "On this device only";
+
+                            const statusBg = item.isSynced
+                                ? "rgba(56, 189, 248, 0.18)"
+                                : hasSyncError
+                                    ? "rgba(248, 113, 113, 0.18)"
+                                    : "rgba(148, 163, 184, 0.20)";
+
+                            const statusTextColor = item.isSynced
+                                ? colors.textPrimary
+                                : hasSyncError
+                                    ? "#fecaca"
+                                    : colors.textSecondary;
 
                             return (
                                 <View key={item.id}>
@@ -338,8 +451,7 @@ export default function HistoryScreen() {
                                                 style={{
                                                     flex: 1,
                                                     height: 1,
-                                                    backgroundColor:
-                                                        colors.border,
+                                                    backgroundColor: colors.border,
                                                     opacity: 0.5,
                                                     marginRight: 8,
                                                 }}
@@ -356,8 +468,7 @@ export default function HistoryScreen() {
                                                 style={{
                                                     flex: 1,
                                                     height: 1,
-                                                    backgroundColor:
-                                                        colors.border,
+                                                    backgroundColor: colors.border,
                                                     opacity: 0.5,
                                                     marginLeft: 8,
                                                 }}
@@ -367,9 +478,7 @@ export default function HistoryScreen() {
 
                                     <View
                                         style={{
-                                            alignSelf: isUser
-                                                ? "flex-end"
-                                                : "flex-start",
+                                            alignSelf: isUser ? "flex-end" : "flex-start",
                                             maxWidth: "80%",
                                             backgroundColor: isUser
                                                 ? USER_BUBBLE_BG
@@ -378,6 +487,9 @@ export default function HistoryScreen() {
                                             paddingVertical: 8,
                                             borderRadius: 16,
                                             marginBottom: 10,
+                                            borderWidth:
+                                                bubbleBorderColor === "transparent" ? 0 : 1,
+                                            borderColor: bubbleBorderColor,
                                         }}
                                     >
                                         <Text
@@ -407,11 +519,54 @@ export default function HistoryScreen() {
                                                 marginTop: 4,
                                             }}
                                         >
-                                            {new Date(
-                                                item.timestamp
-                                            ).toLocaleTimeString()}
-                                            {item.isSynced && " · ☁"}
+                                            {new Date(item.timestamp).toLocaleTimeString()}
                                         </Text>
+
+                                        {/* Sync badge for this bubble */}
+                                        <View
+                                            style={{
+                                                alignSelf: isUser ? "flex-end" : "flex-start",
+                                                marginTop: 4,
+                                                paddingHorizontal: 10,
+                                                paddingVertical: 4,
+                                                borderRadius: 999,
+                                                borderWidth: 1,
+                                                borderColor:
+                                                    bubbleBorderColor === "transparent"
+                                                        ? "rgba(148, 163, 184, 0.4)"
+                                                        : bubbleBorderColor,
+                                                backgroundColor: statusBg,
+                                            }}
+                                        >
+                                            <Text
+                                                style={{
+                                                    fontSize: 10,
+                                                    fontWeight: "500",
+                                                    color: statusTextColor,
+                                                }}
+                                            >
+                                                {statusLabel}
+                                            </Text>
+                                        </View>
+
+                                        {/* NEW: subtle inline helper for unsynced items */}
+                                        {!item.isSynced && (
+                                            <TouchableOpacity onPress={handleLoadRemote}>
+                                                <Text
+                                                    style={{
+                                                        marginTop: 4,
+                                                        fontSize: 11,
+                                                        color: "#93c5fd",
+                                                        textDecorationLine: "underline",
+                                                        alignSelf: isUser
+                                                            ? "flex-end"
+                                                            : "flex-start",
+                                                    }}
+                                                >
+                                                    Tap to check cloud copy
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )}
                                     </View>
                                 </View>
                             );
