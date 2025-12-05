@@ -1,5 +1,5 @@
 // src/screens/ChatScreen.tsx
-import React, { useState } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import {
     View,
     Text,
@@ -11,17 +11,88 @@ import { useHistoryStore } from "../state/HistoryContext";
 import colors from "../theme/colors";
 
 type ChatMessage = {
+    id: string;
     from: "user" | "bot";
     text: string;
+    timestamp: number;
+    // Optional local-only mood hint (shown under bot replies)
+    moodHint?: string;
 };
 
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)"; // soft aurora cyan
 const BOT_BUBBLE_BG = colors.surfaceSoft;
 
+/**
+ * Very simple local-only mood classifier.
+ * No network calls, purely keyword-based and gentle in tone.
+ */
+function getLocalMoodHint(text: string): string | undefined {
+    const lower = text.toLowerCase();
+
+    const sadWords = [
+        "sad",
+        "upset",
+        "depressed",
+        "down",
+        "lonely",
+        "cry",
+        "tired",
+        "anxious",
+        "anxiety",
+        "worried",
+    ];
+    const angryWords = [
+        "angry",
+        "furious",
+        "irritated",
+        "annoyed",
+        "frustrated",
+        "hate",
+        "rage",
+    ];
+    const stressedWords = [
+        "stress",
+        "stressed",
+        "overwhelmed",
+        "pressure",
+        "burnout",
+        "burned out",
+    ];
+    const happyWords = [
+        "happy",
+        "excited",
+        "joy",
+        "grateful",
+        "thankful",
+        "good",
+        "great",
+        "awesome",
+    ];
+
+    const containsAny = (words: string[]) => words.some((w) => lower.includes(w));
+
+    if (containsAny(sadWords)) {
+        return "You seem a bit low. It’s okay to feel this way — I’m here with you 🫂";
+    }
+    if (containsAny(angryWords)) {
+        return "I can sense some anger or frustration. It’s valid — we can unpack it slowly together 🌧️➡️🌤️";
+    }
+    if (containsAny(stressedWords)) {
+        return "It sounds like you’re under a lot of pressure. Let’s take it one step at a time 🌱";
+    }
+    if (containsAny(happyWords)) {
+        return "I’m glad you’re feeling something positive. Let’s hold onto this moment of light ✨";
+    }
+
+    // Neutral / unknown tone → no extra hint
+    return undefined;
+}
+
 export default function ChatScreen() {
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const { addToHistory } = useHistoryStore();
+    const scrollViewRef = useRef<ScrollView | null>(null);
 
     const handleSend = () => {
         const trimmed = input.trim();
@@ -29,13 +100,21 @@ export default function ChatScreen() {
 
         const timestamp = Date.now();
 
+        // Basic local mood hint from the user's message
+        const moodHint = getLocalMoodHint(trimmed);
+
         // 1) User message
-        const userMessage: ChatMessage = { from: "user", text: trimmed };
-        addToHistory({
+        const userMessage: ChatMessage = {
             id: `u-${timestamp}`,
-            text: trimmed,
             from: "user",
+            text: trimmed,
             timestamp,
+        };
+        addToHistory({
+            id: userMessage.id,
+            text: userMessage.text,
+            from: "user",
+            timestamp: userMessage.timestamp,
         });
 
         // 2) Simple local Imotara reply
@@ -43,12 +122,19 @@ export default function ChatScreen() {
             "I hear you. In the real Imotara app, I’ll respond with empathy and emotional insight. " +
             "For now, this is a local-only mobile preview.";
 
-        const botMessage: ChatMessage = { from: "bot", text: botReply };
-        addToHistory({
-            id: `b-${timestamp}`,
-            text: botReply,
+        const botTimestamp = timestamp + 1;
+        const botMessage: ChatMessage = {
+            id: `b-${botTimestamp}`,
             from: "bot",
-            timestamp: timestamp + 1,
+            text: botReply,
+            timestamp: botTimestamp,
+            moodHint, // attach local-only mood hint
+        };
+        addToHistory({
+            id: botMessage.id,
+            text: botMessage.text,
+            from: "bot",
+            timestamp: botMessage.timestamp,
         });
 
         // Add to on-screen chat list
@@ -56,14 +142,57 @@ export default function ChatScreen() {
         setInput("");
     };
 
+    // Group messages into (user + bot) "conversation chunks"
+    const messagePairs = useMemo(() => {
+        const pairs: { user?: ChatMessage; bot?: ChatMessage }[] = [];
+
+        for (let i = 0; i < messages.length; i += 2) {
+            const first = messages[i];
+            const second = messages[i + 1];
+
+            if (!second) {
+                // Odd leftover message (unlikely, but safe)
+                if (first.from === "user") {
+                    pairs.push({ user: first });
+                } else {
+                    pairs.push({ bot: first });
+                }
+            } else {
+                // Try to align as user → bot
+                let user: ChatMessage | undefined;
+                let bot: ChatMessage | undefined;
+
+                if (first.from === "user") {
+                    user = first;
+                    bot = second;
+                } else if (second.from === "user") {
+                    user = second;
+                    bot = first;
+                } else {
+                    // Both same side (rare) – just put them in order
+                    user = first;
+                    bot = second;
+                }
+
+                pairs.push({ user, bot });
+            }
+        }
+
+        return pairs;
+    }, [messages]);
+
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
             {/* Chat area */}
             <ScrollView
+                ref={scrollViewRef}
                 contentContainerStyle={{
                     paddingHorizontal: 16,
                     paddingVertical: 12,
                     paddingBottom: 24,
+                }}
+                onContentSizeChange={() => {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
                 }}
             >
                 <Text
@@ -86,30 +215,120 @@ export default function ChatScreen() {
                     This is a local-only preview. No messages are sent to any server yet.
                 </Text>
 
-                {messages.map((msg, index) => {
-                    const isUser = msg.from === "user";
+                {messagePairs.map((pair, index) => {
+                    const key =
+                        pair.user?.id ??
+                        pair.bot?.id ??
+                        `pair-${index.toString()}`;
 
                     return (
                         <View
-                            key={index}
+                            key={key}
                             style={{
-                                alignSelf: isUser ? "flex-end" : "flex-start",
-                                backgroundColor: isUser ? USER_BUBBLE_BG : BOT_BUBBLE_BG,
-                                paddingHorizontal: 14,
-                                paddingVertical: 10,
-                                borderRadius: 20,
-                                marginBottom: 10,
-                                maxWidth: "82%",
+                                marginBottom: 16,
                             }}
                         >
-                            <Text
-                                style={{
-                                    fontSize: 14,
-                                    color: colors.textPrimary,
-                                }}
-                            >
-                                {msg.text}
-                            </Text>
+                            {/* User bubble (if present) */}
+                            {pair.user && (
+                                <View
+                                    style={{
+                                        alignSelf: "flex-end",
+                                        backgroundColor: USER_BUBBLE_BG,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 10,
+                                        borderRadius: 20,
+                                        marginBottom: 6,
+                                        maxWidth: "82%",
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontSize: 12,
+                                            fontWeight: "600",
+                                            color: colors.textSecondary,
+                                            marginBottom: 2,
+                                        }}
+                                    >
+                                        You
+                                    </Text>
+                                    <Text
+                                        style={{
+                                            fontSize: 14,
+                                            color: colors.textPrimary,
+                                        }}
+                                    >
+                                        {pair.user.text}
+                                    </Text>
+                                    <Text
+                                        style={{
+                                            fontSize: 11,
+                                            color: colors.textSecondary,
+                                            marginTop: 4,
+                                        }}
+                                    >
+                                        {new Date(
+                                            pair.user.timestamp
+                                        ).toLocaleTimeString()}
+                                    </Text>
+                                </View>
+                            )}
+
+                            {/* Bot bubble (if present) */}
+                            {pair.bot && (
+                                <View
+                                    style={{
+                                        alignSelf: "flex-start",
+                                        backgroundColor: BOT_BUBBLE_BG,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 10,
+                                        borderRadius: 20,
+                                        maxWidth: "82%",
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontSize: 12,
+                                            fontWeight: "600",
+                                            color: colors.textSecondary,
+                                            marginBottom: 2,
+                                        }}
+                                    >
+                                        Imotara
+                                    </Text>
+                                    <Text
+                                        style={{
+                                            fontSize: 14,
+                                            color: colors.textPrimary,
+                                        }}
+                                    >
+                                        {pair.bot.text}
+                                    </Text>
+                                    <Text
+                                        style={{
+                                            fontSize: 11,
+                                            color: colors.textSecondary,
+                                            marginTop: 4,
+                                        }}
+                                    >
+                                        {new Date(
+                                            pair.bot.timestamp
+                                        ).toLocaleTimeString()}
+                                    </Text>
+
+                                    {/* Local-only mood hint (under bot reply) */}
+                                    {pair.bot.moodHint && (
+                                        <Text
+                                            style={{
+                                                marginTop: 6,
+                                                fontSize: 12,
+                                                color: colors.textSecondary,
+                                            }}
+                                        >
+                                            {pair.bot.moodHint}
+                                        </Text>
+                                    )}
+                                </View>
+                            )}
                         </View>
                     );
                 })}
