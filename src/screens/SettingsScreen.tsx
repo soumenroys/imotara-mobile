@@ -1,7 +1,14 @@
 // src/screens/SettingsScreen.tsx
 import React from "react";
-import { View, Text, TouchableOpacity, Alert } from "react-native";
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    Alert,
+    Switch,
+} from "react-native";
 import { useHistoryStore } from "../state/HistoryContext";
+import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
 import {
     fetchRemoteHistory,
@@ -10,6 +17,7 @@ import {
 
 export default function SettingsScreen() {
     const { history, clearHistory, addToHistory } = useHistoryStore();
+    const { emotionInsightsEnabled, setEmotionInsightsEnabled } = useSettings();
 
     const handleClearHistory = () => {
         Alert.alert(
@@ -155,8 +163,70 @@ export default function SettingsScreen() {
             >
                 Imotara Mobile (local preview). Your messages are stored only on this
                 device for now. In future updates, you&apos;ll control remote AI, sync,
-                and Teen safety options here.
+                and teen safety options here.
             </Text>
+
+            {/* Emotion Insights (preview) card */}
+            <View
+                style={{
+                    backgroundColor: colors.surfaceSoft,
+                    borderRadius: 16,
+                    paddingHorizontal: 16,
+                    paddingVertical: 14,
+                    marginBottom: 16,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                }}
+            >
+                <View
+                    style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 6,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Emotion Insights (Preview)
+                    </Text>
+                    <Switch
+                        value={emotionInsightsEnabled}
+                        onValueChange={setEmotionInsightsEnabled}
+                        trackColor={{
+                            false: "#4b5563",
+                            true: colors.primary,
+                        }}
+                        thumbColor={"#f9fafb"}
+                    />
+                </View>
+                <Text
+                    style={{
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                        marginBottom: 4,
+                    }}
+                >
+                    When enabled, Imotara will try to give you deeper emotional
+                    reflections, suggestions, and gentle prompts in the chat. In this
+                    early preview, analysis still runs locally on your device.
+                </Text>
+                <Text
+                    style={{
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                        marginTop: 4,
+                    }}
+                >
+                    This toggle does not send any extra data to the cloud yet. It is a
+                    design placeholder for future AI-powered insights.
+                </Text>
+            </View>
 
             {/* Local history card */}
             <View

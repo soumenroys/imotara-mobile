@@ -13,6 +13,7 @@ import {
     ScrollView,
 } from "react-native";
 import { useHistoryStore } from "../state/HistoryContext";
+import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
 
 type ChatMessage = {
@@ -98,16 +99,22 @@ function getLocalMoodHint(text: string): string | undefined {
  * Right now it's purely local and deterministic.
  * Later, this can call a real AI/analysis engine without changing ChatScreen.
  */
-function generateLocalBotResponse(userText: string): {
+function generateLocalBotResponse(
+    userText: string,
+    insightsEnabled: boolean
+): {
     replyText: string;
     moodHint?: string;
 } {
-    const moodHint = getLocalMoodHint(userText);
-
     const replyText =
         "I hear you. In the real Imotara app, I’ll respond with empathy and emotional insight. " +
         "For now, this is a local-only mobile preview.";
 
+    if (!insightsEnabled) {
+        return { replyText, moodHint: undefined };
+    }
+
+    const moodHint = getLocalMoodHint(userText);
     return { replyText, moodHint };
 }
 
@@ -118,6 +125,8 @@ export default function ChatScreen() {
     const [typingDots, setTypingDots] = useState(1);
 
     const { addToHistory } = useHistoryStore();
+    const { emotionInsightsEnabled } = useSettings();
+
     const scrollViewRef = useRef<ScrollView | null>(null);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -179,7 +188,10 @@ export default function ChatScreen() {
         // 2) After a short delay, generate and show Imotara's reply
         typingTimeoutRef.current = setTimeout(() => {
             // This is the "brain" — easy to swap later for real AI
-            const { replyText, moodHint } = generateLocalBotResponse(trimmed);
+            const { replyText, moodHint } = generateLocalBotResponse(
+                trimmed,
+                emotionInsightsEnabled
+            );
 
             const botTimestamp = Date.now();
             const botMessage: ChatMessage = {
@@ -240,6 +252,22 @@ export default function ChatScreen() {
 
         return pairs;
     }, [messages]);
+
+    // Latest user message (for mini-summary)
+    const latestUserMessage = useMemo(
+        () => [...messages].reverse().find((m) => m.from === "user"),
+        [messages]
+    );
+
+    const miniSummaryText = useMemo(() => {
+        if (!emotionInsightsEnabled) return undefined;
+        if (!latestUserMessage) return undefined;
+
+        const hint = getLocalMoodHint(latestUserMessage.text);
+        if (hint) return hint;
+
+        return "I’m still learning how you’re feeling. Share a bit more, at your own pace 💫";
+    }, [emotionInsightsEnabled, latestUserMessage]);
 
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -376,17 +404,18 @@ export default function ChatScreen() {
                                     </Text>
 
                                     {/* Local-only mood hint (under bot reply) */}
-                                    {pair.bot.moodHint && (
-                                        <Text
-                                            style={{
-                                                marginTop: 6,
-                                                fontSize: 12,
-                                                color: colors.textSecondary,
-                                            }}
-                                        >
-                                            {pair.bot.moodHint}
-                                        </Text>
-                                    )}
+                                    {emotionInsightsEnabled &&
+                                        pair.bot.moodHint && (
+                                            <Text
+                                                style={{
+                                                    marginTop: 6,
+                                                    fontSize: 12,
+                                                    color: colors.textSecondary,
+                                                }}
+                                            >
+                                                {pair.bot.moodHint}
+                                            </Text>
+                                        )}
                                 </View>
                             )}
                         </View>
@@ -403,6 +432,7 @@ export default function ChatScreen() {
                             paddingVertical: 10,
                             borderRadius: 20,
                             maxWidth: "60%",
+                            marginBottom: 12,
                         }}
                     >
                         <Text
@@ -423,6 +453,40 @@ export default function ChatScreen() {
                             }}
                         >
                             {".".repeat(typingDots)}
+                        </Text>
+                    </View>
+                )}
+
+                {/* Mini Mood Summary Card */}
+                {miniSummaryText && (
+                    <View
+                        style={{
+                            marginTop: 8,
+                            paddingHorizontal: 14,
+                            paddingVertical: 10,
+                            borderRadius: 16,
+                            borderWidth: 1,
+                            borderColor: colors.primarySoft,
+                            backgroundColor: colors.surfaceSoft,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 12,
+                                fontWeight: "700",
+                                color: colors.textSecondary,
+                                marginBottom: 4,
+                            }}
+                        >
+                            Mini Mood Glimpse
+                        </Text>
+                        <Text
+                            style={{
+                                fontSize: 13,
+                                color: colors.textPrimary,
+                            }}
+                        >
+                            {miniSummaryText}
                         </Text>
                     </View>
                 )}
