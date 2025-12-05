@@ -90,6 +90,7 @@ function normalizeRemoteItem(raw: any): HistoryRecord | null {
         text,
         from,
         timestamp,
+        isSynced: true,
     };
 }
 
@@ -409,6 +410,7 @@ export default function HistoryScreen() {
                                             {new Date(
                                                 item.timestamp
                                             ).toLocaleTimeString()}
+                                            {item.isSynced && " · ☁"}
                                         </Text>
                                     </View>
                                 </View>

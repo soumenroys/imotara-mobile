@@ -107,10 +107,46 @@ export default function SettingsScreen() {
             const existingIds = new Set(history.map((h) => h.id));
             let addedCount = 0;
 
-            remote.forEach((item) => {
-                if (!existingIds.has(item.id)) {
-                    addToHistory(item);
-                    existingIds.add(item.id);
+            remote.forEach((rawItem: any) => {
+                const id = String(
+                    rawItem.id ??
+                    rawItem._id ??
+                    `${rawItem.from ?? "item"}-${rawItem.timestamp ?? Date.now()
+                    }`
+                );
+
+                if (!existingIds.has(id)) {
+                    const merged = {
+                        id,
+                        text:
+                            typeof rawItem.text === "string"
+                                ? rawItem.text
+                                : typeof rawItem.message === "string"
+                                    ? rawItem.message
+                                    : typeof rawItem.content === "string"
+                                        ? rawItem.content
+                                        : "",
+                        from:
+                            (rawItem.from === "user" ||
+                                rawItem.role === "user" ||
+                                rawItem.author === "user" ||
+                                rawItem.isUser === true) &&
+                                rawItem.from !== "bot"
+                                ? ("user" as const)
+                                : ("bot" as const),
+                        timestamp:
+                            typeof rawItem.timestamp === "number"
+                                ? rawItem.timestamp
+                                : typeof rawItem.createdAt === "number"
+                                    ? rawItem.createdAt
+                                    : typeof rawItem.createdAt === "string"
+                                        ? Date.parse(rawItem.createdAt)
+                                        : Date.now(),
+                        isSynced: true,
+                    };
+
+                    addToHistory(merged);
+                    existingIds.add(id);
                     addedCount += 1;
                 }
             });

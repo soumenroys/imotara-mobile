@@ -174,6 +174,7 @@ export default function ChatScreen() {
             text: userMessage.text,
             from: "user",
             timestamp: userMessage.timestamp,
+            isSynced: false,
         });
 
         // Add user message immediately to on-screen chat
@@ -211,6 +212,7 @@ export default function ChatScreen() {
                 text: botMessage.text,
                 from: "bot",
                 timestamp: botMessage.timestamp,
+                isSynced: false,
             });
 
             setMessages((prev) => [...prev, botMessage]);

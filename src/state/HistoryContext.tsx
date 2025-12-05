@@ -15,6 +15,12 @@ export type HistoryItem = {
     text: string;
     from: "user" | "bot";
     timestamp: number;
+    /**
+     * Lite sync metadata:
+     * - undefined or false → only known locally
+     * - true → this record is known to exist in the cloud as well
+     */
+    isSynced?: boolean;
 };
 
 type HistoryContextValue = {
