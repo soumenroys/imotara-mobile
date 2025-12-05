@@ -120,6 +120,7 @@ function generateLocalBotResponse(
 
 export default function ChatScreen() {
     const [input, setInput] = useState("");
+    const [inputHeight, setInputHeight] = useState(40);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isTyping, setIsTyping] = useState(false);
     const [typingDots, setTypingDots] = useState(1);
@@ -129,6 +130,8 @@ export default function ChatScreen() {
 
     const scrollViewRef = useRef<ScrollView | null>(null);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const isSendDisabled = input.trim().length === 0;
 
     // Small animated "..." effect while Imotara is typing
     useEffect(() => {
@@ -176,6 +179,7 @@ export default function ChatScreen() {
         // Add user message immediately to on-screen chat
         setMessages((prev) => [...prev, userMessage]);
         setInput("");
+        setInputHeight(40);
 
         // Show typing indicator for Imotara
         setIsTyping(true);
@@ -508,6 +512,12 @@ export default function ChatScreen() {
                     placeholderTextColor={colors.textSecondary}
                     value={input}
                     onChangeText={setInput}
+                    multiline
+                    onContentSizeChange={(e) => {
+                        const h = e.nativeEvent.contentSize?.height ?? 40;
+                        const clamped = Math.max(40, Math.min(120, h));
+                        setInputHeight(clamped);
+                    }}
                     style={{
                         flex: 1,
                         backgroundColor: "#ffffff",
@@ -518,10 +528,15 @@ export default function ChatScreen() {
                         paddingHorizontal: 16,
                         paddingVertical: 8,
                         fontSize: 14,
+                        minHeight: 40,
+                        maxHeight: 120,
+                        height: inputHeight,
+                        textAlignVertical: "top",
                     }}
                 />
                 <TouchableOpacity
                     onPress={handleSend}
+                    disabled={isSendDisabled}
                     style={{
                         marginLeft: 8,
                         paddingHorizontal: 18,
@@ -530,8 +545,11 @@ export default function ChatScreen() {
                         justifyContent: "center",
                         alignItems: "center",
                         borderWidth: 1,
-                        borderColor: "#ffffff99",
+                        borderColor: isSendDisabled
+                            ? colors.border
+                            : "#ffffff99",
                         backgroundColor: "transparent",
+                        opacity: isSendDisabled ? 0.5 : 1,
                     }}
                 >
                     <Text
