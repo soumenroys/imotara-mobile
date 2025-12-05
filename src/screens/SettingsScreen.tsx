@@ -101,7 +101,30 @@ export default function SettingsScreen() {
 
             // 2) Fetch latest remote history
             const remote = await fetchRemoteHistory();
-            const remoteCount = Array.isArray(remote) ? remote.length : 0;
+
+            if (!Array.isArray(remote)) {
+                const pushedText = pushResult.ok
+                    ? `Pushed ${pushResult.pushed} item(s) to the backend.`
+                    : `Push failed: ${pushResult.errorMessage || "Network / backend error"
+                    }`;
+
+                const mergedText =
+                    "Remote response was not in the expected list format.";
+
+                const summary = `${pushedText} ${mergedText}`;
+
+                setLastSyncAt(Date.now());
+                setLastSyncStatus(summary);
+
+                Alert.alert(
+                    "Sync issue",
+                    `${pushedText}\n\n${mergedText}`,
+                    [{ text: "OK" }]
+                );
+                return;
+            }
+
+            const remoteCount = remote.length;
 
             // 3) Merge into local (no duplicates)
             const existingIds = new Set(history.map((h) => h.id));
