@@ -10,13 +10,16 @@ import {
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
-import {
-    fetchRemoteHistory,
-    pushRemoteHistory,
-} from "../api/historyClient";
+import { fetchRemoteHistory } from "../api/historyClient";
 
 export default function SettingsScreen() {
-    const { history, clearHistory, addToHistory } = useHistoryStore();
+    const {
+        history,
+        clearHistory,
+        addToHistory,
+        pushHistoryToRemote,
+    } = useHistoryStore();
+
     const {
         emotionInsightsEnabled,
         setEmotionInsightsEnabled,
@@ -65,7 +68,7 @@ export default function SettingsScreen() {
 
     const handlePushLocalHistory = async () => {
         try {
-            const result = await pushRemoteHistory(history);
+            const result = await pushHistoryToRemote();
 
             if (!result.ok) {
                 Alert.alert(
@@ -96,8 +99,8 @@ export default function SettingsScreen() {
     // One-tap sync: push local → fetch remote → merge into local
     const handleSyncNow = async () => {
         try {
-            // 1) Push local history
-            const pushResult = await pushRemoteHistory(history);
+            // 1) Push local history (via unified context method)
+            const pushResult = await pushHistoryToRemote();
 
             // 2) Fetch latest remote history
             const remote = await fetchRemoteHistory();
