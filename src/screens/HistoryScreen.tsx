@@ -10,10 +10,13 @@ import colors from "../theme/colors";
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
 const BOT_BUBBLE_BG = colors.surfaceSoft;
 
+// If gap between messages > 45 minutes → consider it a "new session"
+const SESSION_GAP_MS = 45 * 60 * 1000;
+
 /**
  * Normalize any incoming remote object to a strict HistoryItem shape.
- * This prevents UI issues (e.g., all messages same color) when the backend
- * uses slightly different field names like `role`, `author`, `createdAt`, etc.
+ * This prevents UI issues when the backend uses slightly different
+ * field names like `role`, `author`, `createdAt`, etc.
  */
 function normalizeRemoteItem(raw: any): HistoryRecord | null {
     if (!raw) return null;
@@ -305,57 +308,109 @@ export default function HistoryScreen() {
                             {group.label}
                         </Text>
 
-                        {group.items.map((item) => {
+                        {group.items.map((item, index) => {
                             const isUser = item.from === "user";
 
+                            // Determine if this message starts a "new session"
+                            let showSessionDivider = false;
+                            if (index > 0) {
+                                const prev = group.items[index - 1];
+                                const gap =
+                                    item.timestamp - (prev.timestamp ?? 0);
+                                if (gap > SESSION_GAP_MS) {
+                                    showSessionDivider = true;
+                                }
+                            }
+
                             return (
-                                <View
-                                    key={item.id}
-                                    style={{
-                                        alignSelf: isUser
-                                            ? "flex-end"
-                                            : "flex-start",
-                                        maxWidth: "80%",
-                                        backgroundColor: isUser
-                                            ? USER_BUBBLE_BG
-                                            : BOT_BUBBLE_BG,
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 8,
-                                        borderRadius: 16,
-                                        marginBottom: 10,
-                                    }}
-                                >
-                                    <Text
-                                        style={{
-                                            fontSize: 12,
-                                            fontWeight: "600",
-                                            color: colors.textSecondary,
-                                            marginBottom: 2,
-                                        }}
-                                    >
-                                        {isUser ? "You" : "Imotara"}
-                                    </Text>
+                                <View key={item.id}>
+                                    {showSessionDivider && (
+                                        <View
+                                            style={{
+                                                alignSelf: "center",
+                                                marginVertical: 6,
+                                                flexDirection: "row",
+                                                alignItems: "center",
+                                            }}
+                                        >
+                                            <View
+                                                style={{
+                                                    flex: 1,
+                                                    height: 1,
+                                                    backgroundColor:
+                                                        colors.border,
+                                                    opacity: 0.5,
+                                                    marginRight: 8,
+                                                }}
+                                            />
+                                            <Text
+                                                style={{
+                                                    fontSize: 11,
+                                                    color: colors.textSecondary,
+                                                }}
+                                            >
+                                                New session
+                                            </Text>
+                                            <View
+                                                style={{
+                                                    flex: 1,
+                                                    height: 1,
+                                                    backgroundColor:
+                                                        colors.border,
+                                                    opacity: 0.5,
+                                                    marginLeft: 8,
+                                                }}
+                                            />
+                                        </View>
+                                    )}
 
-                                    <Text
+                                    <View
                                         style={{
-                                            fontSize: 14,
-                                            color: colors.textPrimary,
+                                            alignSelf: isUser
+                                                ? "flex-end"
+                                                : "flex-start",
+                                            maxWidth: "80%",
+                                            backgroundColor: isUser
+                                                ? USER_BUBBLE_BG
+                                                : BOT_BUBBLE_BG,
+                                            paddingHorizontal: 12,
+                                            paddingVertical: 8,
+                                            borderRadius: 16,
+                                            marginBottom: 10,
                                         }}
                                     >
-                                        {item.text}
-                                    </Text>
+                                        <Text
+                                            style={{
+                                                fontSize: 12,
+                                                fontWeight: "600",
+                                                color: colors.textSecondary,
+                                                marginBottom: 2,
+                                            }}
+                                        >
+                                            {isUser ? "You" : "Imotara"}
+                                        </Text>
 
-                                    <Text
-                                        style={{
-                                            fontSize: 11,
-                                            color: colors.textSecondary,
-                                            marginTop: 4,
-                                        }}
-                                    >
-                                        {new Date(
-                                            item.timestamp
-                                        ).toLocaleTimeString()}
-                                    </Text>
+                                        <Text
+                                            style={{
+                                                fontSize: 14,
+                                                color: colors.textPrimary,
+                                            }}
+                                        >
+                                            {item.text}
+                                        </Text>
+
+                                        <Text
+                                            style={{
+                                                fontSize: 11,
+                                                color: colors.textSecondary,
+                                                marginTop: 4,
+                                            }}
+                                        >
+                                            {new Date(
+                                                item.timestamp
+                                            ).toLocaleTimeString()}
+                                        </Text>
+                                    </View>
                                 </View>
                             );
                         })}
