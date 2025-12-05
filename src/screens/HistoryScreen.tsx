@@ -3,6 +3,7 @@ import React from "react";
 import { View, Text, ScrollView, TouchableOpacity, Alert } from "react-native";
 import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
+import { useSettings } from "../state/SettingsContext";
 import { fetchRemoteHistory } from "../api/historyClient";
 import colors from "../theme/colors";
 
@@ -108,6 +109,7 @@ function formatDateLabel(timestamp: number): string {
 
 export default function HistoryScreen() {
     const { history, addToHistory } = useHistoryStore();
+    const { lastSyncAt } = useSettings();
 
     // Debug-only: load remote history from backend and merge it into local history
     const handleLoadRemote = async () => {
@@ -202,6 +204,10 @@ export default function HistoryScreen() {
         return groups;
     }, [sortedHistory]);
 
+    const formattedLastSync = lastSyncAt
+        ? new Date(lastSyncAt).toLocaleString()
+        : null;
+
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
             <ScrollView
@@ -225,12 +231,24 @@ export default function HistoryScreen() {
                     style={{
                         fontSize: 13,
                         color: colors.textSecondary,
-                        marginBottom: 12,
+                        marginBottom: 4,
                     }}
                 >
                     A simple preview of your recent conversations with Imotara on this
                     device.
                 </Text>
+
+                {formattedLastSync && (
+                    <Text
+                        style={{
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                            marginBottom: 8,
+                        }}
+                    >
+                        Last sync: {formattedLastSync}
+                    </Text>
+                )}
 
                 {/* Debug: Load Remote History */}
                 <TouchableOpacity

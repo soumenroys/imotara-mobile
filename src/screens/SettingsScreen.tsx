@@ -17,7 +17,14 @@ import {
 
 export default function SettingsScreen() {
     const { history, clearHistory, addToHistory } = useHistoryStore();
-    const { emotionInsightsEnabled, setEmotionInsightsEnabled } = useSettings();
+    const {
+        emotionInsightsEnabled,
+        setEmotionInsightsEnabled,
+        lastSyncAt,
+        lastSyncStatus,
+        setLastSyncAt,
+        setLastSyncStatus,
+    } = useSettings();
 
     const handleClearHistory = () => {
         Alert.alert(
@@ -121,11 +128,21 @@ export default function SettingsScreen() {
                         ? `No new remote items. Local history already had all ${remoteCount} item(s).`
                         : `Merged ${addedCount} new remote item(s) from backend.`;
 
+            const summary = `${pushedText} ${mergedText}`;
+
+            // 5) Update last sync info (Lite)
+            setLastSyncAt(Date.now());
+            setLastSyncStatus(summary);
+
             Alert.alert("Sync summary", `${pushedText}\n\n${mergedText}`, [
                 { text: "OK" },
             ]);
         } catch (error) {
             console.error("handleSyncNow error:", error);
+            setLastSyncAt(Date.now());
+            setLastSyncStatus(
+                "Sync error: Full sync (push + fetch) failed. Please check your connection."
+            );
             Alert.alert(
                 "Sync error",
                 "Full sync (push + fetch) failed. Please check your connection and try again.",
@@ -133,6 +150,10 @@ export default function SettingsScreen() {
             );
         }
     };
+
+    const formattedLastSync = lastSyncAt
+        ? new Date(lastSyncAt).toLocaleString()
+        : "Not synced yet";
 
     return (
         <View
@@ -380,6 +401,7 @@ export default function SettingsScreen() {
                         borderWidth: 1,
                         borderColor: "#a5b4fc",
                         backgroundColor: "rgba(129, 140, 248, 0.16)",
+                        marginBottom: 10,
                     }}
                 >
                     <Text
@@ -392,6 +414,33 @@ export default function SettingsScreen() {
                         Sync Now (push + fetch)
                     </Text>
                 </TouchableOpacity>
+
+                {/* Lite sync status */}
+                <View
+                    style={{
+                        marginTop: 4,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        Last sync: {formattedLastSync}
+                    </Text>
+                    {lastSyncStatus && (
+                        <Text
+                            style={{
+                                fontSize: 11,
+                                color: colors.textSecondary,
+                                marginTop: 2,
+                            }}
+                        >
+                            {lastSyncStatus}
+                        </Text>
+                    )}
+                </View>
             </View>
         </View>
     );
