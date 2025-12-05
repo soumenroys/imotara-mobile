@@ -89,6 +89,23 @@ function normalizeRemoteItem(raw: any): HistoryRecord | null {
     };
 }
 
+function formatDateLabel(timestamp: number): string {
+    const d = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    const sameDay = (a: Date, b: Date) =>
+        a.getFullYear() === b.getFullYear() &&
+        a.getMonth() === b.getMonth() &&
+        a.getDate() === b.getDate();
+
+    if (sameDay(d, today)) return "Today";
+    if (sameDay(d, yesterday)) return "Yesterday";
+
+    return d.toLocaleDateString();
+}
+
 export default function HistoryScreen() {
     const { history, addToHistory } = useHistoryStore();
 
@@ -154,6 +171,37 @@ export default function HistoryScreen() {
         [history]
     );
 
+    // Group by date for nicer visual structure
+    const groupedHistory = React.useMemo(() => {
+        const groups: {
+            label: string;
+            items: HistoryRecord[];
+        }[] = [];
+
+        let currentLabel: string | null = null;
+        let currentItems: HistoryRecord[] = [];
+
+        sortedHistory.forEach((item) => {
+            const label = formatDateLabel(item.timestamp);
+
+            if (label !== currentLabel) {
+                if (currentItems.length > 0 && currentLabel) {
+                    groups.push({ label: currentLabel, items: currentItems });
+                }
+                currentLabel = label;
+                currentItems = [item];
+            } else {
+                currentItems.push(item);
+            }
+        });
+
+        if (currentItems.length > 0 && currentLabel) {
+            groups.push({ label: currentLabel, items: currentItems });
+        }
+
+        return groups;
+    }, [sortedHistory]);
+
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
             <ScrollView
@@ -167,11 +215,21 @@ export default function HistoryScreen() {
                     style={{
                         fontSize: 22,
                         fontWeight: "700",
-                        marginBottom: 8,
+                        marginBottom: 4,
                         color: colors.textPrimary,
                     }}
                 >
                     Emotion History (Mobile)
+                </Text>
+                <Text
+                    style={{
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                        marginBottom: 12,
+                    }}
+                >
+                    A simple preview of your recent conversations with Imotara on this
+                    device.
                 </Text>
 
                 {/* Debug: Load Remote History */}
@@ -211,58 +269,80 @@ export default function HistoryScreen() {
                     </Text>
                 )}
 
-                {sortedHistory.map((item) => {
-                    const isUser = item.from === "user";
-
-                    return (
-                        <View
-                            key={item.id}
+                {groupedHistory.map((group) => (
+                    <View key={group.label} style={{ marginBottom: 18 }}>
+                        {/* Date label */}
+                        <Text
                             style={{
-                                alignSelf: isUser
-                                    ? "flex-end"
-                                    : "flex-start",
-                                maxWidth: "80%",
-                                backgroundColor: isUser
-                                    ? USER_BUBBLE_BG
-                                    : BOT_BUBBLE_BG,
+                                alignSelf: "center",
+                                marginBottom: 8,
                                 paddingHorizontal: 12,
-                                paddingVertical: 8,
-                                borderRadius: 16,
-                                marginBottom: 10,
+                                paddingVertical: 4,
+                                borderRadius: 999,
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                                backgroundColor: colors.surfaceSoft,
                             }}
                         >
-                            <Text
-                                style={{
-                                    fontSize: 12,
-                                    fontWeight: "600",
-                                    color: colors.textSecondary,
-                                    marginBottom: 2,
-                                }}
-                            >
-                                {isUser ? "You" : "Imotara"}
-                            </Text>
+                            {group.label}
+                        </Text>
 
-                            <Text
-                                style={{
-                                    fontSize: 14,
-                                    color: colors.textPrimary,
-                                }}
-                            >
-                                {item.text}
-                            </Text>
+                        {group.items.map((item) => {
+                            const isUser = item.from === "user";
 
-                            <Text
-                                style={{
-                                    fontSize: 11,
-                                    color: colors.textSecondary,
-                                    marginTop: 4,
-                                }}
-                            >
-                                {new Date(item.timestamp).toLocaleString()}
-                            </Text>
-                        </View>
-                    );
-                })}
+                            return (
+                                <View
+                                    key={item.id}
+                                    style={{
+                                        alignSelf: isUser
+                                            ? "flex-end"
+                                            : "flex-start",
+                                        maxWidth: "80%",
+                                        backgroundColor: isUser
+                                            ? USER_BUBBLE_BG
+                                            : BOT_BUBBLE_BG,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 8,
+                                        borderRadius: 16,
+                                        marginBottom: 10,
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontSize: 12,
+                                            fontWeight: "600",
+                                            color: colors.textSecondary,
+                                            marginBottom: 2,
+                                        }}
+                                    >
+                                        {isUser ? "You" : "Imotara"}
+                                    </Text>
+
+                                    <Text
+                                        style={{
+                                            fontSize: 14,
+                                            color: colors.textPrimary,
+                                        }}
+                                    >
+                                        {item.text}
+                                    </Text>
+
+                                    <Text
+                                        style={{
+                                            fontSize: 11,
+                                            color: colors.textSecondary,
+                                            marginTop: 4,
+                                        }}
+                                    >
+                                        {new Date(
+                                            item.timestamp
+                                        ).toLocaleTimeString()}
+                                    </Text>
+                                </View>
+                            );
+                        })}
+                    </View>
+                ))}
             </ScrollView>
         </View>
     );

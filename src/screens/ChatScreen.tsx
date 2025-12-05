@@ -1,5 +1,10 @@
 // src/screens/ChatScreen.tsx
-import React, { useState, useRef, useMemo } from "react";
+import React, {
+    useState,
+    useRef,
+    useMemo,
+    useEffect,
+} from "react";
 import {
     View,
     Text,
@@ -88,11 +93,56 @@ function getLocalMoodHint(text: string): string | undefined {
     return undefined;
 }
 
+/**
+ * Single place to decide how Imotara replies on mobile.
+ * Right now it's purely local and deterministic.
+ * Later, this can call a real AI/analysis engine without changing ChatScreen.
+ */
+function generateLocalBotResponse(userText: string): {
+    replyText: string;
+    moodHint?: string;
+} {
+    const moodHint = getLocalMoodHint(userText);
+
+    const replyText =
+        "I hear you. In the real Imotara app, I’ll respond with empathy and emotional insight. " +
+        "For now, this is a local-only mobile preview.";
+
+    return { replyText, moodHint };
+}
+
 export default function ChatScreen() {
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [isTyping, setIsTyping] = useState(false);
+    const [typingDots, setTypingDots] = useState(1);
+
     const { addToHistory } = useHistoryStore();
     const scrollViewRef = useRef<ScrollView | null>(null);
+    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Small animated "..." effect while Imotara is typing
+    useEffect(() => {
+        if (!isTyping) {
+            setTypingDots(1);
+            return;
+        }
+
+        const interval = setInterval(() => {
+            setTypingDots((prev) => (prev % 3) + 1);
+        }, 400);
+
+        return () => clearInterval(interval);
+    }, [isTyping]);
+
+    // Cleanup any pending bot reply timeout when unmounting
+    useEffect(() => {
+        return () => {
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const handleSend = () => {
         const trimmed = input.trim();
@@ -100,10 +150,7 @@ export default function ChatScreen() {
 
         const timestamp = Date.now();
 
-        // Basic local mood hint from the user's message
-        const moodHint = getLocalMoodHint(trimmed);
-
-        // 1) User message
+        // 1) User message — captured immediately
         const userMessage: ChatMessage = {
             id: `u-${timestamp}`,
             from: "user",
@@ -117,29 +164,42 @@ export default function ChatScreen() {
             timestamp: userMessage.timestamp,
         });
 
-        // 2) Simple local Imotara reply
-        const botReply =
-            "I hear you. In the real Imotara app, I’ll respond with empathy and emotional insight. " +
-            "For now, this is a local-only mobile preview.";
-
-        const botTimestamp = timestamp + 1;
-        const botMessage: ChatMessage = {
-            id: `b-${botTimestamp}`,
-            from: "bot",
-            text: botReply,
-            timestamp: botTimestamp,
-            moodHint, // attach local-only mood hint
-        };
-        addToHistory({
-            id: botMessage.id,
-            text: botMessage.text,
-            from: "bot",
-            timestamp: botMessage.timestamp,
-        });
-
-        // Add to on-screen chat list
-        setMessages((prev) => [...prev, userMessage, botMessage]);
+        // Add user message immediately to on-screen chat
+        setMessages((prev) => [...prev, userMessage]);
         setInput("");
+
+        // Show typing indicator for Imotara
+        setIsTyping(true);
+
+        // Clear any existing bot timer (safety)
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
+        }
+
+        // 2) After a short delay, generate and show Imotara's reply
+        typingTimeoutRef.current = setTimeout(() => {
+            // This is the "brain" — easy to swap later for real AI
+            const { replyText, moodHint } = generateLocalBotResponse(trimmed);
+
+            const botTimestamp = Date.now();
+            const botMessage: ChatMessage = {
+                id: `b-${botTimestamp}`,
+                from: "bot",
+                text: replyText,
+                timestamp: botTimestamp,
+                moodHint,
+            };
+
+            addToHistory({
+                id: botMessage.id,
+                text: botMessage.text,
+                from: "bot",
+                timestamp: botMessage.timestamp,
+            });
+
+            setMessages((prev) => [...prev, botMessage]);
+            setIsTyping(false);
+        }, 800); // ~0.8s feels responsive but still "thoughtful"
     };
 
     // Group messages into (user + bot) "conversation chunks"
@@ -151,7 +211,7 @@ export default function ChatScreen() {
             const second = messages[i + 1];
 
             if (!second) {
-                // Odd leftover message (unlikely, but safe)
+                // Odd leftover message (e.g., user message while bot is still typing)
                 if (first.from === "user") {
                     pairs.push({ user: first });
                 } else {
@@ -332,6 +392,40 @@ export default function ChatScreen() {
                         </View>
                     );
                 })}
+
+                {/* Typing indicator */}
+                {isTyping && (
+                    <View
+                        style={{
+                            alignSelf: "flex-start",
+                            backgroundColor: BOT_BUBBLE_BG,
+                            paddingHorizontal: 14,
+                            paddingVertical: 10,
+                            borderRadius: 20,
+                            maxWidth: "60%",
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 12,
+                                fontWeight: "600",
+                                color: colors.textSecondary,
+                                marginBottom: 2,
+                            }}
+                        >
+                            Imotara
+                        </Text>
+                        <Text
+                            style={{
+                                fontSize: 20,
+                                letterSpacing: 2,
+                                color: colors.textSecondary,
+                            }}
+                        >
+                            {".".repeat(typingDots)}
+                        </Text>
+                    </View>
+                )}
             </ScrollView>
 
             {/* Input area */}
