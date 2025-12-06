@@ -1,18 +1,19 @@
 // src/theme/colors.ts
-// Aurora Calm base palette for Imotara Mobile (can tweak later)
 
-const colors = {
-    background: "#050816",      // deep aurora-night background (for later screens)
-    surface: "#0f172a",         // card / panel background
-    surfaceSoft: "#111827",     // softer variant for sections
-    primary: "#38bdf8",         // aurora cyan
-    primarySoft: "#0ea5e9",     // accent cyan
-    accentPink: "#f472b6",      // soft aurora pink
-    accentPurple: "#a855f7",    // soft aurora violet
-    textPrimary: "#e5e7eb",     // main readable text
-    textSecondary: "#9ca3af",   // secondary text
-    border: "#1f2937",          // subtle borders
-    chipBg: "#111827",          // for small pills / chips
+export default {
+    background: "rgba(3, 6, 23, 1)",
+    surfaceSoft: "rgba(30, 41, 59, 0.7)",
+    surface: "rgba(15, 23, 42, 0.9)",
+    border: "rgba(148, 163, 184, 0.25)",
+    textPrimary: "rgba(241, 245, 249, 1)",
+    textSecondary: "rgba(148, 163, 184, 0.9)",
+    primary: "rgba(56, 189, 248, 1)",
+
+    // 🌈 NEW — ultra-soft mood tints for bot bubbles
+    emotionSad: "rgba(37, 99, 235, 0.20)",         // soft blue
+    emotionAnxious: "rgba(234, 179, 8, 0.22)",     // soft yellow
+    emotionAngry: "rgba(239, 68, 68, 0.20)",       // soft red
+    emotionConfused: "rgba(147, 51, 234, 0.22)",   // soft purple
+    emotionHopeful: "rgba(16, 185, 129, 0.22)",    // soft green
+    emotionNeutral: "rgba(148, 163, 184, 0.18)",   // neutral grey tint
 };
-
-export default colors;

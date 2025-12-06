@@ -22,88 +22,77 @@ import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
 import { callImotaraAI } from "../api/aiClient";
+import { LinearGradient } from "expo-linear-gradient";
 
 type ChatMessageSource = "cloud" | "local";
+
+// Typing animation states for Imotara mobile chat
+type TypingStatus = "idle" | "thinking" | "responding";
+
+// Message action type (can be refined later)
+type MessageAction = string;
 
 type ChatMessage = {
     id: string;
     from: "user" | "bot";
     text: string;
     timestamp: number;
-    // Optional local-only mood hint (preview)
     moodHint?: string;
-    // Lite sync flag (mirrors HistoryItem)
     isSynced?: boolean;
-    /**
-     * Where this bot reply came from:
-     * - "cloud" → remote Imotara AI (via /api/analyze)
-     * - "local" → local preview fallback (no network or error)
-     *
-     * For user messages, this stays undefined.
-     */
     source?: ChatMessageSource;
 };
 
-// Local mood hint helper (same spirit as web app, but ultra-lightweight)
+// Create a medium-intensity gradient from the mood tint
+function getMoodGradient(baseColor: string) {
+    return {
+        // Slightly stronger but still soft
+        start: baseColor.replace("rgb", "rgba").replace(")", ", 0.55)"),
+        end: baseColor.replace("rgb", "rgba").replace(")", ", 0.95)"),
+    };
+}
+
+// ---------------------------------------------------
+// Local mood hint → emoji (already existed)
+// ---------------------------------------------------
+function getMoodEmojiForHint(hint?: string): string {
+    if (!hint) return "";
+    const text = hint.toLowerCase();
+
+    if (text.includes("low")) return " 💙";
+    if (text.includes("tense") || text.includes("worried")) return " 💛";
+    if (text.includes("upset") || text.includes("frustrated")) return " ❤️";
+    if (text.includes("stuck") || text.includes("unsure")) return " 🟣";
+    if (text.includes("light") || text.includes("hope")) return " 💚";
+
+    return " ⚪️";
+}
+
+// ---------------------------------------------------
+// 🌈 NEW: moodHint → bubbleTint mapping
+// ---------------------------------------------------
+function getMoodTintForHint(hint?: string): string {
+    if (!hint) return colors.emotionNeutral;
+    const text = hint.toLowerCase();
+
+    if (text.includes("low")) return colors.emotionSad;
+    if (text.includes("tense") || text.includes("worried")) return colors.emotionAnxious;
+    if (text.includes("upset") || text.includes("frustrated")) return colors.emotionAngry;
+    if (text.includes("stuck") || text.includes("unsure")) return colors.emotionConfused;
+    if (text.includes("light") || text.includes("hope")) return colors.emotionHopeful;
+
+    return colors.emotionNeutral;
+}
+
+// ---------------------------------------------------
 function getLocalMoodHint(text: string): string {
     const lower = text.toLowerCase();
 
-    const sadWords = [
-        "sad",
-        "down",
-        "lonely",
-        "tired",
-        "upset",
-        "hurt",
-        "empty",
-        "depressed",
-        "blue",
-        "cry",
-        "crying",
-    ];
-    const anxiousWords = [
-        "worry",
-        "worried",
-        "anxious",
-        "scared",
-        "panic",
-        "nervous",
-        "stressed",
-        "overwhelmed",
-        "afraid",
-        "fear",
-    ];
-    const angryWords = [
-        "angry",
-        "mad",
-        "frustrated",
-        "annoyed",
-        "irritated",
-        "furious",
-        "rage",
-        "hate",
-    ];
-    const hopefulWords = [
-        "hope",
-        "hopeful",
-        "excited",
-        "looking forward",
-        "grateful",
-        "thankful",
-        "relieved",
-        "better",
-    ];
-    const stuckWords = [
-        "stuck",
-        "lost",
-        "confused",
-        "don’t know",
-        "dont know",
-        "no idea",
-        "numb",
-    ];
-
-    const containsAny = (words: string[]) => words.some((w) => lower.includes(w));
+    const sadWords = ["sad", "down", "lonely", "tired", "upset", "hurt", "empty", "depressed", "blue", "cry", "crying"];
+    const anxiousWords = ["worry", "worried", "anxious", "scared", "panic", "nervous", "stressed", "overwhelmed", "afraid", "fear"];
+    const angryWords = ["angry", "mad", "frustrated", "annoyed", "irritated", "furious", "rage", "hate"];
+    const hopefulWords = ["hope", "hopeful", "excited", "looking forward", "grateful", "thankful", "relieved", "better", "good mood", "feeling good", "happy", "joyful", "cheerful"];
+    const stuckWords = ["stuck", "lost", "confused", "don’t know", "dont know", "no idea", "numb"];
+    const containsAny = (arr: string[]) => arr.some((w) => lower.includes(w));
 
     if (containsAny(sadWords)) {
         return "You seem a bit low. It’s okay to feel this way — Imotara is here with you.";
@@ -124,71 +113,32 @@ function getLocalMoodHint(text: string): string {
     return "I’m listening closely. However you’re feeling, it matters here.";
 }
 
-function getMoodEmojiForHint(hint?: string): string {
-    if (!hint) return "";
-    const text = hint.toLowerCase();
-
-    // Matches the exact wordings we use in getLocalMoodHint
-    if (text.includes("low")) {
-        // a bit low / sad
-        return " 💙";
-    }
-    if (text.includes("tense") || text.includes("worried")) {
-        // tense / anxious
-        return " 💛";
-    }
-    if (text.includes("upset") || text.includes("frustrated")) {
-        // upset / angry
-        return " ❤️";
-    }
-    if (text.includes("stuck") || text.includes("unsure")) {
-        // stuck / confused
-        return " 🟣";
-    }
-    if (text.includes("light") || text.includes("hope")) {
-        // hopeful / a bit bright
-        return " 💚";
-    }
-
-    // neutral / listening
-    return " ⚪️";
-}
-
+// ---------------------------------------------------
+// Response generator (unchanged)
+// ---------------------------------------------------
 function generateLocalBotResponse(
     userText: string,
     insightsEnabled: boolean
-): {
-    replyText: string;
-    moodHint?: string;
-} {
+): { replyText: string; moodHint?: string } {
     const replyText =
         "I hear you. In the real Imotara app, I’ll respond with empathy and emotional insight. " +
         "For now, this is a local-only mobile preview.";
 
-    if (!insightsEnabled) {
-        return { replyText, moodHint: undefined };
-    }
-
-    const moodHint = getLocalMoodHint(userText);
+    if (!insightsEnabled) return { replyText };
 
     return {
         replyText,
-        moodHint,
+        moodHint: getLocalMoodHint(userText),
     };
 }
 
-// Decide bubble colors based on Aurora Calm theme
+// ---------------------------------------------------
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
-const BOT_BUBBLE_BG = colors.surfaceSoft;
+// BOT_BUBBLE_BG replaced by mood tint system
 
-// If gap between messages > 45 minutes → new session
 const SESSION_GAP_MS = 45 * 60 * 1000;
 
-type TypingStatus = "idle" | "thinking";
-
-// On-screen Imotara message actions
-type MessageAction = "copy" | "delete";
-
+// ---------------------------------------------------
 function smoothScrollToBottom(ref: React.RefObject<ScrollView | null>) {
     setTimeout(() => {
         ref.current?.scrollToEnd({ animated: true });
@@ -343,7 +293,7 @@ export default function ChatScreen() {
         return () => clearInterval(interval);
     }, [isTyping]);
 
-    // Typing glow (breathing) animation  ← YOU INSERTED THIS
+    // Typing glow (breathing) animation
     useEffect(() => {
         if (!isTyping) {
             typingGlow.setValue(0);
@@ -747,7 +697,17 @@ export default function ChatScreen() {
         let statusLabel: string;
         let statusBg: string;
         let statusTextColor: string;
-        const bubbleBackground = isUser ? USER_BUBBLE_BG : BOT_BUBBLE_BG;
+        const bubbleBackground = USER_BUBBLE_BG;
+        let gradientStart: string | null = null;
+        let gradientEnd: string | null = null;
+
+        if (!isUser) {
+            const tintSource = message.moodHint || message.text;
+            const tint = getMoodTintForHint(tintSource);
+            const gradient = getMoodGradient(tint);
+            gradientStart = gradient.start;
+            gradientEnd = gradient.end;
+        }
 
         if (message.isSynced) {
             bubbleBorderColor = colors.primary;
@@ -788,6 +748,80 @@ export default function ChatScreen() {
             }
         }
 
+        const content = (
+            <>
+                <Text
+                    style={{
+                        fontSize: 12,
+                        fontWeight: "600",
+                        color: colors.textSecondary,
+                        marginBottom: 2,
+                    }}
+                >
+                    {isUser
+                        ? "You"
+                        : `Imotara${sourceIcon}${getMoodEmojiForHint(message.moodHint)}`}
+                </Text>
+
+                <Text
+                    style={{
+                        fontSize: 14,
+                        color: colors.textPrimary,
+                    }}
+                >
+                    {message.text}
+                </Text>
+
+                {message.moodHint && (
+                    <Text
+                        style={{
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                            marginTop: 4,
+                        }}
+                    >
+                        {message.moodHint}
+                    </Text>
+                )}
+
+                <Text
+                    style={{
+                        fontSize: 11,
+                        color: colors.textSecondary,
+                        marginTop: 4,
+                    }}
+                >
+                    {new Date(message.timestamp).toLocaleTimeString()}
+                </Text>
+
+                <View
+                    style={{
+                        alignSelf: isUser ? "flex-end" : "flex-start",
+                        marginTop: 4,
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor:
+                            bubbleBorderColor === "transparent"
+                                ? "rgba(148, 163, 184, 0.4)"
+                                : bubbleBorderColor,
+                        backgroundColor: statusBg,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 10,
+                            fontWeight: "500",
+                            color: statusTextColor,
+                        }}
+                    >
+                        {statusLabel}
+                    </Text>
+                </View>
+            </>
+        );
+
         return (
             <View key={message.id}>
                 {renderSessionDivider(message, prev)}
@@ -800,85 +834,46 @@ export default function ChatScreen() {
                     style={{
                         alignSelf: isUser ? "flex-end" : "flex-start",
                         maxWidth: "80%",
-                        backgroundColor: bubbleBackground,
-                        paddingHorizontal: 12,
-                        paddingVertical: 8,
-                        borderRadius: 16,
                         marginBottom: 10,
-                        borderWidth:
-                            bubbleBorderColor === "transparent" ? 0 : 1,
-                        borderColor: bubbleBorderColor,
                     }}
                 >
-                    <Text
-                        style={{
-                            fontSize: 12,
-                            fontWeight: "600",
-                            color: colors.textSecondary,
-                            marginBottom: 2,
-                        }}
-                    >
-                        {isUser
-                            ? "You"
-                            : `Imotara${sourceIcon}${getMoodEmojiForHint(message.moodHint)}`}
-                    </Text>
-
-                    <Text
-                        style={{
-                            fontSize: 14,
-                            color: colors.textPrimary,
-                        }}
-                    >
-                        {message.text}
-                    </Text>
-
-                    {message.moodHint && (
-                        <Text
+                    {isUser ? (
+                        <View
                             style={{
-                                fontSize: 11,
-                                color: colors.textSecondary,
-                                marginTop: 4,
+                                backgroundColor: bubbleBackground,
+                                paddingHorizontal: 12,
+                                paddingVertical: 8,
+                                borderRadius: 16,
+                                borderWidth:
+                                    bubbleBorderColor === "transparent" ? 0 : 1,
+                                borderColor: bubbleBorderColor,
                             }}
                         >
-                            {message.moodHint}
-                        </Text>
+                            {content}
+                        </View>
+                    ) : (
+                        <LinearGradient
+                            colors={[
+                                gradientStart || "rgba(148, 163, 184, 0.25)",
+                                gradientEnd || "rgba(148, 163, 184, 0.45)",
+                            ]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 0, y: 1 }}
+                            style={{
+                                borderRadius: 16,
+                                paddingHorizontal: 12,
+                                paddingVertical: 8,
+                                borderWidth:
+                                    bubbleBorderColor === "transparent" ? 0 : 1,
+                                borderColor:
+                                    bubbleBorderColor === "transparent"
+                                        ? "rgba(148, 163, 184, 0.4)"
+                                        : bubbleBorderColor,
+                            }}
+                        >
+                            {content}
+                        </LinearGradient>
                     )}
-
-                    <Text
-                        style={{
-                            fontSize: 11,
-                            color: colors.textSecondary,
-                            marginTop: 4,
-                        }}
-                    >
-                        {new Date(message.timestamp).toLocaleTimeString()}
-                    </Text>
-
-                    <View
-                        style={{
-                            alignSelf: isUser ? "flex-end" : "flex-start",
-                            marginTop: 4,
-                            paddingHorizontal: 10,
-                            paddingVertical: 4,
-                            borderRadius: 999,
-                            borderWidth: 1,
-                            borderColor:
-                                bubbleBorderColor === "transparent"
-                                    ? "rgba(148, 163, 184, 0.4)"
-                                    : bubbleBorderColor,
-                            backgroundColor: statusBg,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 10,
-                                fontWeight: "500",
-                                color: statusTextColor,
-                            }}
-                        >
-                            {statusLabel}
-                        </Text>
-                    </View>
                 </Pressable>
             </View>
         );
@@ -1025,6 +1020,19 @@ export default function ChatScreen() {
         return `Imotara is typing${formattedTypingDots}`;
     }, [isTyping, typingStatus, formattedTypingDots]);
 
+    const typingBubbleBg = useMemo(() => {
+        if (!isTyping) {
+            return "rgba(15, 23, 42, 0.9)";
+        }
+
+        // If we have a mood hint, use its tint; otherwise fall back
+        if (latestMoodHint) {
+            return getMoodTintForHint(latestMoodHint);
+        }
+
+        return "rgba(15, 23, 42, 0.9)";
+    }, [isTyping, latestMoodHint]);
+
     return (
         <View
             style={{
@@ -1033,35 +1041,54 @@ export default function ChatScreen() {
             }}
         >
             {/* Header area with sync + teen safe context */}
+            {/* Header text */}
             <View
                 style={{
                     paddingHorizontal: 16,
-                    paddingTop: 12,
-                    paddingBottom: 8,
+                    paddingTop: 6,
+                    paddingBottom: 4,
                     borderBottomWidth: 1,
                     borderBottomColor: colors.border,
                     backgroundColor: "rgba(15, 23, 42, 0.96)",
                 }}
             >
+                {/* Title row */}
+                <View
+                    style={{
+                        flexDirection: "row",
+                        alignItems: "baseline",
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 18,
+                            fontWeight: "700",
+                            color: colors.textPrimary,
+                        }}
+                    >
+                        Imotara
+                    </Text>
+                    <Text
+                        style={{
+                            marginLeft: 6,
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        (mobile preview)
+                    </Text>
+                </View>
+
+                {/* Short description */}
                 <Text
                     style={{
-                        fontSize: 20,
-                        fontWeight: "700",
-                        color: colors.textPrimary,
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                        marginTop: 2,
                         marginBottom: 4,
                     }}
                 >
-                    Imotara (Mobile Preview)
-                </Text>
-                <Text
-                    style={{
-                        fontSize: 13,
-                        color: colors.textSecondary,
-                        marginBottom: 6,
-                    }}
-                >
-                    A gentle space to talk about your feelings. This early version keeps
-                    messages on this device, with an optional cloud backup preview.
+                    A calm space to talk about your feelings.
                 </Text>
 
                 {/* Sync hint pill */}
@@ -1251,7 +1278,7 @@ export default function ChatScreen() {
                                     paddingHorizontal: 10,
                                     paddingVertical: 6,
                                     borderRadius: 999,
-                                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                    backgroundColor: typingBubbleBg,
                                     borderWidth: 1,
                                     borderColor: colors.border,
                                 }}

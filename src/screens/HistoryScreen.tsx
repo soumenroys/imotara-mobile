@@ -16,19 +16,73 @@ const SESSION_GAP_MS = 45 * 60 * 1000;
 function getMoodEmojiForText(text: string): string {
     const lower = text.toLowerCase();
 
-    const sad = ["sad", "down", "lonely", "hurt", "depressed", "blue"];
-    const anxious = ["worry", "worried", "anxious", "stressed", "panic"];
-    const angry = ["angry", "mad", "frustrated", "irritated", "furious"];
-    const hopeful = ["hope", "hopeful", "better", "relieved", "excited"];
-    const stuck = ["stuck", "lost", "confused", "unsure"];
+    // Align these with ChatScreen's local mood detector
+    const sad = [
+        "sad",
+        "down",
+        "lonely",
+        "tired",
+        "upset",
+        "hurt",
+        "empty",
+        "depressed",
+        "blue",
+        "cry",
+        "crying",
+        "low",
+    ];
+    const anxious = [
+        "worry",
+        "worried",
+        "anxious",
+        "scared",
+        "panic",
+        "nervous",
+        "stressed",
+        "overwhelmed",
+        "afraid",
+        "fear",
+    ];
+    const angry = [
+        "angry",
+        "mad",
+        "frustrated",
+        "annoyed",
+        "irritated",
+        "furious",
+        "rage",
+        "hate",
+    ];
+    const hopeful = [
+        "hope",
+        "hopeful",
+        "better",
+        "relieved",
+        "excited",
+        "good mood",
+        "feeling good",
+        "happy",
+        "joyful",
+        "cheerful",
+    ];
+    const stuck = [
+        "stuck",
+        "lost",
+        "confused",
+        "dont know",
+        "don’t know",
+        "no idea",
+        "numb",
+        "unsure",
+    ];
 
     const match = (arr: string[]) => arr.some((w) => lower.includes(w));
 
-    if (match(sad)) return "💙";      // sad-ish
-    if (match(anxious)) return "💛";  // worried
-    if (match(angry)) return "❤️";    // upset
-    if (match(stuck)) return "🟣";     // confused/stuck
-    if (match(hopeful)) return "💚";   // hopeful
+    if (match(sad)) return "💙"; // sad-ish
+    if (match(anxious)) return "💛"; // worried
+    if (match(angry)) return "❤️"; // upset
+    if (match(stuck)) return "🟣"; // confused/stuck
+    if (match(hopeful)) return "💚"; // hopeful
 
     return "⚪️"; // neutral
 }
@@ -49,6 +103,72 @@ function getEmotionSectionLabel(emoji: string): string {
         default:
             return "Neutral / Mixed moments";
     }
+}
+
+// Map mood emoji → soft background tint for Imotara bubbles
+function getMoodTintForTextBackground(text: string): string {
+    const emoji = getMoodEmojiForText(text);
+
+    switch (emoji) {
+        case "💙":
+            return colors.emotionSad;
+        case "💛":
+            return colors.emotionAnxious;
+        case "❤️":
+            return colors.emotionAngry;
+        case "🟣":
+            return colors.emotionConfused;
+        case "💚":
+            return colors.emotionHopeful;
+        case "⚪️":
+        default:
+            // Neutral / unknown: keep the previous soft surface background
+            return BOT_BUBBLE_BG;
+    }
+}
+
+// Soft ambient halo behind Imotara bubbles
+function getMoodHaloColor(text: string): string {
+    const emoji = getMoodEmojiForText(text);
+
+    switch (emoji) {
+        case "💙":
+            return "rgba(96, 165, 250, 0.18)"; // soft blue
+        case "💛":
+            return "rgba(250, 204, 21, 0.18)"; // soft yellow
+        case "❤️":
+            return "rgba(248, 113, 113, 0.18)"; // soft red
+        case "🟣":
+            return "rgba(192, 132, 252, 0.18)"; // soft purple
+        case "💚":
+            return "rgba(74, 222, 128, 0.18)"; // soft green
+        default:
+            return "rgba(148, 163, 184, 0.12)"; // soft neutral
+    }
+}
+
+/**
+ * For mood purposes, use:
+ * - user bubble → its own text
+ * - Imotara bubble → the most recent user text above it in the same group
+ *   (fallback: its own text if no user above)
+ */
+function getBaseTextForMood(items: HistoryRecord[], index: number): string {
+    const item = items[index];
+
+    if (item.from === "user") {
+        return item.text;
+    }
+
+    // For bot messages, look backwards for the nearest user message
+    for (let i = index - 1; i >= 0; i--) {
+        if (items[i].from === "user") {
+            return items[i].text;
+        }
+    }
+
+    // Fallback: no previous user (e.g., first message is bot)
+    return item.text;
 }
 
 /**
@@ -472,20 +592,28 @@ export default function HistoryScreen() {
                         {group.items.map((item, index) => {
                             const isUser = item.from === "user";
 
+                            // Base text for mood: user's own text, or last user text above this bot reply
+                            const moodBaseText = getBaseTextForMood(group.items, index);
+
                             // Emotion-based section header (per date, per emotion)
                             let emotionHeader: string | null = null;
                             if (!isUser) {
-                                const emoji = getMoodEmojiForText(item.text);
+                                const emoji = getMoodEmojiForText(moodBaseText);
                                 const label = getEmotionSectionLabel(emoji);
 
                                 // Check if we already showed this emotion earlier in this date group
                                 const hasPrevious = group.items
                                     .slice(0, index)
-                                    .some(
-                                        (prev) =>
-                                            prev.from === "bot" &&
-                                            getMoodEmojiForText(prev.text) === emoji
-                                    );
+                                    .some((prev, prevIdx) => {
+                                        if (prev.from !== "bot") return false;
+                                        const prevBase = getBaseTextForMood(
+                                            group.items,
+                                            prevIdx
+                                        );
+                                        return (
+                                            getMoodEmojiForText(prevBase) === emoji
+                                        );
+                                    });
 
                                 if (!hasPrevious) {
                                     emotionHeader = `${emoji} ${label}`;
@@ -509,7 +637,7 @@ export default function HistoryScreen() {
                             let statusTextColor: string;
                             const bubbleBackground = isUser
                                 ? USER_BUBBLE_BG
-                                : BOT_BUBBLE_BG;
+                                : getMoodTintForTextBackground(moodBaseText);
 
                             if (item.isSynced) {
                                 // Synced: aurora cyan accent
@@ -518,7 +646,7 @@ export default function HistoryScreen() {
                                 statusBg = "rgba(56, 189, 248, 0.18)";
                                 statusTextColor = colors.textPrimary;
                             } else {
-                                // Unsynced: red border + red-ish status chip, but keep blue bubble bg
+                                // Unsynced: red border + red-ish status chip, but keep mood tint
                                 if (hasSyncError) {
                                     bubbleBorderColor = "#f97373"; // stronger red
                                     statusLabel =
@@ -532,6 +660,10 @@ export default function HistoryScreen() {
                                     statusTextColor = "#fecaca";
                                 }
                             }
+
+                            const moodHaloColor = !isUser
+                                ? getMoodHaloColor(moodBaseText)
+                                : "transparent";
 
                             return (
                                 <View key={item.id}>
@@ -587,119 +719,134 @@ export default function HistoryScreen() {
                                         </Text>
                                     )}
 
-                                    {/* Bubble + sync info (long-press for full time) */}
-                                    <TouchableOpacity
-                                        activeOpacity={0.9}
-                                        onLongPress={() =>
-                                            Alert.alert(
-                                                "Message timestamp",
-                                                new Date(
-                                                    item.timestamp
-                                                ).toLocaleString()
-                                            )
-                                        }
-                                        delayLongPress={250}
+                                    {/* Bubble + sync info with subtle halo (long-press for full time) */}
+                                    <View
                                         style={{
                                             alignSelf: isUser
                                                 ? "flex-end"
                                                 : "flex-start",
                                             maxWidth: "80%",
-                                            backgroundColor: bubbleBackground,
-                                            paddingHorizontal: 12,
-                                            paddingVertical: 8,
-                                            borderRadius: 16,
+                                            padding: isUser ? 0 : 4,
+                                            borderRadius: isUser ? 0 : 20,
+                                            backgroundColor: moodHaloColor,
                                             marginBottom: 10,
-                                            borderWidth:
-                                                bubbleBorderColor === "transparent"
-                                                    ? 0
-                                                    : 1,
-                                            borderColor: bubbleBorderColor,
                                         }}
                                     >
-                                        <Text
+                                        <TouchableOpacity
+                                            activeOpacity={0.9}
+                                            onLongPress={() =>
+                                                Alert.alert(
+                                                    "Message timestamp",
+                                                    new Date(
+                                                        item.timestamp
+                                                    ).toLocaleString()
+                                                )
+                                            }
+                                            delayLongPress={250}
                                             style={{
-                                                fontSize: 12,
-                                                fontWeight: "600",
-                                                color: colors.textSecondary,
-                                                marginBottom: 2,
-                                            }}
-                                        >
-                                            {isUser ? "You" : `Imotara ${getMoodEmojiForText(item.text)}`}
-                                        </Text>
-
-                                        <Text
-                                            style={{
-                                                fontSize: 14,
-                                                color: colors.textPrimary,
-                                            }}
-                                        >
-                                            {item.text}
-                                        </Text>
-
-                                        <Text
-                                            style={{
-                                                fontSize: 11,
-                                                color: colors.textSecondary,
-                                                marginTop: 4,
-                                            }}
-                                        >
-                                            {new Date(
-                                                item.timestamp
-                                            ).toLocaleTimeString()}
-                                        </Text>
-
-                                        {/* Sync badge for this bubble */}
-                                        <View
-                                            style={{
-                                                alignSelf: isUser
-                                                    ? "flex-end"
-                                                    : "flex-start",
-                                                marginTop: 4,
-                                                paddingHorizontal: 10,
-                                                paddingVertical: 4,
-                                                borderRadius: 999,
-                                                borderWidth: 1,
-                                                borderColor:
+                                                alignSelf: "flex-start",
+                                                maxWidth: "100%",
+                                                backgroundColor: bubbleBackground,
+                                                paddingHorizontal: 12,
+                                                paddingVertical: 8,
+                                                borderRadius: 16,
+                                                borderWidth:
                                                     bubbleBorderColor ===
                                                         "transparent"
-                                                        ? "rgba(148, 163, 184, 0.4)"
-                                                        : bubbleBorderColor,
-                                                backgroundColor: statusBg,
+                                                        ? 0
+                                                        : 1,
+                                                borderColor: bubbleBorderColor,
                                             }}
                                         >
                                             <Text
                                                 style={{
-                                                    fontSize: 10,
-                                                    fontWeight: "500",
-                                                    color: statusTextColor,
+                                                    fontSize: 12,
+                                                    fontWeight: "600",
+                                                    color: colors.textSecondary,
+                                                    marginBottom: 2,
                                                 }}
                                             >
-                                                {statusLabel}
+                                                {isUser
+                                                    ? "You"
+                                                    : `Imotara ${getMoodEmojiForText(
+                                                        moodBaseText
+                                                    )}`}
                                             </Text>
-                                        </View>
 
-                                        {/* Subtle inline helper for unsynced items */}
-                                        {!item.isSynced && (
-                                            <TouchableOpacity
-                                                onPress={handleLoadRemote}
+                                            <Text
+                                                style={{
+                                                    fontSize: 14,
+                                                    color: colors.textPrimary,
+                                                }}
+                                            >
+                                                {item.text}
+                                            </Text>
+
+                                            <Text
+                                                style={{
+                                                    fontSize: 11,
+                                                    color: colors.textSecondary,
+                                                    marginTop: 4,
+                                                }}
+                                            >
+                                                {new Date(
+                                                    item.timestamp
+                                                ).toLocaleTimeString()}
+                                            </Text>
+
+                                            {/* Sync badge for this bubble */}
+                                            <View
+                                                style={{
+                                                    alignSelf: isUser
+                                                        ? "flex-end"
+                                                        : "flex-start",
+                                                    marginTop: 4,
+                                                    paddingHorizontal: 10,
+                                                    paddingVertical: 4,
+                                                    borderRadius: 999,
+                                                    borderWidth: 1,
+                                                    borderColor:
+                                                        bubbleBorderColor ===
+                                                            "transparent"
+                                                            ? "rgba(148, 163, 184, 0.4)"
+                                                            : bubbleBorderColor,
+                                                    backgroundColor: statusBg,
+                                                }}
                                             >
                                                 <Text
                                                     style={{
-                                                        marginTop: 4,
-                                                        fontSize: 11,
-                                                        color: "#93c5fd",
-                                                        textDecorationLine:
-                                                            "underline",
-                                                        alignSelf: isUser
-                                                            ? "flex-end"
-                                                            : "flex-start",
+                                                        fontSize: 10,
+                                                        fontWeight: "500",
+                                                        color: statusTextColor,
                                                     }}
                                                 >
-                                                    Tap to check cloud copy
+                                                    {statusLabel}
                                                 </Text>
-                                            </TouchableOpacity>
-                                        )}
-                                    </TouchableOpacity>
+                                            </View>
+
+                                            {/* Subtle inline helper for unsynced items */}
+                                            {!item.isSynced && (
+                                                <TouchableOpacity
+                                                    onPress={handleLoadRemote}
+                                                >
+                                                    <Text
+                                                        style={{
+                                                            marginTop: 4,
+                                                            fontSize: 11,
+                                                            color: "#93c5fd",
+                                                            textDecorationLine:
+                                                                "underline",
+                                                            alignSelf: isUser
+                                                                ? "flex-end"
+                                                                : "flex-start",
+                                                        }}
+                                                    >
+                                                        Tap to check cloud copy
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
                             );
                         })}
