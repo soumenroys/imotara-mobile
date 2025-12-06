@@ -120,6 +120,9 @@ function isNonEmptyString(value: unknown): value is string {
  *   snapshot: { dominant, averages: { ... } },
  *   reflections: [{ text }, ...]
  * }
+ *
+ * We also strip out our own internal stub phrases so they never show
+ * in the user-facing reply.
  */
 function buildRichReplyFromAnalysis(data: any): string | null {
     if (!data || typeof data !== "object") return null;
@@ -132,10 +135,32 @@ function buildRichReplyFromAnalysis(data: any): string | null {
         ? data.reflections
         : [];
 
+    const STUB_DETAILS_MARKER =
+        "Remote analysis stub served by /api/analyze";
+    const STUB_REFLECTION_MARKER =
+        "No messages were provided, so this is a neutral baseline.";
+
     const headline: string | undefined = summary.headline;
-    const details: string | undefined = summary.details;
+
+    // Filter out stub-like details
+    let details: string | undefined = summary.details;
+    if (
+        typeof details === "string" &&
+        details.includes(STUB_DETAILS_MARKER)
+    ) {
+        details = undefined;
+    }
+
+    // Filter out stub-like reflection text
+    let reflectionText: string | undefined = reflections[0]?.text;
+    if (
+        typeof reflectionText === "string" &&
+        reflectionText.includes(STUB_REFLECTION_MARKER)
+    ) {
+        reflectionText = undefined;
+    }
+
     const dominant: string | undefined = snapshot.dominant;
-    const reflectionText: string | undefined = reflections[0]?.text;
 
     const pieces: string[] = [];
 

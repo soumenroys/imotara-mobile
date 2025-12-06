@@ -68,7 +68,7 @@ function getMoodEmojiForHint(hint?: string): string {
 }
 
 // ---------------------------------------------------
-// 🌈 NEW: moodHint → bubbleTint mapping
+// 🌈 moodHint → bubbleTint mapping
 // ---------------------------------------------------
 function getMoodTintForHint(hint?: string): string {
     if (!hint) return colors.emotionNeutral;
@@ -114,7 +114,7 @@ function getLocalMoodHint(text: string): string {
 }
 
 // ---------------------------------------------------
-// Response generator (unchanged)
+// Local-only response generator
 // ---------------------------------------------------
 function generateLocalBotResponse(
     userText: string,
@@ -514,15 +514,49 @@ export default function ChatScreen() {
         }
 
         // Small note we add only when network/remote fails
-        const networkNote = "\n\n(I'm replying from your device because the network is a little slow.)";
+        const networkNote =
+            "\n\n(I'm replying from your device because the network is a little slow.)";
 
-        // 2) After a short delay, ask Imotara for a reply.
-        //    We first try the remote AI; if that fails, we fall back
-        //    to the existing local preview brain, with a gentle note.
+        // 2) After a short delay, send the message.
+        //    OPTION A:
+        //    - If Emotion Insights OFF → always use local preview (no backend).
+        //    - If ON → try real Imotara backend first, fallback to local preview + note.
         typingTimeoutRef.current = setTimeout(() => {
             (async () => {
                 try {
-                    // Try real Imotara backend first
+                    // -----------------------------------------------
+                    // Case 1: Emotion Insights is OFF → local-only reply
+                    // -----------------------------------------------
+                    if (!emotionInsightsEnabled) {
+                        const local = generateLocalBotResponse(trimmed, false);
+
+                        const botTimestamp = Date.now();
+                        const botMessage: ChatMessage = {
+                            id: `b-${botTimestamp}`,
+                            from: "bot",
+                            text: local.replyText,
+                            timestamp: botTimestamp,
+                            moodHint: undefined, // no mood insight when toggle is off
+                            isSynced: false,
+                            source: "local",
+                        };
+
+                        addToHistory({
+                            id: botMessage.id,
+                            text: botMessage.text,
+                            from: "bot",
+                            timestamp: botMessage.timestamp,
+                            isSynced: false,
+                        });
+
+                        setMessages((prev) => [...prev, botMessage]);
+                        smoothScrollToBottom(scrollViewRef);
+                        return; // early exit from try
+                    }
+
+                    // -----------------------------------------------
+                    // Case 2: Emotion Insights is ON → remote-first
+                    // -----------------------------------------------
                     const remote = await callImotaraAI(trimmed);
 
                     let replyText: string;
@@ -530,19 +564,16 @@ export default function ChatScreen() {
                     let source: ChatMessageSource = "cloud";
 
                     if (remote.ok && remote.replyText.trim().length > 0) {
+                        // ✅ Remote AI reply used
                         replyText = remote.replyText;
                         source = "cloud";
-                        // We still compute a local mood hint (from the user text)
-                        // so the mini mood glimpse + hint remain present.
-                        if (emotionInsightsEnabled) {
-                            moodHint = getLocalMoodHint(trimmed);
-                        }
+                        // Mood hint derived from user's text (local heuristic)
+                        moodHint = getLocalMoodHint(trimmed);
                     } else {
-                        // Fallback to the exact same local behaviour as before,
-                        // but explicitly tell the user we're using a local preview.
+                        // Remote failed → fallback to local preview + note
                         const local = generateLocalBotResponse(
                             trimmed,
-                            emotionInsightsEnabled
+                            true // we want mood hint when insights are enabled
                         );
                         replyText = local.replyText + networkNote;
                         moodHint = local.moodHint;
@@ -570,19 +601,26 @@ export default function ChatScreen() {
 
                     setMessages((prev) => [...prev, botMessage]);
                     smoothScrollToBottom(scrollViewRef);
-
                 } catch (error) {
                     console.warn("Imotara mobile AI error:", error);
-                    // Network / backend error → fallback to local with note
+
+                    // Network / backend error → fallback to local.
+                    // If insights are ON, we add the gentle network note.
                     const local = generateLocalBotResponse(
                         trimmed,
                         emotionInsightsEnabled
                     );
+
+                    const replyWithNote =
+                        emotionInsightsEnabled
+                            ? local.replyText + networkNote
+                            : local.replyText;
+
                     const botTimestamp = Date.now();
                     const botMessage: ChatMessage = {
                         id: `b-${botTimestamp}`,
                         from: "bot",
-                        text: local.replyText + networkNote,
+                        text: replyWithNote,
                         timestamp: botTimestamp,
                         moodHint: local.moodHint,
                         isSynced: false,
@@ -599,7 +637,6 @@ export default function ChatScreen() {
 
                     setMessages((prev) => [...prev, botMessage]);
                     smoothScrollToBottom(scrollViewRef);
-
                 } finally {
                     setIsTyping(false);
                     setTypingStatus("idle");
