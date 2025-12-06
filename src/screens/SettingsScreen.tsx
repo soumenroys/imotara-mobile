@@ -6,6 +6,7 @@ import {
     TouchableOpacity,
     Alert,
     Switch,
+    ScrollView,
 } from "react-native";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
@@ -28,6 +29,9 @@ export default function SettingsScreen() {
         setLastSyncAt,
         setLastSyncStatus,
     } = useSettings();
+
+    const messageCount = history.length;
+    const unsyncedCount = history.filter((h) => !h.isSynced).length;
 
     const handleClearHistory = () => {
         Alert.alert(
@@ -137,8 +141,8 @@ export default function SettingsScreen() {
                 const id = String(
                     rawItem.id ??
                     rawItem._id ??
-                    `${rawItem.from ?? "item"}-${rawItem.timestamp ?? Date.now()
-                    }`
+                    `${rawItem.from ?? "item"
+                    }-${rawItem.timestamp ?? Date.now()}`
                 );
 
                 if (!existingIds.has(id)) {
@@ -222,288 +226,307 @@ export default function SettingsScreen() {
             style={{
                 flex: 1,
                 backgroundColor: colors.background,
-                paddingHorizontal: 16,
-                paddingVertical: 12,
             }}
         >
-            <Text
-                style={{
-                    fontSize: 22,
-                    fontWeight: "700",
-                    marginBottom: 12,
-                    color: colors.textPrimary,
-                }}
-            >
-                Settings & Privacy
-            </Text>
-
-            <Text
-                style={{
-                    fontSize: 14,
-                    color: colors.textSecondary,
-                    marginBottom: 24,
-                }}
-            >
-                Imotara Mobile (local preview). Your messages are stored only on this
-                device for now. In future updates, you&apos;ll control remote AI, sync,
-                and teen safety options here.
-            </Text>
-
-            {/* Emotion Insights (preview) card */}
-            <View
-                style={{
-                    backgroundColor: colors.surfaceSoft,
-                    borderRadius: 16,
+            <ScrollView
+                contentContainerStyle={{
                     paddingHorizontal: 16,
-                    paddingVertical: 14,
-                    marginBottom: 16,
-                    borderWidth: 1,
-                    borderColor: colors.border,
+                    paddingVertical: 12,
+                    paddingBottom: 40, // keep bottom buttons above tab bar
                 }}
             >
-                <View
-                    style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: 6,
-                    }}
-                >
-                    <Text
-                        style={{
-                            fontSize: 14,
-                            color: colors.textPrimary,
-                            fontWeight: "500",
-                        }}
-                    >
-                        Emotion Insights (Preview)
-                    </Text>
-                    <Switch
-                        value={emotionInsightsEnabled}
-                        onValueChange={setEmotionInsightsEnabled}
-                        trackColor={{
-                            false: "#4b5563",
-                            true: colors.primary,
-                        }}
-                        thumbColor={"#f9fafb"}
-                    />
-                </View>
                 <Text
                     style={{
-                        fontSize: 13,
-                        color: colors.textSecondary,
-                        marginBottom: 4,
+                        fontSize: 22,
+                        fontWeight: "700",
+                        marginBottom: 12,
+                        color: colors.textPrimary,
                     }}
                 >
-                    When enabled, Imotara will try to give you deeper emotional
-                    reflections, suggestions, and gentle prompts in the chat. In this
-                    early preview, analysis still runs locally on your device.
+                    Settings & Privacy
                 </Text>
-                <Text
-                    style={{
-                        fontSize: 12,
-                        color: colors.textSecondary,
-                        marginTop: 4,
-                    }}
-                >
-                    This toggle does not send any extra data to the cloud yet. It is a
-                    design placeholder for future AI-powered insights.
-                </Text>
-            </View>
 
-            {/* Local history card */}
-            <View
-                style={{
-                    backgroundColor: colors.surfaceSoft,
-                    borderRadius: 16,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                    marginBottom: 16,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                }}
-            >
                 <Text
                     style={{
                         fontSize: 14,
-                        color: colors.textPrimary,
-                        marginBottom: 6,
-                        fontWeight: "500",
-                    }}
-                >
-                    Local history
-                </Text>
-                <Text
-                    style={{
-                        fontSize: 13,
                         color: colors.textSecondary,
-                        marginBottom: 12,
+                        marginBottom: 24,
                     }}
                 >
-                    Clear all chat messages stored on this device. This does not affect
-                    any future cloud backups or sync features.
+                    Imotara Mobile (preview). By default your messages stay on this
+                    device. From here you can try early emotion insights and sync
+                    options — future versions will add full cloud backup controls and
+                    teen safety settings.
                 </Text>
 
-                <TouchableOpacity
-                    onPress={handleClearHistory}
-                    style={{
-                        alignSelf: "flex-start",
-                        paddingHorizontal: 16,
-                        paddingVertical: 8,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: "#fca5a5",
-                        backgroundColor: "rgba(248, 113, 113, 0.12)",
-                    }}
-                >
-                    <Text
-                        style={{
-                            fontSize: 14,
-                            fontWeight: "600",
-                            color: "#fecaca",
-                        }}
-                    >
-                        Clear Local History
-                    </Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* Remote debug + sync card */}
-            <View
-                style={{
-                    backgroundColor: colors.surfaceSoft,
-                    borderRadius: 16,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                    marginBottom: 16,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                }}
-            >
-                <Text
-                    style={{
-                        fontSize: 14,
-                        color: colors.textPrimary,
-                        marginBottom: 6,
-                        fontWeight: "500",
-                    }}
-                >
-                    Remote history (debug)
-                </Text>
-                <Text
-                    style={{
-                        fontSize: 13,
-                        color: colors.textSecondary,
-                        marginBottom: 12,
-                    }}
-                >
-                    Test connection to the Imotara backend, push your local history, and
-                    optionally merge remote items back into this device. This is a
-                    developer preview for the future sync engine.
-                </Text>
-
-                {/* Test fetch */}
-                <TouchableOpacity
-                    onPress={handleTestRemoteHistory}
-                    style={{
-                        alignSelf: "flex-start",
-                        paddingHorizontal: 16,
-                        paddingVertical: 8,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: colors.primary,
-                        backgroundColor: "rgba(56, 189, 248, 0.16)",
-                        marginBottom: 8,
-                    }}
-                >
-                    <Text
-                        style={{
-                            fontSize: 14,
-                            fontWeight: "600",
-                            color: colors.textPrimary,
-                        }}
-                    >
-                        Test Remote History Fetch
-                    </Text>
-                </TouchableOpacity>
-
-                {/* Push only */}
-                <TouchableOpacity
-                    onPress={handlePushLocalHistory}
-                    style={{
-                        alignSelf: "flex-start",
-                        paddingHorizontal: 16,
-                        paddingVertical: 8,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: colors.primary,
-                        backgroundColor: "rgba(56, 189, 248, 0.12)",
-                        marginBottom: 8,
-                    }}
-                >
-                    <Text
-                        style={{
-                            fontSize: 14,
-                            fontWeight: "600",
-                            color: colors.textPrimary,
-                        }}
-                    >
-                        Push Local History to Cloud
-                    </Text>
-                </TouchableOpacity>
-
-                {/* Full sync: push + fetch + merge */}
-                <TouchableOpacity
-                    onPress={handleSyncNow}
-                    style={{
-                        alignSelf: "flex-start",
-                        paddingHorizontal: 16,
-                        paddingVertical: 8,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: "#a5b4fc",
-                        backgroundColor: "rgba(129, 140, 248, 0.16)",
-                        marginBottom: 10,
-                    }}
-                >
-                    <Text
-                        style={{
-                            fontSize: 14,
-                            fontWeight: "600",
-                            color: colors.textPrimary,
-                        }}
-                    >
-                        Sync Now (push + fetch)
-                    </Text>
-                </TouchableOpacity>
-
-                {/* Lite sync status */}
+                {/* Emotion Insights (preview) card */}
                 <View
                     style={{
-                        marginTop: 4,
+                        backgroundColor: colors.surfaceSoft,
+                        borderRadius: 16,
+                        paddingHorizontal: 16,
+                        paddingVertical: 14,
+                        marginBottom: 16,
+                        borderWidth: 1,
+                        borderColor: colors.border,
                     }}
                 >
+                    <View
+                        style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: 6,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 14,
+                                color: colors.textPrimary,
+                                fontWeight: "500",
+                            }}
+                        >
+                            Emotion Insights (Preview)
+                        </Text>
+                        <Switch
+                            value={emotionInsightsEnabled}
+                            onValueChange={setEmotionInsightsEnabled}
+                            trackColor={{
+                                false: "#4b5563",
+                                true: colors.primary,
+                            }}
+                            thumbColor={"#f9fafb"}
+                        />
+                    </View>
+                    <Text
+                        style={{
+                            fontSize: 13,
+                            color: colors.textSecondary,
+                            marginBottom: 4,
+                        }}
+                    >
+                        When enabled, Imotara will try to give you deeper emotional
+                        reflections, suggestions, and gentle prompts in the chat. In
+                        this early preview, analysis still runs locally on your device.
+                    </Text>
                     <Text
                         style={{
                             fontSize: 12,
                             color: colors.textSecondary,
+                            marginTop: 4,
                         }}
                     >
-                        Last sync: {formattedLastSync}
+                        This toggle does not send any extra data to the cloud yet. It
+                        is a design placeholder for future AI-powered insights.
                     </Text>
-                    {lastSyncStatus && (
+                </View>
+
+                {/* Local history card */}
+                <View
+                    style={{
+                        backgroundColor: colors.surfaceSoft,
+                        borderRadius: 16,
+                        paddingHorizontal: 16,
+                        paddingVertical: 14,
+                        marginBottom: 16,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Local history
+                    </Text>
+                    <Text
+                        style={{
+                            fontSize: 13,
+                            color: colors.textSecondary,
+                            marginBottom: 8,
+                        }}
+                    >
+                        Clear all chat messages stored on this device. This does not
+                        affect any future cloud backups or sync features.
+                    </Text>
+
+                    {/* Small local stats */}
+                    <Text
+                        style={{
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                            marginBottom: 10,
+                        }}
+                    >
+                        Messages on this device: {messageCount}
+                        {unsyncedCount > 0 ? ` · Unsynced: ${unsyncedCount}` : ""}
+                    </Text>
+
+                    <TouchableOpacity
+                        onPress={handleClearHistory}
+                        style={{
+                            alignSelf: "flex-start",
+                            paddingHorizontal: 16,
+                            paddingVertical: 8,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor: "#fca5a5",
+                            backgroundColor: "rgba(248, 113, 113, 0.12)",
+                        }}
+                    >
                         <Text
                             style={{
-                                fontSize: 11,
-                                color: colors.textSecondary,
-                                marginTop: 2,
+                                fontSize: 14,
+                                fontWeight: "600",
+                                color: "#fecaca",
                             }}
                         >
-                            {lastSyncStatus}
+                            Clear Local History
                         </Text>
-                    )}
+                    </TouchableOpacity>
                 </View>
-            </View>
+
+                {/* Remote debug + sync card */}
+                <View
+                    style={{
+                        backgroundColor: colors.surfaceSoft,
+                        borderRadius: 16,
+                        paddingHorizontal: 16,
+                        paddingVertical: 14,
+                        marginBottom: 16,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Remote history (debug)
+                    </Text>
+                    <Text
+                        style={{
+                            fontSize: 13,
+                            color: colors.textSecondary,
+                            marginBottom: 12,
+                        }}
+                    >
+                        Test connection to the Imotara backend, push your local history,
+                        and optionally merge remote items back into this device. This is
+                        a developer preview for the future sync engine.
+                    </Text>
+
+                    {/* Test fetch */}
+                    <TouchableOpacity
+                        onPress={handleTestRemoteHistory}
+                        style={{
+                            alignSelf: "flex-start",
+                            paddingHorizontal: 16,
+                            paddingVertical: 8,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor: colors.primary,
+                            backgroundColor: "rgba(56, 189, 248, 0.16)",
+                            marginBottom: 8,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 14,
+                                fontWeight: "600",
+                                color: colors.textPrimary,
+                            }}
+                        >
+                            Test Remote History Fetch
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* Push only */}
+                    <TouchableOpacity
+                        onPress={handlePushLocalHistory}
+                        style={{
+                            alignSelf: "flex-start",
+                            paddingHorizontal: 16,
+                            paddingVertical: 8,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor: colors.primary,
+                            backgroundColor: "rgba(56, 189, 248, 0.12)",
+                            marginBottom: 8,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 14,
+                                fontWeight: "600",
+                                color: colors.textPrimary,
+                            }}
+                        >
+                            Push Local History to Cloud
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* Full sync: push + fetch + merge */}
+                    <TouchableOpacity
+                        onPress={handleSyncNow}
+                        style={{
+                            alignSelf: "flex-start",
+                            paddingHorizontal: 16,
+                            paddingVertical: 8,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor: "#a5b4fc",
+                            backgroundColor: "rgba(129, 140, 248, 0.16)",
+                            marginBottom: 10,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 14,
+                                fontWeight: "600",
+                                color: colors.textPrimary,
+                            }}
+                        >
+                            Sync Now (push + fetch)
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* Lite sync status */}
+                    <View
+                        style={{
+                            marginTop: 4,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                            }}
+                        >
+                            Last sync: {formattedLastSync}
+                        </Text>
+                        {lastSyncStatus && (
+                            <Text
+                                style={{
+                                    fontSize: 11,
+                                    color: colors.textSecondary,
+                                    marginTop: 2,
+                                }}
+                            >
+                                {lastSyncStatus}
+                            </Text>
+                        )}
+                    </View>
+                </View>
+            </ScrollView>
         </View>
     );
 }

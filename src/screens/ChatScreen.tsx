@@ -11,7 +11,13 @@ import {
     TextInput,
     TouchableOpacity,
     ScrollView,
+    Alert,
+    Pressable,
+    Animated,
+    NativeSyntheticEvent,
+    NativeScrollEvent,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
@@ -23,6 +29,8 @@ type ChatMessage = {
     timestamp: number;
     // Optional local-only mood hint (shown under bot replies)
     moodHint?: string;
+    // Mirror of HistoryItem.isSynced (for per-bubble status)
+    isSynced?: boolean;
 };
 
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)"; // soft aurora cyan
@@ -125,13 +133,37 @@ export default function ChatScreen() {
     const [isTyping, setIsTyping] = useState(false);
     const [typingDots, setTypingDots] = useState(1);
 
-    const { addToHistory } = useHistoryStore();
-    const { emotionInsightsEnabled } = useSettings();
+    const {
+        addToHistory,
+        history,
+        deleteFromHistory,
+    } = useHistoryStore();
+    const { emotionInsightsEnabled, lastSyncAt, lastSyncStatus } = useSettings();
 
     const scrollViewRef = useRef<ScrollView | null>(null);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+    const [isAtBottom, setIsAtBottom] = useState(true);
+    const [showScrollButton, setShowScrollButton] = useState(false);
+
+    // When some messages become synced, we briefly pulse their sync badges.
+    const [recentlySyncedAt, setRecentlySyncedAt] = useState<number | null>(null);
+
+    // For Imotara bottom sheet actions
+    const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
+
     const isSendDisabled = input.trim().length === 0;
+
+    const closeActionSheet = () => setActionMessage(null);
+
+    // Animation for "New messages ↓" button (soft slide + fade)
+    const slideAnim = useRef<Animated.Value>(new Animated.Value(20)).current;
+    const fadeAnim = useRef<Animated.Value>(new Animated.Value(0)).current;
+
+    // Pull-to-refresh custom pulse dot
+    const [refreshing, setRefreshing] = useState(false);
+    const [pullOffset, setPullOffset] = useState(0);
+    const pullAnim = useRef<Animated.Value>(new Animated.Value(0)).current;
 
     // Small animated "..." effect while Imotara is typing
     useEffect(() => {
@@ -156,6 +188,38 @@ export default function ChatScreen() {
         };
     }, []);
 
+    // Clear the sync pulse after a short time
+    useEffect(() => {
+        if (recentlySyncedAt == null) return;
+        const t = setTimeout(() => setRecentlySyncedAt(null), 900);
+        return () => clearTimeout(t);
+    }, [recentlySyncedAt]);
+
+    // Animate "New messages ↓" button when it appears
+    useEffect(() => {
+        if (showScrollButton) {
+            slideAnim.setValue(20);
+            fadeAnim.setValue(0);
+
+            Animated.parallel([
+                Animated.timing(slideAnim, {
+                    toValue: 0,
+                    duration: 180,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 180,
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        } else {
+            // Reset for next time
+            slideAnim.setValue(20);
+            fadeAnim.setValue(0);
+        }
+    }, [showScrollButton, slideAnim, fadeAnim]);
+
     const handleSend = () => {
         const trimmed = input.trim();
         if (!trimmed) return;
@@ -168,6 +232,7 @@ export default function ChatScreen() {
             from: "user",
             text: trimmed,
             timestamp,
+            isSynced: false,
         };
         addToHistory({
             id: userMessage.id,
@@ -205,6 +270,7 @@ export default function ChatScreen() {
                 text: replyText,
                 timestamp: botTimestamp,
                 moodHint,
+                isSynced: false,
             };
 
             addToHistory({
@@ -219,6 +285,62 @@ export default function ChatScreen() {
             setIsTyping(false);
         }, 800); // ~0.8s feels responsive but still "thoughtful"
     };
+
+    // Hydrate chat view from persisted history on first load
+    useEffect(() => {
+        // If chat has no messages yet but history store does,
+        // hydrate the chat UI from history so it feels continuous.
+        if (messages.length === 0 && history.length > 0) {
+            const sorted = [...history].sort(
+                (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
+            );
+
+            const hydrated: ChatMessage[] = sorted.map((h) => ({
+                id: h.id,
+                from: h.from,
+                text: h.text,
+                timestamp: h.timestamp,
+                isSynced: !!h.isSynced,
+            }));
+
+            setMessages(hydrated);
+        }
+    }, [history, messages]);
+
+    // Keep messages' isSynced in sync with HistoryContext
+    useEffect(() => {
+        setMessages((prevMessages) => {
+            if (prevMessages.length === 0 || history.length === 0) {
+                return prevMessages;
+            }
+
+            const historyById = new Map(
+                history.map((h) => [h.id, h] as const)
+            );
+
+            let anyNewlySynced = false;
+
+            const updated = prevMessages.map((msg) => {
+                const h = historyById.get(msg.id);
+                if (!h) return msg;
+
+                const nextIsSynced = !!h.isSynced;
+                if (!msg.isSynced && nextIsSynced) {
+                    anyNewlySynced = true;
+                }
+                if (msg.isSynced === nextIsSynced) {
+                    return msg;
+                }
+                return { ...msg, isSynced: nextIsSynced };
+            });
+
+            if (anyNewlySynced) {
+                setRecentlySyncedAt(Date.now());
+            }
+
+            return updated;
+        });
+    }, [history]);
 
     // Group messages into (user + bot) "conversation chunks"
     const messagePairs = useMemo(() => {
@@ -275,8 +397,215 @@ export default function ChatScreen() {
         return "I’m still learning how you’re feeling. Share a bit more, at your own pace 💫";
     }, [emotionInsightsEnabled, latestUserMessage]);
 
+    // -------------------------------------------------------------------------
+    // Sync-aware hint (same colour language as HistoryScreen)
+    // -------------------------------------------------------------------------
+    const unsyncedCount = useMemo(
+        () => history.filter((h) => !h.isSynced).length,
+        [history]
+    );
+
+    const hasSyncError = useMemo(() => {
+        const lower = (lastSyncStatus || "").toLowerCase();
+        return lower.includes("failed") || lower.includes("error");
+    }, [lastSyncStatus]);
+
+    const formattedLastSync = lastSyncAt
+        ? new Date(lastSyncAt).toLocaleString()
+        : null;
+
+    const syncHintMeta = useMemo(() => {
+        let label = "Sync status: not synced yet";
+        let bg = "rgba(148, 163, 184, 0.20)"; // slate-ish
+        let border = "#9ca3af";
+        let textColor = colors.textSecondary;
+
+        if (hasSyncError) {
+            label = "Sync issue · history is only on this device";
+            bg = "rgba(248, 113, 113, 0.16)"; // soft red
+            border = "#fca5a5";
+            textColor = "#fecaca";
+        } else if (unsyncedCount > 0) {
+            label = `Unsynced messages on this device: ${unsyncedCount}`;
+            bg = "rgba(248, 113, 113, 0.14)";
+            border = "#fca5a5";
+            textColor = "#fecaca";
+        } else if (lastSyncAt) {
+            label = "Synced · recent history backed up";
+            bg = "rgba(56, 189, 248, 0.16)"; // aurora cyan
+            border = colors.primary;
+            textColor = colors.textPrimary;
+        }
+
+        return { label, bg, border, textColor };
+    }, [hasSyncError, unsyncedCount, lastSyncAt]);
+
+    // -------------------------------------------------------------------------
+    // Long-press actions: copy / delete (bottom sheet)
+    // -------------------------------------------------------------------------
+    const handleCopyCurrent = async () => {
+        if (!actionMessage) return;
+        try {
+            await Clipboard.setStringAsync(actionMessage.text);
+        } catch (err) {
+            console.warn("Failed to copy to clipboard:", err);
+        }
+        closeActionSheet();
+    };
+
+    const handleDeleteCurrent = () => {
+        if (!actionMessage) return;
+
+        const idToDelete = actionMessage.id;
+
+        // 1) Delete selected message + (optionally) its paired reply
+        deleteFromHistory(idToDelete);
+
+        setMessages((prev) => {
+            let updated = prev.filter((m) => m.id !== idToDelete);
+
+            // If user message → also remove its next bot reply from this conversation
+            if (actionMessage.from === "user") {
+                const idx = prev.findIndex((m) => m.id === idToDelete);
+                const next = prev[idx + 1];
+
+                if (next && next.from === "bot") {
+                    deleteFromHistory(next.id);
+                    updated = updated.filter((m) => m.id !== next.id);
+                }
+            }
+
+            return updated;
+        });
+
+        // 2) Auto-scroll to bottom if user was already near bottom
+        setTimeout(() => {
+            if (isAtBottom) {
+                scrollViewRef.current?.scrollToEnd({ animated: true });
+            }
+        }, 50);
+
+        closeActionSheet();
+    };
+
+    const formattedActionTimestamp = actionMessage
+        ? new Date(actionMessage.timestamp).toLocaleString()
+        : "";
+
+    // -------------------------------------------------------------------------
+    // Custom pull-to-refresh (pulse dot)
+    // -------------------------------------------------------------------------
+    const PULL_THRESHOLD = 60;
+
+    const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+        const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+
+        const distanceFromBottom =
+            contentSize.height -
+            (contentOffset.y + layoutMeasurement.height);
+
+        const atBottom = distanceFromBottom < 40;
+        setIsAtBottom(atBottom);
+
+        if (atBottom) {
+            setShowScrollButton(false);
+        } else if (!refreshing) {
+            setShowScrollButton(true);
+        }
+
+        // Pull-to-refresh tracking (only when not refreshing)
+        const offsetY = contentOffset.y;
+        if (offsetY < 0 && !refreshing) {
+            setPullOffset((-offsetY));
+        } else if (!refreshing && pullOffset !== 0) {
+            setPullOffset(0);
+        }
+    };
+
+    const onScrollEndDrag = () => {
+        if (refreshing) return;
+
+        if (pullOffset > PULL_THRESHOLD) {
+            // Trigger a small "refresh" animation (UI only)
+            setRefreshing(true);
+            setPullOffset(0);
+
+            pullAnim.setValue(0);
+            Animated.sequence([
+                Animated.timing(pullAnim, {
+                    toValue: 1,
+                    duration: 400,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(pullAnim, {
+                    toValue: 0,
+                    duration: 400,
+                    useNativeDriver: true,
+                }),
+            ]).start(() => {
+                setRefreshing(false);
+            });
+        } else if (pullOffset !== 0) {
+            setPullOffset(0);
+        }
+    };
+
+    // Pulse dot base style
+    const baseDotStyle = {
+        position: "absolute" as const,
+        top: 4,
+        alignSelf: "center" as const,
+        width: 14,
+        height: 14,
+        borderRadius: 999,
+        backgroundColor: colors.primary,
+        shadowColor: colors.primary,
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 3,
+    };
+
+    const pullProgress = Math.max(0, Math.min(pullOffset / PULL_THRESHOLD, 1));
+
+    const staticDotStyle = {
+        opacity: 0.2 + pullProgress * 0.6,
+        transform: [
+            {
+                scale: 0.8 + pullProgress * 0.4,
+            },
+        ],
+    };
+
+    const animatedDotStyle = {
+        opacity: pullAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.7, 0.1],
+        }),
+        transform: [
+            {
+                scale: pullAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 1.6],
+                }),
+            },
+        ],
+    };
+
+    const showPulseDot = pullOffset > 0 || refreshing;
+
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
+            {/* Custom pull-to-refresh pulse dot */}
+            {showPulseDot && (
+                <Animated.View
+                    style={[
+                        baseDotStyle,
+                        refreshing ? animatedDotStyle : staticDotStyle,
+                    ]}
+                />
+            )}
+
             {/* Chat area */}
             <ScrollView
                 ref={scrollViewRef}
@@ -286,8 +615,16 @@ export default function ChatScreen() {
                     paddingBottom: 24,
                 }}
                 onContentSizeChange={() => {
-                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                    // Only auto-scroll if user is already near the bottom
+                    if (isAtBottom) {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                    } else if (!refreshing) {
+                        setShowScrollButton(true);
+                    }
                 }}
+                onScroll={onScroll}
+                onScrollEndDrag={onScrollEndDrag}
+                scrollEventThrottle={50}
             >
                 <Text
                     style={{
@@ -303,11 +640,48 @@ export default function ChatScreen() {
                     style={{
                         fontSize: 14,
                         color: colors.textSecondary,
-                        marginBottom: 16,
+                        marginBottom: 10,
                     }}
                 >
-                    This is a local-only preview. No messages are sent to any server yet.
+                    By default your messages stay on this device. If you use the sync
+                    options in Settings, parts of your history may be backed up to the
+                    Imotara cloud (preview).
                 </Text>
+
+                {/* Sync hint strip (aligned with HistoryScreen theme) */}
+                <View
+                    style={{
+                        alignSelf: "flex-start",
+                        marginBottom: 12,
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: syncHintMeta.border,
+                        backgroundColor: syncHintMeta.bg,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 11,
+                            fontWeight: "600",
+                            color: syncHintMeta.textColor,
+                        }}
+                    >
+                        {syncHintMeta.label}
+                    </Text>
+                    {formattedLastSync && (
+                        <Text
+                            style={{
+                                marginTop: 2,
+                                fontSize: 10,
+                                color: syncHintMeta.textColor,
+                            }}
+                        >
+                            Last sync: {formattedLastSync}
+                        </Text>
+                    )}
+                </View>
 
                 {messagePairs.map((pair, index) => {
                     const key =
@@ -323,107 +697,239 @@ export default function ChatScreen() {
                             }}
                         >
                             {/* User bubble (if present) */}
-                            {pair.user && (
-                                <View
-                                    style={{
-                                        alignSelf: "flex-end",
-                                        backgroundColor: USER_BUBBLE_BG,
-                                        paddingHorizontal: 14,
-                                        paddingVertical: 10,
-                                        borderRadius: 20,
-                                        marginBottom: 6,
-                                        maxWidth: "82%",
-                                    }}
-                                >
-                                    <Text
-                                        style={{
-                                            fontSize: 12,
-                                            fontWeight: "600",
-                                            color: colors.textSecondary,
-                                            marginBottom: 2,
-                                        }}
-                                    >
-                                        You
-                                    </Text>
-                                    <Text
-                                        style={{
-                                            fontSize: 14,
-                                            color: colors.textPrimary,
-                                        }}
-                                    >
-                                        {pair.user.text}
-                                    </Text>
-                                    <Text
-                                        style={{
-                                            fontSize: 11,
-                                            color: colors.textSecondary,
-                                            marginTop: 4,
-                                        }}
-                                    >
-                                        {new Date(
-                                            pair.user.timestamp
-                                        ).toLocaleTimeString()}
-                                    </Text>
-                                </View>
-                            )}
+                            {pair.user && (() => {
+                                const isSynced = !!pair.user!.isSynced;
+                                const statusLabel = isSynced
+                                    ? "Synced to cloud"
+                                    : hasSyncError
+                                        ? "Sync issue · on this device only"
+                                        : "On this device only";
 
-                            {/* Bot bubble (if present) */}
-                            {pair.bot && (
-                                <View
-                                    style={{
-                                        alignSelf: "flex-start",
-                                        backgroundColor: BOT_BUBBLE_BG,
-                                        paddingHorizontal: 14,
-                                        paddingVertical: 10,
-                                        borderRadius: 20,
-                                        maxWidth: "82%",
-                                    }}
-                                >
-                                    <Text
-                                        style={{
-                                            fontSize: 12,
-                                            fontWeight: "600",
-                                            color: colors.textSecondary,
-                                            marginBottom: 2,
-                                        }}
-                                    >
-                                        Imotara
-                                    </Text>
-                                    <Text
-                                        style={{
-                                            fontSize: 14,
-                                            color: colors.textPrimary,
-                                        }}
-                                    >
-                                        {pair.bot.text}
-                                    </Text>
-                                    <Text
-                                        style={{
-                                            fontSize: 11,
-                                            color: colors.textSecondary,
-                                            marginTop: 4,
-                                        }}
-                                    >
-                                        {new Date(
-                                            pair.bot.timestamp
-                                        ).toLocaleTimeString()}
-                                    </Text>
+                                const statusBg = isSynced
+                                    ? "rgba(56, 189, 248, 0.18)"
+                                    : hasSyncError
+                                        ? "rgba(248, 113, 113, 0.18)"
+                                        : "rgba(148, 163, 184, 0.20)";
 
-                                    {/* Local-only mood hint (under bot reply) */}
-                                    {emotionInsightsEnabled &&
-                                        pair.bot.moodHint && (
+                                const statusTextColor = isSynced
+                                    ? colors.textPrimary
+                                    : hasSyncError
+                                        ? "#fecaca"
+                                        : colors.textSecondary;
+
+                                const pulse = !!recentlySyncedAt && isSynced;
+
+                                return (
+                                    <Pressable
+                                        onLongPress={() => setActionMessage(pair.user!)}
+                                        delayLongPress={250}
+                                        style={({ pressed }) => [
+                                            {
+                                                alignSelf: "flex-end",
+                                                backgroundColor: USER_BUBBLE_BG,
+                                                paddingHorizontal: 14,
+                                                paddingVertical: 10,
+                                                borderRadius: 20,
+                                                marginBottom: 6,
+                                                maxWidth: "82%",
+                                            },
+                                            pressed && {
+                                                shadowColor:
+                                                    "rgba(56, 189, 248, 0.9)",
+                                                shadowOpacity: 0.6,
+                                                shadowRadius: 8,
+                                                shadowOffset: {
+                                                    width: 0,
+                                                    height: 0,
+                                                },
+                                                elevation: 5,
+                                                borderWidth: 1,
+                                                borderColor: colors.primary,
+                                            },
+                                        ]}
+                                    >
+                                        <Text
+                                            style={{
+                                                fontSize: 12,
+                                                fontWeight: "600",
+                                                color: colors.textSecondary,
+                                                marginBottom: 2,
+                                            }}
+                                        >
+                                            You
+                                        </Text>
+                                        <Text
+                                            style={{
+                                                fontSize: 14,
+                                                color: colors.textPrimary,
+                                            }}
+                                        >
+                                            {pair.user.text}
+                                        </Text>
+                                        <Text
+                                            style={{
+                                                fontSize: 11,
+                                                color: colors.textSecondary,
+                                                marginTop: 4,
+                                            }}
+                                        >
+                                            {new Date(
+                                                pair.user.timestamp
+                                            ).toLocaleTimeString()}
+                                        </Text>
+
+                                        {/* Sync badge for user bubble */}
+                                        <View
+                                            style={{
+                                                alignSelf: "flex-end",
+                                                marginTop: 4,
+                                                paddingHorizontal: 10,
+                                                paddingVertical: 4,
+                                                borderRadius: 999,
+                                                borderWidth: 1,
+                                                borderColor: pulse
+                                                    ? colors.primary
+                                                    : "rgba(148, 163, 184, 0.4)",
+                                                backgroundColor: statusBg,
+                                            }}
+                                        >
                                             <Text
                                                 style={{
-                                                    marginTop: 6,
-                                                    fontSize: 12,
-                                                    color: colors.textSecondary,
+                                                    fontSize: 10,
+                                                    fontWeight: "500",
+                                                    color: statusTextColor,
                                                 }}
                                             >
-                                                {pair.bot.moodHint}
+                                                {statusLabel}
                                             </Text>
-                                        )}
-                                </View>
-                            )}
+                                        </View>
+                                    </Pressable>
+                                );
+                            })()}
+
+                            {/* Bot bubble (if present) */}
+                            {pair.bot && (() => {
+                                const isSynced = !!pair.bot!.isSynced;
+                                const statusLabel = isSynced
+                                    ? "Synced to cloud"
+                                    : hasSyncError
+                                        ? "Sync issue · on this device only"
+                                        : "On this device only";
+
+                                const statusBg = isSynced
+                                    ? "rgba(56, 189, 248, 0.18)"
+                                    : hasSyncError
+                                        ? "rgba(248, 113, 113, 0.18)"
+                                        : "rgba(148, 163, 184, 0.20)";
+
+                                const statusTextColor = isSynced
+                                    ? colors.textPrimary
+                                    : hasSyncError
+                                        ? "#fecaca"
+                                        : colors.textSecondary;
+
+                                const pulse = !!recentlySyncedAt && isSynced;
+
+                                return (
+                                    <Pressable
+                                        onLongPress={() => setActionMessage(pair.bot!)}
+                                        delayLongPress={250}
+                                        style={({ pressed }) => [
+                                            {
+                                                alignSelf: "flex-start",
+                                                backgroundColor: BOT_BUBBLE_BG,
+                                                paddingHorizontal: 14,
+                                                paddingVertical: 10,
+                                                borderRadius: 20,
+                                                maxWidth: "82%",
+                                            },
+                                            pressed && {
+                                                shadowColor:
+                                                    "rgba(56, 189, 248, 0.9)",
+                                                shadowOpacity: 0.6,
+                                                shadowRadius: 8,
+                                                shadowOffset: {
+                                                    width: 0,
+                                                    height: 0,
+                                                },
+                                                elevation: 5,
+                                                borderWidth: 1,
+                                                borderColor: colors.primary,
+                                            },
+                                        ]}
+                                    >
+                                        <Text
+                                            style={{
+                                                fontSize: 12,
+                                                fontWeight: "600",
+                                                color: colors.textSecondary,
+                                                marginBottom: 2,
+                                            }}
+                                        >
+                                            Imotara
+                                        </Text>
+                                        <Text
+                                            style={{
+                                                fontSize: 14,
+                                                color: colors.textPrimary,
+                                            }}
+                                        >
+                                            {pair.bot.text}
+                                        </Text>
+                                        <Text
+                                            style={{
+                                                fontSize: 11,
+                                                color: colors.textSecondary,
+                                                marginTop: 4,
+                                            }}
+                                        >
+                                            {new Date(
+                                                pair.bot.timestamp
+                                            ).toLocaleTimeString()}
+                                        </Text>
+
+                                        {/* Local-only mood hint (under bot reply) */}
+                                        {emotionInsightsEnabled &&
+                                            pair.bot.moodHint && (
+                                                <Text
+                                                    style={{
+                                                        marginTop: 6,
+                                                        fontSize: 12,
+                                                        color: colors.textSecondary,
+                                                    }}
+                                                >
+                                                    {pair.bot.moodHint}
+                                                </Text>
+                                            )}
+
+                                        {/* Sync badge for bot bubble */}
+                                        <View
+                                            style={{
+                                                alignSelf: "flex-start",
+                                                marginTop: 4,
+                                                paddingHorizontal: 10,
+                                                paddingVertical: 4,
+                                                borderRadius: 999,
+                                                borderWidth: 1,
+                                                borderColor: pulse
+                                                    ? colors.primary
+                                                    : "rgba(148, 163, 184, 0.4)",
+                                                backgroundColor: statusBg,
+                                            }}
+                                        >
+                                            <Text
+                                                style={{
+                                                    fontSize: 10,
+                                                    fontWeight: "500",
+                                                    color: statusTextColor,
+                                                }}
+                                            >
+                                                {statusLabel}
+                                            </Text>
+                                        </View>
+                                    </Pressable>
+                                );
+                            })()}
                         </View>
                     );
                 })}
@@ -498,6 +1004,48 @@ export default function ChatScreen() {
                 )}
             </ScrollView>
 
+            {/* Floating "New messages" button (bottom-right) with soft slide + fade */}
+            {showScrollButton && (
+                <Animated.View
+                    style={{
+                        position: "absolute",
+                        right: 16,
+                        bottom: 72,
+                        transform: [{ translateY: slideAnim }],
+                        opacity: fadeAnim,
+                    }}
+                >
+                    <TouchableOpacity
+                        onPress={() => {
+                            scrollViewRef.current?.scrollToEnd({ animated: true });
+                            setIsAtBottom(true);
+                            setShowScrollButton(false);
+                        }}
+                        style={{
+                            backgroundColor: colors.primary,
+                            paddingHorizontal: 14,
+                            paddingVertical: 8,
+                            borderRadius: 999,
+                            shadowColor: colors.primary,
+                            shadowOpacity: 0.35,
+                            shadowRadius: 10,
+                            shadowOffset: { width: 0, height: 0 },
+                            elevation: 4,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                color: "#ffffff",
+                                fontSize: 12,
+                                fontWeight: "600",
+                            }}
+                        >
+                            New messages ↓
+                        </Text>
+                    </TouchableOpacity>
+                </Animated.View>
+            )}
+
             {/* Input area */}
             <View
                 style={{
@@ -536,23 +1084,36 @@ export default function ChatScreen() {
                         textAlignVertical: "top",
                     }}
                 />
-                <TouchableOpacity
+
+                {/* Send button with scale + cyan glow on press */}
+                <Pressable
                     onPress={handleSend}
                     disabled={isSendDisabled}
-                    style={{
-                        marginLeft: 8,
-                        paddingHorizontal: 18,
-                        paddingVertical: 8,
-                        borderRadius: 999,
-                        justifyContent: "center",
-                        alignItems: "center",
-                        borderWidth: 1,
-                        borderColor: isSendDisabled
-                            ? colors.border
-                            : "#ffffff99",
-                        backgroundColor: "transparent",
-                        opacity: isSendDisabled ? 0.5 : 1,
-                    }}
+                    style={({ pressed }) => [
+                        {
+                            marginLeft: 8,
+                            paddingHorizontal: 18,
+                            paddingVertical: 8,
+                            borderRadius: 999,
+                            justifyContent: "center",
+                            alignItems: "center",
+                            borderWidth: 1,
+                            borderColor: isSendDisabled
+                                ? colors.border
+                                : "#ffffff99",
+                            backgroundColor: "transparent",
+                            opacity: isSendDisabled ? 0.5 : 1,
+                        },
+                        pressed && !isSendDisabled && {
+                            transform: [{ scale: 0.92 }],
+                            shadowColor: "rgba(56, 189, 248, 0.9)",
+                            shadowOpacity: 0.7,
+                            shadowRadius: 8,
+                            shadowOffset: { width: 0, height: 0 },
+                            elevation: 5,
+                            borderColor: colors.primary,
+                        },
+                    ]}
                 >
                     <Text
                         style={{
@@ -563,8 +1124,145 @@ export default function ChatScreen() {
                     >
                         Send
                     </Text>
-                </TouchableOpacity>
+                </Pressable>
             </View>
+
+            {/* Imotara bottom sheet for message actions */}
+            {actionMessage && (
+                <View
+                    style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        justifyContent: "flex-end",
+                        backgroundColor: "rgba(15, 23, 42, 0.55)", // slate overlay
+                    }}
+                >
+                    {/* Tap on dimmed backdrop to close */}
+                    <Pressable
+                        style={{ flex: 1 }}
+                        onPress={closeActionSheet}
+                    />
+
+                    <View
+                        style={{
+                            backgroundColor: colors.surfaceSoft,
+                            borderTopLeftRadius: 24,
+                            borderTopRightRadius: 24,
+                            paddingHorizontal: 18,
+                            paddingTop: 14,
+                            paddingBottom: 24,
+                            borderTopWidth: 1,
+                            borderColor: colors.border,
+                        }}
+                    >
+                        <View
+                            style={{
+                                alignItems: "center",
+                                marginBottom: 10,
+                            }}
+                        >
+                            <View
+                                style={{
+                                    width: 40,
+                                    height: 4,
+                                    borderRadius: 999,
+                                    backgroundColor: "rgba(148,163,184,0.7)",
+                                }}
+                            />
+                        </View>
+
+                        <Text
+                            style={{
+                                fontSize: 14,
+                                fontWeight: "600",
+                                color: colors.textPrimary,
+                                marginBottom: 4,
+                            }}
+                        >
+                            Message options
+                        </Text>
+                        <Text
+                            style={{
+                                fontSize: 11,
+                                color: colors.textSecondary,
+                                marginBottom: 12,
+                            }}
+                            numberOfLines={2}
+                        >
+                            {formattedActionTimestamp} ·{" "}
+                            {actionMessage.from === "user" ? "You" : "Imotara"}
+                        </Text>
+
+                        {/* Copy */}
+                        <TouchableOpacity
+                            onPress={handleCopyCurrent}
+                            style={{
+                                paddingVertical: 10,
+                                borderRadius: 12,
+                                backgroundColor: "rgba(56,189,248,0.16)",
+                                marginBottom: 8,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    textAlign: "center",
+                                    fontSize: 14,
+                                    fontWeight: "600",
+                                    color: colors.textPrimary,
+                                }}
+                            >
+                                Copy message
+                            </Text>
+                        </TouchableOpacity>
+
+                        {/* Delete locally */}
+                        <TouchableOpacity
+                            onPress={handleDeleteCurrent}
+                            style={{
+                                paddingVertical: 10,
+                                borderRadius: 12,
+                                backgroundColor: "rgba(248,113,113,0.16)",
+                                marginBottom: 8,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    textAlign: "center",
+                                    fontSize: 14,
+                                    fontWeight: "600",
+                                    color: "#fecaca",
+                                }}
+                            >
+                                Delete from this device
+                            </Text>
+                        </TouchableOpacity>
+
+                        {/* Cancel */}
+                        <TouchableOpacity
+                            onPress={closeActionSheet}
+                            style={{
+                                paddingVertical: 10,
+                                borderRadius: 12,
+                                backgroundColor: "transparent",
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    textAlign: "center",
+                                    fontSize: 14,
+                                    fontWeight: "500",
+                                    color: colors.textSecondary,
+                                }}
+                            >
+                                Cancel
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
         </View>
     );
 }

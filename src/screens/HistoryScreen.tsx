@@ -115,7 +115,7 @@ export default function HistoryScreen() {
     const { history, addToHistory } = useHistoryStore();
     const { lastSyncAt, lastSyncStatus } = useSettings();
 
-    // NEW: for floating "scroll to latest" button
+    // For floating "scroll to latest" button
     const [showScrollButton, setShowScrollButton] = React.useState(false);
     const scrollRef = React.useRef<ScrollView>(null);
 
@@ -269,7 +269,7 @@ export default function HistoryScreen() {
                 contentContainerStyle={{
                     paddingHorizontal: 16,
                     paddingVertical: 12,
-                    paddingBottom: 80, // a bit more for floating button
+                    paddingBottom: 80, // leave space for floating button
                 }}
                 onScroll={(e) => {
                     const { contentOffset, contentSize, layoutMeasurement } =
@@ -346,7 +346,7 @@ export default function HistoryScreen() {
                     </Text>
                 )}
 
-                {/* ENHANCED: unsynced count summary with helper text */}
+                {/* Unsynced summary with helper text */}
                 {unsyncedCount > 0 && (
                     <View
                         style={{
@@ -386,8 +386,8 @@ export default function HistoryScreen() {
                         borderRadius: 12,
                         borderWidth: 1,
                         marginBottom: 16,
-                        borderColor: colors.primary,
-                        backgroundColor: "rgba(56, 189, 248, 0.16)",
+                        borderColor: "#4ade80",
+                        backgroundColor: "rgba(74, 222, 128, 0.16)", // greenish debug button
                     }}
                 >
                     <Text
@@ -444,30 +444,36 @@ export default function HistoryScreen() {
                                 }
                             }
 
-                            // Bubble-level sync styling
-                            const bubbleBorderColor = item.isSynced
-                                ? colors.primary
-                                : hasSyncError
-                                    ? "#fca5a5"
-                                    : "transparent";
+                            // Bubble-level sync styling (bluish background, reddish borders for unsynced)
+                            let bubbleBorderColor: string;
+                            let statusLabel: string;
+                            let statusBg: string;
+                            let statusTextColor: string;
+                            const bubbleBackground = isUser
+                                ? USER_BUBBLE_BG
+                                : BOT_BUBBLE_BG;
 
-                            const statusLabel = item.isSynced
-                                ? "Synced to cloud"
-                                : hasSyncError
-                                    ? "Sync issue · on this device only"
-                                    : "On this device only";
-
-                            const statusBg = item.isSynced
-                                ? "rgba(56, 189, 248, 0.18)"
-                                : hasSyncError
-                                    ? "rgba(248, 113, 113, 0.18)"
-                                    : "rgba(148, 163, 184, 0.20)";
-
-                            const statusTextColor = item.isSynced
-                                ? colors.textPrimary
-                                : hasSyncError
-                                    ? "#fecaca"
-                                    : colors.textSecondary;
+                            if (item.isSynced) {
+                                // Synced: aurora cyan accent
+                                bubbleBorderColor = colors.primary;
+                                statusLabel = "Synced to cloud";
+                                statusBg = "rgba(56, 189, 248, 0.18)";
+                                statusTextColor = colors.textPrimary;
+                            } else {
+                                // Unsynced: red border + red-ish status chip, but keep blue bubble bg
+                                if (hasSyncError) {
+                                    bubbleBorderColor = "#f97373"; // stronger red
+                                    statusLabel =
+                                        "Sync issue · on this device only";
+                                    statusBg = "rgba(248, 113, 113, 0.24)";
+                                    statusTextColor = "#fecaca";
+                                } else {
+                                    bubbleBorderColor = "#fca5a5"; // softer red
+                                    statusLabel = "On this device only";
+                                    statusBg = "rgba(248, 113, 113, 0.18)";
+                                    statusTextColor = "#fecaca";
+                                }
+                            }
 
                             return (
                                 <View key={item.id}>
@@ -509,7 +515,7 @@ export default function HistoryScreen() {
                                         </View>
                                     )}
 
-                                    {/* Bubble + sync info */}
+                                    {/* Bubble + sync info (long-press for full time) */}
                                     <TouchableOpacity
                                         activeOpacity={0.9}
                                         onLongPress={() =>
@@ -522,17 +528,19 @@ export default function HistoryScreen() {
                                         }
                                         delayLongPress={250}
                                         style={{
-                                            alignSelf: isUser ? "flex-end" : "flex-start",
+                                            alignSelf: isUser
+                                                ? "flex-end"
+                                                : "flex-start",
                                             maxWidth: "80%",
-                                            backgroundColor: isUser
-                                                ? USER_BUBBLE_BG
-                                                : BOT_BUBBLE_BG,
+                                            backgroundColor: bubbleBackground,
                                             paddingHorizontal: 12,
                                             paddingVertical: 8,
                                             borderRadius: 16,
                                             marginBottom: 10,
                                             borderWidth:
-                                                bubbleBorderColor === "transparent" ? 0 : 1,
+                                                bubbleBorderColor === "transparent"
+                                                    ? 0
+                                                    : 1,
                                             borderColor: bubbleBorderColor,
                                         }}
                                     >
@@ -571,14 +579,17 @@ export default function HistoryScreen() {
                                         {/* Sync badge for this bubble */}
                                         <View
                                             style={{
-                                                alignSelf: isUser ? "flex-end" : "flex-start",
+                                                alignSelf: isUser
+                                                    ? "flex-end"
+                                                    : "flex-start",
                                                 marginTop: 4,
                                                 paddingHorizontal: 10,
                                                 paddingVertical: 4,
                                                 borderRadius: 999,
                                                 borderWidth: 1,
                                                 borderColor:
-                                                    bubbleBorderColor === "transparent"
+                                                    bubbleBorderColor ===
+                                                        "transparent"
                                                         ? "rgba(148, 163, 184, 0.4)"
                                                         : bubbleBorderColor,
                                                 backgroundColor: statusBg,
@@ -597,13 +608,16 @@ export default function HistoryScreen() {
 
                                         {/* Subtle inline helper for unsynced items */}
                                         {!item.isSynced && (
-                                            <TouchableOpacity onPress={handleLoadRemote}>
+                                            <TouchableOpacity
+                                                onPress={handleLoadRemote}
+                                            >
                                                 <Text
                                                     style={{
                                                         marginTop: 4,
                                                         fontSize: 11,
                                                         color: "#93c5fd",
-                                                        textDecorationLine: "underline",
+                                                        textDecorationLine:
+                                                            "underline",
                                                         alignSelf: isUser
                                                             ? "flex-end"
                                                             : "flex-start",
@@ -621,10 +635,12 @@ export default function HistoryScreen() {
                 ))}
             </ScrollView>
 
-            {/* NEW: Floating Scroll-to-Latest Button */}
+            {/* Floating Scroll-to-Latest Button */}
             {showScrollButton && (
                 <TouchableOpacity
-                    onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
+                    onPress={() =>
+                        scrollRef.current?.scrollToEnd({ animated: true })
+                    }
                     style={{
                         position: "absolute",
                         bottom: 20,
