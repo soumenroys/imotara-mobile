@@ -115,6 +115,10 @@ export default function HistoryScreen() {
     const { history, addToHistory } = useHistoryStore();
     const { lastSyncAt, lastSyncStatus } = useSettings();
 
+    // NEW: for floating "scroll to latest" button
+    const [showScrollButton, setShowScrollButton] = React.useState(false);
+    const scrollRef = React.useRef<ScrollView>(null);
+
     const hasSyncError = React.useMemo(() => {
         const lower = (lastSyncStatus || "").toLowerCase();
         return lower.includes("failed") || lower.includes("error");
@@ -124,7 +128,7 @@ export default function HistoryScreen() {
         ? new Date(lastSyncAt).toLocaleString()
         : null;
 
-    // NEW: how many messages are still local-only (not synced)
+    // how many messages are still local-only (not synced)
     const unsyncedCount = React.useMemo(
         () => history.filter((h) => !h.isSynced).length,
         [history]
@@ -261,11 +265,23 @@ export default function HistoryScreen() {
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
             <ScrollView
+                ref={scrollRef}
                 contentContainerStyle={{
                     paddingHorizontal: 16,
                     paddingVertical: 12,
-                    paddingBottom: 24,
+                    paddingBottom: 80, // a bit more for floating button
                 }}
+                onScroll={(e) => {
+                    const { contentOffset, contentSize, layoutMeasurement } =
+                        e.nativeEvent;
+
+                    const distanceFromBottom =
+                        contentSize.height -
+                        (contentOffset.y + layoutMeasurement.height);
+
+                    setShowScrollButton(distanceFromBottom > 120);
+                }}
+                scrollEventThrottle={50}
             >
                 <Text
                     style={{
@@ -330,17 +346,34 @@ export default function HistoryScreen() {
                     </Text>
                 )}
 
-                {/* NEW: unsynced count summary (only if there are any) */}
+                {/* ENHANCED: unsynced count summary with helper text */}
                 {unsyncedCount > 0 && (
-                    <Text
+                    <View
                         style={{
-                            fontSize: 11,
-                            color: colors.textSecondary,
                             marginBottom: 8,
                         }}
                     >
-                        Unsynced messages on this device: {unsyncedCount}
-                    </Text>
+                        <Text
+                            style={{
+                                fontSize: 11,
+                                color: hasSyncError ? "#fecaca" : colors.textSecondary,
+                                fontWeight: hasSyncError ? "600" : "400",
+                            }}
+                        >
+                            Unsynced messages on this device: {unsyncedCount}
+                        </Text>
+                        <Text
+                            style={{
+                                marginTop: 2,
+                                fontSize: 11,
+                                color: hasSyncError ? "#fecaca" : colors.textSecondary,
+                            }}
+                        >
+                            {hasSyncError
+                                ? "Imotara will try again when sync recovers."
+                                : "They’ll be backed up automatically on the next successful sync."}
+                        </Text>
+                    </View>
                 )}
 
                 {/* Debug: Load Remote History */}
@@ -476,7 +509,18 @@ export default function HistoryScreen() {
                                         </View>
                                     )}
 
-                                    <View
+                                    {/* Bubble + sync info */}
+                                    <TouchableOpacity
+                                        activeOpacity={0.9}
+                                        onLongPress={() =>
+                                            Alert.alert(
+                                                "Message timestamp",
+                                                new Date(
+                                                    item.timestamp
+                                                ).toLocaleString()
+                                            )
+                                        }
+                                        delayLongPress={250}
                                         style={{
                                             alignSelf: isUser ? "flex-end" : "flex-start",
                                             maxWidth: "80%",
@@ -519,7 +563,9 @@ export default function HistoryScreen() {
                                                 marginTop: 4,
                                             }}
                                         >
-                                            {new Date(item.timestamp).toLocaleTimeString()}
+                                            {new Date(
+                                                item.timestamp
+                                            ).toLocaleTimeString()}
                                         </Text>
 
                                         {/* Sync badge for this bubble */}
@@ -549,7 +595,7 @@ export default function HistoryScreen() {
                                             </Text>
                                         </View>
 
-                                        {/* NEW: subtle inline helper for unsynced items */}
+                                        {/* Subtle inline helper for unsynced items */}
                                         {!item.isSynced && (
                                             <TouchableOpacity onPress={handleLoadRemote}>
                                                 <Text
@@ -567,13 +613,44 @@ export default function HistoryScreen() {
                                                 </Text>
                                             </TouchableOpacity>
                                         )}
-                                    </View>
+                                    </TouchableOpacity>
                                 </View>
                             );
                         })}
                     </View>
                 ))}
             </ScrollView>
+
+            {/* NEW: Floating Scroll-to-Latest Button */}
+            {showScrollButton && (
+                <TouchableOpacity
+                    onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
+                    style={{
+                        position: "absolute",
+                        bottom: 20,
+                        right: 20,
+                        backgroundColor: colors.primary,
+                        paddingHorizontal: 16,
+                        paddingVertical: 10,
+                        borderRadius: 999,
+                        shadowColor: "#000",
+                        shadowOpacity: 0.25,
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowRadius: 4,
+                        elevation: 4,
+                    }}
+                >
+                    <Text
+                        style={{
+                            color: "#fff",
+                            fontWeight: "700",
+                            fontSize: 13,
+                        }}
+                    >
+                        ↓ Latest
+                    </Text>
+                </TouchableOpacity>
+            )}
         </View>
     );
 }
