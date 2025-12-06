@@ -13,6 +13,44 @@ const BOT_BUBBLE_BG = colors.surfaceSoft;
 // If gap between messages > 45 minutes → consider it a "new session"
 const SESSION_GAP_MS = 45 * 60 * 1000;
 
+function getMoodEmojiForText(text: string): string {
+    const lower = text.toLowerCase();
+
+    const sad = ["sad", "down", "lonely", "hurt", "depressed", "blue"];
+    const anxious = ["worry", "worried", "anxious", "stressed", "panic"];
+    const angry = ["angry", "mad", "frustrated", "irritated", "furious"];
+    const hopeful = ["hope", "hopeful", "better", "relieved", "excited"];
+    const stuck = ["stuck", "lost", "confused", "unsure"];
+
+    const match = (arr: string[]) => arr.some((w) => lower.includes(w));
+
+    if (match(sad)) return "💙";      // sad-ish
+    if (match(anxious)) return "💛";  // worried
+    if (match(angry)) return "❤️";    // upset
+    if (match(stuck)) return "🟣";     // confused/stuck
+    if (match(hopeful)) return "💚";   // hopeful
+
+    return "⚪️"; // neutral
+}
+
+function getEmotionSectionLabel(emoji: string): string {
+    switch (emoji) {
+        case "💙":
+            return "Low / Sad moments";
+        case "💛":
+            return "Worried / Anxious moments";
+        case "❤️":
+            return "Upset / Angry moments";
+        case "🟣":
+            return "Stuck / Confused moments";
+        case "💚":
+            return "Hopeful moments";
+        case "⚪️":
+        default:
+            return "Neutral / Mixed moments";
+    }
+}
+
 /**
  * Normalize any incoming remote object to a strict HistoryItem shape.
  * This prevents UI issues when the backend uses slightly different
@@ -434,6 +472,26 @@ export default function HistoryScreen() {
                         {group.items.map((item, index) => {
                             const isUser = item.from === "user";
 
+                            // Emotion-based section header (per date, per emotion)
+                            let emotionHeader: string | null = null;
+                            if (!isUser) {
+                                const emoji = getMoodEmojiForText(item.text);
+                                const label = getEmotionSectionLabel(emoji);
+
+                                // Check if we already showed this emotion earlier in this date group
+                                const hasPrevious = group.items
+                                    .slice(0, index)
+                                    .some(
+                                        (prev) =>
+                                            prev.from === "bot" &&
+                                            getMoodEmojiForText(prev.text) === emoji
+                                    );
+
+                                if (!hasPrevious) {
+                                    emotionHeader = `${emoji} ${label}`;
+                                }
+                            }
+
                             // Determine if this message starts a "new session"
                             let showSessionDivider = false;
                             if (index > 0) {
@@ -515,6 +573,20 @@ export default function HistoryScreen() {
                                         </View>
                                     )}
 
+                                    {emotionHeader && (
+                                        <Text
+                                            style={{
+                                                marginTop: 4,
+                                                marginBottom: 2,
+                                                fontSize: 11,
+                                                color: colors.textSecondary,
+                                                alignSelf: "flex-start",
+                                            }}
+                                        >
+                                            {emotionHeader}
+                                        </Text>
+                                    )}
+
                                     {/* Bubble + sync info (long-press for full time) */}
                                     <TouchableOpacity
                                         activeOpacity={0.9}
@@ -552,7 +624,7 @@ export default function HistoryScreen() {
                                                 marginBottom: 2,
                                             }}
                                         >
-                                            {isUser ? "You" : "Imotara"}
+                                            {isUser ? "You" : `Imotara ${getMoodEmojiForText(item.text)}`}
                                         </Text>
 
                                         <Text

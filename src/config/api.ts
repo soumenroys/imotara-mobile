@@ -24,6 +24,7 @@ function isIosSimulator(): boolean {
 export const IMOTARA_API_BASE_URL = isIosSimulator()
     ? LOCALHOST_BASE
     : WIFI_IP_BASE;
+//export const IMOTARA_API_BASE_URL = "http://127.0.0.1:9999";
 
 export function buildApiUrl(path: string): string {
     const base = IMOTARA_API_BASE_URL.replace(/\/+$/, "");

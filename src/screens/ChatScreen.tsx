@@ -23,6 +23,8 @@ import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
 import { callImotaraAI } from "../api/aiClient";
 
+type ChatMessageSource = "cloud" | "local";
+
 type ChatMessage = {
     id: string;
     from: "user" | "bot";
@@ -32,6 +34,14 @@ type ChatMessage = {
     moodHint?: string;
     // Lite sync flag (mirrors HistoryItem)
     isSynced?: boolean;
+    /**
+     * Where this bot reply came from:
+     * - "cloud" → remote Imotara AI (via /api/analyze)
+     * - "local" → local preview fallback (no network or error)
+     *
+     * For user messages, this stays undefined.
+     */
+    source?: ChatMessageSource;
 };
 
 // Local mood hint helper (same spirit as web app, but ultra-lightweight)
@@ -114,6 +124,36 @@ function getLocalMoodHint(text: string): string {
     return "I’m listening closely. However you’re feeling, it matters here.";
 }
 
+function getMoodEmojiForHint(hint?: string): string {
+    if (!hint) return "";
+    const text = hint.toLowerCase();
+
+    // Matches the exact wordings we use in getLocalMoodHint
+    if (text.includes("low")) {
+        // a bit low / sad
+        return " 💙";
+    }
+    if (text.includes("tense") || text.includes("worried")) {
+        // tense / anxious
+        return " 💛";
+    }
+    if (text.includes("upset") || text.includes("frustrated")) {
+        // upset / angry
+        return " ❤️";
+    }
+    if (text.includes("stuck") || text.includes("unsure")) {
+        // stuck / confused
+        return " 🟣";
+    }
+    if (text.includes("light") || text.includes("hope")) {
+        // hopeful / a bit bright
+        return " 💚";
+    }
+
+    // neutral / listening
+    return " ⚪️";
+}
+
 function generateLocalBotResponse(
     userText: string,
     insightsEnabled: boolean
@@ -149,6 +189,12 @@ type TypingStatus = "idle" | "thinking";
 // On-screen Imotara message actions
 type MessageAction = "copy" | "delete";
 
+function smoothScrollToBottom(ref: React.RefObject<ScrollView | null>) {
+    setTimeout(() => {
+        ref.current?.scrollToEnd({ animated: true });
+    }, 30);
+}
+
 export default function ChatScreen() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
@@ -178,6 +224,7 @@ export default function ChatScreen() {
     const [showScrollButton, setShowScrollButton] = useState(false);
 
     const [typingStatus, setTypingStatus] = useState<TypingStatus>("idle");
+    const [typingGlow] = useState(new Animated.Value(0));
 
     // When some messages become synced, we briefly pulse
     const hasUnsynced = useMemo(
@@ -295,6 +342,33 @@ export default function ChatScreen() {
 
         return () => clearInterval(interval);
     }, [isTyping]);
+
+    // Typing glow (breathing) animation  ← YOU INSERTED THIS
+    useEffect(() => {
+        if (!isTyping) {
+            typingGlow.setValue(0);
+            return;
+        }
+
+        const loop = Animated.loop(
+            Animated.sequence([
+                Animated.timing(typingGlow, {
+                    toValue: 1,
+                    duration: 650,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(typingGlow, {
+                    toValue: 0,
+                    duration: 650,
+                    useNativeDriver: true,
+                }),
+            ])
+        );
+
+        loop.start();
+
+        return () => loop.stop();
+    }, [isTyping, typingGlow]);
 
     // Cleanup any pending bot reply timeout when unmounting
     useEffect(() => {
@@ -489,10 +563,12 @@ export default function ChatScreen() {
             clearTimeout(typingTimeoutRef.current);
         }
 
+        // Small note we add only when network/remote fails
+        const networkNote = "\n\n(I'm replying from your device because the network is a little slow.)";
+
         // 2) After a short delay, ask Imotara for a reply.
         //    We first try the remote AI; if that fails, we fall back
-        //    to the existing local preview brain, so behaviour remains
-        //    100% backward compatible.
+        //    to the existing local preview brain, with a gentle note.
         typingTimeoutRef.current = setTimeout(() => {
             (async () => {
                 try {
@@ -501,22 +577,26 @@ export default function ChatScreen() {
 
                     let replyText: string;
                     let moodHint: string | undefined;
+                    let source: ChatMessageSource = "cloud";
 
                     if (remote.ok && remote.replyText.trim().length > 0) {
                         replyText = remote.replyText;
+                        source = "cloud";
                         // We still compute a local mood hint (from the user text)
                         // so the mini mood glimpse + hint remain present.
                         if (emotionInsightsEnabled) {
                             moodHint = getLocalMoodHint(trimmed);
                         }
                     } else {
-                        // Fallback to the exact same local behaviour as before
+                        // Fallback to the exact same local behaviour as before,
+                        // but explicitly tell the user we're using a local preview.
                         const local = generateLocalBotResponse(
                             trimmed,
                             emotionInsightsEnabled
                         );
-                        replyText = local.replyText;
+                        replyText = local.replyText + networkNote;
                         moodHint = local.moodHint;
+                        source = "local";
                     }
 
                     const botTimestamp = Date.now();
@@ -527,6 +607,7 @@ export default function ChatScreen() {
                         timestamp: botTimestamp,
                         moodHint,
                         isSynced: false,
+                        source,
                     };
 
                     addToHistory({
@@ -538,8 +619,11 @@ export default function ChatScreen() {
                     });
 
                     setMessages((prev) => [...prev, botMessage]);
+                    smoothScrollToBottom(scrollViewRef);
+
                 } catch (error) {
                     console.warn("Imotara mobile AI error:", error);
+                    // Network / backend error → fallback to local with note
                     const local = generateLocalBotResponse(
                         trimmed,
                         emotionInsightsEnabled
@@ -548,10 +632,11 @@ export default function ChatScreen() {
                     const botMessage: ChatMessage = {
                         id: `b-${botTimestamp}`,
                         from: "bot",
-                        text: local.replyText,
+                        text: local.replyText + networkNote,
                         timestamp: botTimestamp,
                         moodHint: local.moodHint,
                         isSynced: false,
+                        source: "local",
                     };
 
                     addToHistory({
@@ -563,6 +648,8 @@ export default function ChatScreen() {
                     });
 
                     setMessages((prev) => [...prev, botMessage]);
+                    smoothScrollToBottom(scrollViewRef);
+
                 } finally {
                     setIsTyping(false);
                     setTypingStatus("idle");
@@ -587,10 +674,11 @@ export default function ChatScreen() {
                 text: h.text,
                 timestamp: h.timestamp,
                 isSynced: h.isSynced,
+                // old messages will have no explicit source; we keep it undefined
             }));
 
             setMessages(hydrated);
-            scrollToBottom();
+            smoothScrollToBottom(scrollViewRef);
         }
     }, [history, messages.length]);
 
@@ -687,6 +775,19 @@ export default function ChatScreen() {
         // For session divider, look at previous message (ignoring date group)
         const prev = messages[index - 1];
 
+        // Teen-friendly icon: cloud for remote, moon for local preview
+        let sourceIcon = "";
+        if (!isUser) {
+            if (message.source === "local") {
+                sourceIcon = " 🌙";
+            } else if (message.source === "cloud") {
+                sourceIcon = " ☁️";
+            } else {
+                // historical messages with no explicit source → no icon
+                sourceIcon = "";
+            }
+        }
+
         return (
             <View key={message.id}>
                 {renderSessionDivider(message, prev)}
@@ -717,7 +818,9 @@ export default function ChatScreen() {
                             marginBottom: 2,
                         }}
                     >
-                        {isUser ? "You" : "Imotara"}
+                        {isUser
+                            ? "You"
+                            : `Imotara${sourceIcon}${getMoodEmojiForHint(message.moodHint)}`}
                     </Text>
 
                     <Text
@@ -1125,27 +1228,44 @@ export default function ChatScreen() {
 
                     {/* Typing indicator */}
                     {isTyping && (
-                        <View
+                        <Animated.View
                             style={{
-                                alignSelf: "flex-start",
-                                marginTop: 4,
-                                paddingHorizontal: 10,
-                                paddingVertical: 6,
-                                borderRadius: 999,
-                                backgroundColor: "rgba(15, 23, 42, 0.9)",
-                                borderWidth: 1,
-                                borderColor: colors.border,
+                                opacity: typingGlow.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [0.5, 1],
+                                }),
+                                transform: [
+                                    {
+                                        scale: typingGlow.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0.98, 1.03],
+                                        }),
+                                    },
+                                ],
                             }}
                         >
-                            <Text
+                            <View
                                 style={{
-                                    fontSize: 11,
-                                    color: colors.textSecondary,
+                                    alignSelf: "flex-start",
+                                    marginTop: 4,
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 6,
+                                    borderRadius: 999,
+                                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                    borderWidth: 1,
+                                    borderColor: colors.border,
                                 }}
                             >
-                                {typingStatusText || "Imotara is typing…"}
-                            </Text>
-                        </View>
+                                <Text
+                                    style={{
+                                        fontSize: 11,
+                                        color: colors.textSecondary,
+                                    }}
+                                >
+                                    {typingStatusText || "Imotara is typing…"}
+                                </Text>
+                            </View>
+                        </Animated.View>
                     )}
                 </ScrollView>
 
