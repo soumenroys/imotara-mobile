@@ -1082,9 +1082,9 @@ export default function ChatScreen() {
             <View
                 style={{
                     paddingHorizontal: 16,
-                    paddingTop: 6,
-                    paddingBottom: 4,
-                    borderBottomWidth: 1,
+                    paddingTop: 2,          // was 6
+                    paddingBottom: 2,       // was 4
+                    borderBottomWidth: 0.5, // slightly lighter divider
                     borderBottomColor: colors.border,
                     backgroundColor: "rgba(15, 23, 42, 0.96)",
                 }}
@@ -1210,8 +1210,8 @@ export default function ChatScreen() {
                 <ScrollView
                     ref={scrollViewRef}
                     contentContainerStyle={{
-                        paddingHorizontal: 16,
-                        paddingTop: 12,
+                        paddingHorizontal: 14,
+                        paddingTop: 4,     // reduced from 12
                         paddingBottom: 80,
                     }}
                     onScroll={handleScroll}

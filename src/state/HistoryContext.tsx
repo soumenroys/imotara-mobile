@@ -25,6 +25,15 @@ export type HistoryItem = {
     isSynced?: boolean;
 };
 
+type MergeRemoteResult = {
+    /** How many raw items were passed in (if array). */
+    totalRemote: number;
+    /** How many of those were valid after normalization. */
+    normalized: number;
+    /** How many new records were actually added (non-duplicates). */
+    added: number;
+};
+
 type HistoryContextValue = {
     history: HistoryItem[];
     addToHistory: (item: HistoryItem) => void;
@@ -37,6 +46,15 @@ type HistoryContextValue = {
      * Never throws; returns a small status object instead.
      */
     pushHistoryToRemote: () => Promise<PushRemoteHistoryResult>;
+
+    /**
+     * Merge raw remote history items into the local store.
+     * - Normalizes arbitrary backend shapes into HistoryItem
+     * - Skips invalid / empty entries
+     * - Avoids duplicates by id
+     * - Marks merged records as isSynced: true
+     */
+    mergeRemoteHistory: (rawItems: unknown[]) => MergeRemoteResult;
 };
 
 const STORAGE_KEY = "imotara_history_v1";
@@ -44,6 +62,86 @@ const STORAGE_KEY = "imotara_history_v1";
 const HistoryContext = createContext<HistoryContextValue | undefined>(
     undefined
 );
+
+/**
+ * Normalize any incoming remote object to a strict HistoryItem shape.
+ * This prevents UI issues when the backend uses slightly different
+ * field names like `role`, `author`, `createdAt`, etc.
+ */
+function normalizeRemoteItem(raw: any): HistoryItem | null {
+    if (!raw || typeof raw !== "object") return null;
+
+    // ----- 1) Extract text -----
+    const text: string =
+        typeof raw.text === "string"
+            ? raw.text
+            : typeof raw.message === "string"
+                ? raw.message
+                : typeof raw.content === "string"
+                    ? raw.content
+                    : "";
+
+    if (!text || !text.trim()) {
+        // Ignore empty rows
+        return null;
+    }
+
+    // ----- 2) Determine "from" (user vs bot) -----
+    const roleLike: string =
+        (raw.from as string) ||
+        (raw.role as string) ||
+        (raw.author as string) ||
+        (raw.speaker as string) ||
+        "";
+
+    let from: "user" | "bot" = "bot";
+    const roleLower = roleLike.toLowerCase();
+
+    if (roleLower === "user" || roleLower === "human" || roleLower === "you") {
+        from = "user";
+    } else if (
+        roleLower === "assistant" ||
+        roleLower === "bot" ||
+        roleLower === "imotara" ||
+        roleLower === "ai"
+    ) {
+        from = "bot";
+    } else if (raw.isUser === true) {
+        // Fallback flag
+        from = "user";
+    }
+
+    // ----- 3) Determine timestamp (number, ms) -----
+    let timestamp: number;
+
+    if (typeof raw.timestamp === "number") {
+        timestamp = raw.timestamp;
+    } else if (typeof raw.createdAt === "number") {
+        timestamp = raw.createdAt;
+    } else if (typeof raw.createdAt === "string") {
+        const parsed = Date.parse(raw.createdAt);
+        timestamp = Number.isNaN(parsed) ? Date.now() : parsed;
+    } else {
+        timestamp = Date.now();
+    }
+
+    // ----- 4) Determine id (string) -----
+    const baseId =
+        (raw.id as string) ||
+        (raw._id as string) ||
+        `${from}-${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const id = String(baseId);
+
+    return {
+        id,
+        text,
+        from,
+        timestamp,
+        // Anything coming from the backend is, by definition, synced.
+        isSynced: true,
+    };
+}
 
 export default function HistoryProvider({ children }: { children: ReactNode }) {
     const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -171,6 +269,61 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    /**
+     * Merge raw remote items into local history.
+     * - Normalizes shapes
+     * - Skips invalid/empty
+     * - Avoids duplicates by id
+     * - Marks merged items as isSynced: true
+     */
+    const mergeRemoteHistory = (rawItems: unknown[]): MergeRemoteResult => {
+        const totalRemote = Array.isArray(rawItems) ? rawItems.length : 0;
+        if (!Array.isArray(rawItems) || rawItems.length === 0) {
+            return { totalRemote, normalized: 0, added: 0 };
+        }
+
+        const normalizedItems: HistoryItem[] = [];
+        for (const raw of rawItems) {
+            const normalized = normalizeRemoteItem(raw);
+            if (normalized) {
+                normalizedItems.push(normalized);
+            }
+        }
+
+        const normalizedCount = normalizedItems.length;
+        if (normalizedCount === 0) {
+            return { totalRemote, normalized: 0, added: 0 };
+        }
+
+        let addedCount = 0;
+
+        setHistory((prev) => {
+            const existingIds = new Set(prev.map((h) => h.id));
+            const toAdd: HistoryItem[] = [];
+
+            for (const item of normalizedItems) {
+                if (!existingIds.has(item.id)) {
+                    existingIds.add(item.id);
+                    toAdd.push(item);
+                }
+            }
+
+            addedCount = toAdd.length;
+            if (addedCount === 0) return prev;
+
+            const merged = [...prev, ...toAdd].sort(
+                (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
+            );
+            return merged;
+        });
+
+        return {
+            totalRemote,
+            normalized: normalizedCount,
+            added: addedCount,
+        };
+    };
+
     return (
         <HistoryContext.Provider
             value={{
@@ -179,6 +332,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 clearHistory,
                 deleteFromHistory,
                 pushHistoryToRemote,
+                mergeRemoteHistory,
             }}
         >
             {children}
