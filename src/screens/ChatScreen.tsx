@@ -21,92 +21,99 @@ import * as Clipboard from "expo-clipboard";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
+import { callImotaraAI } from "../api/aiClient";
 
 type ChatMessage = {
     id: string;
     from: "user" | "bot";
     text: string;
     timestamp: number;
-    // Optional local-only mood hint (shown under bot replies)
+    // Optional local-only mood hint (preview)
     moodHint?: string;
-    // Mirror of HistoryItem.isSynced (for per-bubble status)
+    // Lite sync flag (mirrors HistoryItem)
     isSynced?: boolean;
 };
 
-const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)"; // soft aurora cyan
-const BOT_BUBBLE_BG = colors.surfaceSoft;
-
-/**
- * Very simple local-only mood classifier.
- * No network calls, purely keyword-based and gentle in tone.
- */
-function getLocalMoodHint(text: string): string | undefined {
+// Local mood hint helper (same spirit as web app, but ultra-lightweight)
+function getLocalMoodHint(text: string): string {
     const lower = text.toLowerCase();
 
     const sadWords = [
         "sad",
-        "upset",
-        "depressed",
         "down",
         "lonely",
-        "cry",
         "tired",
-        "anxious",
-        "anxiety",
+        "upset",
+        "hurt",
+        "empty",
+        "depressed",
+        "blue",
+        "cry",
+        "crying",
+    ];
+    const anxiousWords = [
+        "worry",
         "worried",
+        "anxious",
+        "scared",
+        "panic",
+        "nervous",
+        "stressed",
+        "overwhelmed",
+        "afraid",
+        "fear",
     ];
     const angryWords = [
         "angry",
-        "furious",
-        "irritated",
-        "annoyed",
+        "mad",
         "frustrated",
-        "hate",
+        "annoyed",
+        "irritated",
+        "furious",
         "rage",
+        "hate",
     ];
-    const stressedWords = [
-        "stress",
-        "stressed",
-        "overwhelmed",
-        "pressure",
-        "burnout",
-        "burned out",
-    ];
-    const happyWords = [
-        "happy",
+    const hopefulWords = [
+        "hope",
+        "hopeful",
         "excited",
-        "joy",
+        "looking forward",
         "grateful",
         "thankful",
-        "good",
-        "great",
-        "awesome",
+        "relieved",
+        "better",
+    ];
+    const stuckWords = [
+        "stuck",
+        "lost",
+        "confused",
+        "don’t know",
+        "dont know",
+        "no idea",
+        "numb",
     ];
 
     const containsAny = (words: string[]) => words.some((w) => lower.includes(w));
 
     if (containsAny(sadWords)) {
-        return "You seem a bit low. It’s okay to feel this way — I’m here with you 🫂";
+        return "You seem a bit low. It’s okay to feel this way — Imotara is here with you.";
+    }
+    if (containsAny(anxiousWords)) {
+        return "It sounds like something is making you feel tense or worried.";
     }
     if (containsAny(angryWords)) {
-        return "I can sense some anger or frustration. It’s valid — we can unpack it slowly together 🌧️➡️🌤️";
+        return "It sounds like something has really upset or frustrated you.";
     }
-    if (containsAny(stressedWords)) {
-        return "It sounds like you’re under a lot of pressure. Let’s take it one step at a time 🌱";
+    if (containsAny(stuckWords)) {
+        return "You sound a bit stuck or unsure. It’s okay to take time to untangle things.";
     }
-    if (containsAny(happyWords)) {
-        return "I’m glad you’re feeling something positive. Let’s hold onto this moment of light ✨";
+    if (containsAny(hopefulWords)) {
+        return "I can sense a little bit of light or hope in what you’re saying.";
     }
 
-    // Neutral / unknown tone → no extra hint
-    return undefined;
+    return "I’m listening closely. However you’re feeling, it matters here.";
 }
 
-/**
- * Single place to decide how Imotara replies on mobile.
- * Right now it's purely local and deterministic.
- * Later, this can call a real AI/analysis engine without changing ChatScreen.
- */
 function generateLocalBotResponse(
     userText: string,
     insightsEnabled: boolean
@@ -123,15 +130,39 @@ function generateLocalBotResponse(
     }
 
     const moodHint = getLocalMoodHint(userText);
-    return { replyText, moodHint };
+
+    return {
+        replyText,
+        moodHint,
+    };
 }
 
+// Decide bubble colors based on Aurora Calm theme
+const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
+const BOT_BUBBLE_BG = colors.surfaceSoft;
+
+// If gap between messages > 45 minutes → new session
+const SESSION_GAP_MS = 45 * 60 * 1000;
+
+type TypingStatus = "idle" | "thinking";
+
+// On-screen Imotara message actions
+type MessageAction = "copy" | "delete";
+
 export default function ChatScreen() {
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [inputHeight, setInputHeight] = useState(40);
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isTyping, setIsTyping] = useState(false);
     const [typingDots, setTypingDots] = useState(1);
+
+    // For subtle "recently synced" pulse in the header
+    const [recentlySyncedAt, setRecentlySyncedAt] = useState<number | null>(
+        null
+    );
+
+    // For Imotara bottom sheet actions
+    const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
 
     const {
         addToHistory,
@@ -146,26 +177,112 @@ export default function ChatScreen() {
     const [isAtBottom, setIsAtBottom] = useState(true);
     const [showScrollButton, setShowScrollButton] = useState(false);
 
-    // When some messages become synced, we briefly pulse their sync badges.
-    const [recentlySyncedAt, setRecentlySyncedAt] = useState<number | null>(null);
+    const [typingStatus, setTypingStatus] = useState<TypingStatus>("idle");
 
-    // For Imotara bottom sheet actions
-    const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
+    // When some messages become synced, we briefly pulse
+    const hasUnsynced = useMemo(
+        () => history.some((h) => !h.isSynced),
+        [history]
+    );
 
-    const isSendDisabled = input.trim().length === 0;
+    // Short "recently synced" chip
+    const showRecentlySyncedPulse = useMemo(() => {
+        if (recentlySyncedAt == null) return false;
+        const diff = Date.now() - recentlySyncedAt;
+        return diff < 8000; // ~8 seconds
+    }, [recentlySyncedAt]);
 
-    const closeActionSheet = () => setActionMessage(null);
+    // Keep messages' isSynced flags aligned with history store
+    useEffect(() => {
+        if (history.length === 0) return;
 
-    // Animation for "New messages ↓" button (soft slide + fade)
-    const slideAnim = useRef<Animated.Value>(new Animated.Value(20)).current;
-    const fadeAnim = useRef<Animated.Value>(new Animated.Value(0)).current;
+        let anyNewlySynced = false;
 
-    // Pull-to-refresh custom pulse dot
-    const [refreshing, setRefreshing] = useState(false);
-    const [pullOffset, setPullOffset] = useState(0);
-    const pullAnim = useRef<Animated.Value>(new Animated.Value(0)).current;
+        setMessages((prev) => {
+            const updated = prev.map((m) => {
+                const h = history.find((h) => h.id === m.id);
+                if (!h) return m;
+                if (m.isSynced === h.isSynced) return m;
+                if (h.isSynced) anyNewlySynced = true;
+                return {
+                    ...m,
+                    isSynced: h.isSynced,
+                };
+            });
 
-    // Small animated "..." effect while Imotara is typing
+            if (anyNewlySynced) {
+                setRecentlySyncedAt(Date.now());
+            }
+
+            return updated;
+        });
+    }, [history]);
+
+    // Group messages into (user + bot) "conversation chunks"
+    const messagePairs = useMemo(() => {
+        const pairs: { user?: ChatMessage; bot?: ChatMessage }[] = [];
+
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
+            if (msg.from === "user") {
+                const next = messages[i + 1];
+                if (next && next.from === "bot") {
+                    pairs.push({ user: msg, bot: next });
+                    i++; // skip the next one
+                } else {
+                    pairs.push({ user: msg });
+                }
+            } else {
+                // Orphaned bot message (rare, but possible after history hydration)
+                pairs.push({ bot: msg });
+            }
+        }
+
+        return pairs;
+    }, [messages]);
+
+    // Compute sync hint text
+    const syncHint = useMemo(() => {
+        if (!lastSyncAt) return "History is currently only on this device.";
+
+        const lower = (lastSyncStatus || "").toLowerCase();
+        if (lower.includes("failed") || lower.includes("error")) {
+            return "Sync issue · your latest messages are only on this device.";
+        }
+
+        if (
+            lower.includes("pushed") ||
+            lower.includes("merged") ||
+            lower.includes("synced")
+        ) {
+            return "Recent messages are safely backed up to Imotara cloud.";
+        }
+
+        return "Sync checked recently · some messages may still be local-only.";
+    }, [lastSyncAt, lastSyncStatus]);
+
+    const syncHintAccent = useMemo(() => {
+        if (!lastSyncAt) return "#9ca3af";
+
+        const lower = (lastSyncStatus || "").toLowerCase();
+        if (lower.includes("failed") || lower.includes("error")) {
+            return "#fca5a5";
+        }
+
+        if (
+            lower.includes("pushed") ||
+            lower.includes("merged") ||
+            lower.includes("synced")
+        ) {
+            return colors.primary;
+        }
+
+        return "#9ca3af";
+    }, [lastSyncAt, lastSyncStatus]);
+
+    const [typingLabel, setTypingLabel] = useState<string>("");
+
+    // Update typing dots animation
     useEffect(() => {
         if (!isTyping) {
             setTypingDots(1);
@@ -195,30 +312,145 @@ export default function ChatScreen() {
         return () => clearTimeout(t);
     }, [recentlySyncedAt]);
 
-    // Animate "New messages ↓" button when it appears
+    // Animations for "New messages ↓" button
+    const slideAnim = useRef<Animated.Value>(new Animated.Value(20)).current;
+    const fadeAnim = useRef<Animated.Value>(new Animated.Value(0)).current;
+
     useEffect(() => {
         if (showScrollButton) {
             slideAnim.setValue(20);
             fadeAnim.setValue(0);
-
             Animated.parallel([
                 Animated.timing(slideAnim, {
                     toValue: 0,
-                    duration: 180,
+                    duration: 200,
                     useNativeDriver: true,
                 }),
                 Animated.timing(fadeAnim, {
                     toValue: 1,
-                    duration: 180,
+                    duration: 200,
                     useNativeDriver: true,
                 }),
             ]).start();
         } else {
-            // Reset for next time
-            slideAnim.setValue(20);
-            fadeAnim.setValue(0);
+            Animated.parallel([
+                Animated.timing(slideAnim, {
+                    toValue: 20,
+                    duration: 150,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(fadeAnim, {
+                    toValue: 0,
+                    duration: 150,
+                    useNativeDriver: true,
+                }),
+            ]).start();
         }
     }, [showScrollButton, slideAnim, fadeAnim]);
+
+    // Pull-to-refresh custom pulse dot
+    const [refreshing, setRefreshing] = useState(false);
+    const [pullOffset, setPullOffset] = useState(0);
+    const [pullAnim] = useState(new Animated.Value(0));
+
+    useEffect(() => {
+        if (!refreshing) return;
+
+        Animated.sequence([
+            Animated.timing(pullAnim, {
+                toValue: 1,
+                duration: 180,
+                useNativeDriver: true,
+            }),
+            Animated.timing(pullAnim, {
+                toValue: 0,
+                duration: 180,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    }, [refreshing, pullAnim]);
+
+    const handleRefresh = () => {
+        if (refreshing) return;
+        setRefreshing(true);
+
+        // Placeholder: we just show a small pulse and then stop.
+        setTimeout(() => {
+            setRefreshing(false);
+        }, 800);
+    };
+
+    const scrollToBottom = () => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+    };
+
+    const [actionType, setActionType] = useState<MessageAction | null>(null);
+
+    const isSendDisabled = input.trim().length === 0;
+
+    const closeActionSheet = () => {
+        setActionMessage(null);
+        setActionType(null);
+    };
+
+    const handleDeleteMessage = (id: string) => {
+        // Paired delete: remove both user and its immediate bot reply
+        setMessages((prev) => {
+            const idx = prev.findIndex((m) => m.id === id);
+            if (idx === -1) return prev;
+
+            const msg = prev[idx];
+
+            // If user message, also try to delete the bot right after it
+            if (msg.from === "user") {
+                const next = prev[idx + 1];
+                const idsToDelete = [msg.id];
+                if (next && next.from === "bot") {
+                    idsToDelete.push(next.id);
+                }
+
+                idsToDelete.forEach((deleteId) => deleteFromHistory(deleteId));
+
+                return prev.filter((m) => !idsToDelete.includes(m.id));
+            }
+
+            // If bot bubble, just delete that one
+            deleteFromHistory(msg.id);
+            return prev.filter((m) => m.id !== msg.id);
+        });
+
+        setActionMessage(null);
+    };
+
+    const handleCopyMessage = async (text: string) => {
+        try {
+            await Clipboard.setStringAsync(text);
+            Alert.alert("Copied", "Message text copied to clipboard.");
+        } catch {
+            Alert.alert("Copy failed", "Could not copy message text.");
+        } finally {
+            setActionMessage(null);
+        }
+    };
+
+    const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+        const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+
+        const distanceFromBottom =
+            contentSize.height - (contentOffset.y + layoutMeasurement.height);
+
+        const atBottom = distanceFromBottom < 24;
+        setIsAtBottom(atBottom);
+
+        setShowScrollButton(!atBottom && distanceFromBottom > 80);
+    };
+
+    const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+        const { contentOffset } = e.nativeEvent;
+        setPullOffset(contentOffset.y);
+
+        onScroll(e);
+    };
 
     const handleSend = () => {
         const trimmed = input.trim();
@@ -249,40 +481,94 @@ export default function ChatScreen() {
 
         // Show typing indicator for Imotara
         setIsTyping(true);
+        setTypingStatus("thinking");
+        setTypingLabel("Imotara is thinking about your feelings…");
 
         // Clear any existing bot timer (safety)
         if (typingTimeoutRef.current) {
             clearTimeout(typingTimeoutRef.current);
         }
 
-        // 2) After a short delay, generate and show Imotara's reply
+        // 2) After a short delay, ask Imotara for a reply.
+        //    We first try the remote AI; if that fails, we fall back
+        //    to the existing local preview brain, so behaviour remains
+        //    100% backward compatible.
         typingTimeoutRef.current = setTimeout(() => {
-            // This is the "brain" — easy to swap later for real AI
-            const { replyText, moodHint } = generateLocalBotResponse(
-                trimmed,
-                emotionInsightsEnabled
-            );
+            (async () => {
+                try {
+                    // Try real Imotara backend first
+                    const remote = await callImotaraAI(trimmed);
 
-            const botTimestamp = Date.now();
-            const botMessage: ChatMessage = {
-                id: `b-${botTimestamp}`,
-                from: "bot",
-                text: replyText,
-                timestamp: botTimestamp,
-                moodHint,
-                isSynced: false,
-            };
+                    let replyText: string;
+                    let moodHint: string | undefined;
 
-            addToHistory({
-                id: botMessage.id,
-                text: botMessage.text,
-                from: "bot",
-                timestamp: botMessage.timestamp,
-                isSynced: false,
-            });
+                    if (remote.ok && remote.replyText.trim().length > 0) {
+                        replyText = remote.replyText;
+                        // We still compute a local mood hint (from the user text)
+                        // so the mini mood glimpse + hint remain present.
+                        if (emotionInsightsEnabled) {
+                            moodHint = getLocalMoodHint(trimmed);
+                        }
+                    } else {
+                        // Fallback to the exact same local behaviour as before
+                        const local = generateLocalBotResponse(
+                            trimmed,
+                            emotionInsightsEnabled
+                        );
+                        replyText = local.replyText;
+                        moodHint = local.moodHint;
+                    }
 
-            setMessages((prev) => [...prev, botMessage]);
-            setIsTyping(false);
+                    const botTimestamp = Date.now();
+                    const botMessage: ChatMessage = {
+                        id: `b-${botTimestamp}`,
+                        from: "bot",
+                        text: replyText,
+                        timestamp: botTimestamp,
+                        moodHint,
+                        isSynced: false,
+                    };
+
+                    addToHistory({
+                        id: botMessage.id,
+                        text: botMessage.text,
+                        from: "bot",
+                        timestamp: botMessage.timestamp,
+                        isSynced: false,
+                    });
+
+                    setMessages((prev) => [...prev, botMessage]);
+                } catch (error) {
+                    console.warn("Imotara mobile AI error:", error);
+                    const local = generateLocalBotResponse(
+                        trimmed,
+                        emotionInsightsEnabled
+                    );
+                    const botTimestamp = Date.now();
+                    const botMessage: ChatMessage = {
+                        id: `b-${botTimestamp}`,
+                        from: "bot",
+                        text: local.replyText,
+                        timestamp: botTimestamp,
+                        moodHint: local.moodHint,
+                        isSynced: false,
+                    };
+
+                    addToHistory({
+                        id: botMessage.id,
+                        text: botMessage.text,
+                        from: "bot",
+                        timestamp: botMessage.timestamp,
+                        isSynced: false,
+                    });
+
+                    setMessages((prev) => [...prev, botMessage]);
+                } finally {
+                    setIsTyping(false);
+                    setTypingStatus("idle");
+                    setTypingLabel("");
+                }
+            })();
         }, 800); // ~0.8s feels responsive but still "thoughtful"
     };
 
@@ -300,969 +586,677 @@ export default function ChatScreen() {
                 from: h.from,
                 text: h.text,
                 timestamp: h.timestamp,
-                isSynced: !!h.isSynced,
+                isSynced: h.isSynced,
             }));
 
             setMessages(hydrated);
+            scrollToBottom();
         }
-    }, [history, messages]);
+    }, [history, messages.length]);
 
-    // Keep messages' isSynced in sync with HistoryContext
-    useEffect(() => {
-        setMessages((prevMessages) => {
-            if (prevMessages.length === 0 || history.length === 0) {
-                return prevMessages;
-            }
-
-            const historyById = new Map(
-                history.map((h) => [h.id, h] as const)
-            );
-
-            let anyNewlySynced = false;
-
-            const updated = prevMessages.map((msg) => {
-                const h = historyById.get(msg.id);
-                if (!h) return msg;
-
-                const nextIsSynced = !!h.isSynced;
-                if (!msg.isSynced && nextIsSynced) {
-                    anyNewlySynced = true;
-                }
-                if (msg.isSynced === nextIsSynced) {
-                    return msg;
-                }
-                return { ...msg, isSynced: nextIsSynced };
-            });
-
-            if (anyNewlySynced) {
-                setRecentlySyncedAt(Date.now());
-            }
-
-            return updated;
-        });
-    }, [history]);
-
-    // Group messages into (user + bot) "conversation chunks"
-    const messagePairs = useMemo(() => {
-        const pairs: { user?: ChatMessage; bot?: ChatMessage }[] = [];
-
-        for (let i = 0; i < messages.length; i += 2) {
-            const first = messages[i];
-            const second = messages[i + 1];
-
-            if (!second) {
-                // Odd leftover message (e.g., user message while bot is still typing)
-                if (first.from === "user") {
-                    pairs.push({ user: first });
-                } else {
-                    pairs.push({ bot: first });
-                }
-            } else {
-                // Try to align as user → bot
-                let user: ChatMessage | undefined;
-                let bot: ChatMessage | undefined;
-
-                if (first.from === "user") {
-                    user = first;
-                    bot = second;
-                } else if (second.from === "user") {
-                    user = second;
-                    bot = first;
-                } else {
-                    // Both same side (rare) – just put them in order
-                    user = first;
-                    bot = second;
-                }
-
-                pairs.push({ user, bot });
-            }
-        }
-
-        return pairs;
-    }, [messages]);
-
-    // Latest user message (for mini-summary)
-    const latestUserMessage = useMemo(
-        () => [...messages].reverse().find((m) => m.from === "user"),
-        [messages]
-    );
-
-    const miniSummaryText = useMemo(() => {
-        if (!emotionInsightsEnabled) return undefined;
-        if (!latestUserMessage) return undefined;
-
-        const hint = getLocalMoodHint(latestUserMessage.text);
-        if (hint) return hint;
-
-        return "I’m still learning how you’re feeling. Share a bit more, at your own pace 💫";
-    }, [emotionInsightsEnabled, latestUserMessage]);
-
-    // -------------------------------------------------------------------------
-    // Sync-aware hint (same colour language as HistoryScreen)
-    // -------------------------------------------------------------------------
-    const unsyncedCount = useMemo(
-        () => history.filter((h) => !h.isSynced).length,
-        [history]
-    );
-
-    const hasSyncError = useMemo(() => {
-        const lower = (lastSyncStatus || "").toLowerCase();
-        return lower.includes("failed") || lower.includes("error");
-    }, [lastSyncStatus]);
-
-    const formattedLastSync = lastSyncAt
-        ? new Date(lastSyncAt).toLocaleString()
-        : null;
-
-    const syncHintMeta = useMemo(() => {
-        let label = "Sync status: not synced yet";
-        let bg = "rgba(148, 163, 184, 0.20)"; // slate-ish
-        let border = "#9ca3af";
-        let textColor = colors.textSecondary;
-
-        if (hasSyncError) {
-            label = "Sync issue · history is only on this device";
-            bg = "rgba(248, 113, 113, 0.16)"; // soft red
-            border = "#fca5a5";
-            textColor = "#fecaca";
-        } else if (unsyncedCount > 0) {
-            label = `Unsynced messages on this device: ${unsyncedCount}`;
-            bg = "rgba(248, 113, 113, 0.14)";
-            border = "#fca5a5";
-            textColor = "#fecaca";
-        } else if (lastSyncAt) {
-            label = "Synced · recent history backed up";
-            bg = "rgba(56, 189, 248, 0.16)"; // aurora cyan
-            border = colors.primary;
-            textColor = colors.textPrimary;
-        }
-
-        return { label, bg, border, textColor };
-    }, [hasSyncError, unsyncedCount, lastSyncAt]);
-
-    // -------------------------------------------------------------------------
-    // Long-press actions: copy / delete (bottom sheet)
-    // -------------------------------------------------------------------------
-    const handleCopyCurrent = async () => {
-        if (!actionMessage) return;
-        try {
-            await Clipboard.setStringAsync(actionMessage.text);
-        } catch (err) {
-            console.warn("Failed to copy to clipboard:", err);
-        }
-        closeActionSheet();
+    const handleInputChange = (text: string) => {
+        setInput(text);
     };
 
-    const handleDeleteCurrent = () => {
-        if (!actionMessage) return;
-
-        const idToDelete = actionMessage.id;
-
-        // 1) Delete selected message + (optionally) its paired reply
-        deleteFromHistory(idToDelete);
-
-        setMessages((prev) => {
-            let updated = prev.filter((m) => m.id !== idToDelete);
-
-            // If user message → also remove its next bot reply from this conversation
-            if (actionMessage.from === "user") {
-                const idx = prev.findIndex((m) => m.id === idToDelete);
-                const next = prev[idx + 1];
-
-                if (next && next.from === "bot") {
-                    deleteFromHistory(next.id);
-                    updated = updated.filter((m) => m.id !== next.id);
-                }
-            }
-
-            return updated;
-        });
-
-        // 2) Auto-scroll to bottom if user was already near bottom
-        setTimeout(() => {
-            if (isAtBottom) {
-                scrollViewRef.current?.scrollToEnd({ animated: true });
-            }
-        }, 50);
-
-        closeActionSheet();
+    const handleInputLayout = (e: any) => {
+        const { height } = e.nativeEvent.layout;
+        const minHeight = 40;
+        const maxHeight = 120;
+        const nextHeight = Math.min(Math.max(height, minHeight), maxHeight);
+        setInputHeight(nextHeight);
     };
 
-    const formattedActionTimestamp = actionMessage
-        ? new Date(actionMessage.timestamp).toLocaleString()
-        : "";
+    const renderSessionDivider = (current: ChatMessage, prev?: ChatMessage) => {
+        if (!prev) return null;
 
-    // -------------------------------------------------------------------------
-    // Custom pull-to-refresh (pulse dot)
-    // -------------------------------------------------------------------------
-    const PULL_THRESHOLD = 60;
+        const gap = current.timestamp - (prev.timestamp ?? 0);
+        if (gap <= SESSION_GAP_MS) return null;
 
-    const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-        const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-
-        const distanceFromBottom =
-            contentSize.height -
-            (contentOffset.y + layoutMeasurement.height);
-
-        const atBottom = distanceFromBottom < 40;
-        setIsAtBottom(atBottom);
-
-        if (atBottom) {
-            setShowScrollButton(false);
-        } else if (!refreshing) {
-            setShowScrollButton(true);
-        }
-
-        // Pull-to-refresh tracking (only when not refreshing)
-        const offsetY = contentOffset.y;
-        if (offsetY < 0 && !refreshing) {
-            setPullOffset((-offsetY));
-        } else if (!refreshing && pullOffset !== 0) {
-            setPullOffset(0);
-        }
-    };
-
-    const onScrollEndDrag = () => {
-        if (refreshing) return;
-
-        if (pullOffset > PULL_THRESHOLD) {
-            // Trigger a small "refresh" animation (UI only)
-            setRefreshing(true);
-            setPullOffset(0);
-
-            pullAnim.setValue(0);
-            Animated.sequence([
-                Animated.timing(pullAnim, {
-                    toValue: 1,
-                    duration: 400,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(pullAnim, {
-                    toValue: 0,
-                    duration: 400,
-                    useNativeDriver: true,
-                }),
-            ]).start(() => {
-                setRefreshing(false);
-            });
-        } else if (pullOffset !== 0) {
-            setPullOffset(0);
-        }
-    };
-
-    // Pulse dot base style
-    const baseDotStyle = {
-        position: "absolute" as const,
-        top: 4,
-        alignSelf: "center" as const,
-        width: 14,
-        height: 14,
-        borderRadius: 999,
-        backgroundColor: colors.primary,
-        shadowColor: colors.primary,
-        shadowOpacity: 0.4,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 0 },
-        elevation: 3,
-    };
-
-    const pullProgress = Math.max(0, Math.min(pullOffset / PULL_THRESHOLD, 1));
-
-    const staticDotStyle = {
-        opacity: 0.2 + pullProgress * 0.6,
-        transform: [
-            {
-                scale: 0.8 + pullProgress * 0.4,
-            },
-        ],
-    };
-
-    const animatedDotStyle = {
-        opacity: pullAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0.7, 0.1],
-        }),
-        transform: [
-            {
-                scale: pullAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [1, 1.6],
-                }),
-            },
-        ],
-    };
-
-    const showPulseDot = pullOffset > 0 || refreshing;
-
-    return (
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
-            {/* Custom pull-to-refresh pulse dot */}
-            {showPulseDot && (
-                <Animated.View
-                    style={[
-                        baseDotStyle,
-                        refreshing ? animatedDotStyle : staticDotStyle,
-                    ]}
-                />
-            )}
-
-            {/* Chat area */}
-            <ScrollView
-                ref={scrollViewRef}
-                contentContainerStyle={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    paddingBottom: 24,
+        return (
+            <View
+                style={{
+                    alignSelf: "center",
+                    marginVertical: 6,
+                    flexDirection: "row",
+                    alignItems: "center",
                 }}
-                onContentSizeChange={() => {
-                    // Only auto-scroll if user is already near the bottom
-                    if (isAtBottom) {
-                        scrollViewRef.current?.scrollToEnd({ animated: true });
-                    } else if (!refreshing) {
-                        setShowScrollButton(true);
-                    }
-                }}
-                onScroll={onScroll}
-                onScrollEndDrag={onScrollEndDrag}
-                scrollEventThrottle={50}
             >
-                <Text
-                    style={{
-                        fontSize: 22,
-                        fontWeight: "700",
-                        marginBottom: 6,
-                        color: colors.textPrimary,
-                    }}
-                >
-                    Imotara Chat (Mobile)
-                </Text>
-                <Text
-                    style={{
-                        fontSize: 14,
-                        color: colors.textSecondary,
-                        marginBottom: 10,
-                    }}
-                >
-                    By default your messages stay on this device. If you use the sync
-                    options in Settings, parts of your history may be backed up to the
-                    Imotara cloud (preview).
-                </Text>
-
-                {/* Sync hint strip (aligned with HistoryScreen theme) */}
                 <View
                     style={{
-                        alignSelf: "flex-start",
-                        marginBottom: 12,
+                        flex: 1,
+                        height: 1,
+                        backgroundColor: colors.border,
+                        opacity: 0.5,
+                        marginRight: 8,
+                    }}
+                />
+                <Text
+                    style={{
+                        fontSize: 11,
+                        color: colors.textSecondary,
+                    }}
+                >
+                    New session
+                </Text>
+                <View
+                    style={{
+                        flex: 1,
+                        height: 1,
+                        backgroundColor: colors.border,
+                        opacity: 0.5,
+                        marginLeft: 8,
+                    }}
+                />
+            </View>
+        );
+    };
+
+    const renderBubble = (message: ChatMessage, index: number) => {
+        const isUser = message.from === "user";
+
+        // Check sync status for this bubble
+        let bubbleBorderColor: string;
+        let statusLabel: string;
+        let statusBg: string;
+        let statusTextColor: string;
+        const bubbleBackground = isUser ? USER_BUBBLE_BG : BOT_BUBBLE_BG;
+
+        if (message.isSynced) {
+            bubbleBorderColor = colors.primary;
+            statusLabel = "Synced to cloud";
+            statusBg = "rgba(56, 189, 248, 0.18)";
+            statusTextColor = colors.textPrimary;
+        } else {
+            const lower = (lastSyncStatus || "").toLowerCase();
+            const hasSyncError =
+                lower.includes("failed") || lower.includes("error");
+
+            if (hasSyncError) {
+                bubbleBorderColor = "#f97373";
+                statusLabel = "Sync issue · on this device only";
+                statusBg = "rgba(248, 113, 113, 0.24)";
+                statusTextColor = "#fecaca";
+            } else {
+                bubbleBorderColor = "#fca5a5";
+                statusLabel = "On this device only";
+                statusBg = "rgba(248, 113, 113, 0.18)";
+                statusTextColor = "#fecaca";
+            }
+        }
+
+        // For session divider, look at previous message (ignoring date group)
+        const prev = messages[index - 1];
+
+        return (
+            <View key={message.id}>
+                {renderSessionDivider(message, prev)}
+                <Pressable
+                    onLongPress={() => {
+                        setActionMessage(message);
+                        setActionType("copy");
+                    }}
+                    delayLongPress={250}
+                    style={{
+                        alignSelf: isUser ? "flex-end" : "flex-start",
+                        maxWidth: "80%",
+                        backgroundColor: bubbleBackground,
                         paddingHorizontal: 12,
-                        paddingVertical: 6,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: syncHintMeta.border,
-                        backgroundColor: syncHintMeta.bg,
+                        paddingVertical: 8,
+                        borderRadius: 16,
+                        marginBottom: 10,
+                        borderWidth:
+                            bubbleBorderColor === "transparent" ? 0 : 1,
+                        borderColor: bubbleBorderColor,
                     }}
                 >
                     <Text
                         style={{
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: "600",
-                            color: syncHintMeta.textColor,
+                            color: colors.textSecondary,
+                            marginBottom: 2,
                         }}
                     >
-                        {syncHintMeta.label}
+                        {isUser ? "You" : "Imotara"}
                     </Text>
-                    {formattedLastSync && (
-                        <Text
-                            style={{
-                                marginTop: 2,
-                                fontSize: 10,
-                                color: syncHintMeta.textColor,
-                            }}
-                        >
-                            Last sync: {formattedLastSync}
-                        </Text>
-                    )}
-                </View>
 
-                {messagePairs.map((pair, index) => {
-                    const key =
-                        pair.user?.id ??
-                        pair.bot?.id ??
-                        `pair-${index.toString()}`;
-
-                    return (
-                        <View
-                            key={key}
-                            style={{
-                                marginBottom: 16,
-                            }}
-                        >
-                            {/* User bubble (if present) */}
-                            {pair.user && (() => {
-                                const isSynced = !!pair.user!.isSynced;
-                                const statusLabel = isSynced
-                                    ? "Synced to cloud"
-                                    : hasSyncError
-                                        ? "Sync issue · on this device only"
-                                        : "On this device only";
-
-                                const statusBg = isSynced
-                                    ? "rgba(56, 189, 248, 0.18)"
-                                    : hasSyncError
-                                        ? "rgba(248, 113, 113, 0.18)"
-                                        : "rgba(148, 163, 184, 0.20)";
-
-                                const statusTextColor = isSynced
-                                    ? colors.textPrimary
-                                    : hasSyncError
-                                        ? "#fecaca"
-                                        : colors.textSecondary;
-
-                                const pulse = !!recentlySyncedAt && isSynced;
-
-                                return (
-                                    <Pressable
-                                        onLongPress={() => setActionMessage(pair.user!)}
-                                        delayLongPress={250}
-                                        style={({ pressed }) => [
-                                            {
-                                                alignSelf: "flex-end",
-                                                backgroundColor: USER_BUBBLE_BG,
-                                                paddingHorizontal: 14,
-                                                paddingVertical: 10,
-                                                borderRadius: 20,
-                                                marginBottom: 6,
-                                                maxWidth: "82%",
-                                            },
-                                            pressed && {
-                                                shadowColor:
-                                                    "rgba(56, 189, 248, 0.9)",
-                                                shadowOpacity: 0.6,
-                                                shadowRadius: 8,
-                                                shadowOffset: {
-                                                    width: 0,
-                                                    height: 0,
-                                                },
-                                                elevation: 5,
-                                                borderWidth: 1,
-                                                borderColor: colors.primary,
-                                            },
-                                        ]}
-                                    >
-                                        <Text
-                                            style={{
-                                                fontSize: 12,
-                                                fontWeight: "600",
-                                                color: colors.textSecondary,
-                                                marginBottom: 2,
-                                            }}
-                                        >
-                                            You
-                                        </Text>
-                                        <Text
-                                            style={{
-                                                fontSize: 14,
-                                                color: colors.textPrimary,
-                                            }}
-                                        >
-                                            {pair.user.text}
-                                        </Text>
-                                        <Text
-                                            style={{
-                                                fontSize: 11,
-                                                color: colors.textSecondary,
-                                                marginTop: 4,
-                                            }}
-                                        >
-                                            {new Date(
-                                                pair.user.timestamp
-                                            ).toLocaleTimeString()}
-                                        </Text>
-
-                                        {/* Sync badge for user bubble */}
-                                        <View
-                                            style={{
-                                                alignSelf: "flex-end",
-                                                marginTop: 4,
-                                                paddingHorizontal: 10,
-                                                paddingVertical: 4,
-                                                borderRadius: 999,
-                                                borderWidth: 1,
-                                                borderColor: pulse
-                                                    ? colors.primary
-                                                    : "rgba(148, 163, 184, 0.4)",
-                                                backgroundColor: statusBg,
-                                            }}
-                                        >
-                                            <Text
-                                                style={{
-                                                    fontSize: 10,
-                                                    fontWeight: "500",
-                                                    color: statusTextColor,
-                                                }}
-                                            >
-                                                {statusLabel}
-                                            </Text>
-                                        </View>
-                                    </Pressable>
-                                );
-                            })()}
-
-                            {/* Bot bubble (if present) */}
-                            {pair.bot && (() => {
-                                const isSynced = !!pair.bot!.isSynced;
-                                const statusLabel = isSynced
-                                    ? "Synced to cloud"
-                                    : hasSyncError
-                                        ? "Sync issue · on this device only"
-                                        : "On this device only";
-
-                                const statusBg = isSynced
-                                    ? "rgba(56, 189, 248, 0.18)"
-                                    : hasSyncError
-                                        ? "rgba(248, 113, 113, 0.18)"
-                                        : "rgba(148, 163, 184, 0.20)";
-
-                                const statusTextColor = isSynced
-                                    ? colors.textPrimary
-                                    : hasSyncError
-                                        ? "#fecaca"
-                                        : colors.textSecondary;
-
-                                const pulse = !!recentlySyncedAt && isSynced;
-
-                                return (
-                                    <Pressable
-                                        onLongPress={() => setActionMessage(pair.bot!)}
-                                        delayLongPress={250}
-                                        style={({ pressed }) => [
-                                            {
-                                                alignSelf: "flex-start",
-                                                backgroundColor: BOT_BUBBLE_BG,
-                                                paddingHorizontal: 14,
-                                                paddingVertical: 10,
-                                                borderRadius: 20,
-                                                maxWidth: "82%",
-                                            },
-                                            pressed && {
-                                                shadowColor:
-                                                    "rgba(56, 189, 248, 0.9)",
-                                                shadowOpacity: 0.6,
-                                                shadowRadius: 8,
-                                                shadowOffset: {
-                                                    width: 0,
-                                                    height: 0,
-                                                },
-                                                elevation: 5,
-                                                borderWidth: 1,
-                                                borderColor: colors.primary,
-                                            },
-                                        ]}
-                                    >
-                                        <Text
-                                            style={{
-                                                fontSize: 12,
-                                                fontWeight: "600",
-                                                color: colors.textSecondary,
-                                                marginBottom: 2,
-                                            }}
-                                        >
-                                            Imotara
-                                        </Text>
-                                        <Text
-                                            style={{
-                                                fontSize: 14,
-                                                color: colors.textPrimary,
-                                            }}
-                                        >
-                                            {pair.bot.text}
-                                        </Text>
-                                        <Text
-                                            style={{
-                                                fontSize: 11,
-                                                color: colors.textSecondary,
-                                                marginTop: 4,
-                                            }}
-                                        >
-                                            {new Date(
-                                                pair.bot.timestamp
-                                            ).toLocaleTimeString()}
-                                        </Text>
-
-                                        {/* Local-only mood hint (under bot reply) */}
-                                        {emotionInsightsEnabled &&
-                                            pair.bot.moodHint && (
-                                                <Text
-                                                    style={{
-                                                        marginTop: 6,
-                                                        fontSize: 12,
-                                                        color: colors.textSecondary,
-                                                    }}
-                                                >
-                                                    {pair.bot.moodHint}
-                                                </Text>
-                                            )}
-
-                                        {/* Sync badge for bot bubble */}
-                                        <View
-                                            style={{
-                                                alignSelf: "flex-start",
-                                                marginTop: 4,
-                                                paddingHorizontal: 10,
-                                                paddingVertical: 4,
-                                                borderRadius: 999,
-                                                borderWidth: 1,
-                                                borderColor: pulse
-                                                    ? colors.primary
-                                                    : "rgba(148, 163, 184, 0.4)",
-                                                backgroundColor: statusBg,
-                                            }}
-                                        >
-                                            <Text
-                                                style={{
-                                                    fontSize: 10,
-                                                    fontWeight: "500",
-                                                    color: statusTextColor,
-                                                }}
-                                            >
-                                                {statusLabel}
-                                            </Text>
-                                        </View>
-                                    </Pressable>
-                                );
-                            })()}
-                        </View>
-                    );
-                })}
-
-                {/* Typing indicator */}
-                {isTyping && (
-                    <View
-                        style={{
-                            alignSelf: "flex-start",
-                            backgroundColor: BOT_BUBBLE_BG,
-                            paddingHorizontal: 14,
-                            paddingVertical: 10,
-                            borderRadius: 20,
-                            maxWidth: "60%",
-                            marginBottom: 12,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 12,
-                                fontWeight: "600",
-                                color: colors.textSecondary,
-                                marginBottom: 2,
-                            }}
-                        >
-                            Imotara
-                        </Text>
-                        <Text
-                            style={{
-                                fontSize: 20,
-                                letterSpacing: 2,
-                                color: colors.textSecondary,
-                            }}
-                        >
-                            {".".repeat(typingDots)}
-                        </Text>
-                    </View>
-                )}
-
-                {/* Mini Mood Summary Card */}
-                {miniSummaryText && (
-                    <View
-                        style={{
-                            marginTop: 8,
-                            paddingHorizontal: 14,
-                            paddingVertical: 10,
-                            borderRadius: 16,
-                            borderWidth: 1,
-                            borderColor: colors.primarySoft,
-                            backgroundColor: colors.surfaceSoft,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 12,
-                                fontWeight: "700",
-                                color: colors.textSecondary,
-                                marginBottom: 4,
-                            }}
-                        >
-                            Mini Mood Glimpse
-                        </Text>
-                        <Text
-                            style={{
-                                fontSize: 13,
-                                color: colors.textPrimary,
-                            }}
-                        >
-                            {miniSummaryText}
-                        </Text>
-                    </View>
-                )}
-            </ScrollView>
-
-            {/* Floating "New messages" button (bottom-right) with soft slide + fade */}
-            {showScrollButton && (
-                <Animated.View
-                    style={{
-                        position: "absolute",
-                        right: 16,
-                        bottom: 72,
-                        transform: [{ translateY: slideAnim }],
-                        opacity: fadeAnim,
-                    }}
-                >
-                    <TouchableOpacity
-                        onPress={() => {
-                            scrollViewRef.current?.scrollToEnd({ animated: true });
-                            setIsAtBottom(true);
-                            setShowScrollButton(false);
-                        }}
-                        style={{
-                            backgroundColor: colors.primary,
-                            paddingHorizontal: 14,
-                            paddingVertical: 8,
-                            borderRadius: 999,
-                            shadowColor: colors.primary,
-                            shadowOpacity: 0.35,
-                            shadowRadius: 10,
-                            shadowOffset: { width: 0, height: 0 },
-                            elevation: 4,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                color: "#ffffff",
-                                fontSize: 12,
-                                fontWeight: "600",
-                            }}
-                        >
-                            New messages ↓
-                        </Text>
-                    </TouchableOpacity>
-                </Animated.View>
-            )}
-
-            {/* Input area */}
-            <View
-                style={{
-                    flexDirection: "row",
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderTopWidth: 1,
-                    borderTopColor: colors.border,
-                    backgroundColor: colors.background,
-                }}
-            >
-                <TextInput
-                    placeholder="Type how you’re feeling..."
-                    placeholderTextColor={colors.textSecondary}
-                    value={input}
-                    onChangeText={setInput}
-                    multiline
-                    onContentSizeChange={(e) => {
-                        const h = e.nativeEvent.contentSize?.height ?? 40;
-                        const clamped = Math.max(40, Math.min(120, h));
-                        setInputHeight(clamped);
-                    }}
-                    style={{
-                        flex: 1,
-                        backgroundColor: "#ffffff",
-                        color: "#111827",
-                        borderWidth: 1,
-                        borderColor: colors.primarySoft,
-                        borderRadius: 999,
-                        paddingHorizontal: 16,
-                        paddingVertical: 8,
-                        fontSize: 14,
-                        minHeight: 40,
-                        maxHeight: 120,
-                        height: inputHeight,
-                        textAlignVertical: "top",
-                    }}
-                />
-
-                {/* Send button with scale + cyan glow on press */}
-                <Pressable
-                    onPress={handleSend}
-                    disabled={isSendDisabled}
-                    style={({ pressed }) => [
-                        {
-                            marginLeft: 8,
-                            paddingHorizontal: 18,
-                            paddingVertical: 8,
-                            borderRadius: 999,
-                            justifyContent: "center",
-                            alignItems: "center",
-                            borderWidth: 1,
-                            borderColor: isSendDisabled
-                                ? colors.border
-                                : "#ffffff99",
-                            backgroundColor: "transparent",
-                            opacity: isSendDisabled ? 0.5 : 1,
-                        },
-                        pressed && !isSendDisabled && {
-                            transform: [{ scale: 0.92 }],
-                            shadowColor: "rgba(56, 189, 248, 0.9)",
-                            shadowOpacity: 0.7,
-                            shadowRadius: 8,
-                            shadowOffset: { width: 0, height: 0 },
-                            elevation: 5,
-                            borderColor: colors.primary,
-                        },
-                    ]}
-                >
                     <Text
                         style={{
                             fontSize: 14,
-                            fontWeight: "600",
-                            color: "#ffffff",
+                            color: colors.textPrimary,
                         }}
                     >
-                        Send
+                        {message.text}
                     </Text>
-                </Pressable>
-            </View>
 
-            {/* Imotara bottom sheet for message actions */}
-            {actionMessage && (
-                <View
-                    style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        justifyContent: "flex-end",
-                        backgroundColor: "rgba(15, 23, 42, 0.55)", // slate overlay
-                    }}
-                >
-                    {/* Tap on dimmed backdrop to close */}
-                    <Pressable
-                        style={{ flex: 1 }}
-                        onPress={closeActionSheet}
-                    />
-
-                    <View
-                        style={{
-                            backgroundColor: colors.surfaceSoft,
-                            borderTopLeftRadius: 24,
-                            borderTopRightRadius: 24,
-                            paddingHorizontal: 18,
-                            paddingTop: 14,
-                            paddingBottom: 24,
-                            borderTopWidth: 1,
-                            borderColor: colors.border,
-                        }}
-                    >
-                        <View
-                            style={{
-                                alignItems: "center",
-                                marginBottom: 10,
-                            }}
-                        >
-                            <View
-                                style={{
-                                    width: 40,
-                                    height: 4,
-                                    borderRadius: 999,
-                                    backgroundColor: "rgba(148,163,184,0.7)",
-                                }}
-                            />
-                        </View>
-
-                        <Text
-                            style={{
-                                fontSize: 14,
-                                fontWeight: "600",
-                                color: colors.textPrimary,
-                                marginBottom: 4,
-                            }}
-                        >
-                            Message options
-                        </Text>
+                    {message.moodHint && (
                         <Text
                             style={{
                                 fontSize: 11,
                                 color: colors.textSecondary,
-                                marginBottom: 12,
+                                marginTop: 4,
                             }}
-                            numberOfLines={2}
                         >
-                            {formattedActionTimestamp} ·{" "}
-                            {actionMessage.from === "user" ? "You" : "Imotara"}
+                            {message.moodHint}
                         </Text>
+                    )}
 
-                        {/* Copy */}
-                        <TouchableOpacity
-                            onPress={handleCopyCurrent}
+                    <Text
+                        style={{
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                            marginTop: 4,
+                        }}
+                    >
+                        {new Date(message.timestamp).toLocaleTimeString()}
+                    </Text>
+
+                    <View
+                        style={{
+                            alignSelf: isUser ? "flex-end" : "flex-start",
+                            marginTop: 4,
+                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor:
+                                bubbleBorderColor === "transparent"
+                                    ? "rgba(148, 163, 184, 0.4)"
+                                    : bubbleBorderColor,
+                            backgroundColor: statusBg,
+                        }}
+                    >
+                        <Text
                             style={{
-                                paddingVertical: 10,
-                                borderRadius: 12,
-                                backgroundColor: "rgba(56,189,248,0.16)",
-                                marginBottom: 8,
+                                fontSize: 10,
+                                fontWeight: "500",
+                                color: statusTextColor,
+                            }}
+                        >
+                            {statusLabel}
+                        </Text>
+                    </View>
+                </Pressable>
+            </View>
+        );
+    };
+
+    const renderActionSheet = () => {
+        if (!actionMessage || !actionType) return null;
+
+        return (
+            <View
+                style={{
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                    paddingHorizontal: 16,
+                    paddingTop: 10,
+                    paddingBottom: 20,
+                    borderTopLeftRadius: 16,
+                    borderTopRightRadius: 16,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                }}
+            >
+                <View
+                    style={{
+                        alignItems: "center",
+                        marginBottom: 8,
+                    }}
+                >
+                    <View
+                        style={{
+                            width: 40,
+                            height: 4,
+                            borderRadius: 999,
+                            backgroundColor: "rgba(148, 163, 184, 0.9)",
+                        }}
+                    />
+                </View>
+
+                <Text
+                    style={{
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                        marginBottom: 10,
+                    }}
+                >
+                    Imotara message actions
+                </Text>
+
+                <View
+                    style={{
+                        backgroundColor: colors.surfaceSoft,
+                        borderRadius: 12,
+                        padding: 10,
+                        marginBottom: 10,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 12,
+                            color: colors.textPrimary,
+                        }}
+                    >
+                        {actionMessage.text}
+                    </Text>
+                </View>
+
+                <TouchableOpacity
+                    onPress={() => handleCopyMessage(actionMessage.text)}
+                    style={{
+                        paddingVertical: 10,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                        }}
+                    >
+                        Copy text
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={() => handleDeleteMessage(actionMessage.id)}
+                    style={{
+                        paddingVertical: 10,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: "#fecaca",
+                        }}
+                    >
+                        Delete from history
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={closeActionSheet}
+                    style={{
+                        paddingVertical: 10,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        Cancel
+                    </Text>
+                </TouchableOpacity>
+            </View>
+        );
+    };
+
+    const formattedTypingDots = ".".repeat(typingDots);
+
+    // Mini mood glimpse card near the top (based on last user message)
+    const latestUserMessage = useMemo(() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].from === "user") return messages[i];
+        }
+        return null;
+    }, [messages]);
+
+    const latestMoodHint = useMemo(() => {
+        if (!latestUserMessage) return null;
+        if (!emotionInsightsEnabled) return null;
+        return getLocalMoodHint(latestUserMessage.text);
+    }, [emotionInsightsEnabled, latestUserMessage]);
+
+    const typingStatusText = useMemo(() => {
+        if (!isTyping) return "";
+        if (typingStatus === "thinking") {
+            return `Imotara is thinking about your feelings${formattedTypingDots}`;
+        }
+        return `Imotara is typing${formattedTypingDots}`;
+    }, [isTyping, typingStatus, formattedTypingDots]);
+
+    return (
+        <View
+            style={{
+                flex: 1,
+                backgroundColor: colors.background,
+            }}
+        >
+            {/* Header area with sync + teen safe context */}
+            <View
+                style={{
+                    paddingHorizontal: 16,
+                    paddingTop: 12,
+                    paddingBottom: 8,
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.border,
+                    backgroundColor: "rgba(15, 23, 42, 0.96)",
+                }}
+            >
+                <Text
+                    style={{
+                        fontSize: 20,
+                        fontWeight: "700",
+                        color: colors.textPrimary,
+                        marginBottom: 4,
+                    }}
+                >
+                    Imotara (Mobile Preview)
+                </Text>
+                <Text
+                    style={{
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                        marginBottom: 6,
+                    }}
+                >
+                    A gentle space to talk about your feelings. This early version keeps
+                    messages on this device, with an optional cloud backup preview.
+                </Text>
+
+                {/* Sync hint pill */}
+                <View
+                    style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginTop: 2,
+                    }}
+                >
+                    <View
+                        style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 999,
+                            marginRight: 6,
+                            backgroundColor: hasUnsynced
+                                ? "#f97373"
+                                : syncHintAccent,
+                        }}
+                    />
+                    <Text
+                        style={{
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        {syncHint}
+                    </Text>
+                </View>
+
+                {showRecentlySyncedPulse && (
+                    <Text
+                        style={{
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                            marginTop: 2,
+                        }}
+                    >
+                        ✅ All changes synced · Imotara cloud copy updated.
+                    </Text>
+                )}
+            </View>
+
+            {/* Chat area */}
+            <View style={{ flex: 1 }}>
+                {/* Pull-to-refresh overlay pulse */}
+                {refreshing && (
+                    <Animated.View
+                        style={{
+                            position: "absolute",
+                            top: 10,
+                            left: 0,
+                            right: 0,
+                            alignItems: "center",
+                            zIndex: 20,
+                            opacity: pullAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0.2, 1],
+                            }),
+                            transform: [
+                                {
+                                    scale: pullAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [0.9, 1.05],
+                                    }),
+                                },
+                            ],
+                        }}
+                    >
+                        <View
+                            style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 999,
+                                backgroundColor: "rgba(56, 189, 248, 0.8)",
+                            }}
+                        />
+                    </Animated.View>
+                )}
+
+                <ScrollView
+                    ref={scrollViewRef}
+                    contentContainerStyle={{
+                        paddingHorizontal: 16,
+                        paddingTop: 12,
+                        paddingBottom: 80,
+                    }}
+                    onScroll={handleScroll}
+                    scrollEventThrottle={50}
+                    onScrollEndDrag={() => {
+                        if (pullOffset < -60) {
+                            handleRefresh();
+                        }
+                    }}
+                >
+                    {/* Intro text when no messages */}
+                    {messages.length === 0 && (
+                        <View
+                            style={{
+                                paddingTop: 24,
+                                paddingBottom: 16,
                             }}
                         >
                             <Text
                                 style={{
-                                    textAlign: "center",
-                                    fontSize: 14,
-                                    fontWeight: "600",
-                                    color: colors.textPrimary,
+                                    fontSize: 15,
+                                    color: colors.textSecondary,
+                                    marginBottom: 6,
                                 }}
                             >
-                                Copy message
+                                Welcome to Imotara.
                             </Text>
-                        </TouchableOpacity>
-
-                        {/* Delete locally */}
-                        <TouchableOpacity
-                            onPress={handleDeleteCurrent}
-                            style={{
-                                paddingVertical: 10,
-                                borderRadius: 12,
-                                backgroundColor: "rgba(248,113,113,0.16)",
-                                marginBottom: 8,
-                            }}
-                        >
                             <Text
                                 style={{
-                                    textAlign: "center",
-                                    fontSize: 14,
-                                    fontWeight: "600",
-                                    color: "#fecaca",
-                                }}
-                            >
-                                Delete from this device
-                            </Text>
-                        </TouchableOpacity>
-
-                        {/* Cancel */}
-                        <TouchableOpacity
-                            onPress={closeActionSheet}
-                            style={{
-                                paddingVertical: 10,
-                                borderRadius: 12,
-                                backgroundColor: "transparent",
-                            }}
-                        >
-                            <Text
-                                style={{
-                                    textAlign: "center",
-                                    fontSize: 14,
-                                    fontWeight: "500",
+                                    fontSize: 13,
                                     color: colors.textSecondary,
                                 }}
                             >
-                                Cancel
+                                You can start by sharing how your day feels, something that
+                                bothered you, or something you’re looking forward to. Imotara
+                                listens without judgment.
+                            </Text>
+                        </View>
+                    )}
+
+                    {/* Mini mood glimpse (preview) */}
+                    {latestMoodHint && (
+                        <View
+                            style={{
+                                marginBottom: 12,
+                                paddingHorizontal: 12,
+                                paddingVertical: 8,
+                                borderRadius: 12,
+                                backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    fontSize: 11,
+                                    color: colors.textSecondary,
+                                }}
+                            >
+                                Mood glimpse (preview)
+                            </Text>
+                            <Text
+                                style={{
+                                    fontSize: 13,
+                                    color: colors.textPrimary,
+                                    marginTop: 2,
+                                }}
+                            >
+                                {latestMoodHint}
+                            </Text>
+                        </View>
+                    )}
+
+                    {/* All bubbles */}
+                    {messages.map((message, index) =>
+                        renderBubble(message, index)
+                    )}
+
+                    {/* Typing indicator */}
+                    {isTyping && (
+                        <View
+                            style={{
+                                alignSelf: "flex-start",
+                                marginTop: 4,
+                                paddingHorizontal: 10,
+                                paddingVertical: 6,
+                                borderRadius: 999,
+                                backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    fontSize: 11,
+                                    color: colors.textSecondary,
+                                }}
+                            >
+                                {typingStatusText || "Imotara is typing…"}
+                            </Text>
+                        </View>
+                    )}
+                </ScrollView>
+
+                {/* Floating "New messages ↓" button */}
+                {showScrollButton && (
+                    <Animated.View
+                        style={{
+                            position: "absolute",
+                            bottom: 80,
+                            right: 16,
+                            transform: [{ translateY: slideAnim }],
+                            opacity: fadeAnim,
+                        }}
+                    >
+                        <TouchableOpacity
+                            onPress={scrollToBottom}
+                            style={{
+                                backgroundColor: colors.primary,
+                                paddingHorizontal: 14,
+                                paddingVertical: 8,
+                                borderRadius: 999,
+                                shadowColor: "#000",
+                                shadowOpacity: 0.25,
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowRadius: 4,
+                                elevation: 4,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    color: "#fff",
+                                    fontWeight: "700",
+                                    fontSize: 12,
+                                }}
+                            >
+                                New messages ↓
                             </Text>
                         </TouchableOpacity>
+                    </Animated.View>
+                )}
+            </View>
+
+            {/* Input area */}
+            <View
+                style={{
+                    borderTopWidth: 1,
+                    borderTopColor: colors.border,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    backgroundColor: "rgba(15, 23, 42, 0.98)",
+                }}
+            >
+                <View
+                    style={{
+                        flexDirection: "row",
+                        alignItems: "flex-end",
+                    }}
+                >
+                    <View
+                        style={{
+                            flex: 1,
+                            marginRight: 8,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            backgroundColor: "rgba(15, 23, 42, 1)",
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                        }}
+                    >
+                        <TextInput
+                            value={input}
+                            onChangeText={handleInputChange}
+                            multiline
+                            onLayout={handleInputLayout}
+                            placeholder="Type something you feel..."
+                            placeholderTextColor="rgba(148, 163, 184, 0.9)"
+                            style={{
+                                color: colors.textPrimary,
+                                fontSize: 14,
+                                maxHeight: 120,
+                                minHeight: 32,
+                            }}
+                        />
                     </View>
+
+                    <TouchableOpacity
+                        onPress={handleSend}
+                        disabled={isSendDisabled}
+                        style={{
+                            opacity: isSendDisabled ? 0.4 : 1,
+                            paddingHorizontal: 14,
+                            paddingVertical: 10,
+                            borderRadius: 999,
+                            backgroundColor: colors.primary,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                color: "#fff",
+                                fontWeight: "700",
+                            }}
+                        >
+                            Send
+                        </Text>
+                    </TouchableOpacity>
                 </View>
-            )}
+            </View>
+
+            {/* Action sheet overlay */}
+            {renderActionSheet()}
         </View>
     );
 }
