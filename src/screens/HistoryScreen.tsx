@@ -270,7 +270,15 @@ function formatDateLabel(timestamp: number): string {
 }
 
 export default function HistoryScreen() {
-    const { history, addToHistory } = useHistoryStore();
+    const {
+        history,
+        addToHistory,
+        deleteFromHistory,
+        clearHistory,
+        pushHistoryToRemote,
+        mergeRemoteHistory,
+    } = useHistoryStore();
+
     const { lastSyncAt, lastSyncStatus } = useSettings();
 
     // For floating "scroll to latest" button
@@ -340,45 +348,33 @@ export default function HistoryScreen() {
                 return;
             }
 
-            // Normalize all remote items to our local HistoryItem shape
-            const normalized = remote
-                .map((item) => normalizeRemoteItem(item))
-                .filter(Boolean) as HistoryRecord[];
+            // Use our new centralized merge engine
+            const result = mergeRemoteHistory(remote);
 
-            if (normalized.length === 0) {
+            if (result.normalized === 0) {
                 Alert.alert(
                     "Remote history",
-                    "No valid items found on the backend yet.",
-                    [{ text: "OK" }]
+                    "No valid items found on the backend yet."
                 );
                 return;
             }
 
-            // Merge without duplicates (by id)
-            const existingIds = new Set(history.map((h) => h.id));
-            let addedCount = 0;
-
-            normalized.forEach((item) => {
-                if (!existingIds.has(item.id)) {
-                    addToHistory(item);
-                    existingIds.add(item.id);
-                    addedCount += 1;
-                }
-            });
-
-            Alert.alert(
-                "Remote history loaded",
-                addedCount === 0
-                    ? `No new items. Local history already contains all ${normalized.length} remote item(s).`
-                    : `Merged ${addedCount} new remote item(s) into local history.`,
-                [{ text: "OK" }]
-            );
+            if (result.added === 0) {
+                Alert.alert(
+                    "Remote history",
+                    `No new items. Local history already contains all ${result.normalized} remote item(s).`
+                );
+            } else {
+                Alert.alert(
+                    "Remote history",
+                    `Merged ${result.added} new item(s) into local history.`
+                );
+            }
         } catch (error) {
             console.warn("handleLoadRemote error:", error);
             Alert.alert(
                 "Remote history error",
-                "Could not load remote history right now. Please try again later.",
-                [{ text: "OK" }]
+                "Could not load remote history right now. Please try again later."
             );
         }
     };
