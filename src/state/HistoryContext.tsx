@@ -65,21 +65,49 @@ const HistoryContext = createContext<HistoryContextValue | undefined>(
 
 /**
  * Normalize any incoming remote object to a strict HistoryItem shape.
- * This prevents UI issues when the backend uses slightly different
- * field names like `role`, `author`, `createdAt`, etc.
+ * This is intentionally permissive so it can handle:
+ * - Direct chat records from /api/history
+ * - Analysis-like objects with `summary` / `reflections`
+ * - Older shapes that used `message`, `content`, etc.
  */
 function normalizeRemoteItem(raw: any): HistoryItem | null {
     if (!raw || typeof raw !== "object") return null;
 
-    // ----- 1) Extract text -----
-    const text: string =
-        typeof raw.text === "string"
-            ? raw.text
-            : typeof raw.message === "string"
-                ? raw.message
-                : typeof raw.content === "string"
-                    ? raw.content
-                    : "";
+    const pickStr = (v: any): string =>
+        typeof v === "string" ? v : "";
+
+    // ----- 1) Extract text (many fallbacks) -----
+    let text: string =
+        pickStr(raw.text) ||
+        pickStr(raw.message) || // <-- your backend uses this
+        pickStr(raw.content) ||
+        pickStr(raw.body) ||
+        pickStr(raw.prompt) ||
+        "";
+
+    // Try reflections[0].text if still empty
+    if (!text.trim() && Array.isArray(raw.reflections) && raw.reflections.length > 0) {
+        const first = raw.reflections[0];
+        text = pickStr(first?.text) || text;
+    }
+
+    // Try summary.headline/details
+    if (!text.trim() && raw.summary && typeof raw.summary === "object") {
+        const headline = pickStr(raw.summary.headline);
+        const details = pickStr(raw.summary.details);
+        const combined = [headline, details].filter(Boolean).join(" — ");
+        if (combined.trim()) {
+            text = combined;
+        }
+    }
+
+    // Additional generic fallbacks
+    if (!text.trim()) {
+        text =
+            pickStr(raw.description) ||
+            pickStr(raw.title) ||
+            text;
+    }
 
     if (!text || !text.trim()) {
         // Ignore empty rows
@@ -88,11 +116,11 @@ function normalizeRemoteItem(raw: any): HistoryItem | null {
 
     // ----- 2) Determine "from" (user vs bot) -----
     const roleLike: string =
-        (raw.from as string) ||
-        (raw.role as string) ||
-        (raw.author as string) ||
-        (raw.speaker as string) ||
-        "";
+        pickStr(raw.from) ||
+        pickStr(raw.role) ||
+        pickStr(raw.author) ||
+        pickStr(raw.speaker) ||
+        pickStr(raw.source); // <-- your backend uses this
 
     let from: "user" | "bot" = "bot";
     const roleLower = roleLike.toLowerCase();
@@ -109,6 +137,12 @@ function normalizeRemoteItem(raw: any): HistoryItem | null {
     } else if (raw.isUser === true) {
         // Fallback flag
         from = "user";
+    } else if (!roleLike && !raw.isUser) {
+        // Heuristic: if it looks like an AI analysis record (has summary/snapshot/reflections),
+        // treat it as a bot entry.
+        if (raw.summary || raw.snapshot || raw.reflections) {
+            from = "bot";
+        }
     }
 
     // ----- 3) Determine timestamp (number, ms) -----
@@ -116,8 +150,17 @@ function normalizeRemoteItem(raw: any): HistoryItem | null {
 
     if (typeof raw.timestamp === "number") {
         timestamp = raw.timestamp;
+    } else if (typeof raw.computedAt === "number") {
+        // Analysis-like objects
+        timestamp = raw.computedAt;
+    } else if (
+        Array.isArray(raw.reflections) &&
+        raw.reflections.length > 0 &&
+        typeof raw.reflections[0]?.createdAt === "number"
+    ) {
+        timestamp = raw.reflections[0].createdAt;
     } else if (typeof raw.createdAt === "number") {
-        timestamp = raw.createdAt;
+        timestamp = raw.createdAt; // <-- your backend uses this
     } else if (typeof raw.createdAt === "string") {
         const parsed = Date.parse(raw.createdAt);
         timestamp = Number.isNaN(parsed) ? Date.now() : parsed;
@@ -129,7 +172,7 @@ function normalizeRemoteItem(raw: any): HistoryItem | null {
     const baseId =
         (raw.id as string) ||
         (raw._id as string) ||
-        `${from}-${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
+        `remote-${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
 
     const id = String(baseId);
 

@@ -17,8 +17,8 @@ export default function SettingsScreen() {
     const {
         history,
         clearHistory,
-        addToHistory,
         pushHistoryToRemote,
+        mergeRemoteHistory,
     } = useHistoryStore();
 
     const {
@@ -53,13 +53,33 @@ export default function SettingsScreen() {
     const handleTestRemoteHistory = async () => {
         try {
             const remote = await fetchRemoteHistory();
-            const count = Array.isArray(remote) ? remote.length : 0;
 
-            Alert.alert(
-                "Remote history debug",
-                `Fetched ${count} item(s) from backend.`,
-                [{ text: "OK" }]
-            );
+            if (!Array.isArray(remote)) {
+                Alert.alert(
+                    "Remote history debug",
+                    "Unexpected response format from backend.",
+                    [{ text: "OK" }]
+                );
+                return;
+            }
+
+            const mergeResult = mergeRemoteHistory(remote);
+            const { totalRemote, normalized, added } = mergeResult;
+
+            const lines: string[] = [];
+            lines.push(`Fetched ${totalRemote} raw item(s) from backend.`);
+            lines.push(`Recognized ${normalized} item(s) as valid history.`);
+            if (added === 0) {
+                lines.push(
+                    "No new items were added — local history already contained all recognized entries."
+                );
+            } else {
+                lines.push(`Merged ${added} new item(s) into local history.`);
+            }
+
+            Alert.alert("Remote history debug", lines.join("\n"), [
+                { text: "OK" },
+            ]);
         } catch (error) {
             console.error("Failed to fetch remote history:", error);
             Alert.alert(
@@ -123,80 +143,35 @@ export default function SettingsScreen() {
                 setLastSyncAt(Date.now());
                 setLastSyncStatus(summary);
 
-                Alert.alert(
-                    "Sync issue",
-                    `${pushedText}\n\n${mergedText}`,
-                    [{ text: "OK" }]
-                );
+                Alert.alert("Sync issue", `${pushedText}\n\n${mergedText}`, [
+                    { text: "OK" },
+                ]);
                 return;
             }
 
-            const remoteCount = remote.length;
+            // 3) Merge into local (no duplicates, normalized)
+            const mergeResult = mergeRemoteHistory(remote);
+            const { totalRemote, normalized, added } = mergeResult;
 
-            // 3) Merge into local (no duplicates)
-            const existingIds = new Set(history.map((h) => h.id));
-            let addedCount = 0;
-
-            remote.forEach((rawItem: any) => {
-                const id = String(
-                    rawItem.id ??
-                    rawItem._id ??
-                    `${rawItem.from ?? "item"
-                    }-${rawItem.timestamp ?? Date.now()}`
-                );
-
-                if (!existingIds.has(id)) {
-                    const merged = {
-                        id,
-                        text:
-                            typeof rawItem.text === "string"
-                                ? rawItem.text
-                                : typeof rawItem.message === "string"
-                                    ? rawItem.message
-                                    : typeof rawItem.content === "string"
-                                        ? rawItem.content
-                                        : "",
-                        from:
-                            (rawItem.from === "user" ||
-                                rawItem.role === "user" ||
-                                rawItem.author === "user" ||
-                                rawItem.isUser === true) &&
-                                rawItem.from !== "bot"
-                                ? ("user" as const)
-                                : ("bot" as const),
-                        timestamp:
-                            typeof rawItem.timestamp === "number"
-                                ? rawItem.timestamp
-                                : typeof rawItem.createdAt === "number"
-                                    ? rawItem.createdAt
-                                    : typeof rawItem.createdAt === "string"
-                                        ? Date.parse(rawItem.createdAt)
-                                        : Date.now(),
-                        isSynced: true,
-                    };
-
-                    addToHistory(merged);
-                    existingIds.add(id);
-                    addedCount += 1;
-                }
-            });
-
-            // 4) Summary
             const pushedText = pushResult.ok
                 ? `Pushed ${pushResult.pushed} item(s) to the backend.`
                 : `Push failed: ${pushResult.errorMessage || "Network / backend error"
                 }`;
 
-            const mergedText =
-                remoteCount === 0
-                    ? "No remote items found."
-                    : addedCount === 0
-                        ? `No new remote items. Local history already had all ${remoteCount} item(s).`
-                        : `Merged ${addedCount} new remote item(s) from backend.`;
+            let mergedText: string;
+            if (totalRemote === 0) {
+                mergedText = "No remote items found.";
+            } else if (normalized === 0) {
+                mergedText = `Fetched ${totalRemote} item(s), but none looked like valid history rows.`;
+            } else if (added === 0) {
+                mergedText = `Fetched ${totalRemote} item(s), recognized ${normalized}, but local history already had all of them.`;
+            } else {
+                mergedText = `Fetched ${totalRemote} item(s), recognized ${normalized}, and merged ${added} new item(s) into local history.`;
+            }
 
             const summary = `${pushedText} ${mergedText}`;
 
-            // 5) Update last sync info (Lite)
+            // 4) Update last sync info (Lite)
             setLastSyncAt(Date.now());
             setLastSyncStatus(summary);
 

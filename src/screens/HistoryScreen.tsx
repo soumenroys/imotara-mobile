@@ -281,8 +281,9 @@ export default function HistoryScreen() {
 
     const { lastSyncAt, lastSyncStatus } = useSettings();
 
-    // For floating "scroll to latest" button
-    const [showScrollButton, setShowScrollButton] = React.useState(false);
+    // For floating scroll buttons
+    const [showScrollToLatest, setShowScrollToLatest] = React.useState(false);
+    const [showScrollToTop, setShowScrollToTop] = React.useState(false);
     const scrollRef = React.useRef<ScrollView>(null);
 
     const hasSyncError = React.useMemo(() => {
@@ -423,7 +424,7 @@ export default function HistoryScreen() {
                 contentContainerStyle={{
                     paddingHorizontal: 16,
                     paddingVertical: 12,
-                    paddingBottom: 80, // leave space for floating button
+                    paddingBottom: 80, // leave space for floating buttons
                 }}
                 onScroll={(e) => {
                     const { contentOffset, contentSize, layoutMeasurement } =
@@ -433,7 +434,10 @@ export default function HistoryScreen() {
                         contentSize.height -
                         (contentOffset.y + layoutMeasurement.height);
 
-                    setShowScrollButton(distanceFromBottom > 120);
+                    const distanceFromTop = contentOffset.y;
+
+                    setShowScrollToLatest(distanceFromBottom > 120);
+                    setShowScrollToTop(distanceFromTop > 80);
                 }}
                 scrollEventThrottle={50}
             >
@@ -850,37 +854,78 @@ export default function HistoryScreen() {
                 ))}
             </ScrollView>
 
-            {/* Floating Scroll-to-Latest Button */}
-            {showScrollButton && (
-                <TouchableOpacity
-                    onPress={() =>
-                        scrollRef.current?.scrollToEnd({ animated: true })
-                    }
+            {/* Floating Scroll Buttons — stacked bottom-right (↑ Top above ↓ Latest) */}
+            {(showScrollToTop || showScrollToLatest) && (
+                <View
                     style={{
                         position: "absolute",
                         bottom: 20,
                         right: 20,
-                        backgroundColor: colors.primary,
-                        paddingHorizontal: 16,
-                        paddingVertical: 10,
-                        borderRadius: 999,
-                        shadowColor: "#000",
-                        shadowOpacity: 0.25,
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowRadius: 4,
-                        elevation: 4,
+                        alignItems: "flex-end",
                     }}
                 >
-                    <Text
-                        style={{
-                            color: "#fff",
-                            fontWeight: "700",
-                            fontSize: 13,
-                        }}
-                    >
-                        ↓ Latest
-                    </Text>
-                </TouchableOpacity>
+                    {showScrollToTop && (
+                        <TouchableOpacity
+                            onPress={() =>
+                                scrollRef.current?.scrollTo({
+                                    y: 0,
+                                    animated: true,
+                                })
+                            }
+                            style={{
+                                backgroundColor: colors.primary,
+                                paddingHorizontal: 16,
+                                paddingVertical: 8,
+                                borderRadius: 999,
+                                marginBottom: 10,
+                                shadowColor: "#000",
+                                shadowOpacity: 0.25,
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowRadius: 4,
+                                elevation: 4,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    color: "#fff",
+                                    fontWeight: "700",
+                                    fontSize: 13,
+                                }}
+                            >
+                                ↑ Top
+                            </Text>
+                        </TouchableOpacity>
+                    )}
+
+                    {showScrollToLatest && (
+                        <TouchableOpacity
+                            onPress={() =>
+                                scrollRef.current?.scrollToEnd({ animated: true })
+                            }
+                            style={{
+                                backgroundColor: colors.primary,
+                                paddingHorizontal: 16,
+                                paddingVertical: 10,
+                                borderRadius: 999,
+                                shadowColor: "#000",
+                                shadowOpacity: 0.25,
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowRadius: 4,
+                                elevation: 4,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    color: "#fff",
+                                    fontWeight: "700",
+                                    fontSize: 13,
+                                }}
+                            >
+                                ↓ Latest
+                            </Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
             )}
         </View>
     );
