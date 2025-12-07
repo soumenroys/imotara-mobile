@@ -104,6 +104,12 @@ export default function SettingsScreen() {
                 return;
             }
 
+            // ✅ Mark this as a successful sync event for the whole app
+            const summary = `Push-only sync: pushed ${result.pushed} item(s) to the backend (status ${result.status ?? "unknown"
+                }).`;
+            setLastSyncAt(Date.now());
+            setLastSyncStatus(summary);
+
             Alert.alert(
                 "Cloud sync debug",
                 `Pushed ${result.pushed} item(s) to the backend.\n\nStatus: ${result.status ?? "unknown"
