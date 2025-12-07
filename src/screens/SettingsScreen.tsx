@@ -13,6 +13,7 @@ import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
 import { fetchRemoteHistory } from "../api/historyClient";
 import AppSeparator from "../components/ui/AppSeparator";
+import AppSurface from "../components/ui/AppSurface";
 
 <AppSeparator style={{ marginVertical: 12 }} />
 
@@ -306,17 +307,7 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* Local history card */}
-                <View
-                    style={{
-                        backgroundColor: colors.surfaceSoft,
-                        borderRadius: 16,
-                        paddingHorizontal: 16,
-                        paddingVertical: 14,
-                        marginBottom: 16,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                    }}
-                >
+                <AppSurface style={{ marginBottom: 16 }}>
                     <Text
                         style={{
                             fontSize: 14,
@@ -372,7 +363,7 @@ export default function SettingsScreen() {
                             Clear Local History
                         </Text>
                     </TouchableOpacity>
-                </View>
+                </AppSurface>
 
                 {/* Remote debug + sync card */}
                 <View
