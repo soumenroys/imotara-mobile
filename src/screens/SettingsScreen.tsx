@@ -12,6 +12,9 @@ import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
 import { fetchRemoteHistory } from "../api/historyClient";
+import AppSeparator from "../components/ui/AppSeparator";
+
+<AppSeparator style={{ marginVertical: 12 }} />
 
 export default function SettingsScreen() {
     const {
