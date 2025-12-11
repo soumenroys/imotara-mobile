@@ -7,13 +7,25 @@ import React, {
 } from "react";
 
 type SettingsContextValue = {
+    // Emotion insight toggle for Imotara replies
     emotionInsightsEnabled: boolean;
     setEmotionInsightsEnabled: (value: boolean) => void;
 
+    // Last known sync info (used for UI hints)
     lastSyncAt: number | null;
     lastSyncStatus: string | null;
     setLastSyncAt: (ts: number | null) => void;
     setLastSyncStatus: (status: string | null) => void;
+
+    /**
+     * Mobile Sync Phase 2 — configurable background auto-sync delay.
+     *
+     * - Value in seconds
+     * - Example: 8 → ~8 seconds after new unsynced changes,
+     *   HistoryContext may trigger an automatic push to the cloud.
+     */
+    autoSyncDelaySeconds: number;
+    setAutoSyncDelaySeconds: (value: number) => void;
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -29,6 +41,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         null
     );
 
+    // Default auto-sync delay: 8 seconds
+    const [autoSyncDelaySeconds, setAutoSyncDelaySeconds] =
+        useState<number>(8);
+
     return (
         <SettingsContext.Provider
             value={{
@@ -38,6 +54,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 lastSyncStatus,
                 setLastSyncAt,
                 setLastSyncStatus,
+                autoSyncDelaySeconds,
+                setAutoSyncDelaySeconds,
             }}
         >
             {children}

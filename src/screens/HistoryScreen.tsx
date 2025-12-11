@@ -283,7 +283,7 @@ export default function HistoryScreen() {
         hasUnsyncedChanges,
     } = useHistoryStore();
 
-    const { lastSyncAt, lastSyncStatus } = useSettings();
+    const { lastSyncAt, lastSyncStatus, autoSyncDelaySeconds } = useSettings();
 
     // For floating scroll buttons
     const [showScrollToLatest, setShowScrollToLatest] = React.useState(false);
@@ -564,6 +564,7 @@ export default function HistoryScreen() {
                         >
                             Unsynced messages on this device: {unsyncedCount}
                         </Text>
+
                         <Text
                             style={{
                                 marginTop: 2,
@@ -572,10 +573,13 @@ export default function HistoryScreen() {
                             }}
                         >
                             {hasSyncError
-                                ? "Imotara will try again when sync recovers."
-                                : "They’ll be backed up automatically on the next successful sync."}
+                                ? "Imotara couldn’t reach the cloud recently. Your messages are safe on this device and will sync when the connection recovers."
+                                : autoSyncDelaySeconds > 0
+                                    ? `Imotara will auto-sync these in about ${autoSyncDelaySeconds}s when you’re online.`
+                                    : "Imotara will sync these the next time you tap Sync."}
                         </Text>
 
+                        {/* Manual retry button */}
                         <TouchableOpacity
                             onPress={handleRetrySync}
                             disabled={isSyncing}
@@ -609,6 +613,20 @@ export default function HistoryScreen() {
                                         : "Sync now"}
                             </Text>
                         </TouchableOpacity>
+
+                        {/* NEW: subtle background sync indicator */}
+                        {isSyncing && (
+                            <Text
+                                style={{
+                                    marginTop: 4,
+                                    fontSize: 11,
+                                    color: colors.textSecondary,
+                                    fontStyle: "italic",
+                                }}
+                            >
+                                Syncing in background…
+                            </Text>
+                        )}
                     </View>
                 )}
 

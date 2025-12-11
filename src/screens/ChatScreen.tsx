@@ -40,6 +40,7 @@ type ChatMessage = {
     moodHint?: string;
     isSynced?: boolean;
     source?: ChatMessageSource;
+    isPending?: boolean; // ✅ NEW: for “Syncing…” state
 };
 
 // Create a medium-intensity gradient from the mood tint
@@ -164,7 +165,10 @@ export default function ChatScreen() {
         addToHistory,
         history,
         deleteFromHistory,
+        isSyncing,
+        pushHistoryToRemote, // ✅ NEW: used in retry-sync long-press
     } = useHistoryStore();
+
     const { emotionInsightsEnabled, lastSyncAt, lastSyncStatus } = useSettings();
 
     const scrollViewRef = useRef<ScrollView | null>(null);
@@ -726,6 +730,17 @@ export default function ChatScreen() {
         );
     };
 
+    // Fade-in animation for hydrated bubbles
+    const createFadeAnim = () => {
+        const anim = new Animated.Value(0);
+        Animated.timing(anim, {
+            toValue: 1,
+            duration: 220,
+            useNativeDriver: true,
+        }).start();
+        return anim;
+    };
+
     const renderBubble = (message: ChatMessage, index: number) => {
         const isUser = message.from === "user";
 
@@ -859,19 +874,54 @@ export default function ChatScreen() {
             </>
         );
 
+        // Tiny polish: add extra top spacing when two user messages appear consecutively
+        const extraTopSpace =
+            isUser && index > 0 && messages[index - 1].from === "user"
+                ? { marginTop: 4 }
+                : {};
+
         return (
-            <View key={message.id}>
+            <View key={message.id} style={extraTopSpace}>
                 {renderSessionDivider(message, prev)}
                 <Pressable
-                    onLongPress={() => {
-                        setActionMessage(message);
-                        setActionType("copy");
-                    }}
+                    onLongPress={
+                        !isUser || message.isSynced || message.isPending
+                            ? undefined
+                            : async () => {
+                                try {
+                                    // Mark this specific message as pending
+                                    setMessages(prev =>
+                                        prev.map(m =>
+                                            m.id === message.id ? { ...m, isPending: true } : m
+                                        )
+                                    );
+
+                                    const result = await pushHistoryToRemote();
+
+                                    // Clear pending + update synced flag after push
+                                    setMessages(prev =>
+                                        prev.map(m =>
+                                            m.id === message.id
+                                                ? {
+                                                    ...m,
+                                                    isPending: false,
+                                                    isSynced: result.ok ? true : false,
+                                                }
+                                                : m
+                                        )
+                                    );
+                                } catch (err) {
+                                    console.warn("Retry sync failed:", err);
+                                }
+                            }
+                    }
+
                     delayLongPress={250}
                     style={{
                         alignSelf: isUser ? "flex-end" : "flex-start",
-                        maxWidth: "80%",
+                        maxWidth: "82%",                   // smoother wrap
                         marginBottom: 10,
+                        paddingHorizontal: 1,              // micro smoothing
                     }}
                 >
                     {isUser ? (
@@ -1090,12 +1140,22 @@ export default function ChatScreen() {
                 }}
             >
                 {/* Title row */}
-                <View
-                    style={{
-                        flexDirection: "row",
-                        alignItems: "baseline",
-                    }}
-                >
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    {/* Tiny Sync Badge */}
+                    <View
+                        style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 999,
+                            marginRight: 6,
+                            backgroundColor: hasUnsynced
+                                ? "#fbbf24" // yellow for unsynced
+                                : (lastSyncStatus || "").toLowerCase().includes("failed")
+                                    ? "#f87171" // red for error
+                                    : colors.primary, // cyan for synced
+                        }}
+                    />
+
                     <Text
                         style={{
                             fontSize: 18,
@@ -1105,6 +1165,7 @@ export default function ChatScreen() {
                     >
                         Imotara
                     </Text>
+
                     <Text
                         style={{
                             marginLeft: 6,
@@ -1156,6 +1217,18 @@ export default function ChatScreen() {
                         {syncHint}
                     </Text>
                 </View>
+
+                {isSyncing && (
+                    <Text
+                        style={{
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                            marginTop: 2,
+                        }}
+                    >
+                        Syncing your latest messages…
+                    </Text>
+                )}
 
                 {showRecentlySyncedPulse && (
                     <Text

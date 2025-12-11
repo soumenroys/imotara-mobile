@@ -4,6 +4,7 @@ import React, {
     useContext,
     useState,
     useEffect,
+    useRef,
     type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -11,6 +12,7 @@ import {
     pushRemoteHistory,
     type PushRemoteHistoryResult,
 } from "../api/historyClient";
+import { useSettings } from "./SettingsContext";
 
 export type HistoryItem = {
     id: string;
@@ -208,6 +210,16 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         useState<PushRemoteHistoryResult | null>(null);
     const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
 
+    // Auto-sync delay (seconds) AND global “last sync” setters from Settings
+    const {
+        autoSyncDelaySeconds,
+        setLastSyncAt: setSettingsLastSyncAt,
+        setLastSyncStatus: setSettingsLastSyncStatus,
+    } = useSettings();
+
+    // Timer holder for background auto-sync
+    const autoSyncTimerRef = useRef<NodeJS.Timeout | null>(null);
+
     // Hydrate from AsyncStorage on mount
     useEffect(() => {
         const load = async () => {
@@ -301,12 +313,22 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     pushed: 0,
                     status: 0, // 0 → nothing to push
                 };
+                const now = Date.now();
+
                 setLastSyncResult(result);
-                setLastSyncAt(Date.now());
+                setLastSyncAt(now);
+
+                // 🔄 Reflect this in global Settings “Last sync”
+                setSettingsLastSyncAt(now);
+                setSettingsLastSyncStatus(
+                    "Sync checked · nothing new to push from this device."
+                );
+
                 return result;
             }
 
             const result = await pushRemoteHistory(unsynced);
+            const now = Date.now();
 
             if (result.ok) {
                 // Mark all successfully pushed items as synced
@@ -319,14 +341,34 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                             : item
                     )
                 );
+
+                setLastSyncResult(result);
+                setLastSyncAt(now);
+
+                // 🔄 Global Settings summary for successful push
+                const pushedCount = typeof result.pushed === "number" ? result.pushed : 0;
+                setSettingsLastSyncAt(now);
+                setSettingsLastSyncStatus(
+                    pushedCount > 0
+                        ? `Synced ${pushedCount} item(s) from this device to Imotara cloud.`
+                        : "Sync checked · nothing new to push from this device."
+                );
+            } else {
+                // Error result from backend
+                setLastSyncResult(result);
+                setLastSyncAt(now);
+
+                setSettingsLastSyncAt(now);
+                setSettingsLastSyncStatus(
+                    `Sync failed: ${result.errorMessage || "Network / backend error."}`
+                );
             }
 
-            setLastSyncResult(result);
-            setLastSyncAt(Date.now());
             return result;
         } catch (error) {
             console.warn("pushHistoryToRemote error:", error);
 
+            const now = Date.now();
             const fallback: PushRemoteHistoryResult = {
                 ok: false,
                 pushed: 0,
@@ -336,7 +378,14 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             };
 
             setLastSyncResult(fallback);
-            setLastSyncAt(Date.now());
+            setLastSyncAt(now);
+
+            // 🔄 Global Settings summary for unexpected error
+            setSettingsLastSyncAt(now);
+            setSettingsLastSyncStatus(
+                `Sync error: ${fallback.errorMessage || "Unknown error."}`
+            );
+
             return fallback;
         } finally {
             setIsSyncing(false);
@@ -400,6 +449,47 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
     // Derived flag: any local changes not yet synced
     const hasUnsyncedChanges = history.some((h) => !h.isSynced);
+
+    // 🔁 Background auto-sync based on user-configured delay
+    useEffect(() => {
+        // Clear any existing timer whenever dependencies change
+        if (autoSyncTimerRef.current) {
+            clearTimeout(autoSyncTimerRef.current);
+            autoSyncTimerRef.current = null;
+        }
+
+        // Only schedule when:
+        // - storage is hydrated
+        // - there are unsynced changes
+        // - we're not already syncing
+        if (!hydrated) return;
+        if (!hasUnsyncedChanges) return;
+        if (isSyncing) return;
+
+        // Clamp delay between 3s and 60s for safety
+        const delayMs =
+            Math.min(Math.max(autoSyncDelaySeconds, 3), 60) * 1000;
+
+        autoSyncTimerRef.current = setTimeout(() => {
+            pushHistoryToRemote().catch((err) =>
+                console.warn("Background auto-sync error:", err)
+            );
+        }, delayMs);
+
+        // Cleanup on unmount or dependency change
+        return () => {
+            if (autoSyncTimerRef.current) {
+                clearTimeout(autoSyncTimerRef.current);
+                autoSyncTimerRef.current = null;
+            }
+        };
+    }, [
+        hydrated,
+        hasUnsyncedChanges,
+        isSyncing,
+        autoSyncDelaySeconds,
+        pushHistoryToRemote,
+    ]);
 
     return (
         <HistoryContext.Provider

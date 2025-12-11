@@ -15,8 +15,6 @@ import { fetchRemoteHistory } from "../api/historyClient";
 import AppSeparator from "../components/ui/AppSeparator";
 import AppSurface from "../components/ui/AppSurface";
 
-<AppSeparator style={{ marginVertical: 12 }} />
-
 export default function SettingsScreen() {
     const {
         history,
@@ -32,6 +30,8 @@ export default function SettingsScreen() {
         lastSyncStatus,
         setLastSyncAt,
         setLastSyncStatus,
+        autoSyncDelaySeconds,
+        setAutoSyncDelaySeconds,
     } = useSettings();
 
     const messageCount = history.length;
@@ -109,8 +109,8 @@ export default function SettingsScreen() {
             }
 
             // ✅ Mark this as a successful sync event for the whole app
-            const summary = `Push-only sync: pushed ${result.pushed} item(s) to the backend (status ${result.status ?? "unknown"
-                }).`;
+            const summary = `Push-only sync: pushed ${result.pushed
+                } item(s) to the backend (status ${result.status ?? "unknown"}).`;
             setLastSyncAt(Date.now());
             setLastSyncStatus(summary);
 
@@ -186,8 +186,8 @@ export default function SettingsScreen() {
             setLastSyncStatus(summary);
 
             Alert.alert("Sync summary", `${pushedText}\n\n${mergedText}`, [
-                { text: "OK" },
-            ]);
+                { text: "OK" }],
+            );
         } catch (error) {
             console.error("handleSyncNow error:", error);
             setLastSyncAt(Date.now());
@@ -205,6 +205,12 @@ export default function SettingsScreen() {
     const formattedLastSync = lastSyncAt
         ? new Date(lastSyncAt).toLocaleString()
         : "Not synced yet";
+
+    // Utility: set auto-sync delay via preset, clamped to 3–60 seconds
+    const setDelayPreset = (seconds: number) => {
+        const safe = Math.min(Math.max(seconds, 3), 60);
+        setAutoSyncDelaySeconds(safe);
+    };
 
     return (
         <View
@@ -365,6 +371,107 @@ export default function SettingsScreen() {
                     </TouchableOpacity>
                 </AppSurface>
 
+                {/* Small visual separator */}
+                <AppSeparator style={{ marginVertical: 12 }} />
+
+                {/* Background auto-sync card */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Background auto-sync (mobile)
+                    </Text>
+                    <Text
+                        style={{
+                            fontSize: 13,
+                            color: colors.textSecondary,
+                            marginBottom: 8,
+                        }}
+                    >
+                        When new messages are only on this device, Imotara can gently
+                        sync them to the cloud after a short delay. This keeps your
+                        history backed up without you needing to tap anything.
+                    </Text>
+
+                    <Text
+                        style={{
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                            marginBottom: 6,
+                        }}
+                    >
+                        Current delay:{" "}
+                        <Text
+                            style={{
+                                fontWeight: "600",
+                                color: colors.textPrimary,
+                            }}
+                        >
+                            {autoSyncDelaySeconds}s
+                        </Text>{" "}
+                        after the app notices unsynced messages.
+                    </Text>
+
+                    <View
+                        style={{
+                            flexDirection: "row",
+                            marginTop: 4,
+                        }}
+                    >
+                        {[5, 8, 15].map((sec, index) => {
+                            const isActive = autoSyncDelaySeconds === sec;
+                            return (
+                                <TouchableOpacity
+                                    key={sec}
+                                    onPress={() => setDelayPreset(sec)}
+                                    style={{
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: isActive
+                                            ? colors.primary
+                                            : colors.border,
+                                        backgroundColor: isActive
+                                            ? "rgba(56, 189, 248, 0.18)"
+                                            : "rgba(15, 23, 42, 0.9)",
+                                        marginRight:
+                                            index < 2 ? 8 : 0, // spacing between pills
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontSize: 12,
+                                            fontWeight: "600",
+                                            color: isActive
+                                                ? colors.textPrimary
+                                                : colors.textSecondary,
+                                        }}
+                                    >
+                                        {sec}s
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    <Text
+                        style={{
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                            marginTop: 6,
+                        }}
+                    >
+                        You can adjust this later — shorter delays sync more quickly,
+                        longer delays are gentler on battery and data.
+                    </Text>
+                </AppSurface>
+
                 {/* Remote debug + sync card */}
                 <View
                     style={{
@@ -501,6 +608,26 @@ export default function SettingsScreen() {
                         )}
                     </View>
                 </View>
+
+                {/* App version footer */}
+                <View
+                    style={{
+                        marginTop: 32,
+                        alignItems: "center",
+                        paddingBottom: 20,
+                        opacity: 0.5,
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        Imotara Mobile Preview · v0.9.0
+                    </Text>
+                </View>
+
             </ScrollView>
         </View>
     );

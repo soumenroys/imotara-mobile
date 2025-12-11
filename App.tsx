@@ -10,8 +10,9 @@ import { SettingsProvider } from "./src/state/SettingsContext";
 export default function App() {
   return (
     <AppThemeProvider>
-      <HistoryProvider>
-        <SettingsProvider>
+      {/* Settings MUST wrap HistoryProvider because HistoryProvider calls useSettings() */}
+      <SettingsProvider>
+        <HistoryProvider>
           <KeyboardAvoidingView
             style={{ flex: 1 }}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -19,9 +20,10 @@ export default function App() {
           >
             <RootNavigator />
           </KeyboardAvoidingView>
+
           <StatusBar style="auto" />
-        </SettingsProvider>
-      </HistoryProvider>
+        </HistoryProvider>
+      </SettingsProvider>
     </AppThemeProvider>
   );
 }
