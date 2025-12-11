@@ -277,6 +277,10 @@ export default function HistoryScreen() {
         clearHistory,
         pushHistoryToRemote,
         mergeRemoteHistory,
+        isSyncing,
+        lastSyncResult,
+        lastSyncAt: historyLastSyncAt,
+        hasUnsyncedChanges,
     } = useHistoryStore();
 
     const { lastSyncAt, lastSyncStatus } = useSettings();
@@ -287,12 +291,20 @@ export default function HistoryScreen() {
     const scrollRef = React.useRef<ScrollView>(null);
 
     const hasSyncError = React.useMemo(() => {
+        // Prefer explicit error from the last push result (new)
+        if (lastSyncResult && !lastSyncResult.ok) {
+            return true;
+        }
+
+        // Fallback to old string-based status (Settings)
         const lower = (lastSyncStatus || "").toLowerCase();
         return lower.includes("failed") || lower.includes("error");
-    }, [lastSyncStatus]);
+    }, [lastSyncResult, lastSyncStatus]);
 
-    const formattedLastSync = lastSyncAt
-        ? new Date(lastSyncAt).toLocaleString()
+    const effectiveLastSyncAt = lastSyncAt || historyLastSyncAt || null;
+
+    const formattedLastSync = effectiveLastSyncAt
+        ? new Date(effectiveLastSyncAt).toLocaleString()
         : null;
 
     // how many messages are still local-only (not synced)
@@ -309,13 +321,13 @@ export default function HistoryScreen() {
         let border = "#9ca3af";
         let textColor = colors.textSecondary;
 
-        if (!lastSyncAt) {
+        if (!effectiveLastSyncAt) {
             return { label, bg, border, textColor };
         }
 
         const lower = (lastSyncStatus || "").toLowerCase();
 
-        if (lower.includes("failed") || lower.includes("error")) {
+        if (hasSyncError) {
             label = "Sync issue · history is only on this device";
             bg = "rgba(248, 113, 113, 0.16)"; // soft red
             border = "#fca5a5";
@@ -337,7 +349,7 @@ export default function HistoryScreen() {
         }
 
         return { label, bg, border, textColor };
-    }, [lastSyncAt, lastSyncStatus]);
+    }, [effectiveLastSyncAt, lastSyncStatus, hasSyncError]);
 
     // Debug-only: load remote history from backend and merge it into local history
     const handleLoadRemote = async () => {
@@ -376,6 +388,38 @@ export default function HistoryScreen() {
             Alert.alert(
                 "Remote history error",
                 "Could not load remote history right now. Please try again later."
+            );
+        }
+    };
+
+    // Manual retry sync — uses new HistoryContext flags
+    const handleRetrySync = async () => {
+        if (isSyncing) return;
+
+        try {
+            const result = await pushHistoryToRemote();
+
+            if (result.ok) {
+                const pushedCount =
+                    typeof result.pushed === "number" ? result.pushed : 0;
+                Alert.alert(
+                    "Sync complete",
+                    pushedCount > 0
+                        ? `Pushed ${pushedCount} item(s) to the cloud.`
+                        : "Everything is already in sync."
+                );
+            } else {
+                Alert.alert(
+                    "Sync issue",
+                    result.errorMessage ||
+                    "Could not sync right now. Please try again later."
+                );
+            }
+        } catch (error) {
+            console.warn("handleRetrySync error:", error);
+            Alert.alert(
+                "Sync error",
+                "Could not sync right now. Please try again later."
             );
         }
     };
@@ -504,8 +548,8 @@ export default function HistoryScreen() {
                     </Text>
                 )}
 
-                {/* Unsynced summary with helper text */}
-                {unsyncedCount > 0 && (
+                {/* Unsynced summary with helper text + retry button */}
+                {(unsyncedCount > 0 || hasUnsyncedChanges) && (
                     <View
                         style={{
                             marginBottom: 8,
@@ -531,6 +575,40 @@ export default function HistoryScreen() {
                                 ? "Imotara will try again when sync recovers."
                                 : "They’ll be backed up automatically on the next successful sync."}
                         </Text>
+
+                        <TouchableOpacity
+                            onPress={handleRetrySync}
+                            disabled={isSyncing}
+                            style={{
+                                alignSelf: "flex-start",
+                                marginTop: 6,
+                                paddingHorizontal: 12,
+                                paddingVertical: 6,
+                                borderRadius: 999,
+                                borderWidth: 1,
+                                borderColor: isSyncing
+                                    ? "rgba(148, 163, 184, 0.7)"
+                                    : colors.primary,
+                                backgroundColor: isSyncing
+                                    ? "rgba(148, 163, 184, 0.2)"
+                                    : "rgba(56, 189, 248, 0.18)",
+                                opacity: isSyncing ? 0.7 : 1,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    fontSize: 11,
+                                    fontWeight: "600",
+                                    color: colors.textPrimary,
+                                }}
+                            >
+                                {isSyncing
+                                    ? "Syncing…"
+                                    : hasSyncError
+                                        ? "Try sync again now"
+                                        : "Sync now"}
+                            </Text>
+                        </TouchableOpacity>
                     </View>
                 )}
 

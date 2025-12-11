@@ -55,6 +55,18 @@ type HistoryContextValue = {
      * - Marks merged records as isSynced: true
      */
     mergeRemoteHistory: (rawItems: unknown[]) => MergeRemoteResult;
+
+    /**
+     * Lite sync status for Mobile Sync Phase 2:
+     * - isSyncing: true while a push is in flight
+     * - lastSyncResult: last push result (ok/error)
+     * - lastSyncAt: timestamp of last completed push (success or failure)
+     * - hasUnsyncedChanges: derived flag (any !isSynced items)
+     */
+    isSyncing: boolean;
+    lastSyncResult: PushRemoteHistoryResult | null;
+    lastSyncAt: number | null;
+    hasUnsyncedChanges: boolean;
 };
 
 const STORAGE_KEY = "imotara_history_v1";
@@ -190,6 +202,12 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [hydrated, setHydrated] = useState(false);
 
+    // Lite sync status state for Mobile Sync Phase 2
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [lastSyncResult, setLastSyncResult] =
+        useState<PushRemoteHistoryResult | null>(null);
+    const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+
     // Hydrate from AsyncStorage on mount
     useEffect(() => {
         const load = async () => {
@@ -268,19 +286,24 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     };
 
     const pushHistoryToRemote = async (): Promise<PushRemoteHistoryResult> => {
+        // Mark that a sync attempt is underway and clear previous result
+        setIsSyncing(true);
+        setLastSyncResult(null);
+
         try {
             // Only push items that are not yet marked as synced
             const unsynced = history.filter((h) => !h.isSynced);
 
             if (unsynced.length === 0) {
                 // Nothing to push – still return a successful result
-                return {
+                const result: PushRemoteHistoryResult = {
                     ok: true,
                     pushed: 0,
-                    // Numeric status code to satisfy PushRemoteHistoryResult
-                    // 0 → nothing to push
-                    status: 0,
+                    status: 0, // 0 → nothing to push
                 };
+                setLastSyncResult(result);
+                setLastSyncAt(Date.now());
+                return result;
             }
 
             const result = await pushRemoteHistory(unsynced);
@@ -298,17 +321,25 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 );
             }
 
+            setLastSyncResult(result);
+            setLastSyncAt(Date.now());
             return result;
         } catch (error) {
             console.warn("pushHistoryToRemote error:", error);
-            return {
+
+            const fallback: PushRemoteHistoryResult = {
                 ok: false,
                 pushed: 0,
-                // -1 → generic sync error
-                status: -1,
+                status: -1, // -1 → generic sync error
                 errorMessage:
                     error instanceof Error ? error.message : "Unknown error",
             };
+
+            setLastSyncResult(fallback);
+            setLastSyncAt(Date.now());
+            return fallback;
+        } finally {
+            setIsSyncing(false);
         }
     };
 
@@ -367,6 +398,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         };
     };
 
+    // Derived flag: any local changes not yet synced
+    const hasUnsyncedChanges = history.some((h) => !h.isSynced);
+
     return (
         <HistoryContext.Provider
             value={{
@@ -376,6 +410,10 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 deleteFromHistory,
                 pushHistoryToRemote,
                 mergeRemoteHistory,
+                isSyncing,
+                lastSyncResult,
+                lastSyncAt,
+                hasUnsyncedChanges,
             }}
         >
             {children}
