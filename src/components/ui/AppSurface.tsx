@@ -6,22 +6,47 @@ export type AppSurfaceProps = {
     children: React.ReactNode;
     style?: StyleProp<ViewStyle>;
     padding?: number;
+
+    /**
+     * Optional style knobs (non-breaking):
+     * If you don't pass these, AppSurface behaves exactly like before.
+     */
+    backgroundColor?: string;
+    borderColor?: string;
+    borderWidth?: number;
+    radius?: number;
 };
 
 /**
  * AppSurface
  * ----------
  * A simple reusable "card" / "surface" wrapper.
- * We’ll later hook this into the Aurora Calm theme and use it
- * across Chat, History, and Settings.
+ * Defaults preserve current look, but optional props allow
+ * consistent theming across Chat, History, and Settings.
  */
 export const AppSurface: React.FC<AppSurfaceProps> = ({
     children,
     style,
     padding = 12,
+    backgroundColor,
+    borderColor,
+    borderWidth,
+    radius,
 }) => {
     return (
-        <View style={[styles.base, { padding }, style]}>
+        <View
+            style={[
+                styles.base,
+                {
+                    padding,
+                    ...(backgroundColor ? { backgroundColor } : null),
+                    ...(borderColor ? { borderColor } : null),
+                    ...(typeof borderWidth === "number" ? { borderWidth } : null),
+                    ...(typeof radius === "number" ? { borderRadius: radius } : null),
+                },
+                style,
+            ]}
+        >
             {children}
         </View>
     );

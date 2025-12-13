@@ -3,10 +3,10 @@ import React from "react";
 import {
     View,
     Text,
-    TouchableOpacity,
     Alert,
     Switch,
     ScrollView,
+    TouchableOpacity,
 } from "react-native";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
@@ -14,14 +14,12 @@ import colors from "../theme/colors";
 import { fetchRemoteHistory } from "../api/historyClient";
 import AppSeparator from "../components/ui/AppSeparator";
 import AppSurface from "../components/ui/AppSurface";
+import AppButton from "../components/ui/AppButton";
+import { DEBUG_UI_ENABLED } from "../config/debug";
 
 export default function SettingsScreen() {
-    const {
-        history,
-        clearHistory,
-        pushHistoryToRemote,
-        mergeRemoteHistory,
-    } = useHistoryStore();
+    const { history, clearHistory, pushHistoryToRemote, mergeRemoteHistory } =
+        useHistoryStore();
 
     const {
         emotionInsightsEnabled,
@@ -36,6 +34,22 @@ export default function SettingsScreen() {
 
     const messageCount = history.length;
     const unsyncedCount = history.filter((h) => !h.isSynced).length;
+
+    // ✅ QA hardening: avoid setState after leaving screen
+    const mountedRef = React.useRef(true);
+    React.useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+        };
+    }, []);
+
+    // ✅ QA hardening: prevent double-taps on async tools
+    const busyRef = React.useRef<{
+        testRemote: boolean;
+        pushOnly: boolean;
+        syncNow: boolean;
+    }>({ testRemote: false, pushOnly: false, syncNow: false });
 
     const handleClearHistory = () => {
         Alert.alert(
@@ -55,12 +69,15 @@ export default function SettingsScreen() {
     };
 
     const handleTestRemoteHistory = async () => {
+        if (busyRef.current.testRemote) return;
+        busyRef.current.testRemote = true;
+
         try {
             const remote = await fetchRemoteHistory();
 
             if (!Array.isArray(remote)) {
                 Alert.alert(
-                    "Remote history debug",
+                    "Remote history",
                     "Unexpected response format from backend.",
                     [{ text: "OK" }]
                 );
@@ -81,9 +98,7 @@ export default function SettingsScreen() {
                 lines.push(`Merged ${added} new item(s) into local history.`);
             }
 
-            Alert.alert("Remote history debug", lines.join("\n"), [
-                { text: "OK" },
-            ]);
+            Alert.alert("Remote history", lines.join("\n"), [{ text: "OK" }]);
         } catch (error) {
             console.error("Failed to fetch remote history:", error);
             Alert.alert(
@@ -91,16 +106,21 @@ export default function SettingsScreen() {
                 "Could not connect to the Imotara backend right now. Please check your network or try again later.",
                 [{ text: "OK" }]
             );
+        } finally {
+            busyRef.current.testRemote = false;
         }
     };
 
     const handlePushLocalHistory = async () => {
+        if (busyRef.current.pushOnly) return;
+        busyRef.current.pushOnly = true;
+
         try {
             const result = await pushHistoryToRemote();
 
             if (!result.ok) {
                 Alert.alert(
-                    "Cloud sync debug",
+                    "Cloud sync",
                     `Could not push history to the backend. Please check your connection or try again later.\n\n${result.errorMessage || "Network request failed"
                     }`,
                     [{ text: "OK" }]
@@ -109,13 +129,15 @@ export default function SettingsScreen() {
             }
 
             // ✅ Mark this as a successful sync event for the whole app
-            const summary = `Push-only sync: pushed ${result.pushed
-                } item(s) to the backend (status ${result.status ?? "unknown"}).`;
-            setLastSyncAt(Date.now());
-            setLastSyncStatus(summary);
+            const summary = `Push-only sync: pushed ${result.pushed} item(s) to the backend (status ${result.status ?? "unknown"
+                }).`;
+            if (mountedRef.current) {
+                setLastSyncAt(Date.now());
+                setLastSyncStatus(summary);
+            }
 
             Alert.alert(
-                "Cloud sync debug",
+                "Cloud sync",
                 `Pushed ${result.pushed} item(s) to the backend.\n\nStatus: ${result.status ?? "unknown"
                 }`,
                 [{ text: "OK" }]
@@ -123,15 +145,20 @@ export default function SettingsScreen() {
         } catch (error) {
             console.error("Failed to push remote history:", error);
             Alert.alert(
-                "Cloud sync debug",
+                "Cloud sync",
                 "Could not push history to the backend. Please check your connection or try again later.\n\nNetwork request failed",
                 [{ text: "OK" }]
             );
+        } finally {
+            busyRef.current.pushOnly = false;
         }
     };
 
     // One-tap sync: push local → fetch remote → merge into local
     const handleSyncNow = async () => {
+        if (busyRef.current.syncNow) return;
+        busyRef.current.syncNow = true;
+
         try {
             // 1) Push local history (via unified context method)
             const pushResult = await pushHistoryToRemote();
@@ -150,8 +177,10 @@ export default function SettingsScreen() {
 
                 const summary = `${pushedText} ${mergedText}`;
 
-                setLastSyncAt(Date.now());
-                setLastSyncStatus(summary);
+                if (mountedRef.current) {
+                    setLastSyncAt(Date.now());
+                    setLastSyncStatus(summary);
+                }
 
                 Alert.alert("Sync issue", `${pushedText}\n\n${mergedText}`, [
                     { text: "OK" },
@@ -182,23 +211,29 @@ export default function SettingsScreen() {
             const summary = `${pushedText} ${mergedText}`;
 
             // 4) Update last sync info (Lite)
-            setLastSyncAt(Date.now());
-            setLastSyncStatus(summary);
+            if (mountedRef.current) {
+                setLastSyncAt(Date.now());
+                setLastSyncStatus(summary);
+            }
 
             Alert.alert("Sync summary", `${pushedText}\n\n${mergedText}`, [
-                { text: "OK" }],
-            );
+                { text: "OK" },
+            ]);
         } catch (error) {
             console.error("handleSyncNow error:", error);
-            setLastSyncAt(Date.now());
-            setLastSyncStatus(
-                "Sync error: Full sync (push + fetch) failed. Please check your connection."
-            );
+            if (mountedRef.current) {
+                setLastSyncAt(Date.now());
+                setLastSyncStatus(
+                    "Sync error: Full sync (push + fetch) failed. Please check your connection."
+                );
+            }
             Alert.alert(
                 "Sync error",
                 "Full sync (push + fetch) failed. Please check your connection and try again.",
                 [{ text: "OK" }]
             );
+        } finally {
+            busyRef.current.syncNow = false;
         }
     };
 
@@ -213,12 +248,7 @@ export default function SettingsScreen() {
     };
 
     return (
-        <View
-            style={{
-                flex: 1,
-                backgroundColor: colors.background,
-            }}
-        >
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
             <ScrollView
                 contentContainerStyle={{
                     paddingHorizontal: 16,
@@ -248,20 +278,13 @@ export default function SettingsScreen() {
                     device. From here you can try early emotion insights and sync
                     options — future versions will add full cloud backup controls and
                     teen safety settings.
+
+                    {"\n\n"}Your messages are never shared publicly — sync only stores a
+                    private cloud copy for you.
                 </Text>
 
                 {/* Emotion Insights (preview) card */}
-                <View
-                    style={{
-                        backgroundColor: colors.surfaceSoft,
-                        borderRadius: 16,
-                        paddingHorizontal: 16,
-                        paddingVertical: 14,
-                        marginBottom: 16,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                    }}
-                >
+                <AppSurface style={{ marginBottom: 16 }}>
                     <View
                         style={{
                             flexDirection: "row",
@@ -289,6 +312,7 @@ export default function SettingsScreen() {
                             thumbColor={"#f9fafb"}
                         />
                     </View>
+
                     <Text
                         style={{
                             fontSize: 13,
@@ -300,6 +324,7 @@ export default function SettingsScreen() {
                         reflections, suggestions, and gentle prompts in the chat. In
                         this early preview, analysis still runs locally on your device.
                     </Text>
+
                     <Text
                         style={{
                             fontSize: 12,
@@ -310,7 +335,7 @@ export default function SettingsScreen() {
                         This toggle does not send any extra data to the cloud yet. It
                         is a design placeholder for future AI-powered insights.
                     </Text>
-                </View>
+                </AppSurface>
 
                 {/* Local history card */}
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -347,28 +372,12 @@ export default function SettingsScreen() {
                         {unsyncedCount > 0 ? ` · Unsynced: ${unsyncedCount}` : ""}
                     </Text>
 
-                    <TouchableOpacity
+                    <AppButton
+                        title="Clear Local History"
                         onPress={handleClearHistory}
-                        style={{
-                            alignSelf: "flex-start",
-                            paddingHorizontal: 16,
-                            paddingVertical: 8,
-                            borderRadius: 999,
-                            borderWidth: 1,
-                            borderColor: "#fca5a5",
-                            backgroundColor: "rgba(248, 113, 113, 0.12)",
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 14,
-                                fontWeight: "600",
-                                color: "#fecaca",
-                            }}
-                        >
-                            Clear Local History
-                        </Text>
-                    </TouchableOpacity>
+                        variant="destructive"
+                        style={{ alignSelf: "flex-start", borderRadius: 999 }}
+                    />
                 </AppSurface>
 
                 {/* Small visual separator */}
@@ -417,12 +426,7 @@ export default function SettingsScreen() {
                         after the app notices unsynced messages.
                     </Text>
 
-                    <View
-                        style={{
-                            flexDirection: "row",
-                            marginTop: 4,
-                        }}
-                    >
+                    <View style={{ flexDirection: "row", marginTop: 4 }}>
                         {[5, 8, 15].map((sec, index) => {
                             const isActive = autoSyncDelaySeconds === sec;
                             return (
@@ -440,8 +444,7 @@ export default function SettingsScreen() {
                                         backgroundColor: isActive
                                             ? "rgba(56, 189, 248, 0.18)"
                                             : "rgba(15, 23, 42, 0.9)",
-                                        marginRight:
-                                            index < 2 ? 8 : 0, // spacing between pills
+                                        marginRight: index < 2 ? 8 : 0,
                                     }}
                                 >
                                     <Text
@@ -472,18 +475,8 @@ export default function SettingsScreen() {
                     </Text>
                 </AppSurface>
 
-                {/* Remote debug + sync card */}
-                <View
-                    style={{
-                        backgroundColor: colors.surfaceSoft,
-                        borderRadius: 16,
-                        paddingHorizontal: 16,
-                        paddingVertical: 14,
-                        marginBottom: 16,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                    }}
-                >
+                {/* Remote card */}
+                <AppSurface style={{ marginBottom: 16 }}>
                     <Text
                         style={{
                             fontSize: 14,
@@ -492,107 +485,75 @@ export default function SettingsScreen() {
                             fontWeight: "500",
                         }}
                     >
-                        Remote history (debug)
+                        Remote history
                     </Text>
                     <Text
                         style={{
                             fontSize: 13,
                             color: colors.textSecondary,
-                            marginBottom: 12,
-                        }}
-                    >
-                        Test connection to the Imotara backend, push your local history,
-                        and optionally merge remote items back into this device. This is
-                        a developer preview for the future sync engine.
-                    </Text>
-
-                    {/* Test fetch */}
-                    <TouchableOpacity
-                        onPress={handleTestRemoteHistory}
-                        style={{
-                            alignSelf: "flex-start",
-                            paddingHorizontal: 16,
-                            paddingVertical: 8,
-                            borderRadius: 999,
-                            borderWidth: 1,
-                            borderColor: colors.primary,
-                            backgroundColor: "rgba(56, 189, 248, 0.16)",
-                            marginBottom: 8,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 14,
-                                fontWeight: "600",
-                                color: colors.textPrimary,
-                            }}
-                        >
-                            Test Remote History Fetch
-                        </Text>
-                    </TouchableOpacity>
-
-                    {/* Push only */}
-                    <TouchableOpacity
-                        onPress={handlePushLocalHistory}
-                        style={{
-                            alignSelf: "flex-start",
-                            paddingHorizontal: 16,
-                            paddingVertical: 8,
-                            borderRadius: 999,
-                            borderWidth: 1,
-                            borderColor: colors.primary,
-                            backgroundColor: "rgba(56, 189, 248, 0.12)",
-                            marginBottom: 8,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 14,
-                                fontWeight: "600",
-                                color: colors.textPrimary,
-                            }}
-                        >
-                            Push Local History to Cloud
-                        </Text>
-                    </TouchableOpacity>
-
-                    {/* Full sync: push + fetch + merge */}
-                    <TouchableOpacity
-                        onPress={handleSyncNow}
-                        style={{
-                            alignSelf: "flex-start",
-                            paddingHorizontal: 16,
-                            paddingVertical: 8,
-                            borderRadius: 999,
-                            borderWidth: 1,
-                            borderColor: "#a5b4fc",
-                            backgroundColor: "rgba(129, 140, 248, 0.16)",
                             marginBottom: 10,
                         }}
                     >
-                        <Text
-                            style={{
-                                fontSize: 14,
-                                fontWeight: "600",
-                                color: colors.textPrimary,
-                            }}
-                        >
-                            Sync Now (push + fetch)
-                        </Text>
-                    </TouchableOpacity>
+                        Sync your local history to the Imotara backend and merge any
+                        remote items back into this device.
+                    </Text>
 
-                    {/* Lite sync status */}
-                    <View
+                    {/* Quick snapshot */}
+                    <Text
                         style={{
-                            marginTop: 4,
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                            marginBottom: 12,
                         }}
                     >
-                        <Text
-                            style={{
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                            }}
-                        >
+                        Local messages: {messageCount}
+                        {unsyncedCount > 0
+                            ? ` · Unsynced: ${unsyncedCount}`
+                            : " · All synced"}
+                    </Text>
+
+                    {/* Debug-only tools */}
+                    {DEBUG_UI_ENABLED && (
+                        <>
+                            <AppButton
+                                title="Test Remote History Fetch"
+                                onPress={handleTestRemoteHistory}
+                                variant="secondary"
+                                style={{
+                                    alignSelf: "flex-start",
+                                    borderRadius: 999,
+                                    marginBottom: 8,
+                                }}
+                            />
+
+                            <AppButton
+                                title="Push Local History to Cloud"
+                                onPress={handlePushLocalHistory}
+                                variant="secondary"
+                                style={{
+                                    alignSelf: "flex-start",
+                                    borderRadius: 999,
+                                    marginBottom: 8,
+                                }}
+                            />
+                        </>
+                    )}
+
+                    {/* Production-safe one-tap sync stays visible */}
+                    <AppButton
+                        title="Sync Now (push + fetch)"
+                        onPress={handleSyncNow}
+                        variant="primary"
+                        style={{
+                            alignSelf: "flex-start",
+                            borderRadius: 999,
+                            marginBottom: 10,
+                        }}
+                    />
+
+                    {/* Lite sync status */}
+                    <View style={{ marginTop: 4 }}>
+                        <Text style={{ fontSize: 12, color: colors.textSecondary }}>
                             Last sync: {formattedLastSync}
                         </Text>
                         {lastSyncStatus && (
@@ -607,7 +568,7 @@ export default function SettingsScreen() {
                             </Text>
                         )}
                     </View>
-                </View>
+                </AppSurface>
 
                 {/* App version footer */}
                 <View
@@ -618,16 +579,10 @@ export default function SettingsScreen() {
                         opacity: 0.5,
                     }}
                 >
-                    <Text
-                        style={{
-                            fontSize: 12,
-                            color: colors.textSecondary,
-                        }}
-                    >
+                    <Text style={{ fontSize: 12, color: colors.textSecondary }}>
                         Imotara Mobile Preview · v0.9.0
                     </Text>
                 </View>
-
             </ScrollView>
         </View>
     );

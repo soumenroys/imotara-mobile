@@ -5,6 +5,7 @@ import React, {
     useState,
     type ReactNode,
 } from "react";
+import { DEBUG_UI_ENABLED } from "../config/debug";
 
 type SettingsContextValue = {
     // Emotion insight toggle for Imotara replies
@@ -26,6 +27,12 @@ type SettingsContextValue = {
      */
     autoSyncDelaySeconds: number;
     setAutoSyncDelaySeconds: (value: number) => void;
+
+    /**
+     * Global debug-only UI enablement.
+     * Read-only. Sourced from src/config/debug.ts
+     */
+    debugUIEnabled: boolean;
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -33,17 +40,13 @@ const SettingsContext = createContext<SettingsContextValue | undefined>(
 );
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-    const [emotionInsightsEnabled, setEmotionInsightsEnabled] =
-        useState(true);
+    const [emotionInsightsEnabled, setEmotionInsightsEnabled] = useState(true);
 
     const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
-    const [lastSyncStatus, setLastSyncStatus] = useState<string | null>(
-        null
-    );
+    const [lastSyncStatus, setLastSyncStatus] = useState<string | null>(null);
 
     // Default auto-sync delay: 8 seconds
-    const [autoSyncDelaySeconds, setAutoSyncDelaySeconds] =
-        useState<number>(8);
+    const [autoSyncDelaySeconds, setAutoSyncDelaySeconds] = useState<number>(8);
 
     return (
         <SettingsContext.Provider
@@ -56,6 +59,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setLastSyncStatus,
                 autoSyncDelaySeconds,
                 setAutoSyncDelaySeconds,
+                debugUIEnabled: DEBUG_UI_ENABLED,
             }}
         >
             {children}

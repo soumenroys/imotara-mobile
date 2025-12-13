@@ -5,6 +5,7 @@ import React, {
     useState,
     useEffect,
     useRef,
+    useCallback,
     type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -13,6 +14,7 @@ import {
     type PushRemoteHistoryResult,
 } from "../api/historyClient";
 import { useSettings } from "./SettingsContext";
+import { DEBUG_UI_ENABLED } from "../config/debug";
 
 export type HistoryItem = {
     id: string;
@@ -50,6 +52,18 @@ type HistoryContextValue = {
     pushHistoryToRemote: () => Promise<PushRemoteHistoryResult>;
 
     /**
+     * Additive helper for lifecycle/manual triggers:
+     * - Deduped and timer-safe
+     * - Clears pending autosync timer before running
+     */
+    runSync: (opts?: { reason?: string }) => Promise<PushRemoteHistoryResult>;
+
+    /**
+     * Alias for runSync (for flexible callers).
+     */
+    syncNow: (opts?: { reason?: string }) => Promise<PushRemoteHistoryResult>;
+
+    /**
      * Merge raw remote history items into the local store.
      * - Normalizes arbitrary backend shapes into HistoryItem
      * - Skips invalid / empty entries
@@ -77,6 +91,10 @@ const HistoryContext = createContext<HistoryContextValue | undefined>(
     undefined
 );
 
+function debugWarn(...args: any[]) {
+    if (DEBUG_UI_ENABLED) console.warn(...args);
+}
+
 /**
  * Normalize any incoming remote object to a strict HistoryItem shape.
  * This is intentionally permissive so it can handle:
@@ -87,8 +105,7 @@ const HistoryContext = createContext<HistoryContextValue | undefined>(
 function normalizeRemoteItem(raw: any): HistoryItem | null {
     if (!raw || typeof raw !== "object") return null;
 
-    const pickStr = (v: any): string =>
-        typeof v === "string" ? v : "";
+    const pickStr = (v: any): string => (typeof v === "string" ? v : "");
 
     // ----- 1) Extract text (many fallbacks) -----
     let text: string =
@@ -110,23 +127,15 @@ function normalizeRemoteItem(raw: any): HistoryItem | null {
         const headline = pickStr(raw.summary.headline);
         const details = pickStr(raw.summary.details);
         const combined = [headline, details].filter(Boolean).join(" — ");
-        if (combined.trim()) {
-            text = combined;
-        }
+        if (combined.trim()) text = combined;
     }
 
     // Additional generic fallbacks
     if (!text.trim()) {
-        text =
-            pickStr(raw.description) ||
-            pickStr(raw.title) ||
-            text;
+        text = pickStr(raw.description) || pickStr(raw.title) || text;
     }
 
-    if (!text || !text.trim()) {
-        // Ignore empty rows
-        return null;
-    }
+    if (!text || !text.trim()) return null;
 
     // ----- 2) Determine "from" (user vs bot) -----
     const roleLike: string =
@@ -149,11 +158,8 @@ function normalizeRemoteItem(raw: any): HistoryItem | null {
     ) {
         from = "bot";
     } else if (raw.isUser === true) {
-        // Fallback flag
         from = "user";
     } else if (!roleLike && !raw.isUser) {
-        // Heuristic: if it looks like an AI analysis record (has summary/snapshot/reflections),
-        // treat it as a bot entry.
         if (raw.summary || raw.snapshot || raw.reflections) {
             from = "bot";
         }
@@ -165,7 +171,6 @@ function normalizeRemoteItem(raw: any): HistoryItem | null {
     if (typeof raw.timestamp === "number") {
         timestamp = raw.timestamp;
     } else if (typeof raw.computedAt === "number") {
-        // Analysis-like objects
         timestamp = raw.computedAt;
     } else if (
         Array.isArray(raw.reflections) &&
@@ -217,8 +222,28 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         setLastSyncStatus: setSettingsLastSyncStatus,
     } = useSettings();
 
-    // Timer holder for background auto-sync
-    const autoSyncTimerRef = useRef<NodeJS.Timeout | null>(null);
+    // ✅ Keep a ref to latest history to avoid function identity churn
+    const historyRef = useRef<HistoryItem[]>([]);
+    useEffect(() => {
+        historyRef.current = history;
+    }, [history]);
+
+    // ✅ Prevent overlapping pushes (manual + background + lifecycle)
+    const isPushInFlightRef = useRef(false);
+
+    // Timer holder for background auto-sync (RN-safe type)
+    const autoSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // NEW: foreground/manual dedupe guard (prevents sync bursts)
+    const lastRunSyncAtRef = useRef<number>(0);
+    const runSyncInFlightRef = useRef(false);
+
+    const clearAutoSyncTimer = useCallback(() => {
+        if (autoSyncTimerRef.current) {
+            clearTimeout(autoSyncTimerRef.current);
+            autoSyncTimerRef.current = null;
+        }
+    }, []);
 
     // Hydrate from AsyncStorage on mount
     useEffect(() => {
@@ -233,7 +258,6 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 const parsed = JSON.parse(raw);
 
                 if (Array.isArray(parsed)) {
-                    // Basic validation / normalization
                     const cleaned: HistoryItem[] = parsed
                         .filter((item) => item && typeof item === "object")
                         .map((item) => ({
@@ -256,7 +280,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     setHistory(cleaned);
                 }
             } catch (error) {
-                console.warn("Failed to load history from storage:", error);
+                debugWarn("Failed to load history from storage:", error);
             } finally {
                 setHydrated(true);
             }
@@ -273,7 +297,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             try {
                 await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(history));
             } catch (error) {
-                console.warn("Failed to save history to storage:", error);
+                debugWarn("Failed to save history to storage:", error);
             }
         };
 
@@ -286,39 +310,49 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
     const clearHistory = () => {
         setHistory([]);
-        // We also clear storage, but we don’t block on it
         AsyncStorage.removeItem(STORAGE_KEY).catch((err) =>
-            console.warn("Failed to clear history storage:", err)
+            debugWarn("Failed to clear history storage:", err)
         );
     };
 
     const deleteFromHistory = (id: string) => {
         setHistory((prev) => prev.filter((item) => item.id !== id));
-        // AsyncStorage will be updated by the persistence effect
     };
 
-    const pushHistoryToRemote = async (): Promise<PushRemoteHistoryResult> => {
-        // Mark that a sync attempt is underway and clear previous result
+    const pushHistoryToRemote = useCallback(async (): Promise<PushRemoteHistoryResult> => {
+        // Avoid overlap (especially with background auto-sync / foreground resume)
+        if (isPushInFlightRef.current) {
+            return {
+                ok: false,
+                pushed: 0,
+                status: -2,
+                errorMessage: "Sync already in progress",
+            };
+        }
+
+        // NEW: if a push starts, cancel any pending autosync timer (prevents double-fire)
+        clearAutoSyncTimer();
+
+        isPushInFlightRef.current = true;
+
         setIsSyncing(true);
         setLastSyncResult(null);
 
         try {
-            // Only push items that are not yet marked as synced
-            const unsynced = history.filter((h) => !h.isSynced);
+            const currentHistory = historyRef.current || [];
+            const unsynced = currentHistory.filter((h) => !h.isSynced);
 
             if (unsynced.length === 0) {
-                // Nothing to push – still return a successful result
                 const result: PushRemoteHistoryResult = {
                     ok: true,
                     pushed: 0,
-                    status: 0, // 0 → nothing to push
+                    status: 0,
                 };
                 const now = Date.now();
 
                 setLastSyncResult(result);
                 setLastSyncAt(now);
 
-                // 🔄 Reflect this in global Settings “Last sync”
                 setSettingsLastSyncAt(now);
                 setSettingsLastSyncStatus(
                     "Sync checked · nothing new to push from this device."
@@ -331,7 +365,6 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             const now = Date.now();
 
             if (result.ok) {
-                // Mark all successfully pushed items as synced
                 const pushedIds = new Set(unsynced.map((h) => h.id));
 
                 setHistory((prev) =>
@@ -345,7 +378,6 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 setLastSyncResult(result);
                 setLastSyncAt(now);
 
-                // 🔄 Global Settings summary for successful push
                 const pushedCount = typeof result.pushed === "number" ? result.pushed : 0;
                 setSettingsLastSyncAt(now);
                 setSettingsLastSyncStatus(
@@ -354,7 +386,6 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                         : "Sync checked · nothing new to push from this device."
                 );
             } else {
-                // Error result from backend
                 setLastSyncResult(result);
                 setLastSyncAt(now);
 
@@ -366,13 +397,13 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
             return result;
         } catch (error) {
-            console.warn("pushHistoryToRemote error:", error);
+            debugWarn("pushHistoryToRemote error:", error);
 
             const now = Date.now();
             const fallback: PushRemoteHistoryResult = {
                 ok: false,
                 pushed: 0,
-                status: -1, // -1 → generic sync error
+                status: -1,
                 errorMessage:
                     error instanceof Error ? error.message : "Unknown error",
             };
@@ -380,7 +411,6 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             setLastSyncResult(fallback);
             setLastSyncAt(now);
 
-            // 🔄 Global Settings summary for unexpected error
             setSettingsLastSyncAt(now);
             setSettingsLastSyncStatus(
                 `Sync error: ${fallback.errorMessage || "Unknown error."}`
@@ -389,8 +419,55 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             return fallback;
         } finally {
             setIsSyncing(false);
+            isPushInFlightRef.current = false;
         }
-    };
+    }, [clearAutoSyncTimer, setSettingsLastSyncAt, setSettingsLastSyncStatus]);
+
+    /**
+     * Additive “safe sync trigger” for lifecycle/manual calls.
+     * - Dedupes rapid re-entry (foreground events can fire quickly)
+     * - Clears any pending autosync timer
+     * - Delegates to pushHistoryToRemote (which already has overlap protection)
+     */
+    const runSync = useCallback(
+        async (opts?: { reason?: string }): Promise<PushRemoteHistoryResult> => {
+            const now = Date.now();
+
+            // Throttle foreground-trigger bursts (does not affect autosync scheduling)
+            if (now - lastRunSyncAtRef.current < 900) {
+                return {
+                    ok: false,
+                    pushed: 0,
+                    status: -3,
+                    errorMessage: "Sync trigger throttled",
+                };
+            }
+
+            // Avoid overlap of runSync callers (separate from push overlap)
+            if (runSyncInFlightRef.current) {
+                return {
+                    ok: false,
+                    pushed: 0,
+                    status: -2,
+                    errorMessage: "Sync already in progress",
+                };
+            }
+
+            lastRunSyncAtRef.current = now;
+            runSyncInFlightRef.current = true;
+
+            try {
+                clearAutoSyncTimer();
+                return await pushHistoryToRemote();
+            } finally {
+                runSyncInFlightRef.current = false;
+            }
+        },
+        [clearAutoSyncTimer, pushHistoryToRemote]
+    );
+
+    // Alias for flexibility
+    const syncNow = runSync;
 
     /**
      * Merge raw remote items into local history.
@@ -408,9 +485,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         const normalizedItems: HistoryItem[] = [];
         for (const raw of rawItems) {
             const normalized = normalizeRemoteItem(raw);
-            if (normalized) {
-                normalizedItems.push(normalized);
-            }
+            if (normalized) normalizedItems.push(normalized);
         }
 
         const normalizedCount = normalizedItems.length;
@@ -452,36 +527,23 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
     // 🔁 Background auto-sync based on user-configured delay
     useEffect(() => {
-        // Clear any existing timer whenever dependencies change
-        if (autoSyncTimerRef.current) {
-            clearTimeout(autoSyncTimerRef.current);
-            autoSyncTimerRef.current = null;
-        }
+        // Keep existing behavior but ensure we don't leave stale timers around
+        clearAutoSyncTimer();
 
-        // Only schedule when:
-        // - storage is hydrated
-        // - there are unsynced changes
-        // - we're not already syncing
         if (!hydrated) return;
         if (!hasUnsyncedChanges) return;
         if (isSyncing) return;
 
-        // Clamp delay between 3s and 60s for safety
-        const delayMs =
-            Math.min(Math.max(autoSyncDelaySeconds, 3), 60) * 1000;
+        const delayMs = Math.min(Math.max(autoSyncDelaySeconds, 3), 60) * 1000;
 
         autoSyncTimerRef.current = setTimeout(() => {
             pushHistoryToRemote().catch((err) =>
-                console.warn("Background auto-sync error:", err)
+                debugWarn("Background auto-sync error:", err)
             );
         }, delayMs);
 
-        // Cleanup on unmount or dependency change
         return () => {
-            if (autoSyncTimerRef.current) {
-                clearTimeout(autoSyncTimerRef.current);
-                autoSyncTimerRef.current = null;
-            }
+            clearAutoSyncTimer();
         };
     }, [
         hydrated,
@@ -489,6 +551,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         isSyncing,
         autoSyncDelaySeconds,
         pushHistoryToRemote,
+        clearAutoSyncTimer,
     ]);
 
     return (
@@ -499,6 +562,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 clearHistory,
                 deleteFromHistory,
                 pushHistoryToRemote,
+                runSync,
+                syncNow,
                 mergeRemoteHistory,
                 isSyncing,
                 lastSyncResult,

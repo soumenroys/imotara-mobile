@@ -5,6 +5,7 @@
 // whether to fallback to local preview.
 
 import { IMOTARA_API_BASE_URL } from "../config/api";
+import { DEBUG_UI_ENABLED } from "../config/debug";
 
 export type AnalyzeResponse = {
     ok: boolean;
@@ -12,9 +13,15 @@ export type AnalyzeResponse = {
     errorMessage?: string;
 };
 
-export async function callImotaraAI(
-    message: string
-): Promise<AnalyzeResponse> {
+function debugLog(...args: any[]) {
+    if (DEBUG_UI_ENABLED) console.log(...args);
+}
+
+function debugWarn(...args: any[]) {
+    if (DEBUG_UI_ENABLED) console.warn(...args);
+}
+
+export async function callImotaraAI(message: string): Promise<AnalyzeResponse> {
     try {
         const res = await fetch(`${IMOTARA_API_BASE_URL}/api/analyze`, {
             method: "POST",
@@ -22,7 +29,10 @@ export async function callImotaraAI(
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
+                // Backward compatible:
                 message,
+                // Forward compatible (many analyzers expect a list):
+                messages: [{ from: "user", text: message }],
                 source: "mobile-app",
             }),
         });
@@ -37,8 +47,8 @@ export async function callImotaraAI(
 
         const data: any = await res.json();
 
-        // Debug log – see in Metro console
-        console.log("Imotara mobile AI raw response:", data);
+        // Debug log – see in Metro console (gated for QA/prod cleanliness)
+        debugLog("Imotara mobile AI raw response:", data);
 
         // 1) Try common "direct reply" fields first
         let candidate: unknown =
@@ -63,7 +73,7 @@ export async function callImotaraAI(
                 data?.choices?.[0]?.text;
         }
 
-        // 4) Rich emotional reply from Imotara analysis JSON (Option B)
+        // 4) Rich emotional reply from Imotara analysis JSON
         let richFromAnalysis: string | null = null;
         if (!isNonEmptyString(candidate)) {
             richFromAnalysis = buildRichReplyFromAnalysis(data);
@@ -98,7 +108,7 @@ export async function callImotaraAI(
             replyText,
         };
     } catch (error: any) {
-        console.warn("Imotara mobile AI fetch error:", error);
+        debugWarn("Imotara mobile AI fetch error:", error);
         return {
             ok: false,
             replyText: "",
@@ -129,36 +139,26 @@ function buildRichReplyFromAnalysis(data: any): string | null {
 
     const summary = data.summary ?? {};
     const snapshot = data.snapshot ?? {};
-    const windowInfo = snapshot.window ?? {};
-    const averages = snapshot.averages ?? {};
-    const reflections = Array.isArray(data.reflections)
-        ? data.reflections
-        : [];
+    const reflections = Array.isArray(data.reflections) ? data.reflections : [];
 
-    const STUB_DETAILS_MARKER =
-        "Remote analysis stub served by /api/analyze";
-    const STUB_REFLECTION_MARKER =
-        "No messages were provided, so this is a neutral baseline.";
+    // More robust stub detection (covers slight punctuation / spacing differences)
+    const isStubDetails = (s?: unknown) =>
+        typeof s === "string" &&
+        s.toLowerCase().includes("remote analysis stub served by /api/analyze");
+
+    const isStubReflection = (s?: unknown) => {
+        if (typeof s !== "string") return false;
+        const lower = s.toLowerCase();
+        return lower.includes("no messages were provided") && lower.includes("neutral baseline");
+    };
 
     const headline: string | undefined = summary.headline;
 
-    // Filter out stub-like details
     let details: string | undefined = summary.details;
-    if (
-        typeof details === "string" &&
-        details.includes(STUB_DETAILS_MARKER)
-    ) {
-        details = undefined;
-    }
+    if (isStubDetails(details)) details = undefined;
 
-    // Filter out stub-like reflection text
     let reflectionText: string | undefined = reflections[0]?.text;
-    if (
-        typeof reflectionText === "string" &&
-        reflectionText.includes(STUB_REFLECTION_MARKER)
-    ) {
-        reflectionText = undefined;
-    }
+    if (isStubReflection(reflectionText)) reflectionText = undefined;
 
     const dominant: string | undefined = snapshot.dominant;
 
@@ -168,22 +168,16 @@ function buildRichReplyFromAnalysis(data: any): string | null {
     if (isNonEmptyString(headline) || isNonEmptyString(details)) {
         const h = headline?.trim();
         const d = details?.trim();
-        if (h && d) {
-            pieces.push(`${h}. ${d}`);
-        } else if (h) {
-            pieces.push(h);
-        } else if (d) {
-            pieces.push(d);
-        }
+        if (h && d) pieces.push(`${h}. ${d}`);
+        else if (h) pieces.push(h);
+        else if (d) pieces.push(d);
     }
 
     // 2) Dominant emotion hint
     if (isNonEmptyString(dominant)) {
         const dom = dominant.toLowerCase();
         if (dom === "neutral") {
-            pieces.push(
-                "Emotionally, you’re coming across fairly steady and neutral right now."
-            );
+            pieces.push("Emotionally, you’re coming across fairly steady and neutral right now.");
         } else {
             pieces.push(
                 `Emotionally, it seems like “${dom}” is the strongest note in what you’re sharing.`

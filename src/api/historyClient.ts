@@ -6,7 +6,12 @@
 // - pushRemoteHistory  → best-effort batch push of local history to backend
 
 import { buildApiUrl } from "../config/api";
+import { DEBUG_UI_ENABLED } from "../config/debug";
 import type { HistoryItem } from "../state/HistoryContext";
+
+function debugWarn(...args: any[]) {
+    if (DEBUG_UI_ENABLED) console.warn(...args);
+}
 
 // Shape that can represent either:
 //   • Mobile payloads: { id, text, from, timestamp, source? }
@@ -44,143 +49,108 @@ export type PushRemoteHistoryResult = {
  * Coerce "from"/"source"/flags into our simple "user" | "bot".
  *
  * The backend may use:
- *   - source: "user" | "assistant" | "local" | "openai"
- *   - from: "user" | "assistant" | "bot"
+ *   - source: "user" | "assistant" | "bot"
  *   - role: "user" | "assistant"
- *   - isUser: true/false
+ *   - from: "user" | "bot"
+ *   - isUser: boolean
  */
-function coerceFrom(raw: RemoteHistoryItem): "user" | "bot" {
-    // Prefer explicit "user" vs "bot" first.
-    const token =
-        (raw.from ??
-            raw.source ??
-            raw.role ??
-            raw.author ??
-            raw.speaker ??
-            "") + "";
+function normalizeFrom(item: RemoteHistoryItem): "user" | "bot" {
+    const src = (item.source || "").toLowerCase();
+    const role = (item.role || "").toLowerCase();
+    const from = (item.from || "").toLowerCase();
 
-    const lower = token.toLowerCase().trim();
+    if (typeof item.isUser === "boolean") return item.isUser ? "user" : "bot";
 
-    if (
-        lower === "user" ||
-        lower === "human" ||
-        lower === "you" ||
-        (raw as any).isUser === true
-    ) {
-        return "user";
-    }
+    if (role === "user") return "user";
+    if (role === "assistant") return "bot";
 
-    // Common assistant / AI markers → treat as bot
-    if (
-        lower === "assistant" ||
-        lower === "bot" ||
-        lower === "imotara" ||
-        lower === "ai" ||
-        lower === "system" ||
-        lower === "assistant-local" ||
-        lower === "assistant-remote" ||
-        lower === "openai"
-    ) {
-        return "bot";
-    }
+    if (from === "user") return "user";
+    if (from === "bot") return "bot";
+    if (from === "assistant") return "bot";
 
-    // If we at least know it's not "user", treat it as bot;
-    // this helps for values like "local", "cloud", etc.
-    if (lower && lower !== "user") {
-        return "bot";
-    }
+    if (src === "user") return "user";
+    if (src === "assistant") return "bot";
+    if (src === "bot") return "bot";
 
-    // Default: user (safe assumption for early debug)
-    return "user";
+    // best-effort fallback: treat unknown as bot so it doesn't break chat pairing
+    return "bot";
 }
 
 /**
- * Normalize any remote history record (mobile or web) into the
- * simple HistoryItem shape used by the mobile UI.
+ * Normalize timestamp. Backend may store:
+ * - timestamp (ms)
+ * - createdAt (ms)
+ * - updatedAt (ms)
  */
-function normalizeRemoteItem(raw: RemoteHistoryItem): HistoryItem {
-    const id = String(raw.id);
+function normalizeTimestamp(item: RemoteHistoryItem): number {
+    const ts =
+        typeof item.timestamp === "number"
+            ? item.timestamp
+            : typeof item.createdAt === "number"
+                ? item.createdAt
+                : typeof item.updatedAt === "number"
+                    ? item.updatedAt
+                    : Date.now();
 
-    // Prefer "text" (mobile), then "message" (web), then "content".
-    let text = "";
-    if (typeof raw.text === "string" && raw.text.length > 0) {
-        text = raw.text;
-    } else if (typeof raw.message === "string" && raw.message.length > 0) {
-        text = raw.message;
-    } else if (typeof raw.content === "string" && raw.content.length > 0) {
-        text = raw.content;
-    }
+    // If it's seconds, convert to ms (basic heuristic)
+    if (ts < 1e12) return ts * 1000;
 
-    const from = coerceFrom(raw);
+    return ts;
+}
 
-    // Prefer timestamp (mobile), then updatedAt, then createdAt.
-    let timestamp = Date.now();
-    const candidates = [raw.timestamp, raw.updatedAt, raw.createdAt];
-    for (const v of candidates) {
-        if (typeof v === "number" && Number.isFinite(v)) {
-            timestamp = v;
-            break;
-        }
-    }
+/**
+ * Normalize text content. Backend may store:
+ * - text
+ * - message
+ * - content
+ */
+function normalizeText(item: RemoteHistoryItem): string {
+    const t =
+        typeof item.text === "string"
+            ? item.text
+            : typeof item.message === "string"
+                ? item.message
+                : typeof item.content === "string"
+                    ? item.content
+                    : "";
 
+    return String(t ?? "");
+}
+
+/**
+ * Convert remote record → local HistoryItem
+ * Always returns a structurally valid HistoryItem (id/text/from/timestamp),
+ * but some may still be filtered by your merge normalizer if you choose.
+ */
+function normalizeRemoteItem(item: RemoteHistoryItem): HistoryItem {
     return {
-        id,
-        text,
-        from,
-        timestamp,
-        // isSynced is handled by the merging layer (HistoryContext) or SettingsScreen;
-        // we keep this minimal here.
+        id: String(item.id),
+        text: normalizeText(item),
+        from: normalizeFrom(item),
+        timestamp: normalizeTimestamp(item),
+        // backend does not always carry per-item sync marker; locally we treat remote as synced
+        isSynced: true,
     };
 }
 
 /**
- * Build the outgoing payload for a batch of local items.
- * Minimal + tolerant, so backend can treat these as generic records.
- *
- * The web backend's /api/history POST normalizer understands:
- *   - { id, text, from, timestamp, source? }
- *   - { id, message, createdAt, updatedAt, source? }
- */
-function toRemoteOutgoing(items: HistoryItem[]) {
-    return items.map((item) => ({
-        id: item.id,
-        text: item.text,
-        from: item.from,
-        timestamp: item.timestamp,
-        // 🔹 Preserve the speaker so web can color bubbles correctly on fetch.
-        source: item.from, // "user" or "bot"
-    }));
-}
-
-/**
- * Read-only fetch from the backend history API.
- *
- * Today this is used for:
- *   - SettingsScreen → “Test Remote History Fetch” (just to see count)
- *   - HistoryScreen → “Load Remote History (debug)” (which then delegates
- *     to HistoryContext.mergeRemoteHistory for proper merging)
- *
- * It returns **already-normalized HistoryItem[]**.
+ * Read remote history as an array from /api/history?mode=array.
+ * Always returns an array (empty on error).
  */
 export async function fetchRemoteHistory(): Promise<HistoryItem[]> {
     try {
-        // Ask the backend for the simple array mode.
         const url = buildApiUrl("/api/history?mode=array");
         const res = await fetch(url);
 
         if (!res.ok) {
-            console.warn("fetchRemoteHistory: non-OK response", res.status);
+            debugWarn("fetchRemoteHistory: non-OK response", res.status);
             return [];
         }
 
         const raw = await res.json();
 
         if (!Array.isArray(raw)) {
-            console.warn(
-                "fetchRemoteHistory: expected array, got",
-                typeof raw,
-                raw
-            );
+            debugWarn("fetchRemoteHistory: expected array, got", typeof raw, raw);
             return [];
         }
 
@@ -188,40 +158,45 @@ export async function fetchRemoteHistory(): Promise<HistoryItem[]> {
 
         return data.map((item) => normalizeRemoteItem(item));
     } catch (err) {
-        console.warn("fetchRemoteHistory: error talking to backend", err);
+        debugWarn("fetchRemoteHistory: error talking to backend", err);
         return [];
     }
 }
 
 /**
- * Best-effort batch push of local history items to the backend.
+ * Best-effort batch push of local history items to
+ * /api/history via POST.
  *
- * - Never throws (returns a small status object instead).
- * - Safe to call even with an empty list.
+ * Uses a compact payload the backend normalizer already supports:
+ *   { items: [{ id, text, from, timestamp }] }
+ *
+ * Returns ok=false on any non-OK response.
  */
 export async function pushRemoteHistory(
     items: HistoryItem[]
 ): Promise<PushRemoteHistoryResult> {
-    if (!items || items.length === 0) {
-        // Nothing to push, but that's still a "success".
-        return { ok: true, pushed: 0 };
-    }
-
     try {
         const url = buildApiUrl("/api/history");
-        const payload = toRemoteOutgoing(items);
+
+        // Only push valid items that have basic fields
+        const payloadItems = (items || [])
+            .filter((i) => i && i.id && typeof i.text === "string" && i.from && i.timestamp)
+            .map((i) => ({
+                id: i.id,
+                text: i.text,
+                from: i.from,
+                timestamp: i.timestamp,
+            }));
+
+        const pushed = payloadItems.length;
 
         const res = await fetch(url, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            // Backend accepts both:
-            //   - raw array: EmotionRecord[]
-            //   - { records: EmotionRecord[] }
-            // We send the raw array for simplicity.
-            body: JSON.stringify(payload),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: payloadItems }),
         });
+
+        const status = res.status;
 
         if (!res.ok) {
             let bodyText = "";
@@ -231,43 +206,26 @@ export async function pushRemoteHistory(
                 // ignore
             }
 
-            console.warn(
-                "pushRemoteHistory: non-OK response",
-                res.status,
-                bodyText
-            );
+            debugWarn("pushRemoteHistory: non-OK response", res.status, bodyText);
 
             return {
                 ok: false,
                 pushed: 0,
                 status: res.status,
-                errorMessage: bodyText || undefined,
+                errorMessage: bodyText || `HTTP ${res.status}`,
             };
         }
 
-        let pushed = payload.length;
-        const status = res.status;
-
+        // Try to parse response (optional)
         try {
-            const data: any = await res.json();
-
-            // Web /api/history returns an envelope like:
-            //   { attempted, acceptedIds, rejected?, serverTs }
-            if (data && Array.isArray(data.acceptedIds)) {
-                pushed = data.acceptedIds.length;
-            } else if (typeof data.pushed === "number") {
-                pushed = data.pushed;
-            } else if (Array.isArray(data)) {
-                // Older / simpler shapes
-                pushed = data.length;
-            }
+            await res.json();
         } catch {
-            // Response had no JSON body – that's okay.
+            // Backend may return 204 or non-JSON body – that's okay.
         }
 
         return { ok: true, pushed, status };
     } catch (err: any) {
-        console.warn("pushRemoteHistory: error talking to backend", err);
+        debugWarn("pushRemoteHistory: error talking to backend", err);
         return {
             ok: false,
             pushed: 0,

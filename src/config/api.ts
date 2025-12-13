@@ -1,33 +1,57 @@
 // src/config/api.ts
-//
-// Imotara backend URL for the mobile app (DEV VERSION).
-// For now we point to your Mac's local IP where the Next.js app runs.
-//
-// IMPORTANT:
-// 1) Make sure `npm run dev` is running for your web app on your Mac.
-// 2) Make sure your phone and Mac are on the SAME Wi-Fi network.
-// 3) Replace the IP below with your actual local IP.
-//
-// NEW: When running inside iOS Simulator, localhost refers to your Mac.
-// This makes debugging easier without depending only on Wi-Fi IPs.
+import { DEBUG_UI_ENABLED } from "./debug";
 
-const WIFI_IP_BASE = "http://192.168.0.186:3000"; // ← your Mac’s LAN IP
-const LOCALHOST_BASE = "http://localhost:3000";   // ← works inside iOS Simulator
+/**
+ * Imotara Mobile API base URL resolution
+ *
+ * Priority:
+ * 1) EXPO_PUBLIC_IMOTARA_API_BASE_URL (recommended)
+ * 2) IMOTARA_API_BASE_URL (legacy)
+ * 3) http://localhost:3000 (fallback)
+ *
+ * NOTE:
+ * - No dependency on expo-constants (avoids TS/build errors)
+ * - Safe for QA / production
+ */
 
-// Small helper to detect iOS Simulator reliably
-function isIosSimulator(): boolean {
-    // React Native on iOS Simulator sets this global
-    return typeof navigator !== "undefined" && navigator.product === "ReactNative";
+function debugLog(...args: any[]) {
+    if (DEBUG_UI_ENABLED) console.log(...args);
 }
 
-// Final base URL (non-breaking: still uses your WiFi IP by default)
-export const IMOTARA_API_BASE_URL = isIosSimulator()
-    ? LOCALHOST_BASE
-    : WIFI_IP_BASE;
-//export const IMOTARA_API_BASE_URL = "http://127.0.0.1:9999";
+function normalizeBaseUrl(url: string): string {
+    return (url || "").trim().replace(/\/+$/, "");
+}
 
+function looksLikeFullUrl(path: string): boolean {
+    return /^https?:\/\//i.test(path);
+}
+
+// Prefer explicit env vars (Expo supports EXPO_PUBLIC_*)
+const envBase =
+    (process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL as string | undefined) ||
+    (process.env.IMOTARA_API_BASE_URL as string | undefined);
+
+// Final resolved base URL
+const resolvedBase =
+    typeof envBase === "string" && envBase.trim().length > 0
+        ? envBase
+        : "http://localhost:3000";
+
+export const IMOTARA_API_BASE_URL = normalizeBaseUrl(resolvedBase);
+
+// Optional gated debug log
+debugLog("IMOTARA_API_BASE_URL =", IMOTARA_API_BASE_URL);
+
+/**
+ * Build a full API URL for fetch().
+ * - If passed a full URL → returned as-is
+ * - Otherwise prefixes with IMOTARA_API_BASE_URL
+ */
 export function buildApiUrl(path: string): string {
-    const base = IMOTARA_API_BASE_URL.replace(/\/+$/, "");
-    const cleanPath = path.replace(/^\/+/, "");
-    return `${base}/${cleanPath}`;
+    const p = String(path || "");
+
+    if (looksLikeFullUrl(p)) return p;
+
+    const cleanPath = p.startsWith("/") ? p : `/${p}`;
+    return `${IMOTARA_API_BASE_URL}${cleanPath}`;
 }
