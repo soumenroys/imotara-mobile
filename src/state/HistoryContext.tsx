@@ -16,6 +16,10 @@ import {
 import { useSettings } from "./SettingsContext";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
+// ✅ Licensing gates (foundation)
+import type { LicenseTier } from "../licensing/featureGates";
+import { gate } from "../licensing/featureGates";
+
 export type HistoryItem = {
     id: string;
     text: string;
@@ -83,9 +87,31 @@ type HistoryContextValue = {
     lastSyncResult: PushRemoteHistoryResult | null;
     lastSyncAt: number | null;
     hasUnsyncedChanges: boolean;
+
+    /**
+     * Licensing state (foundation):
+     * Default: FREE
+     * Persisted in AsyncStorage so it survives app restarts.
+     */
+    licenseTier: LicenseTier;
+    setLicenseTier: (tier: LicenseTier) => void;
 };
 
 const STORAGE_KEY = "imotara_history_v1";
+
+// ✅ Separate storage key for licensing
+const LICENSE_TIER_KEY = "imotara_license_tier_v1";
+
+// ✅ Validation helper (keeps stored values safe)
+function isValidTier(v: unknown): v is LicenseTier {
+    return (
+        v === "FREE" ||
+        v === "PREMIUM" ||
+        v === "FAMILY" ||
+        v === "EDU" ||
+        v === "ENTERPRISE"
+    );
+}
 
 const HistoryContext = createContext<HistoryContextValue | undefined>(
     undefined
@@ -219,6 +245,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [hydrated, setHydrated] = useState(false);
 
+    // ✅ Licensing state (default FREE; hydrated from AsyncStorage)
+    const [licenseTier, _setLicenseTier] = useState<LicenseTier>("FREE");
+
     // Lite sync status state for Mobile Sync Phase 2
     const [isSyncing, setIsSyncing] = useState(false);
     const [lastSyncResult, setLastSyncResult] =
@@ -230,6 +259,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         autoSyncDelaySeconds,
         setLastSyncAt: setSettingsLastSyncAt,
         setLastSyncStatus: setSettingsLastSyncStatus,
+
+        // ✅ NEW: license-aware flag from SettingsContext
+        cloudSyncAllowed,
     } = useSettings();
 
     // ✅ Keep a ref to latest history to avoid function identity churn
@@ -255,42 +287,64 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
+    // ✅ Public setter with persistence (safe; does not affect existing logic)
+    const setLicenseTier = useCallback((tier: LicenseTier) => {
+        _setLicenseTier(tier);
+        AsyncStorage.setItem(LICENSE_TIER_KEY, tier).catch((err) =>
+            debugWarn("Failed to persist license tier:", err)
+        );
+    }, []);
+
     // Hydrate from AsyncStorage on mount
     useEffect(() => {
         const load = async () => {
             try {
-                const raw = await AsyncStorage.getItem(STORAGE_KEY);
-                if (!raw) {
-                    setHydrated(true);
-                    return;
+                const [rawHistory, rawTier] = await Promise.all([
+                    AsyncStorage.getItem(STORAGE_KEY),
+                    AsyncStorage.getItem(LICENSE_TIER_KEY),
+                ]);
+
+                // 1) History
+                if (rawHistory) {
+                    const parsed = JSON.parse(rawHistory);
+
+                    if (Array.isArray(parsed)) {
+                        const cleaned: HistoryItem[] = parsed
+                            .filter((item) => item && typeof item === "object")
+                            .map((item) => ({
+                                id: String(
+                                    item.id ?? `${item.timestamp ?? Date.now()}`
+                                ),
+                                text: String(item.text ?? ""),
+                                from:
+                                    item.from === "user" || item.from === "bot"
+                                        ? item.from
+                                        : ("bot" as const),
+                                timestamp:
+                                    typeof item.timestamp === "number"
+                                        ? item.timestamp
+                                        : Date.now(),
+                                isSynced:
+                                    typeof item.isSynced === "boolean"
+                                        ? item.isSynced
+                                        : false,
+                            }));
+
+                        setHistory(cleaned);
+                    }
                 }
 
-                const parsed = JSON.parse(raw);
-
-                if (Array.isArray(parsed)) {
-                    const cleaned: HistoryItem[] = parsed
-                        .filter((item) => item && typeof item === "object")
-                        .map((item) => ({
-                            id: String(item.id ?? `${item.timestamp ?? Date.now()}`),
-                            text: String(item.text ?? ""),
-                            from:
-                                item.from === "user" || item.from === "bot"
-                                    ? item.from
-                                    : ("bot" as const),
-                            timestamp:
-                                typeof item.timestamp === "number"
-                                    ? item.timestamp
-                                    : Date.now(),
-                            isSynced:
-                                typeof item.isSynced === "boolean"
-                                    ? item.isSynced
-                                    : false,
-                        }));
-
-                    setHistory(cleaned);
+                // 2) License Tier (defaults safely to FREE)
+                if (rawTier && isValidTier(rawTier)) {
+                    _setLicenseTier(rawTier);
+                } else if (rawTier) {
+                    // If corrupted/unknown, reset to FREE (do not crash)
+                    debugWarn("Unknown license tier in storage, resetting:", rawTier);
+                    _setLicenseTier("FREE");
+                    AsyncStorage.setItem(LICENSE_TIER_KEY, "FREE").catch(() => { });
                 }
             } catch (error) {
-                debugWarn("Failed to load history from storage:", error);
+                debugWarn("Failed to load history/license from storage:", error);
             } finally {
                 setHydrated(true);
             }
@@ -298,6 +352,41 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
         load();
     }, []);
+
+    // ✅ Apply local history retention on FREE (but never delete unsynced items)
+    useEffect(() => {
+        if (!hydrated) return;
+
+        const g = gate("HISTORY_DAYS_LIMIT", licenseTier);
+        const daysRaw =
+            g.enabled && typeof (g as any).params?.days !== "undefined"
+                ? (g as any).params?.days
+                : undefined;
+
+        const days =
+            typeof daysRaw === "number" && Number.isFinite(daysRaw)
+                ? daysRaw
+                : Infinity;
+
+        // Unlimited → no pruning
+        if (!Number.isFinite(days) || days === Infinity) return;
+
+        const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+
+        const current = historyRef.current || [];
+        const pruned = current.filter((item) => {
+            // Never delete unsynced items (prevents data loss on FREE)
+            if (!item.isSynced) return true;
+
+            const ts =
+                typeof item.timestamp === "number" ? item.timestamp : Date.now();
+            return ts >= cutoff;
+        });
+
+        if (pruned.length !== current.length) {
+            setHistory(pruned);
+        }
+    }, [hydrated, licenseTier]);
 
     // Persist to AsyncStorage whenever history changes (after hydration)
     useEffect(() => {
@@ -446,12 +535,6 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         }
     }, [clearAutoSyncTimer, setSettingsLastSyncAt, setSettingsLastSyncStatus]);
 
-    /**
-     * Additive “safe sync trigger” for lifecycle/manual calls.
-     * - Dedupes rapid re-entry (foreground events can fire quickly)
-     * - Clears any pending autosync timer
-     * - Delegates to pushHistoryToRemote (which already has overlap protection)
-     */
     const runSync = useCallback(
         async (opts?: { reason?: string }): Promise<PushRemoteHistoryResult> => {
             const now = Date.now();
@@ -493,16 +576,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         [clearAutoSyncTimer, pushHistoryToRemote]
     );
 
-    // Alias for flexibility
     const syncNow = runSync;
 
-    /**
-     * Merge raw remote items into local history.
-     * - Normalizes shapes
-     * - Skips invalid/empty
-     * - Avoids duplicates by id
-     * - Marks merged items as isSynced: true
-     */
     const mergeRemoteHistory = (rawItems: unknown[]): MergeRemoteResult => {
         const totalRemote = Array.isArray(rawItems) ? rawItems.length : 0;
         if (!Array.isArray(rawItems) || rawItems.length === 0) {
@@ -520,7 +595,6 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             return { totalRemote, normalized: 0, added: 0 };
         }
 
-        // ✅ Compute "added" deterministically before setHistory (avoids async mismatch)
         const existingIds = new Set((historyRef.current || []).map((h) => h.id));
         const toAdd: HistoryItem[] = [];
 
@@ -549,17 +623,17 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         };
     };
 
-    // Derived flag: any local changes not yet synced
     const hasUnsyncedChanges = history.some((h) => !h.isSynced);
 
-    // 🔁 Background auto-sync based on user-configured delay
     useEffect(() => {
-        // Keep existing behavior but ensure we don't leave stale timers around
         clearAutoSyncTimer();
 
         if (!hydrated) return;
         if (!hasUnsyncedChanges) return;
         if (isSyncing) return;
+
+        // ✅ NEW: Respect plan. FREE should not schedule background cloud pushes.
+        if (!cloudSyncAllowed) return;
 
         const delayMs = Math.min(Math.max(autoSyncDelaySeconds, 3), 60) * 1000;
 
@@ -579,6 +653,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         autoSyncDelaySeconds,
         pushHistoryToRemote,
         clearAutoSyncTimer,
+        cloudSyncAllowed,
     ]);
 
     return (
@@ -596,6 +671,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 lastSyncResult,
                 lastSyncAt,
                 hasUnsyncedChanges,
+                licenseTier,
+                setLicenseTier,
             }}
         >
             {children}

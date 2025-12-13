@@ -9,6 +9,10 @@ import React, {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
+// ✅ Licensing gate (read-only awareness for settings layer)
+import type { LicenseTier } from "../licensing/featureGates";
+import { gate } from "../licensing/featureGates";
+
 type SettingsContextValue = {
     // Emotion insight toggle for Imotara replies
     emotionInsightsEnabled: boolean;
@@ -29,6 +33,22 @@ type SettingsContextValue = {
      */
     autoSyncDelaySeconds: number;
     setAutoSyncDelaySeconds: (value: number) => void;
+
+    /**
+     * Licensing-aware convenience flag:
+     * - FREE → false
+     * - Premium tiers → true
+     *
+     * Read-only. This does NOT trigger billing. It only helps the app respect
+     * feature gating (e.g., disabling background cloud sync scheduling).
+     */
+    cloudSyncAllowed: boolean;
+
+    /**
+     * Optional helper to re-check the current license tier from AsyncStorage
+     * and recompute cloudSyncAllowed. Safe to call after setLicenseTier(...) in debug.
+     */
+    refreshCloudSyncAllowed: () => Promise<void>;
 
     /**
      * Global debug-only UI enablement.
@@ -60,6 +80,19 @@ function safeBool(v: unknown, fallback: boolean): boolean {
     return fallback;
 }
 
+// ✅ Same key used by HistoryContext (we are only reading it here)
+const LICENSE_TIER_KEY = "imotara_license_tier_v1";
+
+function isValidTier(v: unknown): v is LicenseTier {
+    return (
+        v === "FREE" ||
+        v === "PREMIUM" ||
+        v === "FAMILY" ||
+        v === "EDU" ||
+        v === "ENTERPRISE"
+    );
+}
+
 export function SettingsProvider({ children }: { children: ReactNode }) {
     // Keep your original defaults (non-breaking)
     const [emotionInsightsEnabled, _setEmotionInsightsEnabled] = useState(true);
@@ -68,9 +101,27 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const [lastSyncStatus, _setLastSyncStatus] = useState<string | null>(null);
 
     // Default auto-sync delay: 8 seconds
-    const [autoSyncDelaySeconds, _setAutoSyncDelaySeconds] = useState<number>(8);
+    const [autoSyncDelaySeconds, _setAutoSyncDelaySeconds] =
+        useState<number>(8);
 
     const [hydrated, setHydrated] = useState(false);
+
+    // ✅ Licensing-derived flag (default FREE behavior: device-only)
+    const [cloudSyncAllowed, setCloudSyncAllowed] = useState<boolean>(false);
+
+    const refreshCloudSyncAllowed = async () => {
+        try {
+            const rawTier = await AsyncStorage.getItem(LICENSE_TIER_KEY);
+            const tier: LicenseTier = isValidTier(rawTier) ? rawTier : "FREE";
+            const g = gate("CLOUD_SYNC", tier);
+            setCloudSyncAllowed(g.enabled);
+        } catch (e) {
+            // Safe fallback: treat as FREE
+            setCloudSyncAllowed(false);
+            if (DEBUG_UI_ENABLED)
+                console.warn("License gate refresh failed:", e);
+        }
+    };
 
     // ---- Hydrate once ----
     useEffect(() => {
@@ -78,40 +129,49 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
         const hydrate = async () => {
             try {
-                const raw = await AsyncStorage.getItem(STORAGE_KEY);
-                if (!raw) {
-                    if (alive) setHydrated(true);
-                    return;
+                // ✅ hydrate settings + compute license gate in parallel
+                const [raw, rawTier] = await Promise.all([
+                    AsyncStorage.getItem(STORAGE_KEY),
+                    AsyncStorage.getItem(LICENSE_TIER_KEY),
+                ]);
+
+                // 1) Settings payload
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+
+                    if (alive && parsed && typeof parsed === "object") {
+                        if ("emotionInsightsEnabled" in parsed) {
+                            _setEmotionInsightsEnabled(
+                                safeBool(parsed.emotionInsightsEnabled, true)
+                            );
+                        }
+
+                        if ("autoSyncDelaySeconds" in parsed) {
+                            _setAutoSyncDelaySeconds(
+                                clampDelaySeconds(parsed.autoSyncDelaySeconds, 8)
+                            );
+                        }
+
+                        if ("lastSyncAt" in parsed) {
+                            const v = parsed.lastSyncAt;
+                            _setLastSyncAt(typeof v === "number" ? v : null);
+                        }
+
+                        if ("lastSyncStatus" in parsed) {
+                            const v = parsed.lastSyncStatus;
+                            _setLastSyncStatus(typeof v === "string" ? v : null);
+                        }
+                    }
                 }
 
-                const parsed = JSON.parse(raw);
-
-                if (alive && parsed && typeof parsed === "object") {
-                    if ("emotionInsightsEnabled" in parsed) {
-                        _setEmotionInsightsEnabled(
-                            safeBool(parsed.emotionInsightsEnabled, true)
-                        );
-                    }
-
-                    if ("autoSyncDelaySeconds" in parsed) {
-                        _setAutoSyncDelaySeconds(
-                            clampDelaySeconds(parsed.autoSyncDelaySeconds, 8)
-                        );
-                    }
-
-                    if ("lastSyncAt" in parsed) {
-                        const v = parsed.lastSyncAt;
-                        _setLastSyncAt(typeof v === "number" ? v : null);
-                    }
-
-                    if ("lastSyncStatus" in parsed) {
-                        const v = parsed.lastSyncStatus;
-                        _setLastSyncStatus(typeof v === "string" ? v : null);
-                    }
-                }
+                // 2) License tier → cloud sync gate
+                const tier: LicenseTier = isValidTier(rawTier) ? rawTier : "FREE";
+                const g = gate("CLOUD_SYNC", tier);
+                if (alive) setCloudSyncAllowed(g.enabled);
             } catch (e) {
                 // Non-fatal; keep defaults
                 if (DEBUG_UI_ENABLED) console.warn("Settings hydrate failed:", e);
+                if (alive) setCloudSyncAllowed(false);
             } finally {
                 if (alive) setHydrated(true);
             }
@@ -138,7 +198,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload)).catch((e) => {
             if (DEBUG_UI_ENABLED) console.warn("Settings save failed:", e);
         });
-    }, [hydrated, emotionInsightsEnabled, autoSyncDelaySeconds, lastSyncAt, lastSyncStatus]);
+    }, [
+        hydrated,
+        emotionInsightsEnabled,
+        autoSyncDelaySeconds,
+        lastSyncAt,
+        lastSyncStatus,
+    ]);
 
     // ---- Wrapped setters (non-breaking; same signatures) ----
     const setEmotionInsightsEnabled = (value: boolean) => {
@@ -168,6 +234,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setLastSyncStatus,
                 autoSyncDelaySeconds,
                 setAutoSyncDelaySeconds,
+                cloudSyncAllowed,
+                refreshCloudSyncAllowed,
                 debugUIEnabled: DEBUG_UI_ENABLED,
             }}
         >

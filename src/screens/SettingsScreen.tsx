@@ -18,6 +18,73 @@ import AppSurface from "../components/ui/AppSurface";
 import AppButton from "../components/ui/AppButton";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
+// ✅ Razorpay Checkout (India-first donations)
+let RazorpayCheckout: any = null;
+try {
+    // In dev builds, the module is usually under `.default`
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require("react-native-razorpay");
+    RazorpayCheckout = mod?.default ?? mod;
+} catch {
+    RazorpayCheckout = null;
+}
+
+// ✅ Licensing types (foundation only)
+import type { LicenseTier } from "../licensing/featureGates";
+import { gate } from "../licensing/featureGates";
+
+// ✅ Donation presets + formatting (re-used)
+import { DONATION_PRESETS, formatINRFromPaise } from "../payments/stripe";
+
+/**
+ * ✅ TS FIX:
+ * In some TS setups, DONATION_PRESETS may be inferred too narrowly and p becomes `never`.
+ * We cast to a UI-safe structural type to keep typing stable without changing runtime behavior.
+ */
+type DonationUIItem = { id: string; label: string; amount: number };
+const DONATION_UI_PRESETS = DONATION_PRESETS as readonly DonationUIItem[];
+
+function prettyTier(tier: LicenseTier | string | undefined | null): string {
+    const t = String(tier ?? "FREE").toUpperCase();
+    switch (t) {
+        case "FREE":
+            return "Free";
+        case "PREMIUM":
+            return "Premium";
+        case "FAMILY":
+            return "Family";
+        case "EDU":
+            return "Education";
+        case "ENTERPRISE":
+            return "Enterprise";
+        default:
+            return "Free";
+    }
+}
+
+function getApiBaseUrl(): string {
+    // Try a few common Expo env names (safe fallbacks).
+    const v =
+        process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL ||
+        process.env.EXPO_PUBLIC_API_BASE_URL ||
+        process.env.EXPO_PUBLIC_BACKEND_URL ||
+        "";
+
+    // Normalize trailing slash
+    return v.endsWith("/") ? v.slice(0, -1) : v;
+}
+
+type DonationIntentRazorpayResponse = {
+    ok: boolean;
+    razorpay?: {
+        orderId: string;
+        keyId: string; // rzp_test_...
+        amount: number; // paise
+        currency: string; // "INR"
+    };
+    error?: string;
+};
+
 export default function SettingsScreen() {
     // Keep compatibility with your current store shape, but allow optional newer fields
     const store = useHistoryStore() as any;
@@ -31,6 +98,10 @@ export default function SettingsScreen() {
         runSync,
         syncNow,
         isSyncing: storeIsSyncing,
+
+        // ✅ Optional licensing fields (if present in HistoryContext)
+        licenseTier,
+        setLicenseTier,
     } = store;
 
     const {
@@ -51,6 +122,13 @@ export default function SettingsScreen() {
         (h: HistoryRecord) => !h.isSynced
     ).length;
 
+    // ✅ Cloud sync gate (soft gating)
+    const cloudGate = gate("CLOUD_SYNC", licenseTier);
+    const canCloudSync = cloudGate.enabled;
+
+    // ✅ TS-safe reason: only exists when enabled === false
+    const cloudGateReason = !cloudGate.enabled ? cloudGate.reason : undefined;
+
     // ✅ QA hardening: avoid setState after leaving screen
     const mountedRef = React.useRef(true);
     React.useEffect(() => {
@@ -65,7 +143,8 @@ export default function SettingsScreen() {
         testRemote: boolean;
         pushOnly: boolean;
         syncNow: boolean;
-    }>({ testRemote: false, pushOnly: false, syncNow: false });
+        donate: boolean;
+    }>({ testRemote: false, pushOnly: false, syncNow: false, donate: false });
 
     const handleClearHistory = () => {
         Alert.alert(
@@ -128,6 +207,16 @@ export default function SettingsScreen() {
     };
 
     const handlePushLocalHistory = async () => {
+        // ✅ Soft gate
+        if (!canCloudSync) {
+            Alert.alert(
+                "Premium feature",
+                cloudGateReason || "Cloud sync is available with Premium.",
+                [{ text: "OK" }]
+            );
+            return;
+        }
+
         if (busyRef.current.pushOnly) return;
         busyRef.current.pushOnly = true;
 
@@ -172,6 +261,16 @@ export default function SettingsScreen() {
 
     // One-tap sync: push local → fetch remote → merge into local
     const handleSyncNow = async () => {
+        // ✅ Soft gate
+        if (!canCloudSync) {
+            Alert.alert(
+                "Premium feature",
+                cloudGateReason || "Cloud sync is available with Premium.",
+                [{ text: "OK" }]
+            );
+            return;
+        }
+
         if (busyRef.current.syncNow) return;
         busyRef.current.syncNow = true;
 
@@ -261,6 +360,122 @@ export default function SettingsScreen() {
         }
     };
 
+    async function createDonationOrder(
+        amount: number,
+        currency: string
+    ): Promise<NonNullable<DonationIntentRazorpayResponse["razorpay"]>> {
+        const base = getApiBaseUrl();
+        if (!base) {
+            throw new Error(
+                "Missing API base URL. Set EXPO_PUBLIC_IMOTARA_API_BASE_URL in .env."
+            );
+        }
+
+        const res = await fetch(`${base}/api/payments/donation-intent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                amount,
+                currency,
+                purpose: "imotara_donation",
+                platform: "mobile",
+            }),
+        });
+
+        const json = (await res.json().catch(() => null)) as
+            | DonationIntentRazorpayResponse
+            | null;
+
+        if (!res.ok || !json?.ok) {
+            const msg =
+                json?.error ||
+                (typeof json === "string" ? json : "") ||
+                `Donation order failed (${res.status}).`;
+            throw new Error(msg);
+        }
+
+        if (!json.razorpay?.orderId || !json.razorpay?.keyId) {
+            throw new Error("Donation order response missing Razorpay details.");
+        }
+
+        return json.razorpay;
+    }
+
+    const handleDonate = async (preset: { label: string; amount: number }) => {
+
+        if (!RazorpayCheckout?.open) {
+            Alert.alert(
+                "Donate (Dev Build required)",
+                "Razorpay needs a Development Build. It does not work inside Expo Go.",
+                [{ text: "OK" }]
+            );
+            return;
+        }
+
+        if (busyRef.current.donate) return;
+        busyRef.current.donate = true;
+
+        try {
+            // 1) Create Razorpay order via backend (server holds secret)
+            const rz = await createDonationOrder(preset.amount, "inr");
+
+            // 2) Open Razorpay checkout
+            const options: any = {
+                key: rz.keyId,
+                amount: rz.amount,
+                currency: rz.currency || "INR",
+                name: "Imotara",
+                description:
+                    "Support Imotara (UPI preferred) — privacy-first, non-commercial Indian initiative",
+                order_id: rz.orderId,
+                method: {
+                    upi: true,
+                    card: false,
+                    netbanking: false,
+                    wallet: false,
+                },
+                theme: { color: "#38bdf8" },
+            };
+
+            const result = await RazorpayCheckout.open(options);
+
+            // success (result typically contains razorpay_payment_id, razorpay_order_id, razorpay_signature)
+            if (mountedRef.current) {
+                setLastSyncStatus(
+                    `Thank you for supporting Imotara 🇮🇳 (${preset.label})`
+                );
+            }
+
+            Alert.alert(
+                "Thank you 🙏",
+                `Donation initiated successfully: ${preset.label}\n\nPayment Id: ${result?.razorpay_payment_id || "—"}`,
+                [{ text: "OK" }]
+            );
+        } catch (e: any) {
+            // Razorpay cancellation often returns a structured error
+            const desc =
+                e?.description ||
+                e?.error?.description ||
+                e?.message ||
+                "Could not start donation checkout. Please try again.";
+
+            // If user cancelled, Razorpay commonly returns code 2 / "cancelled"
+            const isCancel =
+                String(e?.code || "")
+                    .toLowerCase()
+                    .includes("cancel") ||
+                String(desc).toLowerCase().includes("cancel");
+
+            Alert.alert(
+                isCancel ? "Donation cancelled" : "Donation error",
+                isCancel ? "No payment was made." : desc,
+                [{ text: "OK" }]
+            );
+        } finally {
+            busyRef.current.donate = false;
+        }
+    };
+
     const formattedLastSync = lastSyncAt
         ? new Date(lastSyncAt).toLocaleString()
         : "Not synced yet";
@@ -275,7 +490,26 @@ export default function SettingsScreen() {
     const isAnySyncBusy =
         busyRef.current.pushOnly ||
         busyRef.current.syncNow ||
+        busyRef.current.donate ||
         (typeof storeIsSyncing === "boolean" ? storeIsSyncing : false);
+
+    // ✅ Licensing display + optional debug switching
+    const tierLabel = prettyTier(licenseTier);
+    const canSetTier = typeof setLicenseTier === "function";
+
+    const setTierSafe = (tier: LicenseTier) => {
+        if (!canSetTier) return;
+
+        // IMPORTANT: This is only a local flag for gating tests.
+        // It does not enable billing or store subscriptions.
+        setLicenseTier(tier);
+
+        if (mountedRef.current) {
+            setLastSyncStatus(
+                `Plan changed locally for testing: ${prettyTier(tier)}`
+            );
+        }
+    };
 
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -311,6 +545,194 @@ export default function SettingsScreen() {
                     {"\n\n"}Your messages are never shared publicly — sync only stores a
                     private cloud copy for you.
                 </Text>
+
+                {/* ✅ Support / Donation card */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Support Imotara 🇮🇳 (Donate)
+                    </Text>
+
+                    <Text
+                        style={{
+                            fontSize: 13,
+                            color: colors.textSecondary,
+                            marginBottom: 10,
+                        }}
+                    >
+                        Imotara is being built as a privacy-first, non-commercial chat
+                        companion. If you want to support this Indian initiative, you
+                        can donate to help keep the app reliable and safe.
+                    </Text>
+
+                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                        {DONATION_UI_PRESETS.map((p) => (
+                            <TouchableOpacity
+                                key={p.id}
+                                onPress={() =>
+                                    handleDonate({
+                                        label:
+                                            p.label || formatINRFromPaise(p.amount),
+                                        amount: p.amount,
+                                    })
+                                }
+                                disabled={busyRef.current.donate}
+                                style={{
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 6,
+                                    borderRadius: 999,
+                                    borderWidth: 1,
+                                    borderColor: colors.primary,
+                                    backgroundColor: "rgba(56, 189, 248, 0.12)",
+                                    marginRight: 8,
+                                    marginBottom: 8,
+                                    opacity: busyRef.current.donate ? 0.6 : 1,
+                                }}
+                            >
+                                <Text
+                                    style={{
+                                        fontSize: 12,
+                                        fontWeight: "700",
+                                        color: colors.textPrimary,
+                                    }}
+                                >
+                                    {p.label}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <Text
+                        style={{
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                            marginTop: 6,
+                        }}
+                    >
+                        Your chat data is never publicly exposed. Donations help cover
+                        hosting and development.
+                    </Text>
+                </AppSurface>
+
+                {/* ✅ Plan / Licensing card (foundation) */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Plan
+                    </Text>
+
+                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                        Current plan:{" "}
+                        <Text
+                            style={{
+                                fontWeight: "700",
+                                color: colors.textPrimary,
+                            }}
+                        >
+                            {tierLabel}
+                        </Text>
+                    </Text>
+
+                    <Text
+                        style={{
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                            marginTop: 6,
+                        }}
+                    >
+                        Billing is not enabled in this preview. This plan flag is used
+                        only to prepare feature gating (e.g., cloud sync / history depth)
+                        for a future release.
+                    </Text>
+
+                    {!canCloudSync && (
+                        <Text
+                            style={{
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                                marginTop: 8,
+                            }}
+                        >
+                            {cloudGateReason ||
+                                "Cloud sync is available with Premium."}
+                        </Text>
+                    )}
+
+                    {DEBUG_UI_ENABLED && canSetTier && (
+                        <View style={{ marginTop: 12 }}>
+                            <Text
+                                style={{
+                                    fontSize: 12,
+                                    color: colors.textSecondary,
+                                    marginBottom: 8,
+                                }}
+                            >
+                                Debug (local): switch plan to test gated features
+                            </Text>
+
+                            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                                {(
+                                    [
+                                        "FREE",
+                                        "PREMIUM",
+                                        "FAMILY",
+                                        "EDU",
+                                        "ENTERPRISE",
+                                    ] as LicenseTier[]
+                                ).map((tier) => {
+                                    const active =
+                                        String(licenseTier ?? "FREE").toUpperCase() ===
+                                        tier;
+
+                                    return (
+                                        <TouchableOpacity
+                                            key={tier}
+                                            onPress={() => setTierSafe(tier)}
+                                            style={{
+                                                paddingHorizontal: 12,
+                                                paddingVertical: 6,
+                                                borderRadius: 999,
+                                                borderWidth: 1,
+                                                borderColor: active
+                                                    ? colors.primary
+                                                    : colors.border,
+                                                backgroundColor: active
+                                                    ? "rgba(56, 189, 248, 0.18)"
+                                                    : "rgba(15, 23, 42, 0.9)",
+                                                marginRight: 8,
+                                                marginBottom: 8,
+                                            }}
+                                        >
+                                            <Text
+                                                style={{
+                                                    fontSize: 12,
+                                                    fontWeight: "700",
+                                                    color: active
+                                                        ? colors.textPrimary
+                                                        : colors.textSecondary,
+                                                }}
+                                            >
+                                                {prettyTier(tier)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </View>
+                    )}
+                </AppSurface>
 
                 {/* Emotion Insights (preview) card */}
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -568,14 +990,20 @@ export default function SettingsScreen() {
                                         : "Push Local History to Cloud"
                                 }
                                 onPress={handlePushLocalHistory}
-                                disabled={busyRef.current.pushOnly || isAnySyncBusy}
+                                disabled={
+                                    busyRef.current.pushOnly ||
+                                    isAnySyncBusy ||
+                                    !canCloudSync
+                                }
                                 variant="secondary"
                                 style={{
                                     alignSelf: "flex-start",
                                     borderRadius: 999,
                                     marginBottom: 8,
                                     opacity:
-                                        busyRef.current.pushOnly || isAnySyncBusy
+                                        busyRef.current.pushOnly ||
+                                            isAnySyncBusy ||
+                                            !canCloudSync
                                             ? 0.7
                                             : 1,
                                 }}
@@ -591,14 +1019,20 @@ export default function SettingsScreen() {
                                 : "Sync Now (push + fetch)"
                         }
                         onPress={handleSyncNow}
-                        disabled={busyRef.current.syncNow || isAnySyncBusy}
+                        disabled={
+                            busyRef.current.syncNow || isAnySyncBusy || !canCloudSync
+                        }
                         variant="primary"
                         style={{
                             alignSelf: "flex-start",
                             borderRadius: 999,
                             marginBottom: 10,
                             opacity:
-                                busyRef.current.syncNow || isAnySyncBusy ? 0.7 : 1,
+                                busyRef.current.syncNow ||
+                                    isAnySyncBusy ||
+                                    !canCloudSync
+                                    ? 0.7
+                                    : 1,
                         }}
                     />
 
@@ -616,6 +1050,19 @@ export default function SettingsScreen() {
                                 }}
                             >
                                 {lastSyncStatus}
+                            </Text>
+                        )}
+
+                        {!canCloudSync && (
+                            <Text
+                                style={{
+                                    fontSize: 11,
+                                    color: colors.textSecondary,
+                                    marginTop: 6,
+                                }}
+                            >
+                                {cloudGateReason ||
+                                    "Cloud sync is available with Premium."}
                             </Text>
                         )}
                     </View>

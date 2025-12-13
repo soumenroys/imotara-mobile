@@ -7,7 +7,11 @@ import AppThemeProvider from "./src/theme/AppThemeProvider";
 import HistoryProvider from "./src/state/HistoryContext";
 import { SettingsProvider } from "./src/state/SettingsContext";
 
-export default function App() {
+// ✅ Stripe (Donate / future licensing payments)
+import { StripeProvider } from "@stripe/stripe-react-native";
+import { STRIPE_ENABLED, STRIPE_PUBLISHABLE_KEY } from "./src/payments/stripe";
+
+function AppShell() {
   return (
     <AppThemeProvider>
       {/* Settings MUST wrap HistoryProvider because HistoryProvider calls useSettings() */}
@@ -25,5 +29,19 @@ export default function App() {
         </HistoryProvider>
       </SettingsProvider>
     </AppThemeProvider>
+  );
+}
+
+export default function App() {
+  // ✅ If Stripe isn't configured, run the app normally (Donate UI can still show “Coming soon”)
+  if (!STRIPE_ENABLED) {
+    return <AppShell />;
+  }
+
+  // ✅ When configured, provide Stripe context for PaymentSheet / future IAP-like flows
+  return (
+    <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
+      <AppShell />
+    </StripeProvider>
   );
 }

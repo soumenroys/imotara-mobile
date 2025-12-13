@@ -11,6 +11,9 @@ import AppButton from "../components/ui/AppButton";
 import AppChip from "../components/ui/AppChip";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
+// ✅ Licensing gates
+import { gate } from "../licensing/featureGates";
+
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
 const BOT_BUBBLE_BG = colors.surfaceSoft;
 const SESSION_GAP_MS = 45 * 60 * 1000;
@@ -199,7 +202,18 @@ export default function HistoryScreen() {
         lastSyncResult,
         lastSyncAt: historyLastSyncAt,
         hasUnsyncedChanges,
+
+        // ✅ Licensing (stored in HistoryContext)
+        licenseTier,
     } = useHistoryStore() as any;
+
+    // ✅ Cloud sync gate (soft gating)
+    const cloudGate = gate("CLOUD_SYNC", licenseTier);
+    const canCloudSync = cloudGate.enabled;
+
+    // ✅ TS-safe: reason exists only when enabled === false
+    const cloudGateReason =
+        !cloudGate.enabled ? cloudGate.reason : undefined;
 
     const { lastSyncAt, lastSyncStatus, autoSyncDelaySeconds } = useSettings();
 
@@ -278,9 +292,23 @@ export default function HistoryScreen() {
         };
     }, [effectiveLastSyncAt, lastSyncStatus, hasSyncError]);
 
+    const showPremiumAlert = React.useCallback(() => {
+        Alert.alert(
+            "Premium feature",
+            cloudGateReason || "Cloud sync is available with Premium.",
+            [{ text: "OK" }]
+        );
+    }, [cloudGateReason]);
+
     const handleLoadRemote = React.useCallback(async () => {
         // debug button is already gated, but keep this safe if called elsewhere
         if (!DEBUG_UI_ENABLED) return;
+
+        // ✅ Soft gate
+        if (!canCloudSync) {
+            showPremiumAlert();
+            return;
+        }
 
         if (isLoadingRemote) return;
         setIsLoadingRemote(true);
@@ -326,9 +354,15 @@ export default function HistoryScreen() {
         } finally {
             if (mountedRef.current) setIsLoadingRemote(false);
         }
-    }, [isLoadingRemote, mergeRemoteHistory]);
+    }, [isLoadingRemote, mergeRemoteHistory, canCloudSync, showPremiumAlert]);
 
     const handleRetrySync = React.useCallback(async () => {
+        // ✅ Soft gate
+        if (!canCloudSync) {
+            showPremiumAlert();
+            return;
+        }
+
         if (isSyncing) return;
 
         try {
@@ -365,7 +399,14 @@ export default function HistoryScreen() {
                 "Could not sync right now. Please try again later."
             );
         }
-    }, [isSyncing, pushHistoryToRemote, runSync, syncNow]);
+    }, [
+        isSyncing,
+        pushHistoryToRemote,
+        runSync,
+        syncNow,
+        canCloudSync,
+        showPremiumAlert,
+    ]);
 
     const handleGoToChat = React.useCallback(() => {
         // keep behavior safe across any route name differences
@@ -413,9 +454,11 @@ export default function HistoryScreen() {
 
     const retryLabel = isSyncing
         ? "Syncing…"
-        : hasSyncError
-            ? "Try sync again now"
-            : "Sync now";
+        : !canCloudSync
+            ? "Sync (Premium)"
+            : hasSyncError
+                ? "Try sync again now"
+                : "Sync now";
 
     const isEmpty = sortedHistory.length === 0;
 
@@ -526,7 +569,7 @@ export default function HistoryScreen() {
                         <AppButton
                             title={retryLabel}
                             onPress={handleRetrySync}
-                            disabled={isSyncing}
+                            disabled={isSyncing || !canCloudSync}
                             variant="primary"
                             size="sm"
                             style={{
@@ -535,13 +578,15 @@ export default function HistoryScreen() {
                                 borderRadius: 999,
                                 paddingHorizontal: 12,
                                 paddingVertical: 6,
-                                borderColor: isSyncing
-                                    ? "rgba(148, 163, 184, 0.7)"
-                                    : colors.primary,
-                                backgroundColor: isSyncing
-                                    ? "rgba(148, 163, 184, 0.2)"
-                                    : "rgba(56, 189, 248, 0.18)",
-                                opacity: isSyncing ? 0.7 : 1,
+                                borderColor:
+                                    isSyncing || !canCloudSync
+                                        ? "rgba(148, 163, 184, 0.7)"
+                                        : colors.primary,
+                                backgroundColor:
+                                    isSyncing || !canCloudSync
+                                        ? "rgba(148, 163, 184, 0.2)"
+                                        : "rgba(56, 189, 248, 0.18)",
+                                opacity: isSyncing || !canCloudSync ? 0.7 : 1,
                             }}
                             textStyle={{
                                 fontSize: 11,
@@ -549,6 +594,19 @@ export default function HistoryScreen() {
                                 color: colors.textPrimary,
                             }}
                         />
+
+                        {!canCloudSync && (
+                            <Text
+                                style={{
+                                    marginTop: 6,
+                                    fontSize: 11,
+                                    color: colors.textSecondary,
+                                }}
+                            >
+                                {cloudGate.reason ||
+                                    "Cloud sync is available with Premium."}
+                            </Text>
+                        )}
 
                         {isSyncing && (
                             <Text
@@ -571,16 +629,18 @@ export default function HistoryScreen() {
                         title={
                             isLoadingRemote
                                 ? "Loading remote…"
-                                : "Load Remote History"
+                                : !canCloudSync
+                                    ? "Load Remote (Premium)"
+                                    : "Load Remote History"
                         }
                         onPress={handleLoadRemote}
-                        disabled={isLoadingRemote}
+                        disabled={isLoadingRemote || !canCloudSync}
                         variant="success"
                         size="sm"
                         style={{
                             alignSelf: "flex-start",
                             marginBottom: 16,
-                            opacity: isLoadingRemote ? 0.7 : 1,
+                            opacity: isLoadingRemote || !canCloudSync ? 0.7 : 1,
                         }}
                     />
                 )}
@@ -867,10 +927,18 @@ export default function HistoryScreen() {
                                                     title={
                                                         isLoadingRemote
                                                             ? "Checking cloud…"
-                                                            : "Tap to check cloud copy"
+                                                            : !canCloudSync
+                                                                ? "Cloud copy (Premium)"
+                                                                : "Tap to check cloud copy"
                                                     }
-                                                    onPress={handleLoadRemote}
-                                                    disabled={isLoadingRemote}
+                                                    onPress={() => {
+                                                        if (!canCloudSync) {
+                                                            showPremiumAlert();
+                                                            return;
+                                                        }
+                                                        handleLoadRemote();
+                                                    }}
+                                                    disabled={isLoadingRemote || !canCloudSync}
                                                     variant="ghost"
                                                     size="sm"
                                                     style={{
@@ -881,9 +949,10 @@ export default function HistoryScreen() {
                                                         borderWidth: 0,
                                                         paddingHorizontal: 0,
                                                         paddingVertical: 0,
-                                                        opacity: isLoadingRemote
-                                                            ? 0.7
-                                                            : 1,
+                                                        opacity:
+                                                            isLoadingRemote || !canCloudSync
+                                                                ? 0.7
+                                                                : 1,
                                                     }}
                                                     textStyle={{
                                                         fontSize: 11,
