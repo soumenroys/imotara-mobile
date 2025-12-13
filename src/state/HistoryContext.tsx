@@ -94,6 +94,9 @@ const HistoryContext = createContext<HistoryContextValue | undefined>(
 function debugWarn(...args: any[]) {
     if (DEBUG_UI_ENABLED) console.warn(...args);
 }
+function debugLog(...args: any[]) {
+    if (DEBUG_UI_ENABLED) console.log(...args);
+}
 
 /**
  * Normalize any incoming remote object to a strict HistoryItem shape.
@@ -110,14 +113,18 @@ function normalizeRemoteItem(raw: any): HistoryItem | null {
     // ----- 1) Extract text (many fallbacks) -----
     let text: string =
         pickStr(raw.text) ||
-        pickStr(raw.message) || // <-- your backend uses this
+        pickStr(raw.message) || // backend commonly uses this
         pickStr(raw.content) ||
         pickStr(raw.body) ||
         pickStr(raw.prompt) ||
         "";
 
     // Try reflections[0].text if still empty
-    if (!text.trim() && Array.isArray(raw.reflections) && raw.reflections.length > 0) {
+    if (
+        !text.trim() &&
+        Array.isArray(raw.reflections) &&
+        raw.reflections.length > 0
+    ) {
         const first = raw.reflections[0];
         text = pickStr(first?.text) || text;
     }
@@ -143,7 +150,7 @@ function normalizeRemoteItem(raw: any): HistoryItem | null {
         pickStr(raw.role) ||
         pickStr(raw.author) ||
         pickStr(raw.speaker) ||
-        pickStr(raw.source); // <-- your backend uses this
+        pickStr(raw.source);
 
     let from: "user" | "bot" = "bot";
     const roleLower = roleLike.toLowerCase();
@@ -179,13 +186,16 @@ function normalizeRemoteItem(raw: any): HistoryItem | null {
     ) {
         timestamp = raw.reflections[0].createdAt;
     } else if (typeof raw.createdAt === "number") {
-        timestamp = raw.createdAt; // <-- your backend uses this
+        timestamp = raw.createdAt;
     } else if (typeof raw.createdAt === "string") {
         const parsed = Date.parse(raw.createdAt);
         timestamp = Number.isNaN(parsed) ? Date.now() : parsed;
     } else {
         timestamp = Date.now();
     }
+
+    // If backend gives seconds instead of ms, convert (simple heuristic)
+    if (timestamp < 1e12) timestamp = timestamp * 1000;
 
     // ----- 4) Determine id (string) -----
     const baseId =
@@ -234,7 +244,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     // Timer holder for background auto-sync (RN-safe type)
     const autoSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // NEW: foreground/manual dedupe guard (prevents sync bursts)
+    // Foreground/manual dedupe guard (prevents sync bursts)
     const lastRunSyncAtRef = useRef<number>(0);
     const runSyncInFlightRef = useRef(false);
 
@@ -305,11 +315,22 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     }, [history, hydrated]);
 
     const addToHistory = (item: HistoryItem) => {
-        setHistory((prev) => [...prev, item]);
+        // Preserve existing behavior, but make it consistent:
+        // any new local item should be unsynced unless explicitly marked.
+        const normalized: HistoryItem = {
+            ...item,
+            isSynced: typeof item.isSynced === "boolean" ? item.isSynced : false,
+        };
+        setHistory((prev) => [...prev, normalized]);
     };
 
     const clearHistory = () => {
         setHistory([]);
+        // Reset sync UI state too (avoids stale “synced just now” after clearing)
+        setIsSyncing(false);
+        setLastSyncResult(null);
+        setLastSyncAt(null);
+
         AsyncStorage.removeItem(STORAGE_KEY).catch((err) =>
             debugWarn("Failed to clear history storage:", err)
         );
@@ -330,7 +351,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             };
         }
 
-        // NEW: if a push starts, cancel any pending autosync timer (prevents double-fire)
+        // If a push starts, cancel any pending autosync timer (prevents double-fire)
         clearAutoSyncTimer();
 
         isPushInFlightRef.current = true;
@@ -378,7 +399,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 setLastSyncResult(result);
                 setLastSyncAt(now);
 
-                const pushedCount = typeof result.pushed === "number" ? result.pushed : 0;
+                const pushedCount =
+                    typeof result.pushed === "number" ? result.pushed : 0;
+
                 setSettingsLastSyncAt(now);
                 setSettingsLastSyncStatus(
                     pushedCount > 0
@@ -432,6 +455,10 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     const runSync = useCallback(
         async (opts?: { reason?: string }): Promise<PushRemoteHistoryResult> => {
             const now = Date.now();
+
+            if (DEBUG_UI_ENABLED && opts?.reason) {
+                debugLog("runSync triggered:", opts.reason);
+            }
 
             // Throttle foreground-trigger bursts (does not affect autosync scheduling)
             if (now - lastRunSyncAtRef.current < 900) {
@@ -493,27 +520,27 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             return { totalRemote, normalized: 0, added: 0 };
         }
 
-        let addedCount = 0;
+        // ✅ Compute "added" deterministically before setHistory (avoids async mismatch)
+        const existingIds = new Set((historyRef.current || []).map((h) => h.id));
+        const toAdd: HistoryItem[] = [];
 
-        setHistory((prev) => {
-            const existingIds = new Set(prev.map((h) => h.id));
-            const toAdd: HistoryItem[] = [];
-
-            for (const item of normalizedItems) {
-                if (!existingIds.has(item.id)) {
-                    existingIds.add(item.id);
-                    toAdd.push(item);
-                }
+        for (const item of normalizedItems) {
+            if (!existingIds.has(item.id)) {
+                existingIds.add(item.id);
+                toAdd.push(item);
             }
+        }
 
-            addedCount = toAdd.length;
-            if (addedCount === 0) return prev;
+        const addedCount = toAdd.length;
 
-            const merged = [...prev, ...toAdd].sort(
-                (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
-            );
-            return merged;
-        });
+        if (addedCount > 0) {
+            setHistory((prev) => {
+                const merged = [...prev, ...toAdd].sort(
+                    (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
+                );
+                return merged;
+            });
+        }
 
         return {
             totalRemote,

@@ -4,13 +4,80 @@
 // - fetchRemoteHistory → read-only (used by Settings → “Test Remote History Fetch”
 //   and by HistoryScreen → “Load Remote History (debug)”)
 // - pushRemoteHistory  → best-effort batch push of local history to backend
+//
+// Design notes:
+// - Be liberal in what we accept from the backend (web + mobile payloads).
+// - Be conservative in what we send (compact, normalized payload).
+// - Never throw outward; callers expect safe fallbacks ([], ok=false).
 
 import { buildApiUrl } from "../config/api";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 import type { HistoryItem } from "../state/HistoryContext";
 
+const DEFAULT_TIMEOUT_MS = 15_000;
+
 function debugWarn(...args: any[]) {
     if (DEBUG_UI_ENABLED) console.warn(...args);
+}
+function debugLog(...args: any[]) {
+    if (DEBUG_UI_ENABLED) console.log(...args);
+}
+
+/**
+ * Fetch wrapper with a simple timeout.
+ * Keeps behavior identical for callers (still returns Response or throws),
+ * but avoids hanging requests during flaky network / offline transitions.
+ */
+async function fetchWithTimeout(
+    url: string,
+    init: RequestInit | undefined,
+    label: string,
+    timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
+    // AbortController is supported in modern RN/Expo, but guard just in case.
+    const AC: any = (globalThis as any).AbortController;
+    if (!AC) return fetch(url, init);
+
+    const controller = new AC();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    // If caller already provided a signal, we respect it (best effort) by
+    // aborting both when either aborts.
+    const providedSignal: any = (init as any)?.signal;
+    if (providedSignal?.aborted) controller.abort();
+    else if (providedSignal && typeof providedSignal.addEventListener === "function") {
+        providedSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+
+    try {
+        const res = await fetch(url, { ...(init || {}), signal: controller.signal });
+        return res;
+    } catch (err) {
+        // Add a tiny bit of context (debug-only) without changing outward error shape.
+        debugWarn(`${label}: fetch failed`, err);
+        throw err;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+/**
+ * Safely read a JSON body if available; returns undefined on parse failure.
+ * Does not throw.
+ */
+async function tryReadJson(res: Response): Promise<any | undefined> {
+    try {
+        // Some environments may not expose headers cleanly; be defensive.
+        const ct = (res.headers?.get?.("content-type") || "").toLowerCase();
+        if (ct.includes("application/json") || ct.includes("+json")) {
+            return await res.json();
+        }
+        // If server didn't send content-type but body is JSON, res.json() may still work.
+        // Try once, but if it fails we swallow.
+        return await res.json();
+    } catch {
+        return undefined;
+    }
 }
 
 // Shape that can represent either:
@@ -99,10 +166,7 @@ function normalizeTimestamp(item: RemoteHistoryItem): number {
 }
 
 /**
- * Normalize text content. Backend may store:
- * - text
- * - message
- * - content
+ * Extract the message text from possible fields.
  */
 function normalizeText(item: RemoteHistoryItem): string {
     const t =
@@ -119,8 +183,7 @@ function normalizeText(item: RemoteHistoryItem): string {
 
 /**
  * Convert remote record → local HistoryItem
- * Always returns a structurally valid HistoryItem (id/text/from/timestamp),
- * but some may still be filtered by your merge normalizer if you choose.
+ * Always returns a structurally valid HistoryItem (id/text/from/timestamp).
  */
 function normalizeRemoteItem(item: RemoteHistoryItem): HistoryItem {
     return {
@@ -140,14 +203,18 @@ function normalizeRemoteItem(item: RemoteHistoryItem): HistoryItem {
 export async function fetchRemoteHistory(): Promise<HistoryItem[]> {
     try {
         const url = buildApiUrl("/api/history?mode=array");
-        const res = await fetch(url);
+        const res = await fetchWithTimeout(
+            url,
+            { method: "GET", headers: { Accept: "application/json" } },
+            "fetchRemoteHistory"
+        );
 
         if (!res.ok) {
             debugWarn("fetchRemoteHistory: non-OK response", res.status);
             return [];
         }
 
-        const raw = await res.json();
+        const raw = await tryReadJson(res);
 
         if (!Array.isArray(raw)) {
             debugWarn("fetchRemoteHistory: expected array, got", typeof raw, raw);
@@ -155,8 +222,10 @@ export async function fetchRemoteHistory(): Promise<HistoryItem[]> {
         }
 
         const data = raw as RemoteHistoryItem[];
+        const normalized = data.map((item) => normalizeRemoteItem(item));
 
-        return data.map((item) => normalizeRemoteItem(item));
+        debugLog("fetchRemoteHistory: fetched", normalized.length, "item(s)");
+        return normalized;
     } catch (err) {
         debugWarn("fetchRemoteHistory: error talking to backend", err);
         return [];
@@ -190,11 +259,18 @@ export async function pushRemoteHistory(
 
         const pushed = payloadItems.length;
 
-        const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ items: payloadItems }),
-        });
+        const res = await fetchWithTimeout(
+            url,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                },
+                body: JSON.stringify({ items: payloadItems }),
+            },
+            "pushRemoteHistory"
+        );
 
         const status = res.status;
 
@@ -216,13 +292,23 @@ export async function pushRemoteHistory(
             };
         }
 
-        // Try to parse response (optional)
+        // Some backends return 204 No Content or non-JSON payload – that's okay.
+        // We still return ok=true and the number of items we attempted to push.
         try {
-            await res.json();
+            const body = await tryReadJson(res);
+            if (body && typeof body === "object") {
+                // If backend provides a more accurate pushed count, honor it.
+                const maybePushed = (body as any).pushed;
+                if (typeof maybePushed === "number" && Number.isFinite(maybePushed)) {
+                    debugLog("pushRemoteHistory: backend pushed", maybePushed, "item(s)");
+                    return { ok: true, pushed: maybePushed, status };
+                }
+            }
         } catch {
-            // Backend may return 204 or non-JSON body – that's okay.
+            // ignore
         }
 
+        debugLog("pushRemoteHistory: pushed", pushed, "item(s)");
         return { ok: true, pushed, status };
     } catch (err: any) {
         debugWarn("pushRemoteHistory: error talking to backend", err);

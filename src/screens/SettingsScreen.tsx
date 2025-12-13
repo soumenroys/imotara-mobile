@@ -9,6 +9,7 @@ import {
     TouchableOpacity,
 } from "react-native";
 import { useHistoryStore } from "../state/HistoryContext";
+import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
 import { fetchRemoteHistory } from "../api/historyClient";
@@ -18,8 +19,19 @@ import AppButton from "../components/ui/AppButton";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
 export default function SettingsScreen() {
-    const { history, clearHistory, pushHistoryToRemote, mergeRemoteHistory } =
-        useHistoryStore();
+    // Keep compatibility with your current store shape, but allow optional newer fields
+    const store = useHistoryStore() as any;
+
+    const {
+        history,
+        clearHistory,
+        pushHistoryToRemote,
+        mergeRemoteHistory,
+        // Optional newer helpers (if present)
+        runSync,
+        syncNow,
+        isSyncing: storeIsSyncing,
+    } = store;
 
     const {
         emotionInsightsEnabled,
@@ -32,8 +44,12 @@ export default function SettingsScreen() {
         setAutoSyncDelaySeconds,
     } = useSettings();
 
-    const messageCount = history.length;
-    const unsyncedCount = history.filter((h) => !h.isSynced).length;
+    const messageCount = (history as HistoryRecord[]).length;
+
+    // ✅ Fix implicit-any error by typing callback param
+    const unsyncedCount = (history as HistoryRecord[]).filter(
+        (h: HistoryRecord) => !h.isSynced
+    ).length;
 
     // ✅ QA hardening: avoid setState after leaving screen
     const mountedRef = React.useRef(true);
@@ -160,8 +176,16 @@ export default function SettingsScreen() {
         busyRef.current.syncNow = true;
 
         try {
-            // 1) Push local history (via unified context method)
-            const pushResult = await pushHistoryToRemote();
+            // Prefer deduped trigger if present; otherwise fall back to pushHistoryToRemote
+            const syncFn =
+                typeof syncNow === "function"
+                    ? syncNow
+                    : typeof runSync === "function"
+                        ? runSync
+                        : pushHistoryToRemote;
+
+            // 1) Push local history
+            const pushResult = await syncFn({ reason: "SettingsScreen: Sync Now" });
 
             // 2) Fetch latest remote history
             const remote = await fetchRemoteHistory();
@@ -247,6 +271,12 @@ export default function SettingsScreen() {
         setAutoSyncDelaySeconds(safe);
     };
 
+    // If store exposes sync state, reflect it in button disabled state too
+    const isAnySyncBusy =
+        busyRef.current.pushOnly ||
+        busyRef.current.syncNow ||
+        (typeof storeIsSyncing === "boolean" ? storeIsSyncing : false);
+
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
             <ScrollView
@@ -278,7 +308,6 @@ export default function SettingsScreen() {
                     device. From here you can try early emotion insights and sync
                     options — future versions will add full cloud backup controls and
                     teen safety settings.
-
                     {"\n\n"}Your messages are never shared publicly — sync only stores a
                     private cloud copy for you.
                 </Text>
@@ -516,24 +545,39 @@ export default function SettingsScreen() {
                     {DEBUG_UI_ENABLED && (
                         <>
                             <AppButton
-                                title="Test Remote History Fetch"
+                                title={
+                                    busyRef.current.testRemote
+                                        ? "Testing remote…"
+                                        : "Test Remote History Fetch"
+                                }
                                 onPress={handleTestRemoteHistory}
+                                disabled={busyRef.current.testRemote}
                                 variant="secondary"
                                 style={{
                                     alignSelf: "flex-start",
                                     borderRadius: 999,
                                     marginBottom: 8,
+                                    opacity: busyRef.current.testRemote ? 0.7 : 1,
                                 }}
                             />
 
                             <AppButton
-                                title="Push Local History to Cloud"
+                                title={
+                                    busyRef.current.pushOnly
+                                        ? "Pushing…"
+                                        : "Push Local History to Cloud"
+                                }
                                 onPress={handlePushLocalHistory}
+                                disabled={busyRef.current.pushOnly || isAnySyncBusy}
                                 variant="secondary"
                                 style={{
                                     alignSelf: "flex-start",
                                     borderRadius: 999,
                                     marginBottom: 8,
+                                    opacity:
+                                        busyRef.current.pushOnly || isAnySyncBusy
+                                            ? 0.7
+                                            : 1,
                                 }}
                             />
                         </>
@@ -541,13 +585,20 @@ export default function SettingsScreen() {
 
                     {/* Production-safe one-tap sync stays visible */}
                     <AppButton
-                        title="Sync Now (push + fetch)"
+                        title={
+                            busyRef.current.syncNow || isAnySyncBusy
+                                ? "Syncing…"
+                                : "Sync Now (push + fetch)"
+                        }
                         onPress={handleSyncNow}
+                        disabled={busyRef.current.syncNow || isAnySyncBusy}
                         variant="primary"
                         style={{
                             alignSelf: "flex-start",
                             borderRadius: 999,
                             marginBottom: 10,
+                            opacity:
+                                busyRef.current.syncNow || isAnySyncBusy ? 0.7 : 1,
                         }}
                     />
 

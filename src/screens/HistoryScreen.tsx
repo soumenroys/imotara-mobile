@@ -173,18 +173,33 @@ function formatDateLabel(timestamp: number): string {
     return d.toLocaleDateString();
 }
 
+// RN/Android can be picky about locale options; this keeps it safe.
+function formatTimeLabelSafe(timestamp: number): string {
+    try {
+        return new Date(timestamp).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+        } as any);
+    } catch {
+        return new Date(timestamp).toLocaleTimeString();
+    }
+}
+
 export default function HistoryScreen() {
     const navigation = useNavigation<any>();
 
     const {
         history,
         pushHistoryToRemote,
+        // Newly available in current checkpoint: deduped sync triggers.
+        runSync,
+        syncNow,
         mergeRemoteHistory,
         isSyncing,
         lastSyncResult,
         lastSyncAt: historyLastSyncAt,
         hasUnsyncedChanges,
-    } = useHistoryStore();
+    } = useHistoryStore() as any;
 
     const { lastSyncAt, lastSyncStatus, autoSyncDelaySeconds } = useSettings();
 
@@ -204,6 +219,10 @@ export default function HistoryScreen() {
     // ✅ QA hardening: avoid repeated remote-load taps
     const [isLoadingRemote, setIsLoadingRemote] = React.useState(false);
 
+    // ✅ Avoid re-render churn on scroll by only setting state when value actually changes
+    const showTopRef = React.useRef(false);
+    const showLatestRef = React.useRef(false);
+
     const hasSyncError = React.useMemo(() => {
         if (lastSyncResult && !lastSyncResult.ok) return true;
         const lower = (lastSyncStatus || "").toLowerCase();
@@ -217,7 +236,7 @@ export default function HistoryScreen() {
         : null;
 
     const unsyncedCount = React.useMemo(
-        () => history.filter((h) => !h.isSynced).length,
+        () => history.filter((h: HistoryRecord) => !h.isSynced).length,
         [history]
     );
 
@@ -240,7 +259,11 @@ export default function HistoryScreen() {
             };
         }
 
-        if (lower.includes("pushed") || lower.includes("merged") || lower.includes("synced")) {
+        if (
+            lower.includes("pushed") ||
+            lower.includes("merged") ||
+            lower.includes("synced")
+        ) {
             return {
                 label: "Synced · recent history backed up",
                 variant: "primary" as const,
@@ -255,7 +278,7 @@ export default function HistoryScreen() {
         };
     }, [effectiveLastSyncAt, lastSyncStatus, hasSyncError]);
 
-    const handleLoadRemote = async () => {
+    const handleLoadRemote = React.useCallback(async () => {
         // debug button is already gated, but keep this safe if called elsewhere
         if (!DEBUG_UI_ENABLED) return;
 
@@ -270,12 +293,15 @@ export default function HistoryScreen() {
                 return;
             }
 
+            // This returns accurate added counts in the current checkpoint.
             const result = mergeRemoteHistory(remote);
 
             if (result.normalized === 0) {
                 Alert.alert(
                     "Remote history",
-                    "No valid items found on the backend yet."
+                    remote.length === 0
+                        ? "Backend returned 0 item(s) so far."
+                        : "No valid items found on the backend yet."
                 );
                 return;
             }
@@ -300,13 +326,21 @@ export default function HistoryScreen() {
         } finally {
             if (mountedRef.current) setIsLoadingRemote(false);
         }
-    };
+    }, [isLoadingRemote, mergeRemoteHistory]);
 
-    const handleRetrySync = async () => {
+    const handleRetrySync = React.useCallback(async () => {
         if (isSyncing) return;
 
         try {
-            const result = await pushHistoryToRemote();
+            // Prefer deduped trigger if available; fall back to existing function.
+            const syncFn =
+                typeof syncNow === "function"
+                    ? syncNow
+                    : typeof runSync === "function"
+                        ? runSync
+                        : pushHistoryToRemote;
+
+            const result = await syncFn({ reason: "HistoryScreen: manual sync" });
 
             if (result.ok) {
                 const pushedCount =
@@ -326,11 +360,14 @@ export default function HistoryScreen() {
             }
         } catch (error) {
             console.warn("handleRetrySync error:", error);
-            Alert.alert("Sync error", "Could not sync right now. Please try again later.");
+            Alert.alert(
+                "Sync error",
+                "Could not sync right now. Please try again later."
+            );
         }
-    };
+    }, [isSyncing, pushHistoryToRemote, runSync, syncNow]);
 
-    const handleGoToChat = () => {
+    const handleGoToChat = React.useCallback(() => {
         // keep behavior safe across any route name differences
         try {
             navigation.navigate("Chat");
@@ -340,7 +377,7 @@ export default function HistoryScreen() {
             navigation.navigate("ChatScreen");
             return;
         } catch { }
-    };
+    }, [navigation]);
 
     const sortedHistory = React.useMemo(
         () => [...history].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)),
@@ -392,13 +429,24 @@ export default function HistoryScreen() {
                     paddingBottom: 80,
                 }}
                 onScroll={(e) => {
-                    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+                    const { contentOffset, contentSize, layoutMeasurement } =
+                        e.nativeEvent;
 
                     const distanceFromBottom =
-                        contentSize.height - (contentOffset.y + layoutMeasurement.height);
+                        contentSize.height -
+                        (contentOffset.y + layoutMeasurement.height);
 
-                    setShowScrollToLatest(distanceFromBottom > 120);
-                    setShowScrollToTop(contentOffset.y > 80);
+                    const nextShowLatest = distanceFromBottom > 120;
+                    const nextShowTop = contentOffset.y > 80;
+
+                    if (nextShowLatest !== showLatestRef.current) {
+                        showLatestRef.current = nextShowLatest;
+                        setShowScrollToLatest(nextShowLatest);
+                    }
+                    if (nextShowTop !== showTopRef.current) {
+                        showTopRef.current = nextShowTop;
+                        setShowScrollToTop(nextShowTop);
+                    }
                 }}
                 scrollEventThrottle={50}
             >
@@ -420,7 +468,8 @@ export default function HistoryScreen() {
                         marginBottom: 6,
                     }}
                 >
-                    A simple preview of your recent conversations with Imotara on this device.
+                    A simple preview of your recent conversations with Imotara on
+                    this device.
                 </Text>
 
                 <View style={{ marginTop: 4, marginBottom: 6 }}>
@@ -449,7 +498,9 @@ export default function HistoryScreen() {
                         <Text
                             style={{
                                 fontSize: 11,
-                                color: hasSyncError ? "#fecaca" : colors.textSecondary,
+                                color: hasSyncError
+                                    ? "#fecaca"
+                                    : colors.textSecondary,
                                 fontWeight: hasSyncError ? "600" : "400",
                             }}
                         >
@@ -460,7 +511,9 @@ export default function HistoryScreen() {
                             style={{
                                 marginTop: 2,
                                 fontSize: 11,
-                                color: hasSyncError ? "#fecaca" : colors.textSecondary,
+                                color: hasSyncError
+                                    ? "#fecaca"
+                                    : colors.textSecondary,
                             }}
                         >
                             {hasSyncError
@@ -515,7 +568,11 @@ export default function HistoryScreen() {
                 {/* Debug-only: Load remote history */}
                 {DEBUG_UI_ENABLED && (
                     <AppButton
-                        title={isLoadingRemote ? "Loading remote…" : "Load Remote History"}
+                        title={
+                            isLoadingRemote
+                                ? "Loading remote…"
+                                : "Load Remote History"
+                        }
                         onPress={handleLoadRemote}
                         disabled={isLoadingRemote}
                         variant="success"
@@ -559,8 +616,9 @@ export default function HistoryScreen() {
                                 marginBottom: 12,
                             }}
                         >
-                            When you chat with Imotara, your conversation appears here as an “Emotion History”
-                            so you can notice patterns, moods, and growth over time.
+                            When you chat with Imotara, your conversation appears
+                            here as an “Emotion History” so you can notice
+                            patterns, moods, and growth over time.
                         </Text>
 
                         <AppButton
@@ -606,7 +664,10 @@ export default function HistoryScreen() {
 
                         {group.items.map((item, index) => {
                             const isUser = item.from === "user";
-                            const moodBaseText = getBaseTextForMood(group.items, index);
+                            const moodBaseText = getBaseTextForMood(
+                                group.items,
+                                index
+                            );
 
                             let emotionHeader: string | null = null;
                             if (!isUser) {
@@ -617,8 +678,14 @@ export default function HistoryScreen() {
                                     .slice(0, index)
                                     .some((prev, prevIdx) => {
                                         if (prev.from !== "bot") return false;
-                                        const prevBase = getBaseTextForMood(group.items, prevIdx);
-                                        return getMoodEmojiForText(prevBase) === emoji;
+                                        const prevBase = getBaseTextForMood(
+                                            group.items,
+                                            prevIdx
+                                        );
+                                        return (
+                                            getMoodEmojiForText(prevBase) ===
+                                            emoji
+                                        );
                                     });
 
                                 if (!hasPrevious) {
@@ -630,7 +697,8 @@ export default function HistoryScreen() {
                             if (index > 0) {
                                 const prev = group.items[index - 1];
                                 const gap = item.timestamp - (prev.timestamp ?? 0);
-                                if (gap > SESSION_GAP_MS) showSessionDivider = true;
+                                if (gap > SESSION_GAP_MS)
+                                    showSessionDivider = true;
                             }
 
                             const bubbleBackground = isUser
@@ -653,7 +721,11 @@ export default function HistoryScreen() {
                                     ? "Sync issue · device only"
                                     : "On this device only";
 
-                            const chipIcon = item.isSynced ? "✓" : hasSyncError ? "⚠" : "📱";
+                            const chipIcon = item.isSynced
+                                ? "✓"
+                                : hasSyncError
+                                    ? "⚠"
+                                    : "📱";
 
                             return (
                                 <View key={item.id}>
@@ -675,7 +747,12 @@ export default function HistoryScreen() {
                                                     marginRight: 8,
                                                 }}
                                             />
-                                            <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                                            <Text
+                                                style={{
+                                                    fontSize: 11,
+                                                    color: colors.textSecondary,
+                                                }}
+                                            >
                                                 New session
                                             </Text>
                                             <View
@@ -706,7 +783,9 @@ export default function HistoryScreen() {
 
                                     <View
                                         style={{
-                                            alignSelf: isUser ? "flex-end" : "flex-start",
+                                            alignSelf: isUser
+                                                ? "flex-end"
+                                                : "flex-start",
                                             maxWidth: "80%",
                                             padding: isUser ? 0 : 4,
                                             borderRadius: isUser ? 0 : 20,
@@ -719,7 +798,9 @@ export default function HistoryScreen() {
                                             onLongPress={() =>
                                                 Alert.alert(
                                                     "Message timestamp",
-                                                    new Date(item.timestamp).toLocaleString()
+                                                    new Date(
+                                                        item.timestamp
+                                                    ).toLocaleString()
                                                 )
                                             }
                                             delayLongPress={250}
@@ -744,7 +825,9 @@ export default function HistoryScreen() {
                                             >
                                                 {isUser
                                                     ? "You"
-                                                    : `Imotara ${getMoodEmojiForText(moodBaseText)}`}
+                                                    : `Imotara ${getMoodEmojiForText(
+                                                        moodBaseText
+                                                    )}`}
                                             </Text>
 
                                             <Text
@@ -763,7 +846,7 @@ export default function HistoryScreen() {
                                                     marginTop: 4,
                                                 }}
                                             >
-                                                {new Date(item.timestamp).toLocaleTimeString()}
+                                                {formatTimeLabelSafe(item.timestamp)}
                                             </Text>
 
                                             <AppChip
@@ -772,7 +855,9 @@ export default function HistoryScreen() {
                                                 icon={chipIcon}
                                                 animate
                                                 style={{
-                                                    alignSelf: isUser ? "flex-end" : "flex-start",
+                                                    alignSelf: isUser
+                                                        ? "flex-end"
+                                                        : "flex-start",
                                                     marginTop: 6,
                                                 }}
                                             />
@@ -789,18 +874,23 @@ export default function HistoryScreen() {
                                                     variant="ghost"
                                                     size="sm"
                                                     style={{
-                                                        alignSelf: isUser ? "flex-end" : "flex-start",
+                                                        alignSelf: isUser
+                                                            ? "flex-end"
+                                                            : "flex-start",
                                                         marginTop: 4,
                                                         borderWidth: 0,
                                                         paddingHorizontal: 0,
                                                         paddingVertical: 0,
-                                                        opacity: isLoadingRemote ? 0.7 : 1,
+                                                        opacity: isLoadingRemote
+                                                            ? 0.7
+                                                            : 1,
                                                     }}
                                                     textStyle={{
                                                         fontSize: 11,
                                                         fontWeight: "500",
                                                         color: "#93c5fd",
-                                                        textDecorationLine: "underline",
+                                                        textDecorationLine:
+                                                            "underline",
                                                     }}
                                                 />
                                             )}
@@ -825,7 +915,12 @@ export default function HistoryScreen() {
                     {showScrollToTop && (
                         <AppButton
                             title="↑ Top"
-                            onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
+                            onPress={() =>
+                                scrollRef.current?.scrollTo({
+                                    y: 0,
+                                    animated: true,
+                                })
+                            }
                             variant="primary"
                             size="sm"
                             style={{
@@ -845,7 +940,11 @@ export default function HistoryScreen() {
                     {showScrollToLatest && (
                         <AppButton
                             title="↓ Latest"
-                            onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
+                            onPress={() =>
+                                scrollRef.current?.scrollToEnd({
+                                    animated: true,
+                                })
+                            }
                             variant="primary"
                             size="sm"
                             style={{

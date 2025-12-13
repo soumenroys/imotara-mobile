@@ -285,8 +285,17 @@ export default function ChatScreen() {
     // ✅ Action sheet state
     const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
 
-    const { addToHistory, history, deleteFromHistory, isSyncing, pushHistoryToRemote } =
-        useHistoryStore();
+    // ✅ Read store once, but allow optional newer helpers safely (no behavior loss)
+    const store = useHistoryStore() as any;
+    const {
+        addToHistory,
+        history,
+        deleteFromHistory,
+        isSyncing,
+        pushHistoryToRemote,
+        runSync,
+        syncNow,
+    } = store;
 
     const { emotionInsightsEnabled, lastSyncAt, lastSyncStatus } = useSettings();
 
@@ -332,6 +341,9 @@ export default function ChatScreen() {
         setIsTyping(false);
         setTypingStatus("idle");
         setTypingDots(1);
+
+        // (kept for future debugging; no UI impact)
+        void reason;
     };
 
     // NEW: app lifecycle handling (prevents stuck typing on background/foreground)
@@ -346,8 +358,12 @@ export default function ChatScreen() {
         onForeground: () => {
             // If we come back and a typing cycle has been hanging too long, reset.
             const now = Date.now();
-            const typingAge = typingStartedAtRef.current ? now - typingStartedAtRef.current : 0;
-            const sendAge = sendStartedAtRef.current ? now - sendStartedAtRef.current : 0;
+            const typingAge = typingStartedAtRef.current
+                ? now - typingStartedAtRef.current
+                : 0;
+            const sendAge = sendStartedAtRef.current
+                ? now - sendStartedAtRef.current
+                : 0;
 
             // Conservative: only reset if it looks stuck (e.g., OS paused timers)
             if (isTyping && typingAge > 20_000) {
@@ -365,7 +381,7 @@ export default function ChatScreen() {
     const [typingStatus, setTypingStatus] = useState<TypingStatus>("idle");
     const [typingGlow] = useState(new Animated.Value(0));
 
-    const hasUnsynced = useMemo(() => history.some((h) => !h.isSynced), [history]);
+    const hasUnsynced = useMemo(() => history.some((h: any) => !h.isSynced), [history]);
 
     const showRecentlySyncedPulse = useMemo(() => {
         if (recentlySyncedAt == null) return false;
@@ -381,7 +397,7 @@ export default function ChatScreen() {
 
         setMessages((prev) => {
             const updated = prev.map((m) => {
-                const h = history.find((hh) => hh.id === m.id);
+                const h = history.find((hh: any) => hh.id === m.id);
                 if (!h) return m;
                 if (m.isSynced === h.isSynced) return m;
                 if (h.isSynced) anyNewlySynced = true;
@@ -405,7 +421,11 @@ export default function ChatScreen() {
             return "Sync issue · your latest messages are only on this device.";
         }
 
-        if (lower.includes("pushed") || lower.includes("merged") || lower.includes("synced")) {
+        if (
+            lower.includes("pushed") ||
+            lower.includes("merged") ||
+            lower.includes("synced")
+        ) {
             return "Recent messages are safely backed up to Imotara cloud.";
         }
 
@@ -420,7 +440,11 @@ export default function ChatScreen() {
             return "#fca5a5";
         }
 
-        if (lower.includes("pushed") || lower.includes("merged") || lower.includes("synced")) {
+        if (
+            lower.includes("pushed") ||
+            lower.includes("merged") ||
+            lower.includes("synced")
+        ) {
             return colors.primary;
         }
 
@@ -593,14 +617,21 @@ export default function ChatScreen() {
         setActionMessage(null);
     };
 
-    // ✅ Explicit “sync now” action
+    // ✅ Explicit “sync now” action (uses deduped sync trigger when available)
     const handleSyncNowForMessage = async (msg: ChatMessage) => {
         try {
             setMessages((prev) =>
                 prev.map((m) => (m.id === msg.id ? { ...m, isPending: true } : m))
             );
 
-            const result = await pushHistoryToRemote();
+            const syncFn =
+                typeof syncNow === "function"
+                    ? syncNow
+                    : typeof runSync === "function"
+                        ? runSync
+                        : pushHistoryToRemote;
+
+            const result = await syncFn({ reason: "ChatScreen: message sync now" });
 
             setMessages((prev) =>
                 prev.map((m) =>
@@ -608,7 +639,8 @@ export default function ChatScreen() {
                         ? {
                             ...m,
                             isPending: false,
-                            isSynced: result.ok ? true : false,
+                            // This UI flag mirrors what HistoryContext will mark after a successful push.
+                            isSynced: result.ok ? true : m.isSynced,
                         }
                         : m
                 )
@@ -769,7 +801,10 @@ export default function ChatScreen() {
                 } catch (error) {
                     console.warn("Imotara mobile AI error:", error);
 
-                    const local = generateLocalBotResponse(trimmed, emotionInsightsEnabled);
+                    const local = generateLocalBotResponse(
+                        trimmed,
+                        emotionInsightsEnabled
+                    );
 
                     const replyWithNote = emotionInsightsEnabled
                         ? local.replyText + networkNote
@@ -815,9 +850,11 @@ export default function ChatScreen() {
     // Hydrate from persisted history on first load
     useEffect(() => {
         if (messages.length === 0 && history.length > 0) {
-            const sorted = [...history].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+            const sorted = [...history].sort(
+                (a: any, b: any) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
+            );
 
-            const hydrated: ChatMessage[] = sorted.map((h) => ({
+            const hydrated: ChatMessage[] = sorted.map((h: any) => ({
                 id: h.id,
                 from: h.from,
                 text: h.text,
@@ -867,7 +904,9 @@ export default function ChatScreen() {
                         marginRight: 8,
                     }}
                 />
-                <Text style={{ fontSize: 11, color: colors.textSecondary }}>New session</Text>
+                <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                    New session
+                </Text>
                 <View
                     style={{
                         flex: 1,
@@ -954,7 +993,9 @@ export default function ChatScreen() {
                         : `Imotara${sourceIcon}${getMoodEmojiForHint(message.moodHint)}`}
                 </Text>
 
-                <Text style={{ fontSize: 14, color: colors.textPrimary }}>{message.text}</Text>
+                <Text style={{ fontSize: 14, color: colors.textPrimary }}>
+                    {message.text}
+                </Text>
 
                 {message.moodHint && (
                     <Text
@@ -1021,9 +1062,13 @@ export default function ChatScreen() {
         );
 
         const extraTopSpace =
-            isUser && index > 0 && messages[index - 1].from === "user" ? { marginTop: 4 } : {};
+            isUser && index > 0 && messages[index - 1].from === "user"
+                ? { marginTop: 4 }
+                : {};
 
-        const onLongPress = message.isPending ? undefined : () => setActionMessage(message);
+        const onLongPress = message.isPending
+            ? undefined
+            : () => setActionMessage(message);
 
         return (
             <View key={message.id} style={extraTopSpace}>
@@ -1045,7 +1090,8 @@ export default function ChatScreen() {
                                 paddingHorizontal: 12,
                                 paddingVertical: 8,
                                 borderRadius: 16,
-                                borderWidth: bubbleBorderColor === "transparent" ? 0 : 1,
+                                borderWidth:
+                                    bubbleBorderColor === "transparent" ? 0 : 1,
                                 borderColor: bubbleBorderColor,
                             }}
                         >
@@ -1063,7 +1109,8 @@ export default function ChatScreen() {
                                 borderRadius: 16,
                                 paddingHorizontal: 12,
                                 paddingVertical: 8,
-                                borderWidth: bubbleBorderColor === "transparent" ? 0 : 1,
+                                borderWidth:
+                                    bubbleBorderColor === "transparent" ? 0 : 1,
                                 borderColor:
                                     bubbleBorderColor === "transparent"
                                         ? "rgba(148, 163, 184, 0.4)"
@@ -1081,7 +1128,10 @@ export default function ChatScreen() {
     const renderActionSheet = () => {
         if (!actionMessage) return null;
 
-        const canSyncNow = !actionMessage.isSynced && !actionMessage.isPending && !isSyncing;
+        const canSyncNow =
+            !actionMessage.isSynced &&
+            !actionMessage.isPending &&
+            !isSyncing;
 
         const deleteLabel =
             actionMessage.from === "user"
@@ -1157,7 +1207,9 @@ export default function ChatScreen() {
                         onPress={() => handleCopyMessage(actionMessage.text)}
                         style={{ paddingVertical: 10 }}
                     >
-                        <Text style={{ fontSize: 14, color: colors.textPrimary }}>Copy text</Text>
+                        <Text style={{ fontSize: 14, color: colors.textPrimary }}>
+                            Copy text
+                        </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -1192,18 +1244,26 @@ export default function ChatScreen() {
                                     {
                                         text: "Delete",
                                         style: "destructive",
-                                        onPress: () => handleDeleteMessage(actionMessage.id),
+                                        onPress: () =>
+                                            handleDeleteMessage(actionMessage.id),
                                     },
                                 ]
                             );
                         }}
                         style={{ paddingVertical: 10 }}
                     >
-                        <Text style={{ fontSize: 14, color: "#fecaca" }}>{deleteLabel}</Text>
+                        <Text style={{ fontSize: 14, color: "#fecaca" }}>
+                            {deleteLabel}
+                        </Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={closeActionSheet} style={{ paddingVertical: 10 }}>
-                        <Text style={{ fontSize: 14, color: colors.textSecondary }}>Cancel</Text>
+                    <TouchableOpacity
+                        onPress={closeActionSheet}
+                        style={{ paddingVertical: 10 }}
+                    >
+                        <Text style={{ fontSize: 14, color: colors.textSecondary }}>
+                            Cancel
+                        </Text>
                     </TouchableOpacity>
                 </View>
             </>
@@ -1270,11 +1330,19 @@ export default function ChatScreen() {
                         }}
                     />
 
-                    <Text style={{ fontSize: 18, fontWeight: "700", color: colors.textPrimary }}>
+                    <Text
+                        style={{
+                            fontSize: 18,
+                            fontWeight: "700",
+                            color: colors.textPrimary,
+                        }}
+                    >
                         Imotara
                     </Text>
 
-                    <Text style={{ marginLeft: 6, fontSize: 11, color: colors.textSecondary }}>
+                    <Text
+                        style={{ marginLeft: 6, fontSize: 11, color: colors.textSecondary }}
+                    >
                         (mobile preview)
                     </Text>
                 </View>
@@ -1300,7 +1368,9 @@ export default function ChatScreen() {
                             backgroundColor: hasUnsynced ? "#f97373" : syncHintAccent,
                         }}
                     />
-                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>{syncHint}</Text>
+                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                        {syncHint}
+                    </Text>
                 </View>
 
                 {isSyncing && (
@@ -1369,13 +1439,18 @@ export default function ChatScreen() {
                     {messages.length === 0 && (
                         <View style={{ paddingTop: 24, paddingBottom: 16 }}>
                             <Text
-                                style={{ fontSize: 15, color: colors.textSecondary, marginBottom: 6 }}
+                                style={{
+                                    fontSize: 15,
+                                    color: colors.textSecondary,
+                                    marginBottom: 6,
+                                }}
                             >
                                 Welcome to Imotara.
                             </Text>
                             <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                                You can start by sharing how your day feels, something that bothered you,
-                                or something you’re looking forward to. Imotara listens without judgment.
+                                You can start by sharing how your day feels, something that
+                                bothered you, or something you’re looking forward to. Imotara
+                                listens without judgment.
                             </Text>
                         </View>
                     )}
@@ -1395,7 +1470,13 @@ export default function ChatScreen() {
                             <Text style={{ fontSize: 11, color: colors.textSecondary }}>
                                 Mood glimpse (preview)
                             </Text>
-                            <Text style={{ fontSize: 13, color: colors.textPrimary, marginTop: 2 }}>
+                            <Text
+                                style={{
+                                    fontSize: 13,
+                                    color: colors.textPrimary,
+                                    marginTop: 2,
+                                }}
+                            >
                                 {latestMoodHint}
                             </Text>
                         </View>
