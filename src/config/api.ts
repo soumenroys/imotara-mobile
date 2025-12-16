@@ -7,11 +7,11 @@ import { DEBUG_UI_ENABLED } from "./debug";
  * Priority:
  * 1) EXPO_PUBLIC_IMOTARA_API_BASE_URL (recommended)
  * 2) IMOTARA_API_BASE_URL (legacy)
- * 3) http://localhost:3000 (fallback)
+ * 3) Dev-only fallback (localhost) — NEVER used in production
  *
  * NOTE:
  * - No dependency on expo-constants (avoids TS/build errors)
- * - Safe for QA / production
+ * - Safe for QA / production (fails fast if misconfigured)
  */
 
 function debugLog(...args: any[]) {
@@ -31,11 +31,25 @@ const envBase =
     (process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL as string | undefined) ||
     (process.env.IMOTARA_API_BASE_URL as string | undefined);
 
-// Final resolved base URL
-const resolvedBase =
-    typeof envBase === "string" && envBase.trim().length > 0
-        ? envBase
-        : "http://localhost:3000";
+/**
+ * Resolve base URL.
+ * - If env is present → use it
+ * - If dev build and env missing → allow localhost fallback for local testing
+ * - If production build and env missing → fail fast with a clear error
+ */
+const resolvedBase = (() => {
+    const v = typeof envBase === "string" ? envBase.trim() : "";
+
+    if (v.length > 0) return v;
+
+    if (__DEV__) {
+        return "http://localhost:3000";
+    }
+
+    throw new Error(
+        "Missing EXPO_PUBLIC_IMOTARA_API_BASE_URL (or IMOTARA_API_BASE_URL). Set it in EAS/Expo env for production builds."
+    );
+})();
 
 export const IMOTARA_API_BASE_URL = normalizeBaseUrl(resolvedBase);
 

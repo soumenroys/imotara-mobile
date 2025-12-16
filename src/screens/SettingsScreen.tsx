@@ -34,7 +34,7 @@ import type { LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
 
 // ✅ Donation presets + formatting (re-used)
-import { DONATION_PRESETS, formatINRFromPaise } from "../payments/stripe";
+import { DONATION_PRESETS, formatINRFromPaise } from "../payments/donations";
 
 /**
  * ✅ TS FIX:
