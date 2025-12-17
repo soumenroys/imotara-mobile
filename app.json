@@ -14,10 +14,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.soumenroy.imotara"
+      "bundleIdentifier": "com.imotara.imotara",
+      "buildNumber": "1"
     },
     "android": {
-      "package": "com.soumenroy.imotara",
+      "package": "com.imotara.imotara",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -27,6 +29,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d035812a-a728-4703-85a5-f8e957e233bf"
+      }
+    },
+    "owner": "soumenroys"
   }
 }
