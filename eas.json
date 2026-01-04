@@ -25,6 +25,15 @@
                 "EXPO_PUBLIC_IMOTARA_API_BASE_URL": "https://imotaraapp.vercel.app"
             }
         },
+        "iosTestflight": {
+            "distribution": "store",
+            "ios": {
+                "simulator": false
+            },
+            "env": {
+                "EXPO_PUBLIC_IMOTARA_API_BASE_URL": "https://imotaraapp.vercel.app"
+            }
+        },
         "production": {
             "distribution": "store",
             "android": {

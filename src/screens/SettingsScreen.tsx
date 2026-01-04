@@ -113,6 +113,12 @@ export default function SettingsScreen() {
         setLastSyncStatus,
         autoSyncDelaySeconds,
         setAutoSyncDelaySeconds,
+
+        // ✅ New
+        analysisMode,
+        setAnalysisMode,
+        toneContext,
+        setToneContext,
     } = useSettings();
 
     const messageCount = (history as HistoryRecord[]).length;
@@ -786,6 +792,294 @@ export default function SettingsScreen() {
                         This toggle does not send any extra data to the cloud yet. It
                         is a design placeholder for future AI-powered insights.
                     </Text>
+                </AppSurface>
+
+                {/* ✅ Analysis Mode (Local / Cloud / Auto) */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Analysis Mode
+                    </Text>
+
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}>
+                        Choose how Imotara replies are generated.
+                    </Text>
+
+                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                        {(
+                            [
+                                { id: "auto", label: "Auto" },
+                                { id: "cloud", label: "Cloud" },
+                                { id: "local", label: "Local" },
+                            ] as const
+                        ).map((opt) => {
+                            const active = analysisMode === opt.id;
+
+                            return (
+                                <TouchableOpacity
+                                    key={opt.id}
+                                    onPress={() => setAnalysisMode(opt.id)}
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active
+                                            ? "rgba(56, 189, 248, 0.18)"
+                                            : "rgba(15, 23, 42, 0.9)",
+                                        marginRight: 8,
+                                        marginBottom: 8,
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontSize: 12,
+                                            fontWeight: "700",
+                                            color: active ? colors.textPrimary : colors.textSecondary,
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
+                        Auto: tries cloud, falls back to local. Cloud: always attempts Imotara server.
+                        Local: device-only replies.
+                    </Text>
+                </AppSurface>
+
+                {/* ✅ Expected Companion Tone (tone only) */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View
+                        style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: 6,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 14,
+                                color: colors.textPrimary,
+                                fontWeight: "500",
+                            }}
+                        >
+                            Expected Companion Tone (tone only)
+                        </Text>
+
+                        <Switch
+                            value={!!toneContext?.companion?.enabled}
+                            onValueChange={(v) =>
+                                setToneContext({
+                                    ...(toneContext || {}),
+                                    companion: {
+                                        ...(toneContext?.companion || {}),
+                                        enabled: !!v,
+                                    },
+                                })
+                            }
+                            trackColor={{ false: "#4b5563", true: colors.primary }}
+                            thumbColor={"#f9fafb"}
+                        />
+                    </View>
+
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}>
+                        Optional. This only guides wording and warmth. Imotara will not pretend to be a
+                        real person.
+                    </Text>
+
+                    {/* Relationship */}
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>
+                        Relationship tone
+                    </Text>
+
+                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                        {(
+                            [
+                                { id: "prefer_not", label: "Prefer not to specify" },
+                                { id: "mentor", label: "Mentor" },
+                                { id: "elder", label: "Elder" },
+                                { id: "friend", label: "Friend" },
+                                { id: "coach", label: "Coach" },
+                                { id: "sibling", label: "Sibling (younger/peer vibe)" },
+                                { id: "junior_buddy", label: "Junior buddy (younger vibe)" },
+                                { id: "parent_like", label: "Parent-like (tone only)" },
+                                { id: "partner_like", label: "Partner-like (tone only)" },
+                            ] as const
+                        ).map((opt) => {
+                            const active = (toneContext?.companion?.relationship || "prefer_not") === opt.id;
+
+                            return (
+                                <TouchableOpacity
+                                    key={opt.id}
+                                    onPress={() =>
+                                        setToneContext({
+                                            ...(toneContext || {}),
+                                            companion: {
+                                                ...(toneContext?.companion || {}),
+                                                relationship: opt.id,
+                                            },
+                                        })
+                                    }
+                                    disabled={!toneContext?.companion?.enabled}
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active
+                                            ? "rgba(56, 189, 248, 0.18)"
+                                            : "rgba(15, 23, 42, 0.9)",
+                                        marginRight: 8,
+                                        marginBottom: 8,
+                                        opacity: toneContext?.companion?.enabled ? 1 : 0.5,
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontSize: 12,
+                                            fontWeight: "700",
+                                            color: active ? colors.textPrimary : colors.textSecondary,
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    {/* Age range */}
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 10, marginBottom: 6 }}>
+                        Age tone
+                    </Text>
+
+                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                        {(
+                            [
+                                { id: "prefer_not", label: "Prefer not to say" },
+                                { id: "under_13", label: "Under 13" },
+                                { id: "13_17", label: "13–17" },
+                                { id: "18_24", label: "18–24" },
+                                { id: "25_34", label: "25–34" },
+                                { id: "35_44", label: "35–44" },
+                                { id: "45_54", label: "45–54" },
+                                { id: "55_64", label: "55–64" },
+                                { id: "65_plus", label: "65+" },
+                            ] as const
+                        ).map((opt) => {
+                            const active = (toneContext?.companion?.ageRange || "prefer_not") === opt.id;
+
+                            return (
+                                <TouchableOpacity
+                                    key={opt.id}
+                                    onPress={() =>
+                                        setToneContext({
+                                            ...(toneContext || {}),
+                                            companion: {
+                                                ...(toneContext?.companion || {}),
+                                                ageRange: opt.id,
+                                            },
+                                        })
+                                    }
+                                    disabled={!toneContext?.companion?.enabled}
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active
+                                            ? "rgba(56, 189, 248, 0.18)"
+                                            : "rgba(15, 23, 42, 0.9)",
+                                        marginRight: 8,
+                                        marginBottom: 8,
+                                        opacity: toneContext?.companion?.enabled ? 1 : 0.5,
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontSize: 12,
+                                            fontWeight: "700",
+                                            color: active ? colors.textPrimary : colors.textSecondary,
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    {/* Gender */}
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 10, marginBottom: 6 }}>
+                        Gender tone
+                    </Text>
+
+                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                        {(
+                            [
+                                { id: "prefer_not", label: "Prefer not to say" },
+                                { id: "female", label: "Female" },
+                                { id: "male", label: "Male" },
+                                { id: "nonbinary", label: "Non-binary" },
+                                { id: "other", label: "Other" },
+                            ] as const
+                        ).map((opt) => {
+                            const active = (toneContext?.companion?.gender || "prefer_not") === opt.id;
+
+                            return (
+                                <TouchableOpacity
+                                    key={opt.id}
+                                    onPress={() =>
+                                        setToneContext({
+                                            ...(toneContext || {}),
+                                            companion: {
+                                                ...(toneContext?.companion || {}),
+                                                gender: opt.id,
+                                            },
+                                        })
+                                    }
+                                    disabled={!toneContext?.companion?.enabled}
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active
+                                            ? "rgba(56, 189, 248, 0.18)"
+                                            : "rgba(15, 23, 42, 0.9)",
+                                        marginRight: 8,
+                                        marginBottom: 8,
+                                        opacity: toneContext?.companion?.enabled ? 1 : 0.5,
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontSize: 12,
+                                            fontWeight: "700",
+                                            color: active ? colors.textPrimary : colors.textSecondary,
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
                 </AppSurface>
 
                 {/* Local history card */}

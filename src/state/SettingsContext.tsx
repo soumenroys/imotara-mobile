@@ -12,6 +12,7 @@ import { DEBUG_UI_ENABLED } from "../config/debug";
 // ✅ Licensing gate (read-only awareness for settings layer)
 import type { LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
+import type { ToneContextPayload } from "../api/aiClient";
 
 type SettingsContextValue = {
     // Emotion insight toggle for Imotara replies
@@ -55,6 +56,22 @@ type SettingsContextValue = {
      * Read-only. Sourced from src/config/debug.ts
      */
     debugUIEnabled: boolean;
+
+    /**
+     * Analysis mode for chat replies:
+     * - auto: try cloud, fallback local
+     * - cloud: always call /api/analyze (fallback behavior handled in ChatScreen)
+     * - local: never call cloud (device-only)
+     */
+    analysisMode: "auto" | "cloud" | "local";
+    setAnalysisMode: (value: "auto" | "cloud" | "local") => void;
+
+    /**
+     * Optional tone guidance sent to /api/analyze for more humanized replies (tone only).
+     * Mirrors server contract: toneContext?: ToneContextPayload
+     */
+    toneContext: ToneContextPayload;
+    setToneContext: (value: ToneContextPayload) => void;
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -104,6 +121,27 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const [autoSyncDelaySeconds, _setAutoSyncDelaySeconds] =
         useState<number>(8);
 
+    // ✅ New: explicit analysis mode control
+    const [analysisMode, _setAnalysisMode] = useState<"auto" | "cloud" | "local">(
+        "auto"
+    );
+
+    // ✅ New: tone context guidance (tone only; safe defaults)
+    const [toneContext, _setToneContext] = useState<ToneContextPayload>({
+        user: {
+            name: "",
+            ageRange: "prefer_not",
+            gender: "prefer_not",
+        },
+        companion: {
+            enabled: false,
+            name: "",
+            ageRange: "prefer_not",
+            gender: "prefer_not",
+            relationship: "prefer_not",
+        },
+    });
+
     const [hydrated, setHydrated] = useState(false);
 
     // ✅ Licensing-derived flag (default FREE behavior: device-only)
@@ -152,6 +190,30 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             );
                         }
 
+                        // Restore analysis mode (backward compatible)
+                        if ("analysisMode" in parsed) {
+                            const v = String((parsed as any).analysisMode || "").toLowerCase();
+                            if (v === "auto" || v === "cloud" || v === "local") {
+                                _setAnalysisMode(v);
+                            }
+                        }
+
+                        // Restore tone context (soft-merge into defaults)
+                        if ("toneContext" in parsed) {
+                            const v = (parsed as any).toneContext;
+                            if (v && typeof v === "object") {
+                                _setToneContext((prev) => ({
+                                    ...prev,
+                                    ...v,
+                                    user: { ...(prev.user || {}), ...(v.user || {}) },
+                                    companion: {
+                                        ...(prev.companion || {}),
+                                        ...(v.companion || {}),
+                                    },
+                                }));
+                            }
+                        }
+
                         if ("lastSyncAt" in parsed) {
                             const v = parsed.lastSyncAt;
                             _setLastSyncAt(typeof v === "number" ? v : null);
@@ -193,6 +255,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             autoSyncDelaySeconds,
             lastSyncAt,
             lastSyncStatus,
+
+            // ✅ New
+            analysisMode,
+            toneContext,
         };
 
         AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload)).catch((e) => {
@@ -204,6 +270,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         autoSyncDelaySeconds,
         lastSyncAt,
         lastSyncStatus,
+        analysisMode,
+        toneContext,
     ]);
 
     // ---- Wrapped setters (non-breaking; same signatures) ----
@@ -223,6 +291,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         _setLastSyncStatus(typeof status === "string" ? status : null);
     };
 
+    const setAnalysisMode = (value: "auto" | "cloud" | "local") => {
+        const v = String(value).toLowerCase();
+        if (v === "auto" || v === "cloud" || v === "local") {
+            _setAnalysisMode(v as "auto" | "cloud" | "local");
+        }
+    };
+
+    const setToneContext = (value: ToneContextPayload) => {
+        if (value && typeof value === "object") {
+            _setToneContext(value);
+        }
+    };
+
     return (
         <SettingsContext.Provider
             value={{
@@ -237,6 +318,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 cloudSyncAllowed,
                 refreshCloudSyncAllowed,
                 debugUIEnabled: DEBUG_UI_ENABLED,
+                analysisMode,
+                setAnalysisMode,
+                toneContext,
+                setToneContext,
             }}
         >
             {children}

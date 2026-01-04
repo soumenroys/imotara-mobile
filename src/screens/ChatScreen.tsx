@@ -297,7 +297,13 @@ export default function ChatScreen() {
         syncNow,
     } = store;
 
-    const { emotionInsightsEnabled, lastSyncAt, lastSyncStatus } = useSettings();
+    const {
+        emotionInsightsEnabled,
+        lastSyncAt,
+        lastSyncStatus,
+        analysisMode,
+        toneContext,
+    } = useSettings();
 
     const scrollViewRef = useRef<ScrollView | null>(null);
 
@@ -756,7 +762,14 @@ export default function ChatScreen() {
                         return;
                     }
 
-                    const remote = await callImotaraAI(trimmed);
+                    const remote =
+                        analysisMode === "local"
+                            ? { ok: false, replyText: "" }
+                            : await callImotaraAI(trimmed, {
+                                toneContext: toneContext?.companion?.enabled
+                                    ? toneContext
+                                    : undefined,
+                            });
 
                     let replyText: string;
                     let moodHint: string | undefined;

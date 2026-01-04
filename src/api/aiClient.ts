@@ -21,19 +21,83 @@ function debugWarn(...args: any[]) {
     if (DEBUG_UI_ENABLED) console.warn(...args);
 }
 
-export async function callImotaraAI(message: string): Promise<AnalyzeResponse> {
+// Keep this local to mobile; mirrors server payload structure (tone only)
+export type ToneAgeRange =
+    | "prefer_not"
+    | "under_13"
+    | "13_17"
+    | "18_24"
+    | "25_34"
+    | "35_44"
+    | "45_54"
+    | "55_64"
+    | "65_plus";
+
+export type ToneGender =
+    | "prefer_not"
+    | "female"
+    | "male"
+    | "nonbinary"
+    | "other";
+
+// Mirrors web “Relationship vibe”
+export type ToneRelationship =
+    | "prefer_not"
+    | "mentor"
+    | "elder"
+    | "friend"
+    | "coach"
+    | "sibling"
+    | "junior_buddy"
+    | "parent_like"
+    | "partner_like";
+
+export type ToneContextPayload = {
+    user?: {
+        name?: string;
+        ageRange?: ToneAgeRange;
+        gender?: ToneGender;
+        relationship?: ToneRelationship;
+    };
+    companion?: {
+        enabled?: boolean;
+        name?: string;
+        ageRange?: ToneAgeRange;
+        gender?: ToneGender;
+        relationship?: ToneRelationship;
+    };
+};
+
+type CallAIOptions = {
+    // Optional tone guidance for the remote AI (server supports this)
+    toneContext?: ToneContextPayload;
+};
+
+export async function callImotaraAI(
+    message: string,
+    opts?: CallAIOptions
+): Promise<AnalyzeResponse> {
     try {
+        const toneContext = opts?.toneContext;
+
         const res = await fetch(`${IMOTARA_API_BASE_URL}/api/analyze`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                // Backward compatible:
+                // Backward compatible legacy fields:
                 message,
-                // Forward compatible (many analyzers expect a list):
                 messages: [{ from: "user", text: message }],
                 source: "mobile-app",
+
+                // ✅ New server contract (preferred)
+                inputs: [
+                    { id: "m1", text: message, createdAt: Date.now() },
+                ],
+
+                // ✅ Optional tone guidance (tone only)
+                ...(toneContext ? { toneContext } : {}),
             }),
         });
 
