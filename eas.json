@@ -2,7 +2,6 @@
     "cli": {
         "version": ">= 10.0.0"
     },
-    "projectRoot": ".",
     "build": {
         "development": {
             "developmentClient": true,
