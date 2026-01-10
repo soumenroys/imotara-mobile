@@ -1,0 +1,32 @@
+# Keep EAS upload clean; do NOT exclude package.json / app.json / eas.json
+
+# node / caches
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.DS_Store
+
+# Expo / bundler
+.expo
+dist
+web-build
+
+# native build outputs (generated)
+android
+ios
+
+# local env / secrets
+.env
+.env.*
+*.pem
+*.p8
+*.p12
+*.key
+*.jks
+*.mobileprovision
+
+# misc artifacts
+*.pdf
+*.zip
