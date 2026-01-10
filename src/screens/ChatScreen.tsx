@@ -420,7 +420,7 @@ export default function ChatScreen() {
     }, [history]);
 
     const syncHint = useMemo(() => {
-        if (!lastSyncAt) return "History is currently only on this device.";
+        if (!lastSyncAt) return "Some messages are stored locally until cloud sync is enabled.";
 
         const lower = (lastSyncStatus || "").toLowerCase();
         if (lower.includes("failed") || lower.includes("error")) {
@@ -733,57 +733,32 @@ export default function ChatScreen() {
         typingTimeoutRef.current = setTimeout(() => {
             (async () => {
                 try {
-                    if (!emotionInsightsEnabled) {
-                        const local = generateLocalBotResponse(trimmed, false);
+                    const wantsCloud = analysisMode !== "local";
+                    const wantsInsights = emotionInsightsEnabled;
 
-                        const botTimestamp = Date.now();
-                        const botMessage: ChatMessage = {
-                            id: `b-${botTimestamp}`,
-                            from: "bot",
-                            text: local.replyText,
-                            timestamp: botTimestamp,
-                            isSynced: false,
-                            source: "local",
-                        };
-
-                        addToHistory({
-                            id: botMessage.id,
-                            text: botMessage.text,
-                            from: "bot",
-                            timestamp: botMessage.timestamp,
-                            isSynced: false,
-                        });
-
-                        if (!mountedRef.current) return;
-
-                        setTypingStatus("responding");
-                        setMessages((prev) => [...prev, botMessage]);
-                        smoothScrollToBottom(scrollViewRef);
-                        return;
-                    }
-
-                    const remote =
-                        analysisMode === "local"
-                            ? { ok: false, replyText: "" }
-                            : await callImotaraAI(trimmed, {
-                                toneContext: toneContext?.companion?.enabled
-                                    ? toneContext
-                                    : undefined,
-                            });
+                    // 1) Try cloud if allowed by Analysis Mode
+                    const remote = wantsCloud
+                        ? await callImotaraAI(trimmed, {
+                            toneContext: toneContext?.companion?.enabled ? toneContext : undefined,
+                        })
+                        : { ok: false, replyText: "" };
 
                     let replyText: string;
                     let moodHint: string | undefined;
-                    let source: ChatMessageSource = "cloud";
+                    let source: ChatMessageSource = "local";
 
+                    // 2) If cloud succeeded, respect it
                     if (remote.ok && remote.replyText.trim().length > 0) {
                         replyText = remote.replyText;
                         source = "cloud";
-                        // keep preview mood hint behavior exactly as before
-                        moodHint = getLocalMoodHint(trimmed);
+
+                        // Only show mood/insight hint if Emotion Insights is enabled
+                        moodHint = wantsInsights ? getLocalMoodHint(trimmed) : undefined;
                     } else {
-                        const local = generateLocalBotResponse(trimmed, true);
-                        replyText = local.replyText + networkNote;
-                        moodHint = local.moodHint;
+                        // 3) Otherwise fallback to local
+                        const local = generateLocalBotResponse(trimmed, wantsInsights);
+                        replyText = local.replyText + (wantsCloud ? networkNote : "");
+                        moodHint = wantsInsights ? local.moodHint : undefined;
                         source = "local";
                     }
 
@@ -804,6 +779,7 @@ export default function ChatScreen() {
                         from: "bot",
                         timestamp: botMessage.timestamp,
                         isSynced: false,
+                        source: botMessage.source,
                     });
 
                     if (!mountedRef.current) return;
@@ -814,12 +790,12 @@ export default function ChatScreen() {
                 } catch (error) {
                     console.warn("Imotara mobile AI error:", error);
 
-                    const local = generateLocalBotResponse(
-                        trimmed,
-                        emotionInsightsEnabled
-                    );
+                    const wantsCloud = analysisMode !== "local";
+                    const wantsInsights = emotionInsightsEnabled;
 
-                    const replyWithNote = emotionInsightsEnabled
+                    const local = generateLocalBotResponse(trimmed, wantsInsights);
+
+                    const replyWithNote = wantsCloud
                         ? local.replyText + networkNote
                         : local.replyText;
 
@@ -829,7 +805,7 @@ export default function ChatScreen() {
                         from: "bot",
                         text: replyWithNote,
                         timestamp: botTimestamp,
-                        moodHint: local.moodHint,
+                        moodHint: wantsInsights ? local.moodHint : undefined,
                         isSynced: false,
                         source: "local",
                     };
@@ -840,6 +816,7 @@ export default function ChatScreen() {
                         from: "bot",
                         timestamp: botMessage.timestamp,
                         isSynced: false,
+                        source: botMessage.source,
                     });
 
                     if (!mountedRef.current) return;
@@ -847,7 +824,8 @@ export default function ChatScreen() {
                     setTypingStatus("responding");
                     setMessages((prev) => [...prev, botMessage]);
                     smoothScrollToBottom(scrollViewRef);
-                } finally {
+                }
+                finally {
                     if (!mountedRef.current) return;
 
                     setIsTyping(false);
@@ -873,6 +851,7 @@ export default function ChatScreen() {
                 text: h.text,
                 timestamp: h.timestamp,
                 isSynced: h.isSynced,
+                source: h.source,
             }));
 
             setMessages(hydrated);
@@ -969,17 +948,28 @@ export default function ChatScreen() {
         } else {
             const lower = (lastSyncStatus || "").toLowerCase();
             const hasSyncError = lower.includes("failed") || lower.includes("error");
+            const isCloudGenerated = message.source === "cloud";
 
             if (hasSyncError) {
                 bubbleBorderColor = "#f97373";
-                statusLabel = "Sync issue · on this device only";
+                statusLabel = isCloudGenerated
+                    ? "Sync issue · cloud reply (not saved)"
+                    : "Sync issue · on this device only";
                 statusBg = "rgba(248, 113, 113, 0.24)";
                 statusTextColor = "#fecaca";
             } else {
-                bubbleBorderColor = "#fca5a5";
-                statusLabel = "On this device only";
-                statusBg = "rgba(248, 113, 113, 0.18)";
-                statusTextColor = "#fecaca";
+                // Not yet synced: show a truthful label based on where the reply came from
+                if (isCloudGenerated) {
+                    bubbleBorderColor = "rgba(56, 189, 248, 0.55)";
+                    statusLabel = "Imotara Cloud (not saved)";
+                    statusBg = "rgba(56, 189, 248, 0.14)";
+                    statusTextColor = colors.textPrimary;
+                } else {
+                    bubbleBorderColor = "#fca5a5";
+                    statusLabel = "On this device only";
+                    statusBg = "rgba(248, 113, 113, 0.18)";
+                    statusTextColor = "#fecaca";
+                }
             }
         }
 
