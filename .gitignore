@@ -39,3 +39,15 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# --------------------------------------------------
+# Imotara: local artifacts & exports (safe to ignore)
+# --------------------------------------------------
+*.pdf
+
+# --------------------------------------------------
+# Imotara: credentials & service accounts (NEVER COMMIT)
+# --------------------------------------------------
+*.json
+imotara-play-*.json
+*.keystore
