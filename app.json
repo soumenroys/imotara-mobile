@@ -39,6 +39,9 @@
         "projectId": "d035812a-a728-4703-85a5-f8e957e233bf"
       }
     },
-    "owner": "soumenroys"
+    "owner": "soumenroys",
+    "plugins": [
+      "expo-font"
+    ]
   }
 }

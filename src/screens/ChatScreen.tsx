@@ -42,6 +42,11 @@ type ChatMessage = {
     // ✅ NEW: parity metadata (from /api/respond)
     reflectionSeed?: ReflectionSeed;
     followUp?: string;
+
+    // ✅ Debug/diagnostics metadata (optional; report-only)
+    meta?: {
+        compatibility?: any;
+    };
 };
 
 /** ---------- Color helpers (robust with hex/rgb/rgba) ---------- */
@@ -789,6 +794,7 @@ export default function ChatScreen() {
                     // ✅ NEW: parity metadata (optional; safe if aiClient doesn't return it yet)
                     let reflectionSeed: ReflectionSeed | undefined;
                     let followUp: string | undefined;
+                    let compatibility: any | undefined;
 
                     // 2) If cloud succeeded, respect it
                     if (remote.ok && String(remote.replyText || "").trim().length > 0) {
@@ -797,6 +803,8 @@ export default function ChatScreen() {
 
                         reflectionSeed = remote.reflectionSeed;
                         followUp = typeof remote.followUp === "string" ? remote.followUp : undefined;
+
+                        compatibility = remote?.meta?.compatibility ?? remote?.response?.meta?.compatibility;
 
                         // Only show mood/insight hint if Emotion Insights is enabled
                         moodHint = wantsInsights ? getLocalMoodHint(trimmed) : undefined;
@@ -821,6 +829,9 @@ export default function ChatScreen() {
                         // ✅ NEW parity metadata
                         reflectionSeed,
                         followUp,
+
+                        // Debug-only: attach compatibility meta if present
+                        ...(compatibility ? { meta: { compatibility } } : {}),
                     };
 
                     addToHistory({
@@ -1142,6 +1153,42 @@ export default function ChatScreen() {
                 >
                     {new Date(message.timestamp).toLocaleTimeString()}
                 </Text>
+
+                {/* Compatibility badge (DEBUG only) */}
+                {DEBUG_UI_ENABLED && message.meta?.compatibility && (
+                    <View
+                        style={{
+                            alignSelf: "flex-start",
+                            marginTop: 4,
+                            paddingHorizontal: 8,
+                            paddingVertical: 2,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor:
+                                message.meta.compatibility.ok === true
+                                    ? "rgba(34,197,94,0.6)"
+                                    : "rgba(248,113,113,0.6)",
+                            backgroundColor:
+                                message.meta.compatibility.ok === true
+                                    ? "rgba(34,197,94,0.15)"
+                                    : "rgba(248,113,113,0.15)",
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 10,
+                                fontWeight: "500",
+                                color: colors.textPrimary,
+                            }}
+                        >
+                            {typeof message.meta.compatibility.summary === "string"
+                                ? message.meta.compatibility.summary
+                                : message.meta.compatibility.ok === true
+                                    ? "OK"
+                                    : "Issues"}
+                        </Text>
+                    </View>
+                )}
 
                 <View
                     style={{
@@ -1605,6 +1652,80 @@ export default function ChatScreen() {
                             </Text>
                         </View>
                     )}
+
+                    {/* Compatibility Gate (report-only) */}
+                    {DEBUG_UI_ENABLED && (() => {
+                        // Find the most recent message (typically bot) that carries compatibility meta
+                        let compat: any = null;
+
+                        for (let i = messages.length - 1; i >= 0; i--) {
+                            const c = messages[i]?.meta?.compatibility;
+                            if (c) {
+                                compat = c;
+                                break;
+                            }
+                        }
+
+                        if (!compat) return null;
+
+                        const summary =
+                            typeof compat.summary === "string"
+                                ? compat.summary
+                                : compat.ok === true
+                                    ? "OK"
+                                    : "NOT OK";
+
+                        return (
+                            <View
+                                style={{
+                                    marginBottom: 12,
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 10,
+                                    borderRadius: 12,
+                                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                    borderWidth: 1,
+                                    borderColor: colors.border,
+                                }}
+                            >
+                                <View
+                                    style={{
+                                        flexDirection: "row",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontSize: 11,
+                                            fontWeight: "600",
+                                            color: colors.textSecondary,
+                                        }}
+                                    >
+                                        Compatibility Gate
+                                    </Text>
+
+                                    <Text
+                                        style={{
+                                            fontSize: 11,
+                                            color: colors.textPrimary,
+                                        }}
+                                    >
+                                        {summary}
+                                    </Text>
+                                </View>
+
+                                <Text
+                                    style={{
+                                        marginTop: 8,
+                                        fontSize: 11,
+                                        color: colors.textSecondary,
+                                    }}
+                                >
+                                    {JSON.stringify(compat, null, 2)}
+                                </Text>
+                            </View>
+                        );
+                    })()}
 
                     {messages.map((message, index) => renderBubble(message, index))}
 
