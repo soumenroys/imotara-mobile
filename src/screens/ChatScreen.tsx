@@ -22,7 +22,8 @@ import { DEBUG_UI_ENABLED } from "../config/debug";
 
 // NEW: lifecycle hook (additive)
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
-
+import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
+import type { ReflectionSeed } from "../lib/reflectionSeedContract";
 type ChatMessageSource = "cloud" | "local";
 
 // Typing animation states for Imotara mobile chat
@@ -37,6 +38,10 @@ type ChatMessage = {
     isSynced?: boolean;
     source?: ChatMessageSource;
     isPending?: boolean; // for “Syncing…” state
+
+    // ✅ NEW: parity metadata (from /api/respond)
+    reflectionSeed?: ReflectionSeed;
+    followUp?: string;
 };
 
 /** ---------- Color helpers (robust with hex/rgb/rgba) ---------- */
@@ -737,20 +742,61 @@ export default function ChatScreen() {
                     const wantsInsights = emotionInsightsEnabled;
 
                     // 1) Try cloud if allowed by Analysis Mode
-                    const remote = wantsCloud
+                    const remote: any = wantsCloud
                         ? await callImotaraAI(trimmed, {
-                            toneContext: toneContext?.companion?.enabled ? toneContext : undefined,
+                            // ✅ always send toneContext if present (server can decide what to use)
+                            toneContext: toneContext ?? undefined,
+
+                            analysisMode: analysisMode,
+                            emotionInsightsEnabled: wantsInsights,
+
+                            // ✅ persona hints: prefer companion settings when enabled, else fall back to user settings
+                            settings: {
+                                relationshipTone:
+                                    (toneContext?.companion?.enabled
+                                        ? toneContext?.companion?.relationship
+                                        : undefined) ?? toneContext?.user?.relationship,
+
+                                ageTone:
+                                    (toneContext?.companion?.enabled
+                                        ? toneContext?.companion?.ageRange
+                                        : undefined) ?? toneContext?.user?.ageRange,
+
+                                genderTone:
+                                    (toneContext?.companion?.enabled
+                                        ? toneContext?.companion?.gender
+                                        : undefined) ?? toneContext?.user?.gender,
+                            },
+
+                            recentMessages: messages.slice(-6).map((m) => ({
+                                role: m.from === "user" ? "user" : "assistant",
+                                content: m.text,
+                            })),
                         })
                         : { ok: false, replyText: "" };
+
+                    console.log("[imotara] remote:", {
+                        ok: remote?.ok,
+                        replyText: remote?.replyText,
+                        followUp: remote?.followUp,
+                        reflectionSeed: remote?.reflectionSeed,
+                    });
 
                     let replyText: string;
                     let moodHint: string | undefined;
                     let source: ChatMessageSource = "local";
 
+                    // ✅ NEW: parity metadata (optional; safe if aiClient doesn't return it yet)
+                    let reflectionSeed: ReflectionSeed | undefined;
+                    let followUp: string | undefined;
+
                     // 2) If cloud succeeded, respect it
-                    if (remote.ok && remote.replyText.trim().length > 0) {
-                        replyText = remote.replyText;
+                    if (remote.ok && String(remote.replyText || "").trim().length > 0) {
+                        replyText = String(remote.replyText);
                         source = "cloud";
+
+                        reflectionSeed = remote.reflectionSeed;
+                        followUp = typeof remote.followUp === "string" ? remote.followUp : undefined;
 
                         // Only show mood/insight hint if Emotion Insights is enabled
                         moodHint = wantsInsights ? getLocalMoodHint(trimmed) : undefined;
@@ -771,6 +817,10 @@ export default function ChatScreen() {
                         moodHint,
                         isSynced: false,
                         source,
+
+                        // ✅ NEW parity metadata
+                        reflectionSeed,
+                        followUp,
                     };
 
                     addToHistory({
@@ -987,7 +1037,8 @@ export default function ChatScreen() {
                     style={{
                         fontSize: 12,
                         fontWeight: "600",
-                        color: colors.textSecondary,
+                        color: colors.textPrimary,
+                        opacity: 0.75,
                         marginBottom: 2,
                     }}
                 >
@@ -996,16 +1047,85 @@ export default function ChatScreen() {
                         : `Imotara${sourceIcon}${getMoodEmojiForHint(message.moodHint)}`}
                 </Text>
 
+                {!isUser ? (() => {
+                    const seed = getReflectionSeedCard({
+                        message: message.text,
+                        reflectionSeed: message.reflectionSeed,
+                    } as any);
+
+                    if (!seed) return null;
+
+                    return (
+                        <View
+                            style={{
+                                marginBottom: 8,
+                                paddingHorizontal: 10,
+                                paddingVertical: 8,
+                                borderRadius: 14,
+                                borderWidth: 1,
+                                borderColor: "rgba(255,255,255,0.12)",
+                                backgroundColor: "rgba(0,0,0,0.22)",
+                            }}
+                        >
+                            <View
+                                style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: 8,
+                                }}
+                            >
+                                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>
+                                    {seed.title}
+                                </Text>
+                                <View
+                                    style={{
+                                        paddingHorizontal: 8,
+                                        paddingVertical: 2,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: "rgba(255,255,255,0.12)",
+                                        backgroundColor: "rgba(255,255,255,0.06)",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 10, color: colors.textSecondary }}>
+                                        {seed.label}
+                                    </Text>
+                                </View>
+                            </View>
+
+                            <Text style={{ marginTop: 4, fontSize: 12, color: colors.textPrimary, opacity: 0.92 }}>
+                                {seed.prompt}
+                            </Text>
+                        </View>
+                    );
+                })() : null}
+
                 <Text style={{ fontSize: 14, color: colors.textPrimary }}>
                     {message.text}
                 </Text>
+
+                {/* ✅ NEW: render follow-up question (bot only) */}
+                {!isUser && typeof message.followUp === "string" && message.followUp.trim() ? (
+                    <Text
+                        style={{
+                            fontSize: 13,
+                            color: colors.textPrimary,
+                            marginTop: 8,
+                            opacity: 0.92,
+                        }}
+                    >
+                        {message.followUp.trim()}
+                    </Text>
+                ) : null}
 
                 {message.moodHint && (
                     <Text
                         style={{
                             fontSize: 11,
-                            color: colors.textSecondary,
+                            color: colors.textPrimary,
                             marginTop: 4,
+                            opacity: 0.9,
                         }}
                     >
                         {message.moodHint}
@@ -1017,6 +1137,7 @@ export default function ChatScreen() {
                         fontSize: 11,
                         color: colors.textSecondary,
                         marginTop: 4,
+                        opacity: 0.85,
                     }}
                 >
                     {new Date(message.timestamp).toLocaleTimeString()}
