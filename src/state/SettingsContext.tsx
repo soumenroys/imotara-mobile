@@ -60,14 +60,14 @@ type SettingsContextValue = {
     /**
      * Analysis mode for chat replies:
      * - auto: try cloud, fallback local
-     * - cloud: always call /api/analyze (fallback behavior handled in ChatScreen)
+     * - cloud: call /api/respond (user-facing parity endpoint)
      * - local: never call cloud (device-only)
      */
     analysisMode: "auto" | "cloud" | "local";
     setAnalysisMode: (value: "auto" | "cloud" | "local") => void;
 
     /**
-     * Optional tone guidance sent to /api/analyze for more humanized replies (tone only).
+     * Optional tone guidance sent to /api/respond for more humanized replies (tone only).
      * Mirrors server contract: toneContext?: ToneContextPayload
      */
     toneContext: ToneContextPayload;
