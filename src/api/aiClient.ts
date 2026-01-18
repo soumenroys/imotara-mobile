@@ -10,6 +10,11 @@ import { DEBUG_UI_ENABLED } from "../config/debug";
 export type AnalyzeResponse = {
     ok: boolean;
     replyText: string;
+
+    // ✅ NEW: parity metadata from /api/respond
+    reflectionSeed?: any;
+    followUp?: string;
+
     errorMessage?: string;
 };
 
@@ -71,6 +76,22 @@ export type ToneContextPayload = {
 type CallAIOptions = {
     // Optional tone guidance for the remote AI (server supports this)
     toneContext?: ToneContextPayload;
+
+    // ✅ NEW: allow mobile settings + light history to reach /api/respond
+    analysisMode?: "auto" | "cloud" | "local";
+    emotionInsightsEnabled?: boolean;
+
+    settings?: {
+        relationshipTone?: ToneRelationship;
+        ageTone?: ToneAgeRange;
+        genderTone?: ToneGender;
+    };
+
+    // lightweight last-N messages
+    recentMessages?: Array<{
+        role: "user" | "assistant";
+        content: string;
+    }>;
 };
 
 export async function callImotaraAI(
@@ -80,24 +101,33 @@ export async function callImotaraAI(
     try {
         const toneContext = opts?.toneContext;
 
-        const res = await fetch(`${IMOTARA_API_BASE_URL}/api/analyze`, {
+        const res = await fetch(`${IMOTARA_API_BASE_URL}/api/respond`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                // Backward compatible legacy fields:
                 message,
-                messages: [{ from: "user", text: message }],
-                source: "mobile-app",
+                context: {
+                    source: "mobile",
+                    analysisMode: opts?.analysisMode,
+                    emotionInsightsEnabled: opts?.emotionInsightsEnabled,
 
-                // ✅ New server contract (preferred)
-                inputs: [
-                    { id: "m1", text: message, createdAt: Date.now() },
-                ],
+                    // tone-only guidance (existing)
+                    ...(toneContext ? { toneContext } : {}),
 
-                // ✅ Optional tone guidance (tone only)
-                ...(toneContext ? { toneContext } : {}),
+                    // soft persona hints (do NOT roleplay; just wording guidance)
+                    persona: opts?.settings
+                        ? {
+                            relationshipTone: opts.settings.relationshipTone,
+                            ageTone: opts.settings.ageTone,
+                            genderTone: opts.settings.genderTone,
+                        }
+                        : undefined,
+
+                    // last few messages for continuity
+                    recent: opts?.recentMessages ?? undefined,
+                },
             }),
         });
 
@@ -115,48 +145,16 @@ export async function callImotaraAI(
         debugLog("Imotara mobile AI raw response:", data);
 
         // 1) Try common "direct reply" fields first
-        let candidate: unknown =
-            data?.replyText ??
-            data?.reply_text ??
-            data?.text ??
-            data?.message ??
-            data?.content;
+        // ✅ /api/respond contract (strict):
+        // { message: string, reflectionSeed?: {...}, followUp?: string }
+        const replyText = String(data?.message ?? "").trim();
 
-        // 2) Nested "reply" object
-        if (!isNonEmptyString(candidate)) {
-            candidate =
-                data?.reply?.text ??
-                data?.reply?.content ??
-                data?.reply?.message;
-        }
-
-        // 3) OpenAI-style chat completions
-        if (!isNonEmptyString(candidate)) {
-            candidate =
-                data?.choices?.[0]?.message?.content ??
-                data?.choices?.[0]?.text;
-        }
-
-        // 4) Rich emotional reply from Imotara analysis JSON
-        let richFromAnalysis: string | null = null;
-        if (!isNonEmptyString(candidate)) {
-            richFromAnalysis = buildRichReplyFromAnalysis(data);
-        }
-
-        // 5) If the whole data is itself a string
-        if (!isNonEmptyString(candidate) && typeof data === "string") {
-            candidate = data;
-        }
-
-        // Decide final reply text
-        let replyText: string;
-        if (richFromAnalysis && richFromAnalysis.trim().length > 0) {
-            replyText = richFromAnalysis;
-        } else if (isNonEmptyString(candidate)) {
-            replyText = String(candidate);
-        } else {
-            // 6) Last resort: stringify the JSON so we see *something*
-            replyText = JSON.stringify(data);
+        if (!replyText) {
+            return {
+                ok: false,
+                replyText: "",
+                errorMessage: "Invalid /api/respond response: missing message",
+            };
         }
 
         if (!replyText.trim()) {
@@ -170,6 +168,10 @@ export async function callImotaraAI(
         return {
             ok: true,
             replyText,
+
+            // ✅ carry through parity fields if server provides them
+            reflectionSeed: data?.reflectionSeed,
+            followUp: typeof data?.followUp === "string" ? data.followUp : undefined,
         };
     } catch (error: any) {
         debugWarn("Imotara mobile AI fetch error:", error);
@@ -208,7 +210,7 @@ function buildRichReplyFromAnalysis(data: any): string | null {
     // More robust stub detection (covers slight punctuation / spacing differences)
     const isStubDetails = (s?: unknown) =>
         typeof s === "string" &&
-        s.toLowerCase().includes("remote analysis stub served by /api/analyze");
+        s.toLowerCase().includes("remote analysis stub served by /api/respond");
 
     const isStubReflection = (s?: unknown) => {
         if (typeof s !== "string") return false;
