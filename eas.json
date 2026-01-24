@@ -49,6 +49,13 @@
         }
     },
     "submit": {
+        "iosTestflight": {
+            "ios": {
+                "appleId": "roysoumen@icloud.com",
+                "ascAppId": "128384266",
+                "appleTeamId": "MY64TKZ69W"
+            }
+        },
         "production": {}
     }
 }
