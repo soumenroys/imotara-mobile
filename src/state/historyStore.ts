@@ -7,6 +7,11 @@ export type HistoryItem = {
     text: string;
     from: "user" | "bot";
     timestamp: number;
+    isSynced?: boolean;
+    source?: string;
+
+    // ✅ Baby Step 10.4.2 — persist/rehydrate emotion field
+    moodHint?: string;
 };
 
 let history: HistoryItem[] = [];

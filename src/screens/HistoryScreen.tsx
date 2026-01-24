@@ -249,6 +249,47 @@ export default function HistoryScreen() {
         ? new Date(effectiveLastSyncAt).toLocaleString()
         : null;
 
+    // --- Emotion summary (lightweight, non-diagnostic) ---
+    const moodSummary = React.useMemo(() => {
+        // Use ONLY user messages for mood inference (safer + avoids analyzing assistant text)
+        const userTexts = history
+            .filter((h: HistoryRecord) => h.from === "user")
+            .map((h: HistoryRecord) => h.text)
+            .filter(Boolean);
+
+        if (userTexts.length === 0) return null;
+
+        const counts: Record<string, number> = {};
+        for (const t of userTexts) {
+            const emoji = getMoodEmojiForText(t);
+            counts[emoji] = (counts[emoji] || 0) + 1;
+        }
+
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        const [dominantEmoji, dominantCount] = sorted[0] || [];
+        if (!dominantEmoji) return null;
+
+        const total = userTexts.length;
+        const ratio = total > 0 ? dominantCount / total : 0;
+
+        // Gentle note
+        let note = "";
+        if (ratio >= 0.6) {
+            note = "This shows up the most lately.";
+        } else if (ratio >= 0.4) {
+            note = "This shows up often lately.";
+        } else {
+            note = "Your recent mood looks mixed.";
+        }
+
+        return {
+            emoji: dominantEmoji,
+            label: getEmotionSectionLabel(dominantEmoji),
+            note,
+            total,
+        };
+    }, [history]);
+
     const unsyncedCount = React.useMemo(
         () => history.filter((h: HistoryRecord) => !h.isSynced).length,
         [history]
@@ -523,6 +564,51 @@ export default function HistoryScreen() {
                         animate
                     />
                 </View>
+
+                {moodSummary && (
+                    <View
+                        style={{
+                            marginBottom: 10,
+                            borderRadius: 16,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            backgroundColor: colors.surfaceSoft,
+                            padding: 12,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                                marginBottom: 4,
+                            }}
+                        >
+                            Quick mood summary
+                        </Text>
+
+                        <Text
+                            style={{
+                                fontSize: 14,
+                                fontWeight: "700",
+                                color: colors.textPrimary,
+                                marginBottom: 3,
+                            }}
+                        >
+                            {moodSummary.emoji} {moodSummary.label}
+                        </Text>
+
+                        <Text
+                            style={{
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                                lineHeight: 17,
+                            }}
+                        >
+                            {moodSummary.note} (Based on your last {moodSummary.total} message
+                            {moodSummary.total === 1 ? "" : "s"}.)
+                        </Text>
+                    </View>
+                )}
 
                 {formattedLastSync && (
                     <Text

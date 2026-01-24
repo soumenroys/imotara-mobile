@@ -801,8 +801,16 @@ export default function ChatScreen() {
                         replyText = String(remote.replyText);
                         source = "cloud";
 
-                        reflectionSeed = remote.reflectionSeed;
-                        followUp = typeof remote.followUp === "string" ? remote.followUp : undefined;
+                        reflectionSeed =
+                            (remote as any)?.reflectionSeed ??
+                            (remote as any)?.response?.reflectionSeed;
+
+                        followUp =
+                            typeof (remote as any)?.followUp === "string"
+                                ? (remote as any).followUp
+                                : typeof (remote as any)?.response?.followUp === "string"
+                                    ? (remote as any).response.followUp
+                                    : undefined;
 
                         compatibility = remote?.meta?.compatibility ?? remote?.response?.meta?.compatibility;
 
@@ -841,6 +849,9 @@ export default function ChatScreen() {
                         timestamp: botMessage.timestamp,
                         isSynced: false,
                         source: botMessage.source,
+
+                        // ✅ Baby Step 10.2 — persist emotion in history
+                        moodHint: botMessage.moodHint,
                     });
 
                     if (!mountedRef.current) return;
@@ -908,11 +919,14 @@ export default function ChatScreen() {
 
             const hydrated: ChatMessage[] = sorted.map((h: any) => ({
                 id: h.id,
-                from: h.from,
                 text: h.text,
+                from: h.from,
                 timestamp: h.timestamp,
-                isSynced: h.isSynced,
+                isSynced: !!h.isSynced,
                 source: h.source,
+
+                // ✅ Baby Step 10.4 — rehydrate emotion from persisted history
+                moodHint: h.moodHint,
             }));
 
             setMessages(hydrated);
@@ -1112,7 +1126,10 @@ export default function ChatScreen() {
                     );
                 })() : null}
 
-                <Text style={{ fontSize: 14, color: colors.textPrimary }}>
+                <Text
+                    style={{ fontSize: 14, color: colors.textPrimary }}
+                    selectable
+                >
                     {message.text}
                 </Text>
 
@@ -1151,7 +1168,7 @@ export default function ChatScreen() {
                         opacity: 0.85,
                     }}
                 >
-                    {new Date(message.timestamp).toLocaleTimeString()}
+                    {new Date(message.timestamp).toLocaleTimeString()} · {message.text.length} chars
                 </Text>
 
                 {/* Compatibility badge (DEBUG only) */}
@@ -1392,16 +1409,31 @@ export default function ChatScreen() {
                         </Text>
                     </TouchableOpacity>
 
-                    {canSyncNow && (
-                        <TouchableOpacity
-                            onPress={() => handleSyncNowForMessage(actionMessage)}
-                            style={{ paddingVertical: 10 }}
-                        >
-                            <Text style={{ fontSize: 14, color: colors.textPrimary }}>
-                                Sync now (try cloud)
+                    <TouchableOpacity
+                        onPress={
+                            canSyncNow ? () => handleSyncNowForMessage(actionMessage) : undefined
+                        }
+                        disabled={!canSyncNow}
+                        style={{
+                            paddingVertical: 10,
+                            opacity: canSyncNow ? 1 : 0.45,
+                        }}
+                    >
+                        <Text style={{ fontSize: 14, color: colors.textPrimary }}>
+                            Sync now (try cloud)
+                        </Text>
+                        {!canSyncNow && (
+                            <Text style={{ marginTop: 2, fontSize: 11, color: colors.textSecondary }}>
+                                {actionMessage.isPending
+                                    ? "Already syncing…"
+                                    : actionMessage.isSynced
+                                        ? "Already synced."
+                                        : isSyncing
+                                            ? "Sync in progress…"
+                                            : "Not available right now."}
                             </Text>
-                        </TouchableOpacity>
-                    )}
+                        )}
+                    </TouchableOpacity>
 
                     <TouchableOpacity
                         onPress={() => {

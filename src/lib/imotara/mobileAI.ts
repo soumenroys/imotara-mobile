@@ -10,9 +10,13 @@ export type MobileAIResult = {
     replyText: string;
     moodHint?: string;
     source: "remote" | "local-fallback";
+
+    // structured fields from backend
+    followUp?: string;
+    reflectionSeed?: any; // typed later, preserved now
 };
 
-/** lightweight local fallback (your existing behaviour) */
+/** lightweight local fallback (existing behaviour) */
 function localFallback(userText: string, insightsEnabled: boolean): MobileAIResult {
     const lower = userText.toLowerCase();
 
@@ -51,11 +55,29 @@ export async function runMobileAI(
     try {
         const remote = await callImotaraAI(userText);
 
-        if (remote.ok && remote.replyText.trim().length > 0) {
+        // ✅ Canonical response alignment (Baby Step 7.1)
+        // Backend returns: { message, followUp?, reflectionSeed?, meta? }
+        // Mobile expects: replyText
+        const message =
+            typeof (remote as any)?.message === "string"
+                ? String((remote as any).message)
+                : typeof (remote as any)?.replyText === "string"
+                    ? String((remote as any).replyText)
+                    : "";
+
+        if (remote.ok && message.trim().length > 0) {
             return {
-                replyText: remote.replyText,
-                moodHint: undefined, // remote engine moodHint integration comes later
+                replyText: message,
+                moodHint: undefined,
                 source: "remote",
+
+                followUp:
+                    typeof (remote as any)?.followUp === "string"
+                        ? (remote as any).followUp
+                        : undefined,
+
+                reflectionSeed:
+                    (remote as any)?.reflectionSeed ?? undefined,
             };
         }
 

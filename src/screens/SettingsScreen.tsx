@@ -277,8 +277,23 @@ export default function SettingsScreen() {
             return;
         }
 
-        if (busyRef.current.syncNow) return;
+        // ✅ Never silently no-op
+        if (busyRef.current.syncNow) {
+            if (mountedRef.current) {
+                setLastSyncStatus("Sync already running…");
+            }
+            Alert.alert("Sync", "Sync is already running. Please wait a moment.", [
+                { text: "OK" },
+            ]);
+            return;
+        }
+
         busyRef.current.syncNow = true;
+
+        // ✅ Immediate visible feedback
+        if (mountedRef.current) {
+            setLastSyncStatus("Syncing…");
+        }
 
         try {
             // Prefer deduped trigger if present; otherwise fall back to pushHistoryToRemote
@@ -290,7 +305,11 @@ export default function SettingsScreen() {
                         : pushHistoryToRemote;
 
             // 1) Push local history
-            const pushResult = await syncFn({ reason: "SettingsScreen: Sync Now" });
+            // Some implementations accept opts; some don't. Call safely.
+            const pushResult =
+                syncFn === pushHistoryToRemote && (syncFn as any).length === 0
+                    ? await (syncFn as any)()
+                    : await (syncFn as any)({ reason: "SettingsScreen: Sync Now" });
 
             // 2) Fetch latest remote history
             const remote = await fetchRemoteHistory();
@@ -367,8 +386,7 @@ export default function SettingsScreen() {
     };
 
     async function createDonationOrder(
-        amount: number,
-        currency: string
+        presetId: string
     ): Promise<NonNullable<DonationIntentRazorpayResponse["razorpay"]>> {
         const base = getApiBaseUrl();
         if (!base) {
@@ -381,8 +399,7 @@ export default function SettingsScreen() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                amount,
-                currency,
+                presetId,
                 purpose: "imotara_donation",
                 platform: "mobile",
             }),
@@ -407,6 +424,54 @@ export default function SettingsScreen() {
         return json.razorpay;
     }
 
+    // Prevent overlapping polling loops
+    const donationPollRef = React.useRef(false);
+
+    async function pollDonationConfirmation(paymentId?: string) {
+        if (!paymentId) return;
+
+        const base = getApiBaseUrl();
+        if (!base) return;
+
+        if (donationPollRef.current) return;
+        donationPollRef.current = true;
+
+        try {
+            for (let i = 0; i < 5; i++) {
+                try {
+                    const res = await fetch(`${base}/api/donations/recent?limit=10`, {
+                        method: "GET",
+                    });
+                    const json = (await res.json().catch(() => null)) as any;
+
+                    const donations =
+                        json?.donations || json?.items || json?.data || [];
+
+                    const found =
+                        Array.isArray(donations) &&
+                        donations.some(
+                            (d: any) =>
+                                d?.razorpay_payment_id === paymentId ||
+                                d?.razorpayPaymentId === paymentId
+                        );
+
+                    if (found && mountedRef.current) {
+                        setLastSyncStatus(
+                            "Donation confirmed. Thank you for supporting Imotara 🙏"
+                        );
+                        return;
+                    }
+                } catch {
+                    // ignore (chat/settings must never break)
+                }
+
+                await new Promise((r) => setTimeout(r, 1200));
+            }
+        } finally {
+            donationPollRef.current = false;
+        }
+    }
+
     const handleDonate = async (preset: { label: string; amount: number }) => {
 
         if (!RazorpayCheckout?.open) {
@@ -423,7 +488,7 @@ export default function SettingsScreen() {
 
         try {
             // 1) Create Razorpay order via backend (server holds secret)
-            const rz = await createDonationOrder(preset.amount, "inr");
+            const rz = await createDonationOrder(String((preset as any)?.id || ""));
 
             // 2) Open Razorpay checkout
             const options: any = {
@@ -445,18 +510,21 @@ export default function SettingsScreen() {
 
             const result = await RazorpayCheckout.open(options);
 
-            // success (result typically contains razorpay_payment_id, razorpay_order_id, razorpay_signature)
+            // Checkout completed on device; final confirmation is via server webhook.
             if (mountedRef.current) {
                 setLastSyncStatus(
-                    `Thank you for supporting Imotara 🇮🇳 (${preset.label})`
+                    `Checkout completed for ${preset.label}. Receipt will appear after confirmation.`
                 );
             }
 
             Alert.alert(
-                "Thank you 🙏",
-                `Donation initiated successfully: ${preset.label}\n\nPayment Id: ${result?.razorpay_payment_id || "—"}`,
+                "Thanks 🙏",
+                `Checkout completed for ${preset.label}.\n\nPayment Id: ${result?.razorpay_payment_id || "—"}\n\nNote: Receipt is confirmed by the server webhook and may take a moment to appear.`,
                 [{ text: "OK" }]
             );
+
+            // 🔁 Auto-confirm once webhook records the receipt
+            void pollDonationConfirmation(result?.razorpay_payment_id);
         } catch (e: any) {
             // Razorpay cancellation often returns a structured error
             const desc =
@@ -583,10 +651,10 @@ export default function SettingsScreen() {
                                 key={p.id}
                                 onPress={() =>
                                     handleDonate({
-                                        label:
-                                            p.label || formatINRFromPaise(p.amount),
+                                        id: p.id,
+                                        label: p.label || formatINRFromPaise(p.amount),
                                         amount: p.amount,
-                                    })
+                                    } as any)
                                 }
                                 disabled={busyRef.current.donate}
                                 style={{
