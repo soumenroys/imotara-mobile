@@ -51,3 +51,5 @@ yarn-error.*
 *.json
 imotara-play-*.json
 *.keystore
+
+.dev-mobile.log
