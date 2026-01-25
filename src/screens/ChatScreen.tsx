@@ -24,6 +24,8 @@ import { DEBUG_UI_ENABLED } from "../config/debug";
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import type { ReflectionSeed } from "../lib/reflectionSeedContract";
+import { buildLocalReply } from "../lib/ai/local/localReplyEngine";
+
 type ChatMessageSource = "cloud" | "local";
 
 // Typing animation states for Imotara mobile chat
@@ -232,23 +234,6 @@ function getLocalMoodHint(text: string): string {
     }
 
     return "I’m listening closely. However you’re feeling, it matters here.";
-}
-
-// Local-only response generator
-function generateLocalBotResponse(
-    userText: string,
-    insightsEnabled: boolean
-): { replyText: string; moodHint?: string } {
-    const replyText =
-        "I hear you. In the real Imotara app, I’ll respond with empathy and emotional insight. " +
-        "For now, this is a local-only mobile preview.";
-
-    if (!insightsEnabled) return { replyText };
-
-    return {
-        replyText,
-        moodHint: getLocalMoodHint(userText),
-    };
 }
 
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
@@ -817,11 +802,16 @@ export default function ChatScreen() {
                         // Only show mood/insight hint if Emotion Insights is enabled
                         moodHint = wantsInsights ? getLocalMoodHint(trimmed) : undefined;
                     } else {
-                        // 3) Otherwise fallback to local
-                        const local = generateLocalBotResponse(trimmed, wantsInsights);
-                        replyText = local.replyText + (wantsCloud ? networkNote : "");
-                        moodHint = wantsInsights ? local.moodHint : undefined;
+                        // 3) Otherwise fallback to NEW local reply engine
+                        const local = buildLocalReply(trimmed, toneContext);
+
+                        replyText = local.message + (wantsCloud ? networkNote : "");
+                        moodHint = wantsInsights ? getLocalMoodHint(trimmed) : undefined;
                         source = "local";
+
+                        reflectionSeed = local.reflectionSeed
+                            ? { ...local.reflectionSeed, title: local.reflectionSeed.title ?? "" }
+                            : undefined;
                     }
 
                     const botTimestamp = Date.now();
@@ -865,11 +855,11 @@ export default function ChatScreen() {
                     const wantsCloud = analysisMode !== "local";
                     const wantsInsights = emotionInsightsEnabled;
 
-                    const local = generateLocalBotResponse(trimmed, wantsInsights);
+                    const local = buildLocalReply(trimmed, toneContext);
 
                     const replyWithNote = wantsCloud
-                        ? local.replyText + networkNote
-                        : local.replyText;
+                        ? local.message + networkNote
+                        : local.message;
 
                     const botTimestamp = Date.now();
                     const botMessage: ChatMessage = {
@@ -877,7 +867,7 @@ export default function ChatScreen() {
                         from: "bot",
                         text: replyWithNote,
                         timestamp: botTimestamp,
-                        moodHint: wantsInsights ? local.moodHint : undefined,
+                        moodHint: wantsInsights ? getLocalMoodHint(trimmed) : undefined,
                         isSynced: false,
                         source: "local",
                     };
