@@ -19,6 +19,10 @@ type SettingsContextValue = {
     emotionInsightsEnabled: boolean;
     setEmotionInsightsEnabled: (value: boolean) => void;
 
+    // Phase 2.4: History list preference (UI-only)
+    showAssistantRepliesInHistory: boolean;
+    setShowAssistantRepliesInHistory: (value: boolean) => void;
+
     // Last known sync info (used for UI hints)
     lastSyncAt: number | null;
     lastSyncStatus: string | null;
@@ -110,10 +114,56 @@ function isValidTier(v: unknown): v is LicenseTier {
     );
 }
 
+function normalizeToneContext(value: ToneContextPayload): ToneContextPayload {
+    const base: ToneContextPayload = {
+        user: { name: "" },
+        companion: {
+            enabled: false,
+            name: "Imotara",
+            relationship: "friend",
+            ageTone: undefined,
+            gender: undefined,
+        },
+    };
+
+    const v: any = value && typeof value === "object" ? value : {};
+
+    // Soft-merge into defaults (keeps API-safe shape)
+    const merged: any = {
+        ...base,
+        ...v,
+        user: { ...(base as any).user, ...(v.user || {}) },
+        companion: { ...(base as any).companion, ...(v.companion || {}) },
+    };
+
+    const c: any = merged.companion;
+
+    if (c && typeof c === "object") {
+        // ✅ Accept legacy keys from older builds (backward compatible)
+        if (c.gender == null && c.genderTone != null) c.gender = c.genderTone;
+        if (c.relationship == null && c.relationshipTone != null)
+            c.relationship = c.relationshipTone;
+
+        // ✅ Keep parity if one of them exists (server may log/use both)
+        if (c.ageTone == null && c.ageRange != null) c.ageTone = c.ageRange;
+        if (c.ageRange == null && c.ageTone != null) c.ageRange = c.ageTone;
+
+        // ✅ Normalize companion name when enabled
+        const enabled = !!c.enabled;
+        const name = typeof c.name === "string" ? c.name.trim() : "";
+        if (enabled && !name) c.name = "Imotara";
+    }
+
+    return merged as ToneContextPayload;
+}
+
 export function SettingsProvider({ children }: { children: ReactNode }) {
     // Keep your original defaults (non-breaking)
     const [emotionInsightsEnabled, _setEmotionInsightsEnabled] = useState(true);
 
+    // Phase 2.4: History list preference (default: hide assistant replies)
+    const [showAssistantRepliesInHistory, _setShowAssistantRepliesInHistory] =
+        useState(false);
     const [lastSyncAt, _setLastSyncAt] = useState<number | null>(null);
     const [lastSyncStatus, _setLastSyncStatus] = useState<string | null>(null);
 
@@ -128,17 +178,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     // ✅ New: tone context guidance (tone only; safe defaults)
     const [toneContext, _setToneContext] = useState<ToneContextPayload>({
-        user: {
-            name: "",
-            ageRange: "prefer_not",
-            gender: "prefer_not",
-        },
+        user: { name: "" },
         companion: {
             enabled: false,
-            name: "",
-            ageRange: "prefer_not",
-            gender: "prefer_not",
-            relationship: "prefer_not",
+            name: "Imotara",
+            relationship: "friend",
+            // ✅ undefined means “prefer not to say” (TS-safe, API-safe)
+            ageTone: undefined,
+            // ✅ payload uses `gender`, not `genderTone`
+            gender: undefined,
         },
     });
 
@@ -153,13 +201,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             const tier: LicenseTier = isValidTier(rawTier) ? rawTier : "FREE";
             const g = gate("CLOUD_SYNC", tier);
             setCloudSyncAllowed(g.enabled);
+
+
         } catch (e) {
             // Safe fallback: treat as FREE
             setCloudSyncAllowed(false);
+
+
             if (DEBUG_UI_ENABLED)
                 console.warn("License gate refresh failed:", e);
         }
     };
+
 
     // ---- Hydrate once ----
     useEffect(() => {
@@ -184,6 +237,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             );
                         }
 
+                        if ("showAssistantRepliesInHistory" in parsed) {
+                            _setShowAssistantRepliesInHistory(
+                                safeBool((parsed as any).showAssistantRepliesInHistory, false)
+                            );
+                        }
+
                         if ("autoSyncDelaySeconds" in parsed) {
                             _setAutoSyncDelaySeconds(
                                 clampDelaySeconds(parsed.autoSyncDelaySeconds, 8)
@@ -198,19 +257,42 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             }
                         }
 
-                        // Restore tone context (soft-merge into defaults)
+                        // Restore tone context (soft-merge into defaults + normalize)
                         if ("toneContext" in parsed) {
                             const v = (parsed as any).toneContext;
                             if (v && typeof v === "object") {
-                                _setToneContext((prev) => ({
-                                    ...prev,
-                                    ...v,
-                                    user: { ...(prev.user || {}), ...(v.user || {}) },
-                                    companion: {
-                                        ...(prev.companion || {}),
-                                        ...(v.companion || {}),
-                                    },
-                                }));
+                                _setToneContext((prev) => {
+                                    const merged: ToneContextPayload = {
+                                        ...prev,
+                                        ...v,
+                                        user: { ...(prev.user || {}), ...(v.user || {}) },
+                                        companion: {
+                                            ...(prev.companion || {}),
+                                            ...(v.companion || {}),
+                                        },
+                                    };
+
+                                    // ✅ Normalize companion name when enabled (prevents empty name from old storage)
+                                    if (
+                                        merged.companion &&
+                                        typeof merged.companion === "object" &&
+                                        merged.companion.enabled
+                                    ) {
+                                        const name =
+                                            typeof merged.companion.name === "string"
+                                                ? merged.companion.name.trim()
+                                                : "";
+
+                                        if (!name) {
+                                            merged.companion = {
+                                                ...merged.companion,
+                                                name: "Imotara",
+                                            };
+                                        }
+                                    }
+
+                                    return merged;
+                                });
                             }
                         }
 
@@ -229,7 +311,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 // 2) License tier → cloud sync gate
                 const tier: LicenseTier = isValidTier(rawTier) ? rawTier : "FREE";
                 const g = gate("CLOUD_SYNC", tier);
-                if (alive) setCloudSyncAllowed(g.enabled);
+                if (alive) {
+                    setCloudSyncAllowed(g.enabled);
+
+                }
+
             } catch (e) {
                 // Non-fatal; keep defaults
                 if (DEBUG_UI_ENABLED) console.warn("Settings hydrate failed:", e);
@@ -252,6 +338,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
         const payload = {
             emotionInsightsEnabled,
+            showAssistantRepliesInHistory,
             autoSyncDelaySeconds,
             lastSyncAt,
             lastSyncStatus,
@@ -267,6 +354,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }, [
         hydrated,
         emotionInsightsEnabled,
+        showAssistantRepliesInHistory,
         autoSyncDelaySeconds,
         lastSyncAt,
         lastSyncStatus,
@@ -277,6 +365,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // ---- Wrapped setters (non-breaking; same signatures) ----
     const setEmotionInsightsEnabled = (value: boolean) => {
         _setEmotionInsightsEnabled(!!value);
+    };
+
+    const setShowAssistantRepliesInHistory = (value: boolean) => {
+        _setShowAssistantRepliesInHistory(!!value);
     };
 
     const setAutoSyncDelaySeconds = (value: number) => {
@@ -298,10 +390,42 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const setToneContext = (value: ToneContextPayload) => {
-        if (value && typeof value === "object") {
-            _setToneContext(value);
+    // ✅ Normalize toneContext into the shape our cloud API expects
+    // - keeps backward compatibility with older stored keys (genderTone/ageTone)
+    // - prevents enabled companion with empty name
+    // - keeps both ageRange + ageTone in sync
+    const normalizeToneContext = (value: ToneContextPayload): ToneContextPayload => {
+        if (!value || typeof value !== "object") return value;
+
+        const next: ToneContextPayload = { ...value };
+
+        if (next.companion && typeof next.companion === "object") {
+            const c: any = { ...(next.companion as any) };
+
+            c.enabled = !!c.enabled;
+
+            const rawName = typeof c.name === "string" ? c.name.trim() : "";
+            if (c.enabled && !rawName) c.name = "Imotara";
+
+            // Back-compat: genderTone -> gender
+            if (!c.gender && c.genderTone) c.gender = c.genderTone;
+            if (c.gender && !c.genderTone) c.genderTone = c.gender;
+            // Cleanup junk key (we keep only `gender` in the outbound payload elsewhere)
+            if ("genderTone" in c) delete c.genderTone;
+
+            // Back-compat: ageTone <-> ageRange
+            if (!c.ageRange && c.ageTone) c.ageRange = c.ageTone;
+            if (!c.ageTone && c.ageRange) c.ageTone = c.ageRange;
+
+            next.companion = c;
         }
+
+        return next;
+    };
+
+    const setToneContext = (value: ToneContextPayload) => {
+        if (!value || typeof value !== "object") return;
+        _setToneContext(normalizeToneContext(value));
     };
 
     return (
@@ -309,6 +433,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             value={{
                 emotionInsightsEnabled,
                 setEmotionInsightsEnabled,
+                showAssistantRepliesInHistory,
+                setShowAssistantRepliesInHistory,
                 lastSyncAt,
                 lastSyncStatus,
                 setLastSyncAt,

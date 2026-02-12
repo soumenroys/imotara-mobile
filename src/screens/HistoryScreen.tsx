@@ -91,6 +91,7 @@ function getMoodEmojiForText(text: string): string {
     return "⚪️";
 }
 
+
 function getEmotionSectionLabel(emoji: string): string {
     switch (emoji) {
         case "💙":
@@ -103,11 +104,14 @@ function getEmotionSectionLabel(emoji: string): string {
             return "Stuck / Confused moments";
         case "💚":
             return "Hopeful moments";
+        case "💜":
+            return "Happy / Joyful moments";
         case "⚪️":
         default:
             return "Neutral / Mixed moments";
     }
 }
+
 
 function getMoodTintForTextBackground(text: string): string {
     const emoji = getMoodEmojiForText(text);
@@ -146,6 +150,55 @@ function getMoodHaloColor(text: string): string {
             return "rgba(148, 163, 184, 0.12)";
     }
 }
+
+function getMoodEmojiForHistoryItem(item: HistoryRecord): string | null {
+    // ✅ Prefer persisted emotion first (new rows),
+    // then legacy moodHint.emotion,
+    // then moodHint.primary (most reliable fallback for older/local rows)
+    const primaryEmotion = (item as any)?.emotion;
+    const hintEmotion = (item as any)?.moodHint?.emotion;
+    const hintPrimary = (item as any)?.moodHint?.primary;
+
+    const emotionCandidate =
+        typeof primaryEmotion === "string" && primaryEmotion.trim()
+            ? primaryEmotion
+            : typeof hintEmotion === "string" && hintEmotion.trim()
+                ? hintEmotion
+                : typeof hintPrimary === "string" && hintPrimary.trim()
+                    ? hintPrimary
+                    : "";
+
+
+    if (emotionCandidate) {
+        const e = emotionCandidate.trim().toLowerCase();
+
+        // Map stored emotion → EXISTING mood emoji system used across HistoryScreen
+        if (e === "joy" || e === "happy") return "💜";
+        if (e === "sadness" || e === "sad") return "💙";
+
+        // ✅ Treat "stressed" as the same bucket as fear/anxiety
+        if (e === "stressed") return "💛";
+        if (e === "fear" || e === "anxiety" || e === "anxious") return "💛";
+
+        if (e === "anger" || e === "angry") return "❤️";
+        if (e === "hope" || e === "hopeful") return "💚";
+        if (e === "confused") return "🟣";
+        if (e === "neutral") return "⚪️";
+
+        // Unknown-but-present emotion: keep neutral-safe (don’t re-guess from text)
+        return "⚪️";
+
+
+    }
+
+    // Legacy fallback (older rows): infer from text (includes emoji-only)
+    const t = (item as any)?.text;
+    if (typeof t === "string" && t.trim()) return getMoodEmojiForText(t);
+
+    return null;
+}
+
+
 
 function getBaseTextForMood(items: HistoryRecord[], index: number): string {
     const item = items[index];
@@ -215,7 +268,13 @@ export default function HistoryScreen() {
     const cloudGateReason =
         !cloudGate.enabled ? cloudGate.reason : undefined;
 
-    const { lastSyncAt, lastSyncStatus, autoSyncDelaySeconds } = useSettings();
+    const {
+        lastSyncAt,
+        lastSyncStatus,
+        autoSyncDelaySeconds,
+        showAssistantRepliesInHistory,
+        setShowAssistantRepliesInHistory,
+    } = useSettings();
 
     const scrollRef = React.useRef<ScrollView>(null);
     const [showScrollToLatest, setShowScrollToLatest] = React.useState(false);
@@ -251,17 +310,34 @@ export default function HistoryScreen() {
 
     // --- Emotion summary (lightweight, non-diagnostic) ---
     const moodSummary = React.useMemo(() => {
-        // Use ONLY user messages for mood inference (safer + avoids analyzing assistant text)
-        const userTexts = history
-            .filter((h: HistoryRecord) => h.from === "user")
-            .map((h: HistoryRecord) => h.text)
-            .filter(Boolean);
+        // Phase 3.2: Prefer authoritative stored emotion; fall back to legacy moodHint.emotion
+        const userItems = history.filter((h: HistoryRecord) => {
+            if (h.from !== "user") return false;
 
-        if (userTexts.length === 0) return null;
+            const primaryEmotion = (h as any)?.emotion;
+            const hintEmotion = (h as any)?.moodHint?.emotion;
+
+            return (
+                (typeof primaryEmotion === "string" && primaryEmotion.trim()) ||
+                (typeof hintEmotion === "string" && hintEmotion.trim())
+            );
+        });
+
+
+        // Require a minimum sample so the summary isn’t misleading
+        if (userItems.length < 2) return null;
+
+        const emojis: string[] = [];
+        for (const item of userItems) {
+            const emoji = getMoodEmojiForHistoryItem(item);
+            if (emoji) emojis.push(emoji);
+        }
+
+
+        if (emojis.length === 0) return null;
 
         const counts: Record<string, number> = {};
-        for (const t of userTexts) {
-            const emoji = getMoodEmojiForText(t);
+        for (const emoji of emojis) {
             counts[emoji] = (counts[emoji] || 0) + 1;
         }
 
@@ -269,10 +345,9 @@ export default function HistoryScreen() {
         const [dominantEmoji, dominantCount] = sorted[0] || [];
         if (!dominantEmoji) return null;
 
-        const total = userTexts.length;
+        const total = emojis.length;
         const ratio = total > 0 ? dominantCount / total : 0;
 
-        // Gentle note
         let note = "";
         if (ratio >= 0.6) {
             note = "This shows up the most lately.";
@@ -289,6 +364,8 @@ export default function HistoryScreen() {
             total,
         };
     }, [history]);
+
+
 
     const unsyncedCount = React.useMemo(
         () => history.filter((h: HistoryRecord) => !h.isSynced).length,
@@ -461,10 +538,20 @@ export default function HistoryScreen() {
         } catch { }
     }, [navigation]);
 
+    // Phase 2.4: hide assistant replies by default (toggleable + persisted)
+    const showAssistantReplies = showAssistantRepliesInHistory;
+    const setShowAssistantReplies = setShowAssistantRepliesInHistory;
+
     const sortedHistory = React.useMemo(
         () => [...history].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)),
         [history]
     );
+
+    // List-only filter (does NOT affect stored history; just controls what is shown)
+    const visibleHistory = React.useMemo(() => {
+        if (showAssistantReplies) return sortedHistory;
+        return sortedHistory.filter((h: HistoryRecord) => h.from === "user");
+    }, [sortedHistory, showAssistantReplies]);
 
     const groupedHistory = React.useMemo(() => {
         const groups: { label: string; items: HistoryRecord[] }[] = [];
@@ -472,7 +559,7 @@ export default function HistoryScreen() {
         let currentLabel: string | null = null;
         let currentItems: HistoryRecord[] = [];
 
-        sortedHistory.forEach((item) => {
+        visibleHistory.forEach((item) => {
             const label = formatDateLabel(item.timestamp);
 
             if (label !== currentLabel) {
@@ -491,17 +578,19 @@ export default function HistoryScreen() {
         }
 
         return groups;
-    }, [sortedHistory]);
+    }, [visibleHistory]);
 
     const retryLabel = isSyncing
         ? "Syncing…"
         : !canCloudSync
             ? "Sync (Premium)"
-            : hasSyncError
-                ? "Try sync again now"
-                : "Sync now";
+            : !hasUnsyncedChanges && !hasSyncError
+                ? "Up to date"
+                : hasSyncError
+                    ? "Try sync again now"
+                    : "Sync now";
 
-    const isEmpty = sortedHistory.length === 0;
+    const isEmpty = visibleHistory.length === 0;
 
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -565,14 +654,14 @@ export default function HistoryScreen() {
                     />
                 </View>
 
-                {moodSummary && (
+                {moodSummary ? (
                     <View
                         style={{
                             marginBottom: 10,
                             borderRadius: 16,
                             borderWidth: 1,
                             borderColor: colors.border,
-                            backgroundColor: colors.surfaceSoft,
+                            backgroundColor: colors.surface,
                             padding: 12,
                         }}
                     >
@@ -601,14 +690,56 @@ export default function HistoryScreen() {
                             style={{
                                 fontSize: 12,
                                 color: colors.textSecondary,
-                                lineHeight: 17,
+                                lineHeight: 16,
                             }}
                         >
-                            {moodSummary.note} (Based on your last {moodSummary.total} message
-                            {moodSummary.total === 1 ? "" : "s"}.)
+                            {moodSummary.note} (Based on your last {moodSummary.total} messages.)
+                        </Text>
+                    </View>
+                ) : (
+                    <View
+                        style={{
+                            marginBottom: 10,
+                            borderRadius: 16,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            backgroundColor: colors.surface,
+                            padding: 12,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                                marginBottom: 4,
+                            }}
+                        >
+                            Quick mood summary
+                        </Text>
+
+                        <Text
+                            style={{
+                                fontSize: 14,
+                                fontWeight: "700",
+                                color: colors.textPrimary,
+                                marginBottom: 3,
+                            }}
+                        >
+                            ⚪️ Not enough recent mood data yet
+                        </Text>
+
+                        <Text
+                            style={{
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                                lineHeight: 16,
+                            }}
+                        >
+                            This appears after a few messages are captured with mood hints.
                         </Text>
                     </View>
                 )}
+
 
                 {formattedLastSync && (
                     <Text
@@ -655,7 +786,7 @@ export default function HistoryScreen() {
                         <AppButton
                             title={retryLabel}
                             onPress={handleRetrySync}
-                            disabled={isSyncing || !canCloudSync}
+                            disabled={isSyncing || !canCloudSync || (!hasUnsyncedChanges && !hasSyncError)}
                             variant="primary"
                             size="sm"
                             style={{
@@ -680,6 +811,31 @@ export default function HistoryScreen() {
                                 color: colors.textPrimary,
                             }}
                         />
+
+                        <TouchableOpacity
+                            onPress={() => setShowAssistantReplies(!showAssistantReplies)}
+                            style={{
+                                marginTop: 10,
+                                alignSelf: "flex-start",
+                                borderRadius: 999,
+                                paddingHorizontal: 12,
+                                paddingVertical: 8,
+                                borderWidth: 1,
+                                borderColor: "rgba(255,255,255,0.18)",
+                                backgroundColor: showAssistantReplies
+                                    ? "rgba(56, 189, 248, 0.14)"
+                                    : "rgba(148, 163, 184, 0.10)",
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    fontSize: 12,
+                                    color: colors.textPrimary,
+                                }}
+                            >
+                                {showAssistantReplies ? "Hide assistant replies" : "Show assistant replies"}
+                            </Text>
+                        </TouchableOpacity>
 
                         {!canCloudSync && (
                             <Text

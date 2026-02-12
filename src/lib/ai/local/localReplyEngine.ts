@@ -1,5 +1,21 @@
 // src/lib/ai/local/localReplyEngine.ts
-type ToneContext = any;
+import type { ToneContextPayload } from "../../../api/aiClient";
+import { BN_SAD_REGEX, HI_STRESS_REGEX, isConfusedText } from "../../emotion/keywordMaps";
+
+
+type ToneContext = ToneContextPayload;
+
+// ✅ DEV-only: handy local-mode prompt set for quick manual verification (safe if unused)
+export const LOCAL_DEV_TEST_PROMPTS: string[] = [
+    "I cannot focus today",
+    "I can’t focus today. Work is piling up.",
+    "I feel very sad today",
+    "I’m anxious and can’t calm down",
+    "I’m angry at everyone",
+    "😂😂😂",
+    "👍",
+];
+
 
 export type LocalReplyResult = {
     message: string;
@@ -24,22 +40,69 @@ function pick<T>(arr: T[], seed: number) {
     return arr[seed % arr.length];
 }
 
-function detectSignal(text: string): "sad" | "anxious" | "angry" | "tired" | "okay" {
-    const t = (text || "").toLowerCase();
-    if (/(sad|down|depressed|hopeless|cry)/.test(t)) return "sad";
-    if (/(anxious|worried|panic|overwhelm|stress)/.test(t)) return "anxious";
+function detectSignal(
+    text: string
+): "sad" | "anxious" | "angry" | "tired" | "confused" | "okay" {
+    const t = (text || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+
+
+    // ✅ Explicit neutral emoji-only acknowledgement (future-proof parity with web)
+    // Thumbs-up is acknowledgement, not an emotional state
+    if (/^[\s👍]+$/.test(text || "")) return "okay";
+
+    // ✅ Confusion / mental overload (parity with keywordMaps)
+    if (isConfusedText(text || "")) return "confused";
+
+
+    if (BN_SAD_REGEX.test(text || "") || /(sad|down|depressed|hopeless|cry)/.test(t)) return "sad";
+    if (HI_STRESS_REGEX.test(text || "") || /(anxious|worried|panic|overwhelm|stress)/.test(t)) return "anxious";
+
     if (/(angry|mad|furious|irritated|annoyed)/.test(t)) return "angry";
     if (/(tired|exhausted|drained|sleepy|burnt)/.test(t)) return "tired";
     return "okay";
 }
 
+
+
 export function buildLocalReply(message: string, toneContext?: ToneContext): LocalReplyResult {
     const seed = hash32(
-        `${message}::${toneContext?.companion?.relationship ?? ""}::${toneContext?.companion?.tone ?? ""}`
+        `${message}::${toneContext?.companion?.relationship ?? ""}::${(toneContext?.companion?.ageTone ?? toneContext?.companion?.ageRange) ?? ""}`
     );
     const signal = detectSignal(message);
 
-    const openers = [
+    const name = String(toneContext?.user?.name ?? "").trim();
+    const rel =
+        (toneContext?.companion?.enabled ? toneContext?.companion?.relationship : undefined) ??
+        toneContext?.user?.relationship ??
+        "prefer_not";
+
+    // Relationship-aware openers (preserves your existing tone, adds safe variety)
+    const friendOpeners = name
+        ? [
+            `Got you, ${name}.`,
+            `I’m here with you, ${name}.`,
+            `I hear you, ${name}.`,
+            `Okay — I’m with you, ${name}.`,
+        ]
+        : [`Got you.`, `I’m here with you.`, `I hear you.`, `Okay — I’m with you.`];
+
+    const mentorOpeners = name
+        ? [
+            `I’m listening, ${name}.`,
+            `Let’s slow this down, ${name}.`,
+            `We can take this one piece at a time, ${name}.`,
+        ]
+        : [`I’m listening.`, `Let’s slow this down.`, `We can take this one piece at a time.`];
+
+    const coachOpeners = name
+        ? [`Okay, ${name}.`, `Alright, ${name}.`, `Let’s focus, ${name}.`]
+        : [`Okay.`, `Alright.`, `Let’s focus.`];
+
+    // Keep your original openers as default fallback so we don’t lose any current behavior
+    const defaultOpeners = [
         `I’m here with you.`,
         `I hear you.`,
         `Thanks for telling me.`,
@@ -51,6 +114,15 @@ export function buildLocalReply(message: string, toneContext?: ToneContext): Loc
         `Okay. Let’s take this one piece at a time.`,
     ];
 
+    const openers =
+        rel === "friend"
+            ? friendOpeners
+            : rel === "mentor"
+                ? mentorOpeners
+                : rel === "coach"
+                    ? coachOpeners
+                    : defaultOpeners;
+
     const validations: Record<typeof signal, string[]> = {
         sad: [`That sounds heavy.`, `That can really hurt.`, `I’m sorry you’re carrying that.`, `That’s a lot to sit with.`],
         anxious: [
@@ -58,6 +130,12 @@ export function buildLocalReply(message: string, toneContext?: ToneContext): Loc
             `That kind of pressure can feel loud.`,
             `It makes sense you’d feel tense with that.`,
             `That overwhelm feeling is real.`,
+        ],
+        confused: [
+            `That sounds foggy and hard to hold in your head.`,
+            `It makes sense you’d feel scattered right now.`,
+            `That “can’t focus” feeling can be really frustrating.`,
+            `Okay — sounds like your thoughts are tangled.`,
         ],
         angry: [
             `That sounds frustrating.`,
@@ -73,6 +151,7 @@ export function buildLocalReply(message: string, toneContext?: ToneContext): Loc
             `Okay. What’s the main thing on your mind?`,
         ],
     };
+
 
     const reflectLines = [
         `When you say “${(message || "").trim().slice(0, 120)}${(message || "").length > 120 ? "…" : ""}”, what part feels strongest right now?`,

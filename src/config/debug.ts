@@ -66,7 +66,8 @@ const envOverride = parseBool(
  * 2. Dev mode default
  */
 export const DEBUG_UI_ENABLED: boolean =
-    typeof envOverride === "boolean" ? envOverride : __DEV__;
+    IS_PROD ? false : (typeof envOverride === "boolean" ? envOverride : __DEV__);
+
 
 /**
  * Optional helper for gated logging.

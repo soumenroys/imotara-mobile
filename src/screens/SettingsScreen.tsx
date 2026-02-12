@@ -130,7 +130,9 @@ export default function SettingsScreen() {
 
     // ✅ Cloud sync gate (soft gating)
     const cloudGate = gate("CLOUD_SYNC", licenseTier);
-    const canCloudSync = cloudGate.enabled;
+
+    // ✅ Keep real gating for production, but allow DEBUG builds to test sync reliability
+    const canCloudSync = cloudGate.enabled || DEBUG_UI_ENABLED;
 
     // ✅ TS-safe reason: only exists when enabled === false
     const cloudGateReason = !cloudGate.enabled ? cloudGate.reason : undefined;
@@ -888,11 +890,22 @@ export default function SettingsScreen() {
                             ] as const
                         ).map((opt) => {
                             const active = analysisMode === opt.id;
+                            const cloudLocked = opt.id === "cloud" && !canCloudSync;
 
                             return (
                                 <TouchableOpacity
                                     key={opt.id}
-                                    onPress={() => setAnalysisMode(opt.id)}
+                                    disabled={cloudLocked}
+                                    onPress={() => {
+                                        if (cloudLocked) {
+                                            Alert.alert(
+                                                "Cloud mode unavailable",
+                                                cloudGateReason || "Cloud mode is available with Premium."
+                                            );
+                                            return;
+                                        }
+                                        setAnalysisMode(opt.id);
+                                    }}
                                     style={{
                                         paddingHorizontal: 12,
                                         paddingVertical: 6,
@@ -904,6 +917,7 @@ export default function SettingsScreen() {
                                             : "rgba(15, 23, 42, 0.9)",
                                         marginRight: 8,
                                         marginBottom: 8,
+                                        opacity: cloudLocked ? 0.45 : 1,
                                     }}
                                 >
                                     <Text
@@ -918,12 +932,21 @@ export default function SettingsScreen() {
                                 </TouchableOpacity>
                             );
                         })}
+
                     </View>
 
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
                         Auto: tries cloud, falls back to local. Cloud: always attempts Imotara server.
                         Local: device-only replies.
                     </Text>
+
+                    {!canCloudSync ? (
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 8 }}>
+                            Cloud is currently unavailable:{" "}
+                            {cloudGateReason || "Cloud mode is available with Premium."}
+                        </Text>
+                    ) : null}
+
                 </AppSurface>
 
                 {/* ✅ Expected Companion Tone (tone only) */}
@@ -1048,7 +1071,8 @@ export default function SettingsScreen() {
                                 { id: "65_plus", label: "65+" },
                             ] as const
                         ).map((opt) => {
-                            const active = (toneContext?.companion?.ageRange || "prefer_not") === opt.id;
+                            const active =
+                                ((toneContext?.companion?.ageTone ?? toneContext?.companion?.ageRange) || "prefer_not") === opt.id;
 
                             return (
                                 <TouchableOpacity
@@ -1058,7 +1082,8 @@ export default function SettingsScreen() {
                                             ...(toneContext || {}),
                                             companion: {
                                                 ...(toneContext?.companion || {}),
-                                                ageRange: opt.id,
+                                                ageTone: opt.id,
+                                                ageRange: opt.id, // legacy compatibility
                                             },
                                         })
                                     }
@@ -1090,6 +1115,76 @@ export default function SettingsScreen() {
                             );
                         })}
                     </View>
+
+                    {/* ⚠️ Tone mismatch hint (additive UI only) */}
+                    {(() => {
+                        const relationship = toneContext?.companion?.relationship || "prefer_not";
+                        const ageTone =
+                            (toneContext?.companion?.ageTone ?? toneContext?.companion?.ageRange) || "prefer_not";
+
+                        const mismatch =
+                            !!toneContext?.companion?.enabled &&
+                            ageTone === "under_13" &&
+                            ["mentor", "elder", "parent_like", "partner_like"].includes(relationship);
+
+                        if (!mismatch) return null;
+
+                        const relationshipLabel: Record<string, string> = {
+                            mentor: "Mentor",
+                            elder: "Elder",
+                            parent_like: "Parent-like",
+                            partner_like: "Partner-like",
+                        };
+
+                        return (
+                            <View
+                                style={{
+                                    marginTop: 10,
+                                    padding: 12,
+                                    borderRadius: 14,
+                                    borderWidth: 1,
+                                    borderColor: "rgba(251, 191, 36, 0.55)",
+                                    backgroundColor: "rgba(251, 191, 36, 0.12)",
+                                }}
+                            >
+                                <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: "700" }}>
+                                    Heads up
+                                </Text>
+
+                                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6, lineHeight: 16 }}>
+                                    “Under 13” + “{relationshipLabel[relationship] || relationship}” can create a tone
+                                    conflict and sometimes makes replies feel awkward or repetitive. You can keep it,
+                                    but for smoother replies try “Junior buddy” or “Sibling”.
+                                </Text>
+
+                                <View style={{ flexDirection: "row", marginTop: 10 }}>
+                                    <TouchableOpacity
+                                        onPress={() =>
+                                            setToneContext({
+                                                ...(toneContext || {}),
+                                                companion: {
+                                                    ...(toneContext?.companion || {}),
+                                                    relationship: "junior_buddy",
+                                                },
+                                            })
+                                        }
+                                        style={{
+                                            paddingHorizontal: 12,
+                                            paddingVertical: 8,
+                                            borderRadius: 999,
+                                            borderWidth: 1,
+                                            borderColor: colors.primary,
+                                            backgroundColor: "rgba(56, 189, 248, 0.18)",
+                                        }}
+                                    >
+                                        <Text style={{ fontSize: 12, fontWeight: "800", color: colors.textPrimary }}>
+                                            Fix: set Junior buddy
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        );
+                    })()}
 
                     {/* Gender */}
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 10, marginBottom: 6 }}>

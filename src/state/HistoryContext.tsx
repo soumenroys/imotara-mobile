@@ -11,7 +11,9 @@ import React, {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     pushRemoteHistory,
+    fetchRemoteHistorySince,
     type PushRemoteHistoryResult,
+    type FetchRemoteHistoryResult,
 } from "../api/historyClient";
 import { useSettings } from "./SettingsContext";
 import { DEBUG_UI_ENABLED } from "../config/debug";
@@ -25,6 +27,11 @@ export type HistoryItem = {
     text: string;
     from: "user" | "bot";
     timestamp: number;
+
+    // ✅ Additive: persist emotion for UI chips/history parity
+    emotion?: string;
+    intensity?: number;
+
     /**
      * Lite sync metadata:
      * - undefined or false → only known locally
@@ -32,6 +39,7 @@ export type HistoryItem = {
      */
     isSynced?: boolean;
 };
+
 
 type MergeRemoteResult = {
     /** How many raw items were passed in (if array). */
@@ -98,6 +106,9 @@ type HistoryContextValue = {
 };
 
 const STORAGE_KEY = "imotara_history_v1";
+
+// ✅ Cursor for remote history incremental sync
+const HISTORY_REMOTE_SINCE_KEY = "imotara_history_remote_since_v1";
 
 // ✅ Separate storage key for licensing
 const LICENSE_TIER_KEY = "imotara_license_tier_v1";
@@ -231,14 +242,54 @@ function normalizeRemoteItem(raw: any): HistoryItem | null {
 
     const id = String(baseId);
 
+    // ----- 5) Optional emotion (permissive) -----
+    const meta = raw?.meta;
+
+    const metaEmotionObj =
+        meta && typeof meta === "object" && (meta as any).emotion && typeof (meta as any).emotion === "object"
+            ? (meta as any).emotion
+            : undefined;
+
+    const emotionRaw =
+        pickStr(raw.emotion) ||
+        pickStr(raw.emotionLabel) ||
+        (meta && typeof meta === "object" ? pickStr((meta as any).emotionLabel) : "") ||
+        (metaEmotionObj ? pickStr(metaEmotionObj.primary) : "");
+
+    const emotion = emotionRaw.trim() ? emotionRaw.trim() : undefined;
+
+    const intensityRaw =
+        raw?.intensity ??
+        (meta && typeof meta === "object" ? (meta as any).intensity : undefined) ??
+        (metaEmotionObj ? metaEmotionObj.intensity : undefined);
+
+    const intensity =
+        typeof intensityRaw === "number" && Number.isFinite(intensityRaw)
+            ? intensityRaw
+            : typeof intensityRaw === "string"
+                ? intensityRaw === "high"
+                    ? 1
+                    : intensityRaw === "medium"
+                        ? 0.66
+                        : intensityRaw === "low"
+                            ? 0.33
+                            : undefined
+                : undefined;
+
     return {
         id,
         text,
         from,
         timestamp,
+
+        // ✅ Additive: store emotion if present
+        emotion,
+        intensity,
+
         // Anything coming from the backend is, by definition, synced.
         isSynced: true,
     };
+
 }
 
 export default function HistoryProvider({ children }: { children: ReactNode }) {
@@ -270,6 +321,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         historyRef.current = history;
     }, [history]);
 
+    // ✅ Cursor for incremental remote pulls
+    const remoteSinceRef = useRef<number>(0);
+
     // ✅ Prevent overlapping pushes (manual + background + lifecycle)
     const isPushInFlightRef = useRef(false);
 
@@ -299,10 +353,19 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const load = async () => {
             try {
-                const [rawHistory, rawTier] = await Promise.all([
+                const [rawHistory, rawTier, rawRemoteSince] = await Promise.all([
                     AsyncStorage.getItem(STORAGE_KEY),
                     AsyncStorage.getItem(LICENSE_TIER_KEY),
+                    AsyncStorage.getItem(HISTORY_REMOTE_SINCE_KEY),
                 ]);
+
+                // 0) Remote cursor (since)
+                if (rawRemoteSince) {
+                    const n = Number(rawRemoteSince);
+                    if (Number.isFinite(n) && n >= 0) {
+                        remoteSinceRef.current = n;
+                    }
+                }
 
                 // 1) History
                 if (rawHistory) {
@@ -324,10 +387,22 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                                     typeof item.timestamp === "number"
                                         ? item.timestamp
                                         : Date.now(),
+                                // ✅ Preserve emotion if present (additive; safe defaults)
+                                emotion:
+                                    typeof item.emotion === "string"
+                                        ? item.emotion
+                                        : undefined,
+                                intensity:
+                                    typeof item.intensity === "number" &&
+                                        Number.isFinite(item.intensity)
+                                        ? item.intensity
+                                        : undefined,
+
                                 isSynced:
                                     typeof item.isSynced === "boolean"
                                         ? item.isSynced
                                         : false,
+
                             }));
 
                         setHistory(cleaned);
@@ -440,6 +515,26 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             };
         }
 
+        // ✅ Hardening: FREE / gated users must not attempt cloud push (manual or background)
+        if (!cloudSyncAllowed) {
+            const now = Date.now();
+            const result: PushRemoteHistoryResult = {
+                ok: false,
+                pushed: 0,
+                status: -4,
+                errorMessage: "Cloud sync not available on this plan",
+            };
+
+            setLastSyncResult(result);
+            setLastSyncAt(now);
+            setSettingsLastSyncAt(now);
+            setSettingsLastSyncStatus(
+                "Cloud sync is not available on your plan."
+            );
+
+            return result;
+        }
+
         // If a push starts, cancel any pending autosync timer (prevents double-fire)
         clearAutoSyncTimer();
 
@@ -447,6 +542,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
         setIsSyncing(true);
         setLastSyncResult(null);
+
 
         try {
             const currentHistory = historyRef.current || [];
@@ -533,7 +629,13 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             setIsSyncing(false);
             isPushInFlightRef.current = false;
         }
-    }, [clearAutoSyncTimer, setSettingsLastSyncAt, setSettingsLastSyncStatus]);
+    }, [
+        clearAutoSyncTimer,
+        setSettingsLastSyncAt,
+        setSettingsLastSyncStatus,
+        cloudSyncAllowed,
+    ]);
+
 
     const runSync = useCallback(
         async (opts?: { reason?: string }): Promise<PushRemoteHistoryResult> => {
@@ -568,12 +670,78 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
             try {
                 clearAutoSyncTimer();
-                return await pushHistoryToRemote();
+
+                // 1) Push local unsynced → backend (existing behavior)
+                const pushRes = await pushHistoryToRemote();
+
+                // ✅ Hardening: if cloud is gated off, do not attempt remote pull either
+                if (!cloudSyncAllowed) {
+                    return pushRes;
+                }
+
+                // 2) Pull incremental remote → merge into local store (NEW, additive)
+                try {
+                    const since = remoteSinceRef.current || 0;
+                    const pulled: FetchRemoteHistoryResult = await fetchRemoteHistorySince(
+                        since
+                    );
+
+
+                    if (pulled.items.length > 0) {
+                        // mergeRemoteHistory expects raw backend-ish items, but our fetcher returns HistoryItem[]
+                        // We can directly merge by mapping HistoryItem → raw-like shape that normalizeRemoteItem already supports
+                        // OR simply add them with dedupe-by-id logic here.
+                        const existingIds = new Set(
+                            (historyRef.current || []).map((h) => h.id)
+                        );
+
+                        const toAdd = pulled.items.filter((it) => !existingIds.has(it.id));
+
+                        if (toAdd.length > 0) {
+                            setHistory((prev) => {
+                                const merged = [...prev, ...toAdd].sort(
+                                    (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
+                                );
+                                return merged;
+                            });
+
+                            // Optional: surface this in Settings debug status (non-breaking)
+                            setSettingsLastSyncStatus(
+                                `Synced. Pulled ${toAdd.length} item(s) from cloud.`
+                            );
+                        }
+                    }
+
+                    // Persist nextSince cursor
+                    if (
+                        typeof pulled.nextSince === "number" &&
+                        Number.isFinite(pulled.nextSince) &&
+                        pulled.nextSince >= 0
+                    ) {
+                        remoteSinceRef.current = pulled.nextSince;
+                        AsyncStorage.setItem(
+                            HISTORY_REMOTE_SINCE_KEY,
+                            String(pulled.nextSince)
+                        ).catch((err) =>
+                            debugWarn("Failed to persist remote since cursor:", err)
+                        );
+                    }
+                } catch (err) {
+                    debugWarn("runSync: remote pull failed (non-fatal):", err);
+                }
+
+                return pushRes;
             } finally {
                 runSyncInFlightRef.current = false;
             }
         },
-        [clearAutoSyncTimer, pushHistoryToRemote]
+        [
+            clearAutoSyncTimer,
+            pushHistoryToRemote,
+            setSettingsLastSyncStatus,
+            cloudSyncAllowed,
+        ]
+
     );
 
     const syncNow = runSync;

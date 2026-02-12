@@ -191,53 +191,114 @@ function normalizeRemoteItem(item: RemoteHistoryItem): HistoryItem {
         text: normalizeText(item),
         from: normalizeFrom(item),
         timestamp: normalizeTimestamp(item),
+
+        // ✅ Additive: preserve emotion metadata when present (used by History UI)
+        ...(typeof item.emotion === "string" && item.emotion.trim()
+            ? { emotion: item.emotion.trim() }
+            : {}),
+        ...(typeof item.intensity === "number" && Number.isFinite(item.intensity)
+            ? { intensity: item.intensity }
+            : {}),
+
         // backend does not always carry per-item sync marker; locally we treat remote as synced
         isSynced: true,
     };
 }
 
+
 /**
- * Read remote history as an array from /api/history?mode=array.
- * Always returns an array (empty on error).
+ * Fetch remote history WITH cursor support.
+ * - Calls: /api/history?since=<ms> (envelope mode)
+ * - Returns: { items, nextSince }
+ *
+ * Safe + additive: does not break existing callers.
  */
-export async function fetchRemoteHistory(): Promise<HistoryItem[]> {
+export type FetchRemoteHistoryResult = {
+    items: HistoryItem[];
+    nextSince: number;
+};
+
+export async function fetchRemoteHistorySince(
+    since: number = 0
+): Promise<FetchRemoteHistoryResult> {
     try {
-        const url = buildApiUrl("/api/history?mode=array");
+        const safeSince = Number.isFinite(since) && since > 0 ? since : 0;
+
+        // IMPORTANT: do NOT use mode=array in production (backend blocks it without QA/admin)
+        const path =
+            safeSince > 0 ? `/api/history?since=${encodeURIComponent(String(safeSince))}` : "/api/history";
+
+        const url = buildApiUrl(path);
+
         const res = await fetchWithTimeout(
             url,
             { method: "GET", headers: { Accept: "application/json" } },
-            "fetchRemoteHistory"
+            "fetchRemoteHistorySince"
         );
 
         if (!res.ok) {
-            debugWarn("fetchRemoteHistory: non-OK response", res.status);
-            return [];
+            debugWarn("fetchRemoteHistorySince: non-OK response", res.status);
+            return { items: [], nextSince: safeSince };
         }
 
         const raw = await tryReadJson(res);
 
-        if (!Array.isArray(raw)) {
-            debugWarn("fetchRemoteHistory: expected array, got", typeof raw, raw);
-            return [];
+        // Accept array OR envelope. Envelope may contain `records` (preferred) or `items` (back-compat).
+        const records: any[] = Array.isArray(raw)
+            ? raw
+            : raw && typeof raw === "object"
+                ? Array.isArray((raw as any).records)
+                    ? (raw as any).records
+                    : Array.isArray((raw as any).items)
+                        ? (raw as any).items
+                        : []
+                : [];
+
+        if (!Array.isArray(records)) {
+            debugWarn("fetchRemoteHistorySince: expected records array, got", typeof raw, raw);
+            return { items: [], nextSince: safeSince };
         }
 
-        const data = raw as RemoteHistoryItem[];
-        const normalized = data.map((item) => normalizeRemoteItem(item));
+        const data = records as RemoteHistoryItem[];
+        const items = data.map((item) => normalizeRemoteItem(item));
 
-        debugLog("fetchRemoteHistory: fetched", normalized.length, "item(s)");
-        return normalized;
+        // Prefer backend-provided nextSince (new in imotaraapp), else compute.
+        const backendNextSince =
+            raw && typeof raw === "object" && typeof (raw as any).nextSince === "number"
+                ? (raw as any).nextSince
+                : undefined;
+
+        const computedNextSince =
+            items.length > 0 ? Math.max(...items.map((i) => i.timestamp || 0)) : safeSince;
+
+        const nextSince =
+            typeof backendNextSince === "number" && Number.isFinite(backendNextSince) && backendNextSince >= 0
+                ? backendNextSince
+                : computedNextSince;
+
+        debugLog("fetchRemoteHistorySince: fetched", items.length, "item(s), nextSince=", nextSince);
+        return { items, nextSince };
     } catch (err) {
-        debugWarn("fetchRemoteHistory: error talking to backend", err);
-        return [];
+        debugWarn("fetchRemoteHistorySince: error talking to backend", err);
+        return { items: [], nextSince: Number.isFinite(since) && since > 0 ? since : 0 };
     }
+}
+
+/**
+ * Backward-compatible wrapper used by existing callers.
+ * (Keeps the original behavior: fetch all, return array.)
+ */
+export async function fetchRemoteHistory(): Promise<HistoryItem[]> {
+    const res = await fetchRemoteHistorySince(0);
+    return res.items;
 }
 
 /**
  * Best-effort batch push of local history items to
  * /api/history via POST.
  *
- * Uses a compact payload the backend normalizer already supports:
- *   { items: [{ id, text, from, timestamp }] }
+ * Backend expects:
+ *   { records: [{ id, text, from, timestamp }] }
  *
  * Returns ok=false on any non-OK response.
  */
@@ -257,7 +318,13 @@ export async function pushRemoteHistory(
                 timestamp: i.timestamp,
             }));
 
-        const pushed = payloadItems.length;
+        const attempted = payloadItems.length;
+
+        // Push can take longer than fetch (larger payload). Scale timeout by payload size.
+        const pushTimeoutMs =
+            payloadItems.length <= 25 ? 15_000 :
+                payloadItems.length <= 100 ? 30_000 :
+                    60_000;
 
         const res = await fetchWithTimeout(
             url,
@@ -267,9 +334,11 @@ export async function pushRemoteHistory(
                     "Content-Type": "application/json",
                     Accept: "application/json",
                 },
-                body: JSON.stringify({ items: payloadItems }),
+                // ✅ CRITICAL FIX: use `records`, not `items`
+                body: JSON.stringify({ records: payloadItems }),
             },
-            "pushRemoteHistory"
+            "pushRemoteHistory",
+            pushTimeoutMs
         );
 
         const status = res.status;
@@ -292,24 +361,25 @@ export async function pushRemoteHistory(
             };
         }
 
-        // Some backends return 204 No Content or non-JSON payload – that's okay.
-        // We still return ok=true and the number of items we attempted to push.
+        // If backend provides acceptedIds, honor it.
         try {
             const body = await tryReadJson(res);
             if (body && typeof body === "object") {
-                // If backend provides a more accurate pushed count, honor it.
-                const maybePushed = (body as any).pushed;
-                if (typeof maybePushed === "number" && Number.isFinite(maybePushed)) {
-                    debugLog("pushRemoteHistory: backend pushed", maybePushed, "item(s)");
-                    return { ok: true, pushed: maybePushed, status };
+                const acceptedIds = Array.isArray((body as any).acceptedIds)
+                    ? (body as any).acceptedIds
+                    : null;
+
+                if (acceptedIds) {
+                    debugLog("pushRemoteHistory: backend accepted", acceptedIds.length, "item(s)");
+                    return { ok: true, pushed: acceptedIds.length, status };
                 }
             }
         } catch {
             // ignore
         }
 
-        debugLog("pushRemoteHistory: pushed", pushed, "item(s)");
-        return { ok: true, pushed, status };
+        debugLog("pushRemoteHistory: pushed", attempted, "item(s)");
+        return { ok: true, pushed: attempted, status };
     } catch (err: any) {
         debugWarn("pushRemoteHistory: error talking to backend", err);
         return {
@@ -324,3 +394,4 @@ export async function pushRemoteHistory(
         };
     }
 }
+
