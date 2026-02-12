@@ -1,4 +1,5 @@
 // src/config/api.ts
+import { NativeModules, Platform } from "react-native";
 import { DEBUG_UI_ENABLED } from "./debug";
 
 /**
@@ -31,6 +32,30 @@ const envBase =
     (process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL as string | undefined) ||
     (process.env.IMOTARA_API_BASE_URL as string | undefined);
 
+
+function inferDevHostFromMetro(): string | null {
+    try {
+        const scriptURL: string | undefined = NativeModules?.SourceCode?.scriptURL;
+        if (!scriptURL) return null;
+
+        // examples:
+        // - http://192.168.0.111:8081/index.bundle?...
+        // - http://10.0.2.2:8081/index.bundle?...
+        const match = scriptURL.match(/^https?:\/\/([^/:]+)(?::\d+)?\//i);
+        const host = match?.[1]?.trim();
+        if (!host) return null;
+
+        // If metro host is localhost on Android, switch to emulator host.
+        if (Platform.OS === "android" && (host === "localhost" || host === "127.0.0.1")) {
+            return "10.0.2.2";
+        }
+
+        return host;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Resolve base URL.
  * - If env is present → use it
@@ -43,8 +68,27 @@ const resolvedBase = (() => {
     if (v.length > 0) return v;
 
     if (__DEV__) {
-        return "http://localhost:3000";
+        const host = inferDevHostFromMetro();
+
+        // Prefer metro host IP so the phone/emulator can reach your laptop server.
+        if (host) return `http://${host}:3000`;
+
+        // Last resort:
+        // - iOS simulator can use localhost
+        // - Android emulator needs 10.0.2.2
+        // DEV-only fallback if env is missing
+        if (__DEV__) {
+            return Platform.OS === "android"
+                ? "http://10.0.2.2:3000"
+                : "http://localhost:3000";
+        }
+
+        // Production must never silently fall back to localhost
+        throw new Error(
+            "Missing EXPO_PUBLIC_IMOTARA_API_BASE_URL (or IMOTARA_API_BASE_URL) in production build."
+        );
     }
+
 
     throw new Error(
         "Missing EXPO_PUBLIC_IMOTARA_API_BASE_URL (or IMOTARA_API_BASE_URL). Set it in EAS/Expo env for production builds."
