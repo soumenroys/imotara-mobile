@@ -24,7 +24,9 @@ import { DEBUG_UI_ENABLED } from "../config/debug";
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import type { ReflectionSeed } from "../lib/reflectionSeedContract";
-import { buildLocalReply } from "../lib/ai/local/localReplyEngine";
+import { buildLocalReply, LOCAL_DEV_TEST_PROMPTS } from "../lib/ai/local/localReplyEngine";
+import { BN_SAD_REGEX, HI_STRESS_REGEX, CONFUSED_EN_REGEX, isConfusedText } from "../lib/emotion/keywordMaps";
+
 
 type ChatMessageSource = "cloud" | "local";
 
@@ -45,11 +47,130 @@ type ChatMessage = {
     reflectionSeed?: ReflectionSeed;
     followUp?: string;
 
+    // ✅ NEW: cloud attempt diagnostics (additive)
+    cloudAttempted?: boolean;
+    remoteUrl?: string;
+    remoteStatus?: number;
+    remoteError?: string;
+
     // ✅ Debug/diagnostics metadata (optional; report-only)
     meta?: {
         compatibility?: any;
     };
 };
+
+
+// Phase 2.2.2 — local followUp de-dupe (best-effort, avoids immediate repeats)
+const __lastLocalFollowUp = new Map<string, { text: string; ts: number }>();
+
+function varyLocalFollowUpIfRepeated(params: {
+    cacheKey: string;
+    followUp: string;
+    lowerUserMsg: string;
+}): string {
+    const { cacheKey, followUp, lowerUserMsg } = params;
+
+    const normalize = (s: string) =>
+        String(s ?? "")
+            .toLowerCase()
+            .replace(/[’‘]/g, "'")
+            .replace(/[“”]/g, '"')
+            .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")
+            .replace(/[^a-z0-9]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+    const now = Date.now();
+    const last = __lastLocalFollowUp.get(cacheKey);
+    const isFresh = last && now - last.ts < 60_000; // 60s
+    const isRepeat = Boolean(isFresh && normalize(last.text) === normalize(followUp));
+
+    if (!isRepeat) {
+        __lastLocalFollowUp.set(cacheKey, { text: followUp, ts: now });
+        return followUp;
+    }
+
+    // intent-aware alternates (one question only)
+    const isLonely = /\b(lonely|alone|isolated|unseen|ignored)\b/.test(lowerUserMsg);
+    const isOverwhelm =
+        /\b(overwhelm|overwhelmed|pressure|too much|piling up|burnt out|burned out|can['’]t focus|distract)\b/.test(
+            lowerUserMsg
+        );
+    const isDecision = /\b(choose|choosing|decide|decision|torn|stuck( choosing)? between|options?)\b/.test(
+        lowerUserMsg
+    );
+
+    const alternates = isLonely
+        ? [
+            "When does it hit hardest — evenings, weekends, or even around people?",
+            "Do you feel like you’re missing someone specific, or more a general sense of disconnection?",
+            "What would feel like a tiny bit of support today — a message, a call, or just being heard?",
+        ]
+        : isOverwhelm
+            ? [
+                "If we shrink it to one thing, what feels most urgent?",
+                "What’s heaviest right now — time, energy, or expectations?",
+                "Do you want to vent first, or pick one tiny next step together?",
+            ]
+            : isDecision
+                ? [
+                    "Which option gives you more peace a week from now?",
+                    "If you chose based on one value, what would it be?",
+                    "What’s the cost of waiting vs choosing now?",
+                ]
+                : [
+                    "What would help most right now — comfort, clarity, or a practical next step?",
+                    "Where do you feel this most — thoughts, body, or situation?",
+                    "Do you want to talk it through, or choose one small action together?",
+                ];
+
+    const pick = alternates.find((a) => !last || normalize(a) !== normalize(last.text)) ?? alternates[0];
+    __lastLocalFollowUp.set(cacheKey, { text: pick, ts: now });
+    return pick;
+}
+
+function stripReflectionSeedPromptFromMessage(message: string, prompt?: string) {
+    const normalize = (s: string) =>
+        String(s ?? "")
+            .toLowerCase()
+            .replace(/[’‘]/g, "'")
+            .replace(/[“”]/g, '"')
+            .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")
+            .replace(/[^a-z0-9]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+    const pNorm = normalize(prompt ?? "");
+    if (!pNorm) return message;
+
+    // Matches "Want comfort, clarity, or a next step?" even if prefixed by bullets/emojis/dashes
+    const wantLine = /^\s*(?:[-*•–—]|👉|➡️|→)?\s*want\s+(comfort|clarity|a\s+next\s+step)\b/i;
+
+    let out = String(message ?? "");
+
+    // 1) Remove standalone line if it equals the prompt OR matches the wantLine pattern
+    out = out
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => {
+            const lNorm = normalize(l);
+            if (!lNorm) return false;
+            if (lNorm === pNorm) return false;
+            if (wantLine.test(l)) return false;
+            return true;
+        })
+        .join("\n")
+        .trim();
+
+    // 2) Best-effort inline cleanup (if the prompt appears mid-paragraph)
+    out = out
+        .replace(/\bwant\s+comfort,\s*clarity,\s*or\s+a\s+next\s+step\??/gi, "")
+        .replace(/\s+\./g, ".")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+    return out;
+}
 
 /** ---------- Color helpers (robust with hex/rgb/rgba) ---------- */
 function clamp01(n: number) {
@@ -120,6 +241,22 @@ function getMoodGradient(baseColor: string) {
     };
 }
 
+function getMoodHintFromEmotionPrimary(primary?: string): string | undefined {
+    const p = (primary ?? "").trim().toLowerCase();
+    if (!p) return undefined;
+
+    // These strings are intentionally aligned with:
+    // - getMoodEmojiForHint()
+    // - getMoodTintForHint()
+    if (p === "confused") return "stuck/unsure";
+    if (p === "stressed" || p === "anxious" || p === "anxiety") return "tense/worried";
+    if (p === "sad" || p === "sadness") return "low";
+    if (p === "angry" || p === "anger") return "upset/frustrated";
+    if (p === "hope" || p === "hopeful") return "light/hope";
+
+    return undefined;
+}
+
 // Local mood hint → emoji
 function getMoodEmojiForHint(hint?: string): string {
     if (!hint) return "";
@@ -153,9 +290,63 @@ function getMoodTintForHint(hint?: string): string {
 }
 
 function getLocalMoodHint(text: string): string {
-    const lower = text.toLowerCase();
+    const raw = String(text ?? "");
+    const lower = raw.toLowerCase();
 
+    // ✅ NEW: emoji-based mood inference (additive)
+    // Keep the returned hint strings consistent with existing tint logic:
+    // - "low" → sad tint
+    // - "tense/worried" → anxious tint
+    // - "upset/frustrated" → angry tint
+    // - "stuck/unsure" → confused tint
+    // - "light/hope" → hopeful tint
+    const emojiHappy = [
+        "😀",
+        "😃",
+        "😄",
+        "😁",
+        "😊",
+        "🙂",
+        "☺️",
+        "😍",
+        "🥰",
+        "😎",
+        "🥳",
+        "🎉",
+        "✨",
+
+        // ✅ laughter / joy (fixes prompt #6: 😂😂😂)
+        "😂",
+        "🤣",
+
+        "💚",
+        "💙",
+        "💛",
+        "❤️",
+        "🙌",
+        "👏",
+    ];
+
+    const emojiSad = ["😢", "😭", "😞", "😔", "😟", "🙁", "☹️", "💔", "🥺"];
+    const emojiAnxious = ["😰", "😨", "😱", "😬", "😮‍💨", "🫠"];
+    const emojiAngry = ["😡", "😠", "🤬", "👿"];
+    const emojiStuck = ["🤔", "😕", "😵‍💫", "😶‍🌫️", "🫤"];
+
+    const containsEmoji = (arr: string[]) => arr.some((e) => raw.includes(e));
+
+    // If message is emoji-heavy / emoji-only, infer mood early.
+    // (We still allow word-based rules below to override for mixed messages.)
+    const emojiSignals = {
+        sad: containsEmoji(emojiSad),
+        anxious: containsEmoji(emojiAnxious),
+        angry: containsEmoji(emojiAngry),
+        stuck: containsEmoji(emojiStuck),
+        happy: containsEmoji(emojiHappy),
+    };
+
+    // Word-based mood inference (existing behavior preserved)
     const sadWords = [
+        // English
         "sad",
         "down",
         "lonely",
@@ -167,8 +358,20 @@ function getLocalMoodHint(text: string): string {
         "blue",
         "cry",
         "crying",
+
+        // ✅ Bengali (additive) — fixes prompt #8: “আমি খুব মন খারাপ করছি”
+        "মন খারাপ",
+        "খারাপ লাগছে",
+        "দুঃখ",
+        "কষ্ট",
+        "কাঁদ",
+        "কান্না",
+        "একলা",
+        "একাকী",
     ];
+
     const anxiousWords = [
+        // English
         "worry",
         "worried",
         "anxious",
@@ -179,7 +382,15 @@ function getLocalMoodHint(text: string): string {
         "overwhelmed",
         "afraid",
         "fear",
+
+        // ✅ Hindi/Devanagari (additive) — fixes prompt #9: “मैं बहुत परेशान हूँ”
+        "परेशान",
+        "तनाव",
+        "चिंता",
+        "घबराहट",
+        "बेचैन",
     ];
+
     const angryWords = [
         "angry",
         "mad",
@@ -213,10 +424,19 @@ function getLocalMoodHint(text: string): string {
         "dont know",
         "no idea",
         "numb",
+
+        // ✅ Additive: common indecision phrasing → confused
+        "not sure what to do",
+        "not sure what i do",
+        "not sure what to do next",
     ];
+
+
+
 
     const containsAny = (arr: string[]) => arr.some((w) => lower.includes(w));
 
+    // ✅ Priority: explicit words first (unchanged behavior for normal messages)
     if (containsAny(sadWords)) {
         return "You seem a bit low. It’s okay to feel this way — Imotara is here with you.";
     }
@@ -226,14 +446,383 @@ function getLocalMoodHint(text: string): string {
     if (containsAny(angryWords)) {
         return "It sounds like something has really upset or frustrated you.";
     }
-    if (containsAny(stuckWords)) {
+    if (containsAny(stuckWords) || CONFUSED_EN_REGEX.test(lower)) {
         return "You sound a bit stuck or unsure. It’s okay to take time to untangle things.";
     }
+
     if (containsAny(hopefulWords)) {
         return "I can sense a little bit of light or hope in what you’re saying.";
     }
 
+    // ✅ If no word match, fall back to emoji signals (NEW)
+    if (emojiSignals.sad) {
+        return "You seem a bit low. It’s okay to feel this way — Imotara is here with you.";
+    }
+    if (emojiSignals.anxious) {
+        return "It sounds like something is making you feel tense or worried.";
+    }
+    if (emojiSignals.angry) {
+        return "It sounds like something has really upset or frustrated you.";
+    }
+    if (emojiSignals.stuck) {
+        return "You sound a bit stuck or unsure. It’s okay to take time to untangle things.";
+    }
+    if (emojiSignals.happy) {
+        return "I can sense a little bit of light or hope in what you’re saying.";
+    }
+
     return "I’m listening closely. However you’re feeling, it matters here.";
+}
+
+// ✅ Additive: same logic, but returns a stable primary label + hint.
+// Does NOT replace getLocalMoodHint(); existing callers remain untouched.
+function getLocalMoodHintWithPrimary(
+    text: string
+): { primary?: string; hint: string } {
+    const t = text.trim().toLowerCase();
+
+    // mirrored buckets from getLocalMoodHint (keep in sync; additive)
+    const sadWords = [
+        "sad",
+        "lonely",
+        "hopeless",
+        "empty",
+        "down",
+        "depressed",
+        "cry",
+        "miserable",
+    ];
+    const anxiousWords = [
+        "anxious",
+        "anxiety",
+        "panic",
+        "panicking",
+        "scared",
+        "fear",
+        "worried",
+        "worry",
+        "nervous",
+        "tense",
+        "stress",
+        "stressed",
+    ];
+    const angryWords = [
+        "angry",
+        "anger",
+        "furious",
+        "mad",
+        "irritated",
+        "annoyed",
+        "rage",
+        "frustrated",
+    ];
+    const stuckWords = [
+        "stuck",
+        "lost",
+        "confused",
+        "don’t know",
+        "dont know",
+        "no idea",
+        "numb",
+        "not sure what to do",
+        "not sure what i do",
+        "not sure what to do next",
+    ];
+    const hopefulWords = [
+        "hope",
+        "hopeful",
+        "better",
+        "improving",
+        "relieved",
+        "grateful",
+        "happy",
+        "joy",
+        "excited",
+    ];
+
+    const containsAny = (list: string[]) => list.some((w) => t.includes(w));
+
+    // ✅ Non-English / mixed-script detection (additive, centralized)
+    // Fix: romanized Bengali/Hinglish like "kichu bhalo lagchhe na" / "mood off"
+    if (HI_STRESS_REGEX.test(text || "")) {
+        return {
+            primary: "stressed",
+            hint: "It sounds like something is making you feel tense or worried.",
+        };
+    }
+    if (BN_SAD_REGEX.test(text || "")) {
+        return {
+            primary: "sadness",
+            hint: "You seem a bit low. It’s okay to feel this way — Imotara is here with you.",
+        };
+    }
+    if (CONFUSED_EN_REGEX.test(text || "")) {
+        return {
+            primary: "confused",
+            hint: "You sound a bit stuck or unsure. It’s okay to take time to untangle things.",
+        };
+    }
+
+    if (containsAny(anxiousWords)) {
+        return {
+            primary: "stressed",
+            hint: "It sounds like something is making you feel tense or worried.",
+        };
+    }
+    if (containsAny(sadWords)) {
+        return {
+            primary: "sadness",
+            hint: "You seem a bit low. It’s okay to feel this way — Imotara is here with you.",
+        };
+    }
+    if (containsAny(angryWords)) {
+        return {
+            primary: "anger",
+            hint: "It sounds like something has really upset or frustrated you.",
+        };
+    }
+    if (containsAny(stuckWords)) {
+        return {
+            primary: "confused",
+            hint: "You sound a bit stuck or unsure. It’s okay to take time to untangle things.",
+        };
+    }
+    if (containsAny(hopefulWords)) {
+        return {
+            primary: "hopeful",
+            hint: "I can sense a little bit of light or hope in what you’re saying.",
+        };
+    }
+
+    return {
+        primary: undefined,
+        hint: "I’m listening closely. However you’re feeling, it matters here.",
+    };
+}
+
+// ✅ Additive: local default intensity (used only for history persistence; no UI behavior change)
+function getDefaultIntensityForPrimary(primary?: string): number | undefined {
+    const p = typeof primary === "string" ? primary.trim().toLowerCase() : "";
+    if (!p) return undefined;
+
+    if (p === "confused") return 0.6;
+    if (p === "stressed") return 0.75;
+    if (p === "sadness") return 0.7;
+    if (p === "anger") return 0.7;
+    if (p === "hopeful") return 0.55;
+
+    return undefined;
+}
+
+
+// ✅ DEV-ONLY QA helper (debug gated)
+// Allows quick replay of prompts 1–10 and logs mismatches.
+// This is DEV-only and does not change chat behavior.
+type DevQaCase = { id: number; prompt: string; expected: string };
+
+const DEV_QA_CASES: DevQaCase[] = [
+    { id: 1, prompt: "I can’t focus today. Work is piling up.", expected: "confused" },
+    { id: 2, prompt: "😂😂😂", expected: "joy" },
+    { id: 3, prompt: "👍", expected: "neutral" },
+    { id: 4, prompt: "আমি খুব মন খারাপ করছি", expected: "sad" },
+    { id: 5, prompt: "मैं बहुत परेशान हूँ", expected: "stressed" },
+    { id: 6, prompt: "I feel lonely and down", expected: "sad" },
+    { id: 7, prompt: "I’m stressed and worried", expected: "stressed" },
+    { id: 8, prompt: "I’m so frustrated right now", expected: "angry" },
+    { id: 9, prompt: "Not sure what to do…", expected: "confused" },
+    { id: 10, prompt: "I feel hopeful today ✨", expected: "hopeful" },
+    { id: 11, prompt: "I cannot focus today", expected: "confused" },
+];
+
+// ✅ DEV-only: last QA report buffer (for "Copy QA Report")
+let DEV_QA_LAST_REPORT = "";
+
+function devQaCategoryFromMoodHint(moodHint: string | undefined): string {
+    const h = String(moodHint ?? "").toLowerCase();
+    if (h.includes("low")) return "sad";
+    if (h.includes("tense") || h.includes("worried")) return "stressed";
+    if (h.includes("upset") || h.includes("frustrated")) return "angry";
+    if (h.includes("stuck") || h.includes("unsure")) return "confused";
+    if (h.includes("light") || h.includes("hope")) return "hopeful";
+    return "neutral";
+}
+
+
+function devQaDetectEmotion(prompt: string): string {
+    const raw = String(prompt ?? "");
+
+    // Mirror agreed parity rules for emoji cases (DEV-only; no production impact)
+    if (raw.includes("😂") || raw.includes("🤣")) return "joy";
+    if (raw.includes("👍")) return "neutral";
+
+    const hint = getLocalMoodHint(raw);
+    return devQaCategoryFromMoodHint(hint);
+}
+
+type DevQaRunOptions = {
+    cloudProbe?: (prompt: string) => Promise<string | undefined>;
+    cancelRef?: { current: boolean };
+};
+
+async function runDevQaSuite(options: DevQaRunOptions = {}): Promise<void> {
+    const lines: string[] = [];
+    const logLine = (line: string) => {
+        lines.push(line);
+        console.log(line);
+    };
+
+    logLine("— IMOTARA DEV QA SUITE (mobile) —");
+
+    let localPass = 0;
+    const localFailed: number[] = [];
+
+    const localVsCloudMismatch: number[] = [];
+    const cloudFailed: number[] = [];
+
+    for (const tc of DEV_QA_CASES) {
+        const localDetected = devQaDetectEmotion(tc.prompt);
+        const localOk = localDetected === tc.expected;
+
+        if (localOk) localPass += 1;
+        else localFailed.push(tc.id);
+
+        let cloudDetected: string | undefined;
+        if (options.cloudProbe) {
+            cloudDetected = await options.cloudProbe(tc.prompt);
+            if (cloudDetected && cloudDetected !== localDetected) {
+                localVsCloudMismatch.push(tc.id);
+            }
+            if (cloudDetected && cloudDetected !== tc.expected) {
+                cloudFailed.push(tc.id);
+            }
+        }
+
+        const cloudTag = options.cloudProbe ? ` cloud=${cloudDetected ?? "unknown"}` : "";
+        const cloudMark =
+            options.cloudProbe && cloudDetected
+                ? cloudDetected === tc.expected
+                    ? " ☁️✅"
+                    : " ☁️❌"
+                : options.cloudProbe
+                    ? " ☁️?"
+                    : "";
+
+        logLine(
+            `[QA][${tc.id}] ${localOk ? "✅" : "❌"} expected=${tc.expected} local=${localDetected}${cloudTag}${cloudMark} :: "${tc.prompt}"`
+        );
+    }
+
+    const total = DEV_QA_CASES.length;
+    const localFail = total - localPass;
+
+    logLine(
+        `— IMOTARA DEV QA SUMMARY — total=${total} localPass=${localPass} localFail=${localFail}${localFail ? ` localFailedIds=[${localFailed.join(", ")}]` : ""
+        }`
+    );
+
+    if (options.cloudProbe) {
+        logLine(
+            `— IMOTARA DEV QA CLOUD SUMMARY — cloudCompared=${total} cloudFailed=${cloudFailed.length}${cloudFailed.length ? ` cloudFailedIds=[${cloudFailed.join(", ")}]` : ""
+            }${localVsCloudMismatch.length ? ` localVsCloudMismatchIds=[${localVsCloudMismatch.join(", ")}]` : ""}`
+        );
+    }
+
+    // ✅ DEV-only: persist last report for clipboard copy
+    DEV_QA_LAST_REPORT = lines.join("\n");
+}
+
+// ✅ DEV-only: cloud-only runner (compact summary)
+// This does NOT change production behavior; it only helps quick parity checks.
+async function runDevQaCloudOnly(options: DevQaRunOptions = {}): Promise<void> {
+    const lines: string[] = [];
+    const logLine = (line: string) => {
+        lines.push(line);
+        console.log(line);
+    };
+
+    logLine("— IMOTARA DEV QA CLOUD-ONLY (mobile) —");
+
+    if (!options.cloudProbe) {
+        logLine("[QA][cloud-only] ❌ No cloudProbe provided.");
+        DEV_QA_LAST_REPORT = lines.join("\n");
+        return;
+    }
+
+    let pass = 0;
+    const failed: number[] = [];
+
+    for (const tc of DEV_QA_CASES) {
+        if (options.cancelRef?.current) {
+            logLine("— IMOTARA DEV QA CLOUD-ONLY CANCELLED —");
+            DEV_QA_LAST_REPORT = lines.join("\n");
+            return;
+        }
+
+        const cloudDetected = await options.cloudProbe(tc.prompt);
+        const ok = cloudDetected === tc.expected;
+
+        if (ok) pass += 1;
+        else failed.push(tc.id);
+
+        logLine(
+            `[QA-CLOUD][${tc.id}] ${ok ? "✅" : "❌"} expected=${tc.expected} cloud=${cloudDetected ?? "unknown"} :: "${tc.prompt}"`
+        );
+    }
+
+    const total = DEV_QA_CASES.length;
+    const fail = total - pass;
+
+    logLine(
+        `— IMOTARA DEV QA CLOUD-ONLY SUMMARY — total=${total} pass=${pass} fail=${fail}${fail ? ` failedIds=[${failed.join(", ")}]` : ""}`
+    );
+
+    // ✅ DEV-only: persist last report for clipboard copy
+    DEV_QA_LAST_REPORT = lines.join("\n");
+}
+
+// ✅ UI helper — if a reflection prompt is already shown in the Reflection seed card,
+// remove the same prompt line from the message body to avoid duplication.
+function stripReflectionPromptFromMessage(messageText: string, prompt?: string): string {
+
+    const text = String(messageText ?? "");
+    const pRaw = String(prompt ?? "").trim();
+    if (!pRaw) return text;
+
+    const normalize = (s: string) =>
+        s
+            .toLowerCase()
+            .replace(/[’‘]/g, "'")
+            .replace(/[“”]/g, '"')
+            .replace(/\s+/g, " ")
+            .trim();
+
+    const p = normalize(pRaw);
+    const lines = text.split("\n"); // IMPORTANT: keep original blank lines
+
+    const kept = lines.filter((line) => {
+        const trimmed = String(line ?? "").trim();
+        if (!trimmed) return true; // keep blank lines (preserve formatting)
+
+        const n = normalize(trimmed);
+
+        const isExactPrompt = n === p;
+
+        // Covers: "Want comfort, clarity, or a next step?" and slight variants
+        const isGenericPrompt = /^want\s+(comfort|clarity|a\s+next\s+step)\b/.test(n);
+
+        return !(isExactPrompt || isGenericPrompt);
+    });
+
+    // Re-join preserving blank lines, then do best-effort inline cleanup too
+    let out = kept.join("\n");
+
+    out = out
+        .replace(/\bwant\s+comfort,\s*clarity,\s*or\s+a\s+next\s+step\??/gi, "")
+        .replace(/\s+\./g, ".")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+    return out || text;
 }
 
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
@@ -298,7 +887,9 @@ export default function ChatScreen() {
         lastSyncStatus,
         analysisMode,
         toneContext,
+        cloudSyncAllowed,
     } = useSettings();
+
 
     const scrollViewRef = useRef<ScrollView | null>(null);
 
@@ -542,6 +1133,15 @@ export default function ChatScreen() {
     const [pullOffset, setPullOffset] = useState(0);
     const [pullAnim] = useState(new Animated.Value(0));
 
+    // ✅ DEV-only: QA run state (prevents concurrent runs; no prod impact)
+    const [devQaRunning, setDevQaRunning] = useState(false);
+    const devQaRunningRef = useRef(false);
+
+    // ✅ DEV-only: cancel flag for QA runs (used by Stop QA)
+    const devQaCancelRef = useRef(false);
+
+
+
     useEffect(() => {
         if (!refreshing) return;
 
@@ -559,16 +1159,163 @@ export default function ChatScreen() {
         ]).start();
     }, [refreshing, pullAnim]);
 
+    // ✅ DEV-only: probe cloud emotion label if returned by the API
+    // Safe: if API doesn't provide an emotion label, returns undefined ("unknown" in logs).
+    const devQaCloudProbe = async (prompt: string): Promise<string | undefined> => {
+        try {
+            const remote: any = await callImotaraAI(prompt, {
+                toneContext: toneContext
+                    ? {
+                        ...toneContext,
+                        user: toneContext.user
+                            ? {
+                                ...toneContext.user,
+                                ageTone: toneContext.user.ageTone ?? toneContext.user.ageRange,
+                            }
+                            : undefined,
+                        companion: toneContext.companion
+                            ? {
+                                ...toneContext.companion,
+                                ageTone: toneContext.companion.ageTone ?? toneContext.companion.ageRange,
+                            }
+                            : undefined,
+                    }
+                    : undefined,
+
+                analysisMode: analysisMode,
+                emotionInsightsEnabled: true,
+
+                settings: {
+                    relationshipTone:
+                        (toneContext?.companion?.enabled
+                            ? toneContext?.companion?.relationship
+                            : undefined) ?? toneContext?.user?.relationship,
+
+                    ageTone:
+                        (toneContext?.companion?.enabled
+                            ? (toneContext?.companion?.ageTone ?? toneContext?.companion?.ageRange)
+                            : undefined) ??
+                        (toneContext?.user?.ageTone ?? toneContext?.user?.ageRange),
+
+                    genderTone:
+                        (toneContext?.companion?.enabled
+                            ? toneContext?.companion?.gender
+                            : undefined) ?? toneContext?.user?.gender,
+                },
+            });
+
+            // ✅ DEV-only: normalize labels into UI buckets (parity with web)
+            const normalizeCloudEmotionLabel = (v: string): string => {
+                const x = v.trim().toLowerCase();
+                if (x === "anxious" || x === "anxiety" || x === "fear" || x === "stress") return "stressed";
+                return x;
+            };
+
+            // Prefer canonical field first (server now guarantees meta.emotionLabel),
+            // then fall back safely to other shapes, and finally derive from meta.emotion.primary.
+            const directLabel =
+                remote?.meta?.emotionLabel ??
+                remote?.response?.meta?.emotionLabel ??
+                remote?.emotionLabel;
+
+            if (typeof directLabel === "string") {
+                const v = normalizeCloudEmotionLabel(directLabel);
+                return v || undefined;
+            }
+
+
+            // Some responses may only include meta.emotion (object) without emotionLabel.
+            const primary =
+                (typeof remote?.meta?.emotion?.primary === "string"
+                    ? remote.meta.emotion.primary
+                    : typeof remote?.response?.meta?.emotion?.primary === "string"
+                        ? remote.response.meta.emotion.primary
+                        : undefined) ?? undefined;
+
+            if (typeof primary === "string") {
+                const p = primary.trim().toLowerCase();
+                const derived =
+                    p === "sadness"
+                        ? "sad"
+                        : p === "fear" || p === "anxiety"
+                            ? "stressed"
+                            : p === "anger"
+                                ? "angry"
+                                : p === "joy"
+                                    ? "joy"
+                                    : p === "neutral"
+                                        ? "neutral"
+                                        : p;
+                return derived || undefined;
+            }
+
+
+            // Legacy tolerant fallbacks (keep, but normalize)
+            const candidate =
+                remote?.meta?.emotion ??
+                remote?.response?.meta?.emotion ??
+                remote?.emotion;
+
+            if (typeof candidate === "string") {
+                const v = normalizeCloudEmotionLabel(candidate);
+                return v || undefined;
+            }
+
+
+            if (candidate && typeof candidate === "object" && typeof candidate.label === "string") {
+                const v = normalizeCloudEmotionLabel(String(candidate.label));
+                return v || undefined;
+            }
+
+            return undefined;
+
+        } catch {
+            return undefined;
+        }
+    };
+
+    const startDevQaRun = async (options: { cloud?: boolean } = {}): Promise<void> => {
+        // DEV-only concurrency guard
+        if (!DEBUG_UI_ENABLED) return;
+        if (devQaRunningRef.current) return;
+
+        devQaCancelRef.current = false; // reset cancel at the start of a run
+        devQaRunningRef.current = true;
+        setDevQaRunning(true);
+
+        try {
+            await runDevQaSuite({
+                cancelRef: devQaCancelRef,
+                cloudProbe: options.cloud ? devQaCloudProbe : undefined,
+            });
+        } finally {
+            devQaRunningRef.current = false;
+            if (mountedRef.current) setDevQaRunning(false);
+        }
+    };
+
+
     const handleRefresh = () => {
-        if (!DEBUG_UI_ENABLED) return; // gated (no behavior change in dev)
+        if (!DEBUG_UI_ENABLED) return; // gated (no behavior change in prod)
         if (refreshing) return;
+
+        // ✅ Prevent overlapping QA runs
+        if (devQaRunningRef.current) return;
+
         setRefreshing(true);
+
+        // ✅ DEV-only: quick QA replay logger (no UI changes)
+        void startDevQaRun({ cloud: false });
+
 
         setTimeout(() => {
             if (!mountedRef.current) return;
             setRefreshing(false);
         }, 800);
     };
+
+
+
 
     const scrollToBottom = () => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -621,6 +1368,15 @@ export default function ChatScreen() {
     // ✅ Explicit “sync now” action (uses deduped sync trigger when available)
     const handleSyncNowForMessage = async (msg: ChatMessage) => {
         try {
+            // ✅ Hardening: don't start a sync attempt when cloud is gated off
+            if (!cloudSyncAllowed) {
+                Alert.alert(
+                    "Cloud sync unavailable",
+                    lastSyncStatus || "Cloud sync is not available on your plan."
+                );
+                return;
+            }
+
             setMessages((prev) =>
                 prev.map((m) => (m.id === msg.id ? { ...m, isPending: true } : m))
             );
@@ -668,6 +1424,7 @@ export default function ChatScreen() {
         }
     };
 
+
     const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
         const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
 
@@ -695,22 +1452,31 @@ export default function ChatScreen() {
 
         const timestamp = Date.now();
 
+        // ✅ Phase 3.1 — persist user moodHint too (emoji-only + text)
+        // This is additive and mirrors the existing bot-side moodHint behavior.
+        const wantsInsights = emotionInsightsEnabled;
+        const userMoodHint = wantsInsights ? getLocalMoodHint(trimmed) : undefined;
+
         const userMessage: ChatMessage = {
             id: `u-${timestamp}`,
             from: "user",
             text: trimmed,
             timestamp,
             isSynced: false,
+            moodHint: userMoodHint,
         };
 
-        // IMPORTANT: Do NOT add extra properties to HistoryItem (keeps existing types stable)
         addToHistory({
             id: userMessage.id,
             text: userMessage.text,
             from: "user",
             timestamp: userMessage.timestamp,
             isSynced: false,
+
+            // ✅ Already supported (bot uses it). Now user messages get it too.
+            moodHint: userMoodHint,
         });
+
 
         setMessages((prev) => [...prev, userMessage]);
         setInput("");
@@ -735,7 +1501,24 @@ export default function ChatScreen() {
                     const remote: any = wantsCloud
                         ? await callImotaraAI(trimmed, {
                             // ✅ always send toneContext if present (server can decide what to use)
-                            toneContext: toneContext ?? undefined,
+                            // ✅ parity: ensure ageTone is present (fallback to ageRange) when sending
+                            toneContext: toneContext
+                                ? {
+                                    ...toneContext,
+                                    user: toneContext.user
+                                        ? {
+                                            ...toneContext.user,
+                                            ageTone: toneContext.user.ageTone ?? toneContext.user.ageRange,
+                                        }
+                                        : undefined,
+                                    companion: toneContext.companion
+                                        ? {
+                                            ...toneContext.companion,
+                                            ageTone: toneContext.companion.ageTone ?? toneContext.companion.ageRange,
+                                        }
+                                        : undefined,
+                                }
+                                : undefined,
 
                             analysisMode: analysisMode,
                             emotionInsightsEnabled: wantsInsights,
@@ -747,10 +1530,13 @@ export default function ChatScreen() {
                                         ? toneContext?.companion?.relationship
                                         : undefined) ?? toneContext?.user?.relationship,
 
+                                // ✅ parity: ageTone preferred, ageRange legacy fallback
                                 ageTone:
                                     (toneContext?.companion?.enabled
-                                        ? toneContext?.companion?.ageRange
-                                        : undefined) ?? toneContext?.user?.ageRange,
+                                        ? (toneContext?.companion?.ageTone ??
+                                            toneContext?.companion?.ageRange)
+                                        : undefined) ??
+                                    (toneContext?.user?.ageTone ?? toneContext?.user?.ageRange),
 
                                 genderTone:
                                     (toneContext?.companion?.enabled
@@ -767,10 +1553,38 @@ export default function ChatScreen() {
 
                     console.log("[imotara] remote:", {
                         ok: remote?.ok,
+                        errorMessage: remote?.errorMessage,
+
+                        // What user sees
                         replyText: remote?.replyText,
                         followUp: remote?.followUp,
                         reflectionSeed: remote?.reflectionSeed,
+
+                        // What we need to debug “Cloud but same reply”
+                        analysisMode,
+                        meta: remote?.meta,
                     });
+
+                    const cloudAttempted = wantsCloud;
+                    const cloudFailed =
+                        cloudAttempted &&
+                        !(remote?.ok && String(remote?.replyText || "").trim().length > 0);
+
+                    const remoteUrl: string | undefined =
+                        typeof remote?.remoteUrl === "string" ? remote.remoteUrl : undefined;
+
+                    const remoteStatus: number | undefined =
+                        typeof remote?.remoteStatus === "number" ? remote.remoteStatus : undefined;
+
+                    const remoteError: string | undefined =
+                        typeof remote?.remoteError === "string" && remote.remoteError.trim()
+                            ? remote.remoteError.trim()
+                            : typeof remote?.errorMessage === "string" && remote.errorMessage.trim()
+                                ? remote.errorMessage.trim()
+                                : cloudFailed
+                                    ? "Unknown error"
+                                    : undefined;
+
 
                     let replyText: string;
                     let moodHint: string | undefined;
@@ -799,20 +1613,150 @@ export default function ChatScreen() {
 
                         compatibility = remote?.meta?.compatibility ?? remote?.response?.meta?.compatibility;
 
-                        // Only show mood/insight hint if Emotion Insights is enabled
-                        moodHint = wantsInsights ? getLocalMoodHint(trimmed) : undefined;
+                        // ✅ DEV-only QA contract gate (no UI impact):
+                        // Confirms server contract fields are present after cloud reply.
+                        if (DEBUG_UI_ENABLED) {
+                            const meta =
+                                (remote as any)?.meta ??
+                                (remote as any)?.response?.meta ??
+                                {};
+
+                            const analysisSource =
+                                typeof meta?.analysisSource === "string"
+                                    ? meta.analysisSource
+                                    : "MISSING";
+
+                            const emotionLabel =
+                                typeof meta?.emotionLabel === "string" && meta.emotionLabel.trim()
+                                    ? meta.emotionLabel.trim().toLowerCase()
+                                    : "MISSING";
+
+                            const primary =
+                                typeof meta?.emotion?.primary === "string" && meta.emotion.primary.trim()
+                                    ? meta.emotion.primary.trim().toLowerCase()
+                                    : "MISSING";
+
+                            console.log(
+                                `[imotara][QA] respond contract (mobile): analysisSource=${analysisSource} emotionLabel=${emotionLabel} emotion.primary=${primary}`
+                            );
+                        }
+
+                        const cloudMoodHint = getMoodHintFromEmotionPrimary(remote?.emotion);
+
+                        // ✅ Local mood hint must also return a primary emotion bucket (for badge + history)
+                        const localMood = getLocalMoodHintWithPrimary(trimmed);
+                        const localMoodHint = localMood.hint;
+                        const localPrimary = localMood.primary;
+
+                        moodHint = wantsInsights
+                            ? cloudMoodHint ?? localMoodHint
+                            : undefined;
+
+                        // ✅ DEV-only visibility: confirm which source won
+                        if (__DEV__ && wantsInsights) {
+                            console.log("[imotara][moodHint]", {
+                                analysisMode,
+                                remoteEmotion: remote?.emotion,
+                                source: cloudMoodHint ? "cloud" : "local_fallback",
+                            });
+                        }
+
+
                     } else {
                         // 3) Otherwise fallback to NEW local reply engine
                         const local = buildLocalReply(trimmed, toneContext);
 
-                        replyText = local.message + (wantsCloud ? networkNote : "");
                         moodHint = wantsInsights ? getLocalMoodHint(trimmed) : undefined;
                         source = "local";
 
                         reflectionSeed = local.reflectionSeed
                             ? { ...local.reflectionSeed, title: local.reflectionSeed.title ?? "" }
                             : undefined;
+
+                        // ✅ Phase 2.2.1 — avoid duplicating reflectionSeed prompt inside the message body (local source of truth)
+                        const prompt = local.reflectionSeed?.prompt?.trim();
+                        const baseMessage = stripReflectionSeedPromptFromMessage(local.message, prompt);
+
+                        replyText = (baseMessage || local.message) + (wantsCloud ? networkNote : "");
+
+                        // ✅ Phase 2.2.2 — local followUp parity + de-dupe (enhancement only)
+                        followUp =
+                            typeof prompt === "string" && prompt.trim()
+                                ? varyLocalFollowUpIfRepeated({
+                                    cacheKey: "local-followup",
+                                    followUp: prompt.trim(),
+                                    lowerUserMsg: trimmed.toLowerCase(),
+                                })
+                                : undefined;
                     }
+
+                    // ✅ Persist resolved emotion/intensity into history (cloud-preferred; additive only)
+                    const localPrimary = getLocalMoodHintWithPrimary(trimmed).primary;
+
+                    const finalEmotion =
+                        source === "cloud"
+                            ? (() => {
+                                const raw = trimmed || "";
+
+                                // 1) Prefer backend-provided emotion if present
+                                if (typeof remote?.emotion === "string" && remote.emotion.trim()) {
+                                    const e = remote.emotion.trim().toLowerCase();
+                                    if (e === "sadness" || e === "sad") return "sad";
+                                    if (e === "fear" || e === "anxiety" || e === "anxious" || e === "stressed") return "stressed";
+                                    if (e === "anger" || e === "angry") return "angry";
+                                    if (e === "joy" || e === "happy") return "joy";
+                                    if (e === "confused" || e === "confusion") return "confused";
+                                    if (e === "neutral") return "neutral";
+                                    return e;
+                                }
+
+                                // 2) If backend didn't send emotion, derive from input text (safe fallback)
+                                const t = raw.toLowerCase().replace(/\s+/g, " ");
+                                if (HI_STRESS_REGEX.test(raw)) return "stressed";
+                                if (BN_SAD_REGEX.test(raw)) return "sad";
+                                if (
+                                    isConfusedText(raw) ||
+                                    /\bsamajh nahi aa raha\b/.test(t) ||
+                                    /\bsamajh nahi aa rahi\b/.test(t) ||
+                                    /\bkya karu\b/.test(t) ||
+                                    /\bkya karoon\b/.test(t)
+                                ) {
+                                    return "confused";
+                                }
+
+                                return undefined;
+                            })()
+                            : source === "local"
+                                ? (() => {
+                                    const raw = trimmed || "";
+
+                                    // ✅ Mixed Hindi/Bengali + romanized Bengali should never fall to neutral
+                                    if (HI_STRESS_REGEX.test(raw)) return "stressed";
+                                    if (BN_SAD_REGEX.test(raw) || /\bmood\s+off\b/i.test(raw)) return "sad";
+
+                                    // Use localPrimary if available (keeps existing behavior)
+                                    if (typeof localPrimary === "string" && localPrimary.trim()) {
+                                        const p = localPrimary.trim().toLowerCase();
+                                        // normalize to UI buckets
+                                        if (p === "sadness") return "sad";
+                                        if (p === "fear" || p === "anxiety") return "stressed";
+                                        if (p === "anger") return "angry";
+                                        if (p === "joy") return "joy";
+                                        if (p === "neutral") return "neutral";
+                                        return p;
+                                    }
+                                    return undefined;
+                                })()
+                                : undefined;
+
+
+                    const finalIntensity =
+                        source === "cloud" && typeof remote?.intensity === "number" && Number.isFinite(remote.intensity)
+                            ? remote.intensity
+                            : source === "local" && finalEmotion
+                                ? getDefaultIntensityForPrimary(finalEmotion)
+                                : undefined;
+
 
                     const botTimestamp = Date.now();
                     const botMessage: ChatMessage = {
@@ -828,9 +1772,22 @@ export default function ChatScreen() {
                         reflectionSeed,
                         followUp,
 
+                        // ✅ cloud attempt diagnostics (additive)
+                        cloudAttempted,
+                        ...(cloudFailed
+                            ? {
+                                remoteUrl,
+                                remoteStatus,
+                                remoteError,
+                            }
+                            : {
+                                remoteUrl,
+                            }),
+
                         // Debug-only: attach compatibility meta if present
                         ...(compatibility ? { meta: { compatibility } } : {}),
                     };
+
 
                     addToHistory({
                         id: botMessage.id,
@@ -840,9 +1797,14 @@ export default function ChatScreen() {
                         isSynced: false,
                         source: botMessage.source,
 
-                        // ✅ Baby Step 10.2 — persist emotion in history
+                        // ✅ Existing persisted hint
                         moodHint: botMessage.moodHint,
+
+                        // ✅ NEW persisted emotion payload (HistoryContext now supports this)
+                        emotion: finalEmotion,
+                        intensity: finalIntensity,
                     });
+
 
                     if (!mountedRef.current) return;
 
@@ -852,16 +1814,27 @@ export default function ChatScreen() {
                 } catch (error) {
                     console.warn("Imotara mobile AI error:", error);
 
-                    const wantsCloud = analysisMode !== "local";
+                    const wantsCloud = analysisMode !== "local" && cloudSyncAllowed;
                     const wantsInsights = emotionInsightsEnabled;
 
                     const local = buildLocalReply(trimmed, toneContext);
 
+                    const reflectionSeed = local.reflectionSeed
+                        ? { ...local.reflectionSeed, title: local.reflectionSeed.title ?? "" }
+                        : undefined;
+
+                    /// ✅ Phase 2.2.1 — avoid duplicating reflectionSeed prompt inside the message body (catch path too)
+                    const prompt = reflectionSeed?.prompt?.trim();
+                    const baseMessage = stripReflectionSeedPromptFromMessage(local.message, prompt);
+
                     const replyWithNote = wantsCloud
-                        ? local.message + networkNote
-                        : local.message;
+                        ? (baseMessage || local.message) + networkNote
+                        : (baseMessage || local.message);
 
                     const botTimestamp = Date.now();
+
+                    const followUp = reflectionSeed?.prompt;
+
                     const botMessage: ChatMessage = {
                         id: `b-${botTimestamp}`,
                         from: "bot",
@@ -870,16 +1843,40 @@ export default function ChatScreen() {
                         moodHint: wantsInsights ? getLocalMoodHint(trimmed) : undefined,
                         isSynced: false,
                         source: "local",
+
+                        // ✅ parity metadata for local fallback
+                        reflectionSeed,
+                        followUp,
                     };
 
+                    // ✅ Additive: persist user emotion for timelines/insights (stable primary label)
+                    const userPrimary = wantsInsights
+                        ? getLocalMoodHintWithPrimary(trimmed).primary
+                        : undefined;
+
+                    const userEmotion =
+                        typeof userPrimary === "string" && userPrimary.trim()
+                            ? userPrimary.trim()
+                            : undefined;
+
+                    const userIntensity =
+                        userEmotion ? getDefaultIntensityForPrimary(userEmotion) : undefined;
+
+
                     addToHistory({
-                        id: botMessage.id,
-                        text: botMessage.text,
-                        from: "bot",
-                        timestamp: botMessage.timestamp,
+                        id: userMessage.id,
+                        text: userMessage.text,
+                        from: "user",
+                        timestamp: userMessage.timestamp,
                         isSynced: false,
-                        source: botMessage.source,
+                        source: userMessage.source,
+
+                        // ✅ NEW
+                        emotion: userEmotion,
+                        intensity: userIntensity,
                     });
+
+
 
                     if (!mountedRef.current) return;
 
@@ -899,6 +1896,17 @@ export default function ChatScreen() {
             })();
         }, 800);
     };
+
+    // ✅ DEV-only helper: fill input with a local test prompt (auto-send only in local mode)
+    const runLocalDevPrompt = (prompt: string) => {
+        setInput(prompt);
+
+        // Auto-send only when explicitly in local mode (prevents surprise cloud sends)
+        if (analysisMode === "local") {
+            setTimeout(() => handleSend(), 0);
+        }
+    };
+
 
     // Hydrate from persisted history on first load
     useEffect(() => {
@@ -923,6 +1931,32 @@ export default function ChatScreen() {
             smoothScrollToBottom(scrollViewRef);
         }
     }, [history, messages.length]);
+
+    // ✅ NEW: when history updates (e.g., after Sync Now), reflect isSynced/source changes in chat bubbles
+    useEffect(() => {
+        if (!history || history.length === 0) return;
+        if (!messages || messages.length === 0) return;
+
+        const byId = new Map<string, any>(history.map((h: any) => [h.id, h]));
+
+        setMessages((prev) =>
+            prev.map((m) => {
+                const h = byId.get(m.id);
+                if (!h) return m;
+
+                const nextIsSynced = !!h.isSynced;
+                const nextSource = (h as any).source ?? m.source;
+
+                if (m.isSynced === nextIsSynced && m.source === nextSource) return m;
+
+                return {
+                    ...m,
+                    isSynced: nextIsSynced,
+                    source: nextSource,
+                };
+            })
+        );
+    }, [history]); // intentionally NOT depending on `messages` to avoid loops
 
     const handleInputChange = (text: string) => {
         setInput(text);
@@ -1015,26 +2049,35 @@ export default function ChatScreen() {
             const hasSyncError = lower.includes("failed") || lower.includes("error");
             const isCloudGenerated = message.source === "cloud";
 
+            // ✅ Truth rule:
+            // - "isSynced/isPending" refers to HISTORY sync
+            // - "source" refers to where the reply was GENERATED
+            // So a cloud reply should never be labeled "On this device only".
             if (hasSyncError) {
                 bubbleBorderColor = "#f97373";
                 statusLabel = isCloudGenerated
-                    ? "Sync issue · cloud reply (not saved)"
+                    ? "Sync issue · cloud reply"
                     : "Sync issue · on this device only";
                 statusBg = "rgba(248, 113, 113, 0.24)";
                 statusTextColor = "#fecaca";
             } else {
-                // Not yet synced: show a truthful label based on where the reply came from
                 if (isCloudGenerated) {
                     bubbleBorderColor = "rgba(56, 189, 248, 0.55)";
-                    statusLabel = "Imotara Cloud (not saved)";
+                    statusLabel = "Imotara Cloud";
                     statusBg = "rgba(56, 189, 248, 0.14)";
                     statusTextColor = colors.textPrimary;
+                } else if (!isUser && message.cloudAttempted) {
+                    bubbleBorderColor = "#fbbf24";
+                    statusLabel = "Cloud failed → Local";
+                    statusBg = "rgba(251, 191, 36, 0.18)";
+                    statusTextColor = "#fde68a";
                 } else {
                     bubbleBorderColor = "#fca5a5";
                     statusLabel = "On this device only";
                     statusBg = "rgba(248, 113, 113, 0.18)";
                     statusTextColor = "#fecaca";
                 }
+
             }
         }
 
@@ -1062,65 +2105,87 @@ export default function ChatScreen() {
                         : `Imotara${sourceIcon}${getMoodEmojiForHint(message.moodHint)}`}
                 </Text>
 
-                {!isUser ? (() => {
-                    const seed = getReflectionSeedCard({
-                        message: message.text,
-                        reflectionSeed: message.reflectionSeed,
-                    } as any);
+                {!isUser && message.source === "local"
+                    ? (() => {
+                        const seed = getReflectionSeedCard({
+                            message: message.text,
+                            reflectionSeed: message.reflectionSeed,
+                        } as any);
 
-                    if (!seed) return null;
+                        if (!seed) return null;
 
-                    return (
-                        <View
-                            style={{
-                                marginBottom: 8,
-                                paddingHorizontal: 10,
-                                paddingVertical: 8,
-                                borderRadius: 14,
-                                borderWidth: 1,
-                                borderColor: "rgba(255,255,255,0.12)",
-                                backgroundColor: "rgba(0,0,0,0.22)",
-                            }}
-                        >
+                        return (
                             <View
                                 style={{
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                    gap: 8,
+                                    marginBottom: 8,
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 8,
+                                    borderRadius: 14,
+                                    borderWidth: 1,
+                                    borderColor: "rgba(255,255,255,0.12)",
+                                    backgroundColor: "rgba(0,0,0,0.22)",
                                 }}
                             >
-                                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>
-                                    {seed.title}
-                                </Text>
                                 <View
                                     style={{
-                                        paddingHorizontal: 8,
-                                        paddingVertical: 2,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
-                                        borderColor: "rgba(255,255,255,0.12)",
-                                        backgroundColor: "rgba(255,255,255,0.06)",
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        gap: 8,
                                     }}
                                 >
-                                    <Text style={{ fontSize: 10, color: colors.textSecondary }}>
-                                        {seed.label}
+                                    <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>
+                                        {seed.title}
                                     </Text>
+                                    <View
+                                        style={{
+                                            paddingHorizontal: 8,
+                                            paddingVertical: 2,
+                                            borderRadius: 999,
+                                            borderWidth: 1,
+                                            borderColor: "rgba(255,255,255,0.12)",
+                                            backgroundColor: "rgba(255,255,255,0.06)",
+                                        }}
+                                    >
+                                        <Text style={{ fontSize: 10, color: colors.textSecondary }}>
+                                            {seed.label}
+                                        </Text>
+                                    </View>
                                 </View>
-                            </View>
 
-                            <Text style={{ marginTop: 4, fontSize: 12, color: colors.textPrimary, opacity: 0.92 }}>
-                                {seed.prompt}
-                            </Text>
-                        </View>
-                    );
-                })() : null}
+                                <Text
+                                    style={{ marginTop: 4, fontSize: 12, color: colors.textPrimary, opacity: 0.92 }}
+                                >
+                                    {seed.prompt}
+                                </Text>
+                            </View>
+                        );
+                    })()
+                    : null}
+
 
                 <Text
                     style={{ fontSize: 14, color: colors.textPrimary }}
                     selectable
                 >
-                    {message.text}
+                    {(() => {
+                        // If a reflection seed prompt is being shown in the card,
+                        // don’t show the same prompt again inside message.text.
+                        if (isUser) return message.text;
+
+                        // Only strip the reflection prompt if we are actually showing the reflection card (local-only).
+                        if (message.source !== "local") return message.text;
+
+                        const seed = getReflectionSeedCard({
+                            message: message.text,
+                            reflectionSeed: message.reflectionSeed,
+                        } as any);
+
+                        if (!seed?.prompt) return message.text;
+
+                        return stripReflectionPromptFromMessage(message.text, seed.prompt);
+
+                    })()}
                 </Text>
 
                 {/* ✅ NEW: render follow-up question (bot only) */}
@@ -1648,7 +2713,7 @@ export default function ChatScreen() {
                         </View>
                     )}
 
-                    {DEBUG_UI_ENABLED && latestMoodHint && (
+                    {emotionInsightsEnabled && latestMoodHint && (
                         <View
                             style={{
                                 marginBottom: 12,
@@ -1661,7 +2726,7 @@ export default function ChatScreen() {
                             }}
                         >
                             <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                                Mood glimpse (preview)
+                                Mood glimpse
                             </Text>
                             <Text
                                 style={{
@@ -1672,8 +2737,185 @@ export default function ChatScreen() {
                             >
                                 {latestMoodHint}
                             </Text>
+
+                            {DEBUG_UI_ENABLED && (
+                                <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 4 }}>
+                                    (debug preview)
+                                </Text>
+                            )}
                         </View>
                     )}
+
+                    {DEBUG_UI_ENABLED && devQaRunning && (
+                        <View
+                            style={{
+                                marginBottom: 12,
+                                paddingHorizontal: 12,
+                                paddingVertical: 8,
+                                borderRadius: 12,
+                                backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                            }}
+                        >
+                            <Text style={{ fontSize: 12, color: colors.textPrimary }}>
+                                QA running…
+                            </Text>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                                (DEV only) New runs are blocked until this finishes.
+                            </Text>
+                        </View>
+                    )}
+
+                    {DEBUG_UI_ENABLED && (
+                        <View style={{ marginBottom: 12 }}>
+                            <View
+                                style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    flexWrap: "wrap",
+                                }}
+                            >
+                                <TouchableOpacity
+                                    onPress={() => void runDevQaSuite({ cloudProbe: devQaCloudProbe })}
+                                    style={{
+                                        alignSelf: "flex-start",
+                                        marginRight: 10,
+                                        marginBottom: 8,
+                                        borderRadius: 999,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 8,
+                                        borderWidth: 1,
+                                        borderColor: colors.border,
+                                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                    }}
+                                >
+                                    <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
+                                        Run QA 1–10 (DEV)
+                                    </Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    onPress={() => void runDevQaCloudOnly({ cloudProbe: devQaCloudProbe })}
+                                    style={{
+                                        alignSelf: "flex-start",
+                                        marginRight: 10,
+                                        marginBottom: 8,
+                                        borderRadius: 999,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 8,
+                                        borderWidth: 1,
+                                        borderColor: colors.border,
+                                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                    }}
+                                >
+                                    <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
+                                        Run QA 1–10 (Cloud) (DEV)
+                                    </Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    onPress={async () => {
+                                        const textToCopy =
+                                            (DEV_QA_LAST_REPORT || "").trim() || "No QA report generated yet.";
+                                        await Clipboard.setStringAsync(textToCopy);
+                                        console.log("— IMOTARA DEV QA: copied report to clipboard —");
+                                    }}
+                                    style={{
+                                        alignSelf: "flex-start",
+                                        marginBottom: 8,
+                                        borderRadius: 999,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 8,
+                                        borderWidth: 1,
+                                        borderColor: colors.border,
+                                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                    }}
+                                >
+                                    <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
+                                        Copy QA Report (DEV)
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* ✅ Local quick prompts (DEV) */}
+                            <View
+                                style={{
+                                    marginTop: 8,
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 10,
+                                    borderRadius: 12,
+                                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                    borderWidth: 1,
+                                    borderColor: colors.border,
+                                }}
+                            >
+                                <View
+                                    style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        gap: 10,
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 11, color: colors.textSecondary, flex: 1 }}>
+                                        Local quick prompts (DEV) — tap to fill (auto-sends only in Local mode)
+                                    </Text>
+
+                                    {/* ✅ DEV badge: current analysis mode (no behavior change) */}
+                                    <View
+                                        style={{
+                                            alignSelf: "flex-start",
+                                            borderRadius: 999,
+                                            paddingHorizontal: 10,
+                                            paddingVertical: 6,
+                                            borderWidth: 1,
+                                            borderColor: colors.border,
+                                            backgroundColor: "rgba(2, 6, 23, 0.6)",
+                                        }}
+                                    >
+                                        <Text style={{ fontSize: 11, color: colors.textPrimary }}>
+                                            {analysisMode === "local" || !cloudSyncAllowed ? "Local" : "Cloud"}
+                                        </Text>
+
+                                    </View>
+                                </View>
+
+
+                                <View
+                                    style={{
+                                        flexDirection: "row",
+                                        flexWrap: "wrap",
+                                        marginTop: 8,
+                                    }}
+                                >
+                                    {LOCAL_DEV_TEST_PROMPTS.map((p, idx) => (
+                                        <TouchableOpacity
+                                            key={`local-dev-${idx}`}
+                                            onPress={() => runLocalDevPrompt(p)}
+                                            style={{
+                                                alignSelf: "flex-start",
+                                                marginRight: 8,
+                                                marginBottom: 8,
+                                                borderRadius: 999,
+                                                paddingHorizontal: 12,
+                                                paddingVertical: 8,
+                                                borderWidth: 1,
+                                                borderColor: colors.border,
+                                                backgroundColor: "rgba(2, 6, 23, 0.6)",
+                                                maxWidth: "100%",
+                                            }}
+                                        >
+                                            <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
+                                                {p}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
 
                     {/* Compatibility Gate (report-only) */}
                     {DEBUG_UI_ENABLED && (() => {
