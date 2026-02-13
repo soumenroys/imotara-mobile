@@ -53,3 +53,4 @@ imotara-play-*.json
 *.keystore
 
 .dev-mobile.log
+.env
