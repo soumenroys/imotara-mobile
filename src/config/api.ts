@@ -73,20 +73,13 @@ const resolvedBase = (() => {
         // Prefer metro host IP so the phone/emulator can reach your laptop server.
         if (host) return `http://${host}:3000`;
 
-        // Last resort:
+        // Last resort (DEV-only):
         // - iOS simulator can use localhost
         // - Android emulator needs 10.0.2.2
-        // DEV-only fallback if env is missing
-        if (__DEV__) {
-            return Platform.OS === "android"
-                ? "http://10.0.2.2:3000"
-                : "http://localhost:3000";
-        }
+        return Platform.OS === "android"
+            ? "http://10.0.2.2:3000"
+            : "http://localhost:3000";
 
-        // Production must never silently fall back to localhost
-        throw new Error(
-            "Missing EXPO_PUBLIC_IMOTARA_API_BASE_URL (or IMOTARA_API_BASE_URL) in production build."
-        );
     }
 
 
