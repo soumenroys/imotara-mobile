@@ -18,7 +18,8 @@ import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
 import { callImotaraAI } from "../api/aiClient";
 import { LinearGradient } from "expo-linear-gradient";
-import { DEBUG_UI_ENABLED } from "../config/debug";
+import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
+
 
 // NEW: lifecycle hook (additive)
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
@@ -668,8 +669,9 @@ async function runDevQaSuite(options: DevQaRunOptions = {}): Promise<void> {
     const lines: string[] = [];
     const logLine = (line: string) => {
         lines.push(line);
-        console.log(line);
+        debugLog(line);
     };
+
 
     logLine("— IMOTARA DEV QA SUITE (mobile) —");
 
@@ -737,8 +739,9 @@ async function runDevQaCloudOnly(options: DevQaRunOptions = {}): Promise<void> {
     const lines: string[] = [];
     const logLine = (line: string) => {
         lines.push(line);
-        console.log(line);
+        debugLog(line);
     };
+
 
     logLine("— IMOTARA DEV QA CLOUD-ONLY (mobile) —");
 
@@ -1411,7 +1414,8 @@ export default function ChatScreen() {
                 );
             }
         } catch (err) {
-            console.warn("Sync now failed:", err);
+            debugWarn("Sync now failed:", err);
+
             Alert.alert(
                 "Sync error",
                 "Could not sync right now. Your message is safe on this device."
@@ -1551,7 +1555,7 @@ export default function ChatScreen() {
                         })
                         : { ok: false, replyText: "" };
 
-                    console.log("[imotara] remote:", {
+                    debugLog("[imotara] remote:", {
                         ok: remote?.ok,
                         errorMessage: remote?.errorMessage,
 
@@ -1564,6 +1568,7 @@ export default function ChatScreen() {
                         analysisMode,
                         meta: remote?.meta,
                     });
+
 
                     const cloudAttempted = wantsCloud;
                     const cloudFailed =
@@ -1636,9 +1641,10 @@ export default function ChatScreen() {
                                     ? meta.emotion.primary.trim().toLowerCase()
                                     : "MISSING";
 
-                            console.log(
+                            debugLog(
                                 `[imotara][QA] respond contract (mobile): analysisSource=${analysisSource} emotionLabel=${emotionLabel} emotion.primary=${primary}`
                             );
+
                         }
 
                         const cloudMoodHint = getMoodHintFromEmotionPrimary(remote?.emotion);
@@ -1653,13 +1659,14 @@ export default function ChatScreen() {
                             : undefined;
 
                         // ✅ DEV-only visibility: confirm which source won
-                        if (__DEV__ && wantsInsights) {
-                            console.log("[imotara][moodHint]", {
+                        if (wantsInsights) {
+                            debugLog("[imotara][moodHint]", {
                                 analysisMode,
                                 remoteEmotion: remote?.emotion,
                                 source: cloudMoodHint ? "cloud" : "local_fallback",
                             });
                         }
+
 
 
                     } else {
@@ -1812,7 +1819,7 @@ export default function ChatScreen() {
                     setMessages((prev) => [...prev, botMessage]);
                     smoothScrollToBottom(scrollViewRef);
                 } catch (error) {
-                    console.warn("Imotara mobile AI error:", error);
+                    debugWarn("Imotara mobile AI error:", error);
 
                     const wantsCloud = analysisMode !== "local" && cloudSyncAllowed;
                     const wantsInsights = emotionInsightsEnabled;
@@ -2819,7 +2826,8 @@ export default function ChatScreen() {
                                         const textToCopy =
                                             (DEV_QA_LAST_REPORT || "").trim() || "No QA report generated yet.";
                                         await Clipboard.setStringAsync(textToCopy);
-                                        console.log("— IMOTARA DEV QA: copied report to clipboard —");
+                                        debugLog("— IMOTARA DEV QA: copied report to clipboard —");
+
                                     }}
                                     style={{
                                         alignSelf: "flex-start",

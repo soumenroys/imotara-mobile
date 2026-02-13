@@ -5,8 +5,9 @@
 // whether to fallback to local preview.
 
 import { IMOTARA_API_BASE_URL } from "../config/api";
-import { DEBUG_UI_ENABLED } from "../config/debug";
+import { debugLog, debugWarn } from "../config/debug";
 import { BN_SAD_REGEX, HI_STRESS_REGEX, isConfusedText } from "../lib/emotion/keywordMaps";
+
 
 export type AnalyzeResponse = {
     ok: boolean;
@@ -28,16 +29,6 @@ export type AnalyzeResponse = {
     emotion?: string;
     intensity?: number;
 };
-
-function debugLog(...args: any[]) {
-    // ✅ Never log in production builds
-    if (__DEV__ && DEBUG_UI_ENABLED) console.log(...args);
-}
-
-function debugWarn(...args: any[]) {
-    // ✅ Never warn in production builds
-    if (__DEV__ && DEBUG_UI_ENABLED) console.warn(...args);
-}
 
 // Keep this local to mobile; mirrors server payload structure (tone only)
 export type ToneAgeRange =

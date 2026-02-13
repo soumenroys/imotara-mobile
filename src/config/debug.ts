@@ -69,11 +69,9 @@ export const DEBUG_UI_ENABLED: boolean =
     IS_PROD ? false : (typeof envOverride === "boolean" ? envOverride : __DEV__);
 
 
-/**
- * Optional helper for gated logging.
- * (Use instead of console.log in new code; existing code untouched.)
- */
 export function debugLog(...args: any[]) {
+    // Never log in production builds, even if DEBUG_UI is forced on.
+    if (!__DEV__) return;
     if (DEBUG_UI_ENABLED) {
         // eslint-disable-next-line no-console
         console.log(...args);
@@ -84,8 +82,11 @@ export function debugLog(...args: any[]) {
  * Optional helper for gated warnings.
  */
 export function debugWarn(...args: any[]) {
+    // Never warn in production builds, even if DEBUG_UI is forced on.
+    if (!__DEV__) return;
     if (DEBUG_UI_ENABLED) {
         // eslint-disable-next-line no-console
         console.warn(...args);
     }
 }
+
