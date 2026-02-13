@@ -90,8 +90,22 @@ const resolvedBase = (() => {
 
 export const IMOTARA_API_BASE_URL = normalizeBaseUrl(resolvedBase);
 
-// Optional gated debug log
+// ✅ Always warn in production if base looks suspicious (helps diagnose TestFlight issues)
+const isProbablyLocal =
+    /^(http:\/\/)?(localhost|127\.0\.0\.1|10\.0\.2\.2)(:\d+)?$/i.test(
+        IMOTARA_API_BASE_URL
+    );
+
+const isHttp = /^http:\/\//i.test(IMOTARA_API_BASE_URL);
+
+// In dev, keep the gated logs
 debugLog("IMOTARA_API_BASE_URL =", IMOTARA_API_BASE_URL);
+
+// In production builds, print ONE visible line only when something is likely wrong
+if (!__DEV__ && (isProbablyLocal || isHttp)) {
+    console.warn("[imotara] Suspicious IMOTARA_API_BASE_URL:", IMOTARA_API_BASE_URL);
+}
+
 
 /**
  * Build a full API URL for fetch().

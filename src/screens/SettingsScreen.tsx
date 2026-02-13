@@ -1,5 +1,8 @@
 // src/screens/SettingsScreen.tsx
 import React from "react";
+import Constants from "expo-constants";
+
+
 import {
     View,
     Text,
@@ -1535,7 +1538,21 @@ export default function SettingsScreen() {
                     }}
                 >
                     <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-                        Imotara Mobile Preview · v0.9.0
+                        {(() => {
+                            const version =
+                                (Constants as any)?.expoConfig?.version ??
+                                (Constants as any)?.manifest2?.extra?.expoClient?.version ??
+                                "—";
+
+                            // In Expo Go / dev builds, build number may not be available reliably without native modules.
+                            // For TestFlight / EAS builds, we can still surface the configured buildNumber from expoConfig when present.
+                            const build =
+                                (Constants as any)?.expoConfig?.ios?.buildNumber ??
+                                (Constants as any)?.expoConfig?.android?.versionCode ??
+                                "—";
+
+                            return `Imotara Mobile · v${version} (${build})`;
+                        })()}
                     </Text>
                 </View>
             </ScrollView>
