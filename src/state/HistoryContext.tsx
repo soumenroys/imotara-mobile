@@ -113,6 +113,10 @@ const HISTORY_REMOTE_SINCE_KEY = "imotara_history_remote_since_v1";
 // ✅ Separate storage key for licensing
 const LICENSE_TIER_KEY = "imotara_license_tier_v1";
 
+// 🚀 Launch Phase Override (temporary: 3–6 months free cloud sync)
+const LAUNCH_CLOUD_SYNC_FREE_FOR_ALL =
+    (process.env.EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL ?? "true") === "true";
+
 // ✅ Validation helper (keeps stored values safe)
 function isValidTier(v: unknown): v is LicenseTier {
     return (
@@ -516,7 +520,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         }
 
         // ✅ Hardening: FREE / gated users must not attempt cloud push (manual or background)
-        if (!cloudSyncAllowed) {
+        if (!cloudSyncAllowed && !LAUNCH_CLOUD_SYNC_FREE_FOR_ALL) {
             const now = Date.now();
             const result: PushRemoteHistoryResult = {
                 ok: false,
@@ -675,7 +679,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 const pushRes = await pushHistoryToRemote();
 
                 // ✅ Hardening: if cloud is gated off, do not attempt remote pull either
-                if (!cloudSyncAllowed) {
+                // 🚀 Launch Phase Override: allow cloud sync for everyone temporarily
+                if (!cloudSyncAllowed && !LAUNCH_CLOUD_SYNC_FREE_FOR_ALL) {
                     return pushRes;
                 }
 
@@ -801,7 +806,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         if (isSyncing) return;
 
         // ✅ NEW: Respect plan. FREE should not schedule background cloud pushes.
-        if (!cloudSyncAllowed) return;
+        if (!cloudSyncAllowed && !LAUNCH_CLOUD_SYNC_FREE_FOR_ALL) return;
 
         const delayMs = Math.min(Math.max(autoSyncDelaySeconds, 3), 60) * 1000;
 

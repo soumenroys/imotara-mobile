@@ -318,7 +318,8 @@ export async function pushRemoteHistory(
                 timestamp: i.timestamp,
             }));
 
-        const attempted = payloadItems.length;
+        const limited = payloadItems.slice(0, 50);
+        const attempted = limited.length;
 
         // Push can take longer than fetch (larger payload). Scale timeout by payload size.
         const pushTimeoutMs =
@@ -335,7 +336,7 @@ export async function pushRemoteHistory(
                     Accept: "application/json",
                 },
                 // ✅ CRITICAL FIX: use `records`, not `items`
-                body: JSON.stringify({ records: payloadItems }),
+                body: JSON.stringify({ records: limited }),
             },
             "pushRemoteHistory",
             pushTimeoutMs
@@ -394,4 +395,3 @@ export async function pushRemoteHistory(
         };
     }
 }
-

@@ -262,7 +262,9 @@ export default function HistoryScreen() {
 
     // ✅ Cloud sync gate (soft gating)
     const cloudGate = gate("CLOUD_SYNC", licenseTier);
-    const canCloudSync = cloudGate.enabled;
+
+    // 🚀 Launch Phase Override: Cloud sync free for all users
+    const canCloudSync = true;
 
     // ✅ TS-safe: reason exists only when enabled === false
     const cloudGateReason =
@@ -373,6 +375,15 @@ export default function HistoryScreen() {
     );
 
     const topChip = React.useMemo(() => {
+        // ✅ If cloud sync is not available (Premium-gated), never show scary sync errors
+        if (!canCloudSync) {
+            return {
+                label: "Device-only · cloud sync is off",
+                variant: "neutral" as const,
+                icon: "📱",
+            };
+        }
+
         if (!effectiveLastSyncAt) {
             return {
                 label: "Sync status: never synced",
@@ -408,7 +419,7 @@ export default function HistoryScreen() {
             variant: "neutral" as const,
             icon: "☁",
         };
-    }, [effectiveLastSyncAt, lastSyncStatus, hasSyncError]);
+    }, [effectiveLastSyncAt, lastSyncStatus, hasSyncError, canCloudSync]);
 
     const showPremiumAlert = React.useCallback(() => {
         Alert.alert(
@@ -845,8 +856,9 @@ export default function HistoryScreen() {
                                     color: colors.textSecondary,
                                 }}
                             >
-                                {cloudGate.reason ||
-                                    "Cloud sync is available with Premium."}
+                                {!cloudGate.enabled
+                                    ? (cloudGate as any).reason || "Cloud sync is available with Premium."
+                                    : null}
                             </Text>
                         )}
 
