@@ -12,11 +12,17 @@ import {
     NativeSyntheticEvent,
     NativeScrollEvent,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
-import { callImotaraAI } from "../api/aiClient";
+import {
+    callImotaraAI,
+    fetchRemoteChatMessages,
+    pushRemoteChatMessages,
+} from "../api/aiClient";
+
 import { LinearGradient } from "expo-linear-gradient";
 import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
 
@@ -892,6 +898,61 @@ export default function ChatScreen() {
         toneContext,
         cloudSyncAllowed,
     } = useSettings();
+
+    // ---------------------------------------------------------------------------
+    // Chat persistence (read-only pull test)
+    // Identity: x-imotara-user (Option 1: device-scoped user id)
+    // ---------------------------------------------------------------------------
+
+    const CHAT_USER_SCOPE_KEY = "imotara_chat_user_scope_v1";
+
+    async function getOrCreateChatUserScope(): Promise<string> {
+        try {
+            const existing = await AsyncStorage.getItem(CHAT_USER_SCOPE_KEY);
+            if (existing && existing.trim()) return existing.trim();
+
+            const created =
+                Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
+            await AsyncStorage.setItem(CHAT_USER_SCOPE_KEY, created);
+            return created;
+        } catch (e) {
+            // ultra-safe fallback (won't crash chat)
+            debugWarn("[imotara] getOrCreateChatUserScope failed:", e);
+            return "mobile-fallback";
+        }
+    }
+
+    useEffect(() => {
+        // DEV-only remote pull + single write test (no UI changes yet)
+        let cancelled = false;
+
+        const makeId = () =>
+            Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
+
+        (async () => {
+            try {
+                const userScope = await getOrCreateChatUserScope();
+
+                // 1) Pull
+                const res1 = await fetchRemoteChatMessages({ userScope });
+                if (cancelled) return;
+
+                const count1 = res1?.messages?.length ?? 0;
+                debugLog("[imotara] remote chat pull:", { userScope, count: count1 });
+
+                // DEV auto-write test removed (remote sync verified on prod)
+
+            } catch (e) {
+                debugWarn("[imotara] remote chat pull failed:", e);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+
 
 
     const scrollViewRef = useRef<ScrollView | null>(null);

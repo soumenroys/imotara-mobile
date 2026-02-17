@@ -393,3 +393,105 @@ export async function callImotaraAI(
     }
 
 }
+
+// ---------------------------------------------------------------------------
+// Chat persistence (mobile ↔ web parity)
+// Server: /api/chat/messages
+// Identity: x-imotara-user (Option 1: server-side scoped user id)
+// ---------------------------------------------------------------------------
+
+export type RemoteChatMessage = {
+    id: string;
+    userScope: string;
+    threadId: string;
+    role: "user" | "assistant";
+    content: string;
+    createdAt: number;
+};
+
+export type GetChatMessagesResponse = {
+    messages: RemoteChatMessage[];
+    serverTs?: number;
+};
+
+function buildChatMessagesUrl(params?: { threadId?: string; since?: number }): string {
+    const base = `${IMOTARA_API_BASE_URL}/api/chat/messages`;
+    const q = new URLSearchParams();
+    if (params?.threadId) q.set("threadId", params.threadId);
+    if (typeof params?.since === "number") q.set("since", String(params.since));
+    const qs = q.toString();
+    return qs ? `${base}?${qs}` : base;
+}
+
+export async function fetchRemoteChatMessages(args: {
+    userScope: string;
+    threadId?: string;
+    since?: number;
+}): Promise<GetChatMessagesResponse> {
+    const remoteUrl = buildChatMessagesUrl({ threadId: args.threadId, since: args.since });
+
+    try {
+        const res = await fetch(remoteUrl, {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+                "x-imotara-user": args.userScope,
+            },
+        });
+
+        if (!res.ok) {
+            const bodyText = await res.text().catch(() => "");
+            debugWarn("[imotara] fetchRemoteChatMessages failed", {
+                status: res.status,
+                body: bodyText.slice(0, 200),
+            });
+            return { messages: [] };
+        }
+
+        const data: any = await res.json();
+        const messages = Array.isArray(data?.messages) ? (data.messages as RemoteChatMessage[]) : [];
+        return { messages, serverTs: typeof data?.serverTs === "number" ? data.serverTs : undefined };
+    } catch (err: any) {
+        debugWarn("[imotara] fetchRemoteChatMessages error", err);
+        return { messages: [] };
+    }
+}
+
+export async function pushRemoteChatMessages(args: {
+    userScope: string;
+    messages: Array<{
+        id: string;
+        threadId: string;
+        role: "user" | "assistant";
+        content: string;
+        createdAt: number;
+    }>;
+}): Promise<{ ok: boolean; errorMessage?: string }> {
+    const remoteUrl = `${IMOTARA_API_BASE_URL}/api/chat/messages`;
+
+    try {
+        const res = await fetch(remoteUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "x-imotara-user": args.userScope,
+            },
+            body: JSON.stringify({ messages: args.messages }),
+        });
+
+        if (!res.ok) {
+            const bodyText = await res.text().catch(() => "");
+            debugWarn("[imotara] pushRemoteChatMessages failed", {
+                status: res.status,
+                body: bodyText.slice(0, 200),
+            });
+            return { ok: false, errorMessage: `HTTP ${res.status}` };
+        }
+
+        return { ok: true };
+    } catch (err: any) {
+        debugWarn("[imotara] pushRemoteChatMessages error", err);
+        return { ok: false, errorMessage: err?.message ?? "Network error" };
+    }
+}
+
