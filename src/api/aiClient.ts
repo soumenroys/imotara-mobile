@@ -417,11 +417,17 @@ export type GetChatMessagesResponse = {
 function buildChatMessagesUrl(params?: { threadId?: string; since?: number }): string {
     const base = `${IMOTARA_API_BASE_URL}/api/chat/messages`;
     const q = new URLSearchParams();
+
     if (params?.threadId) q.set("threadId", params.threadId);
     if (typeof params?.since === "number") q.set("since", String(params.since));
+
+    // DEV-only cache-bypass to avoid stale CDN responses during deployments
+    if (__DEV__) q.set("ts", String(Date.now()));
+
     const qs = q.toString();
     return qs ? `${base}?${qs}` : base;
 }
+
 
 export async function fetchRemoteChatMessages(args: {
     userScope: string;
