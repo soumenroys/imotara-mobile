@@ -949,6 +949,7 @@ export default function ChatScreen() {
 
 
                 // 1) Pull
+                console.log("[imotara] mobile remoteScope =", userScope);
                 const res1 = await fetchRemoteChatMessages({ userScope });
                 if (cancelled) return;
 
