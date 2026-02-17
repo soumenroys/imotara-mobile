@@ -866,6 +866,9 @@ function isFirstBotReplyOfSession(
 }
 
 export default function ChatScreen() {
+
+    console.log("[imotara] ChatScreen mounted");
+
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [inputHeight, setInputHeight] = useState(40);
@@ -943,13 +946,12 @@ export default function ChatScreen() {
 
         (async () => {
             try {
-                if (!cloudSyncAllowed) return;
+                // Respect privacy/consent: if analysis is local-only, do not touch remote.
+                if (analysisMode === "local") return;
 
                 const userScope = await resolveChatRemoteScope();
 
-
                 // 1) Pull
-                console.log("[imotara] mobile remoteScope =", userScope);
                 const res1 = await fetchRemoteChatMessages({ userScope });
                 if (cancelled) return;
 
@@ -957,16 +959,16 @@ export default function ChatScreen() {
                 debugLog("[imotara] remote chat pull:", { userScope, count: count1 });
 
                 // DEV auto-write test removed (remote sync verified on prod)
-
             } catch (e) {
                 debugWarn("[imotara] remote chat pull failed:", e);
             }
+
         })();
 
         return () => {
             cancelled = true;
         };
-    }, [cloudSyncAllowed, chatLinkKey]);
+    }, [analysisMode, chatLinkKey]);
 
 
 
