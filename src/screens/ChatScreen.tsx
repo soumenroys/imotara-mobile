@@ -20,7 +20,6 @@ import colors from "../theme/colors";
 import {
     callImotaraAI,
     fetchRemoteChatMessages,
-    pushRemoteChatMessages,
 } from "../api/aiClient";
 
 import { LinearGradient } from "expo-linear-gradient";
@@ -897,12 +896,25 @@ export default function ChatScreen() {
         analysisMode,
         toneContext,
         cloudSyncAllowed,
+
+        // ✅ Cross-device chat link key (optional)
+        chatLinkKey,
     } = useSettings();
 
+
     // ---------------------------------------------------------------------------
-    // Chat persistence (read-only pull test)
-    // Identity: x-imotara-user (Option 1: device-scoped user id)
+    // Chat persistence (read-only pull)
+    // Identity header: x-imotara-user
+    // - Prefer chatLinkKey (cross-device continuity)
+    // - Fallback to device-scoped id (safe default)
     // ---------------------------------------------------------------------------
+
+    async function resolveChatRemoteScope(): Promise<string> {
+        const lk = (chatLinkKey ?? "").trim();
+        if (lk) return lk.slice(0, 80);
+        return await getOrCreateChatUserScope();
+    }
+
 
     const CHAT_USER_SCOPE_KEY = "imotara_chat_user_scope_v1";
 
@@ -931,7 +943,10 @@ export default function ChatScreen() {
 
         (async () => {
             try {
-                const userScope = await getOrCreateChatUserScope();
+                if (!cloudSyncAllowed) return;
+
+                const userScope = await resolveChatRemoteScope();
+
 
                 // 1) Pull
                 const res1 = await fetchRemoteChatMessages({ userScope });
@@ -950,7 +965,7 @@ export default function ChatScreen() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [cloudSyncAllowed, chatLinkKey]);
 
 
 
