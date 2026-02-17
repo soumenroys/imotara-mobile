@@ -76,7 +76,15 @@ type SettingsContextValue = {
      */
     toneContext: ToneContextPayload;
     setToneContext: (value: ToneContextPayload) => void;
+
+    /**
+     * Optional: Cross-device chat link key.
+     * If the same key is set on Web + Mobile, remote chat history can match.
+     */
+    chatLinkKey: string;
+    setChatLinkKey: (value: string) => void;
 };
+
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
     undefined
@@ -190,7 +198,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         },
     });
 
+    // ✅ Cross-device chat link key (optional)
+    const [chatLinkKey, _setChatLinkKey] = useState<string>("");
+
     const [hydrated, setHydrated] = useState(false);
+
 
     // ✅ Licensing-derived flag (default FREE behavior: device-only)
     const [cloudSyncAllowed, setCloudSyncAllowed] = useState<boolean>(false);
@@ -296,10 +308,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             }
                         }
 
+                        // Restore chat link key (optional)
+                        if ("chatLinkKey" in parsed) {
+                            const v = (parsed as any).chatLinkKey;
+                            if (typeof v === "string") {
+                                _setChatLinkKey(v.trim().slice(0, 80));
+                            }
+                        }
+
                         if ("lastSyncAt" in parsed) {
                             const v = parsed.lastSyncAt;
                             _setLastSyncAt(typeof v === "number" ? v : null);
                         }
+
 
                         if ("lastSyncStatus" in parsed) {
                             const v = parsed.lastSyncStatus;
@@ -346,7 +367,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             // ✅ New
             analysisMode,
             toneContext,
+
+            // ✅ Optional: cross-device chat link key
+            chatLinkKey,
         };
+
 
         AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload)).catch((e) => {
             if (DEBUG_UI_ENABLED) console.warn("Settings save failed:", e);
@@ -360,6 +385,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         lastSyncStatus,
         analysisMode,
         toneContext,
+        chatLinkKey,
     ]);
 
     // ---- Wrapped setters (non-breaking; same signatures) ----
@@ -428,6 +454,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         _setToneContext(normalizeToneContext(value));
     };
 
+    const setChatLinkKey = (value: string) => {
+        const v = typeof value === "string" ? value.trim() : "";
+        _setChatLinkKey(v.slice(0, 80));
+    };
+
+
     return (
         <SettingsContext.Provider
             value={{
@@ -448,6 +480,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setAnalysisMode,
                 toneContext,
                 setToneContext,
+                chatLinkKey,
+                setChatLinkKey,
             }}
         >
             {children}

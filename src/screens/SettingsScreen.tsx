@@ -10,7 +10,9 @@ import {
     Switch,
     ScrollView,
     TouchableOpacity,
+    TextInput,
 } from "react-native";
+
 import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
@@ -122,7 +124,12 @@ export default function SettingsScreen() {
         setAnalysisMode,
         toneContext,
         setToneContext,
+
+        // ✅ Cross-device chat link key (optional)
+        chatLinkKey,
+        setChatLinkKey,
     } = useSettings();
+
 
     const messageCount = (history as HistoryRecord[]).length;
 
@@ -157,7 +164,22 @@ export default function SettingsScreen() {
         donate: boolean;
     }>({ testRemote: false, pushOnly: false, syncNow: false, donate: false });
 
+    // ✅ Link key status (UI only)
+    const [chatLinkStatus, setChatLinkStatus] = React.useState<string | null>(null);
+
+    const saveChatLinkKey = () => {
+        const v = (chatLinkKey ?? "").trim();
+        setChatLinkKey(v);
+        setChatLinkStatus(v ? "Link Key saved on this device." : "Link Key cleared.");
+    };
+
+    const clearChatLinkKey = () => {
+        setChatLinkKey("");
+        setChatLinkStatus("Link Key cleared.");
+    };
+
     const handleClearHistory = () => {
+
         Alert.alert(
             "Clear chat history?",
             "This will remove all local messages stored in this app on this device.",
@@ -952,7 +974,93 @@ export default function SettingsScreen() {
 
                 </AppSurface>
 
+                {/* ✅ Cross-device Link Key (optional) */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Link this device (optional)
+                    </Text>
+
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}>
+                        Enter the same Link Key on Web + Mobile to see the same remote chat history.
+                        Treat it like a private password.
+                    </Text>
+
+                    <TextInput
+                        value={chatLinkKey}
+                        onChangeText={(t) => {
+                            setChatLinkKey(t);
+                            setChatLinkStatus(null);
+                        }}
+                        placeholder="Link Key (e.g., soumen-sync-1)"
+                        placeholderTextColor={colors.textSecondary}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        style={{
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            borderRadius: 12,
+                            paddingHorizontal: 12,
+                            paddingVertical: 10,
+                            color: colors.textPrimary,
+                            backgroundColor: colors.surfaceSoft,
+                            marginBottom: 10,
+                        }}
+                    />
+
+                    <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+                        <TouchableOpacity
+                            onPress={saveChatLinkKey}
+                            style={{
+                                paddingHorizontal: 12,
+                                paddingVertical: 10,
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                                backgroundColor: colors.surface,
+                            }}
+                        >
+                            <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "600" }}>
+                                Save
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            onPress={clearChatLinkKey}
+                            style={{
+                                paddingHorizontal: 12,
+                                paddingVertical: 10,
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                                backgroundColor: colors.surfaceSoft,
+                            }}
+                        >
+                            <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "600" }}>
+                                Clear
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {chatLinkStatus ? (
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 10 }}>
+                            {chatLinkStatus}
+                        </Text>
+                    ) : null}
+
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 10 }}>
+                        Tip: Use a short phrase with no spaces. Example: soumen-sync-1
+                    </Text>
+                </AppSurface>
+
                 {/* ✅ Expected Companion Tone (tone only) */}
+
                 <AppSurface style={{ marginBottom: 16 }}>
                     <View
                         style={{
