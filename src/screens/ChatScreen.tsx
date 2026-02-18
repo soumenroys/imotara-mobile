@@ -17,10 +17,7 @@ import * as Clipboard from "expo-clipboard";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
-import {
-    callImotaraAI,
-    fetchRemoteChatMessages,
-} from "../api/aiClient";
+import { callImotaraAI } from "../api/aiClient";
 
 import { LinearGradient } from "expo-linear-gradient";
 import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
@@ -892,6 +889,7 @@ export default function ChatScreen() {
         syncNow,
     } = store;
 
+
     const {
         emotionInsightsEnabled,
         lastSyncAt,
@@ -906,71 +904,32 @@ export default function ChatScreen() {
 
 
     // ---------------------------------------------------------------------------
-    // Chat persistence (read-only pull)
-    // Identity header: x-imotara-user
-    // - Prefer chatLinkKey (cross-device continuity)
-    // - Fallback to device-scoped id (safe default)
+    // Cloud sync trigger (centralized in HistoryContext)
+    // ChatScreen does NOT pull cloud chat directly anymore.
+    // It simply triggers runSync(); HistoryContext handles remote pull + merge into History.
+    // The existing "hydrate from history" effect will populate the chat UI.
     // ---------------------------------------------------------------------------
-
-    async function resolveChatRemoteScope(): Promise<string> {
-        const lk = (chatLinkKey ?? "").trim();
-        if (lk) return lk.slice(0, 80);
-        return await getOrCreateChatUserScope();
-    }
-
-
-    const CHAT_USER_SCOPE_KEY = "imotara_chat_user_scope_v1";
-
-    async function getOrCreateChatUserScope(): Promise<string> {
-        try {
-            const existing = await AsyncStorage.getItem(CHAT_USER_SCOPE_KEY);
-            if (existing && existing.trim()) return existing.trim();
-
-            const created =
-                Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
-            await AsyncStorage.setItem(CHAT_USER_SCOPE_KEY, created);
-            return created;
-        } catch (e) {
-            // ultra-safe fallback (won't crash chat)
-            debugWarn("[imotara] getOrCreateChatUserScope failed:", e);
-            return "mobile-fallback";
-        }
-    }
-
     useEffect(() => {
-        // DEV-only remote pull + single write test (no UI changes yet)
-        let cancelled = false;
-
-        const makeId = () =>
-            Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
-
         (async () => {
             try {
-                // Respect privacy/consent: if analysis is local-only, do not touch remote.
+                // Respect privacy/consent: local-only means never touch cloud.
                 if (analysisMode === "local") return;
 
-                const userScope = await resolveChatRemoteScope();
+                // Respect license gate
+                if (!cloudSyncAllowed) return;
 
-                // 1) Pull
-                const res1 = await fetchRemoteChatMessages({ userScope });
-                if (cancelled) return;
-
-                const count1 = res1?.messages?.length ?? 0;
-                debugLog("[imotara] remote chat pull:", { userScope, count: count1 });
-
-                // DEV auto-write test removed (remote sync verified on prod)
+                // Centralized sync (pull+merge lives in HistoryContext)
+                if (typeof runSync === "function") {
+                    await runSync();
+                } else if (typeof syncNow === "function") {
+                    await syncNow();
+                }
             } catch (e) {
-                debugWarn("[imotara] remote chat pull failed:", e);
+                debugWarn("[imotara] ChatScreen runSync trigger failed:", e);
             }
-
         })();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [analysisMode, chatLinkKey]);
-
-
+        // Re-trigger when identity scope changes (cross-device continuity)
+    }, [analysisMode, cloudSyncAllowed, chatLinkKey, runSync, syncNow]);
 
 
     const scrollViewRef = useRef<ScrollView | null>(null);

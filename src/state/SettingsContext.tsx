@@ -406,8 +406,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     };
 
     const setLastSyncStatus = (status: string | null) => {
-        _setLastSyncStatus(typeof status === "string" ? status : null);
+        const next = typeof status === "string" ? status : null;
+
+        // ✅ Only update when changed (prevents repeated renders / status spam)
+        _setLastSyncStatus((prev) => (prev === next ? prev : next));
     };
+
 
     const setAnalysisMode = (value: "auto" | "cloud" | "local") => {
         const v = String(value).toLowerCase();

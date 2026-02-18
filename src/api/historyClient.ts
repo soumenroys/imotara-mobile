@@ -218,9 +218,16 @@ export type FetchRemoteHistoryResult = {
     nextSince: number;
 };
 
+export type FetchRemoteHistoryOptions = {
+    // Identity scope header used by backend to partition data per user/device
+    userScope?: string;
+};
+
 export async function fetchRemoteHistorySince(
-    since: number = 0
+    since: number = 0,
+    options?: FetchRemoteHistoryOptions
 ): Promise<FetchRemoteHistoryResult> {
+
     try {
         const safeSince = Number.isFinite(since) && since > 0 ? since : 0;
 
@@ -230,11 +237,20 @@ export async function fetchRemoteHistorySince(
 
         const url = buildApiUrl(path);
 
+        const headers: Record<string, string> = { Accept: "application/json" };
+
+        const scope = (options?.userScope ?? "").trim();
+        if (scope) {
+            // Match ChatScreen behavior (cross-device continuity)
+            headers["x-imotara-user"] = scope.slice(0, 80);
+        }
+
         const res = await fetchWithTimeout(
             url,
-            { method: "GET", headers: { Accept: "application/json" } },
+            { method: "GET", headers },
             "fetchRemoteHistorySince"
         );
+
 
         if (!res.ok) {
             debugWarn("fetchRemoteHistorySince: non-OK response", res.status);

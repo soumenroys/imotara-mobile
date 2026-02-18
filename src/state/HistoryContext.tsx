@@ -15,6 +15,9 @@ import {
     type PushRemoteHistoryResult,
     type FetchRemoteHistoryResult,
 } from "../api/historyClient";
+
+import { fetchRemoteChatMessages } from "../api/aiClient";
+
 import { useSettings } from "./SettingsContext";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
@@ -315,15 +318,35 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         setLastSyncAt: setSettingsLastSyncAt,
         setLastSyncStatus: setSettingsLastSyncStatus,
 
+        // ✅ Privacy: if local-only, do not touch cloud
+        analysisMode,
+
+        // ✅ Cross-device identity scope
+        chatLinkKey,
+
         // ✅ NEW: license-aware flag from SettingsContext
         cloudSyncAllowed,
     } = useSettings();
 
-    // ✅ Keep a ref to latest history to avoid function identity churn
+    // ✅ Keep latest history ref to avoid function identity churn
     const historyRef = useRef<HistoryItem[]>([]);
     useEffect(() => {
         historyRef.current = history;
     }, [history]);
+
+    // ✅ Final guard: dedupe-by-id + stable timestamp sort (prevents rare overlap duplicates)
+    const dedupeAndSortHistory = useCallback(() => {
+        setHistory((prev) => {
+            const byId = new Map<string, HistoryItem>();
+            for (const it of prev) {
+                if (it?.id) byId.set(it.id, it);
+            }
+            return Array.from(byId.values()).sort(
+                (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
+            );
+        });
+    }, []);
+
 
     // ✅ Cursor for incremental remote pulls
     const remoteSinceRef = useRef<number>(0);
@@ -684,56 +707,115 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     return pushRes;
                 }
 
-                // 2) Pull incremental remote → merge into local store (NEW, additive)
+                // 2) Pull incremental remote → merge into local store (additive, hardened)
                 try {
                     const since = remoteSinceRef.current || 0;
-                    const pulled: FetchRemoteHistoryResult = await fetchRemoteHistorySince(
-                        since
-                    );
+                    const pulled: FetchRemoteHistoryResult = await fetchRemoteHistorySince(since, {
+                        userScope: String(chatLinkKey ?? "").trim(),
+                    });
 
 
-                    if (pulled.items.length > 0) {
-                        // mergeRemoteHistory expects raw backend-ish items, but our fetcher returns HistoryItem[]
-                        // We can directly merge by mapping HistoryItem → raw-like shape that normalizeRemoteItem already supports
-                        // OR simply add them with dedupe-by-id logic here.
-                        const existingIds = new Set(
-                            (historyRef.current || []).map((h) => h.id)
-                        );
 
-                        const toAdd = pulled.items.filter((it) => !existingIds.has(it.id));
+                    const items = Array.isArray((pulled as any)?.items) ? pulled.items : [];
+
+                    if (items.length > 0) {
+                        const existingIds = new Set((historyRef.current || []).map((h) => h.id));
+                        const toAdd = items.filter((it) => it?.id && !existingIds.has(it.id));
 
                         if (toAdd.length > 0) {
-                            setHistory((prev) => {
-                                const merged = [...prev, ...toAdd].sort(
+                            setHistory((prev) =>
+                                [...prev, ...toAdd].sort(
                                     (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
-                                );
-                                return merged;
-                            });
-
-                            // Optional: surface this in Settings debug status (non-breaking)
-                            setSettingsLastSyncStatus(
-                                `Synced. Pulled ${toAdd.length} item(s) from cloud.`
+                                )
                             );
                         }
+
+                        setSettingsLastSyncStatus(
+                            `Synced. Pulled ${toAdd.length} new item(s) from cloud.`
+                        );
+                    } else {
+                        // ✅ Important: still update status on empty pulls (fresh install / already up-to-date)
+                        setSettingsLastSyncStatus("Synced. No new cloud items.");
                     }
 
-                    // Persist nextSince cursor
+                    // Persist nextSince cursor (even when items is empty)
+                    const nextSince = (pulled as any)?.nextSince;
                     if (
-                        typeof pulled.nextSince === "number" &&
-                        Number.isFinite(pulled.nextSince) &&
-                        pulled.nextSince >= 0
+                        typeof nextSince === "number" &&
+                        Number.isFinite(nextSince) &&
+                        nextSince >= 0
                     ) {
-                        remoteSinceRef.current = pulled.nextSince;
-                        AsyncStorage.setItem(
-                            HISTORY_REMOTE_SINCE_KEY,
-                            String(pulled.nextSince)
-                        ).catch((err) =>
-                            debugWarn("Failed to persist remote since cursor:", err)
+                        remoteSinceRef.current = nextSince;
+                        AsyncStorage.setItem(HISTORY_REMOTE_SINCE_KEY, String(nextSince)).catch(
+                            (err) => debugWarn("Failed to persist remote since cursor:", err)
                         );
                     }
                 } catch (err) {
                     debugWarn("runSync: remote pull failed (non-fatal):", err);
                 }
+
+                // 3) Pull remote chat messages → merge into local History (additive, deduped)
+                // This centralizes chat pull in one place (HistoryContext) so ChatScreen can stop pulling directly.
+                try {
+                    // Respect privacy/consent: local-only means never call cloud.
+                    if (analysisMode !== "local") {
+                        const userScope = String(chatLinkKey ?? "").trim();
+
+                        if (userScope) {
+                            const res = await fetchRemoteChatMessages({ userScope });
+                            const remote = Array.isArray((res as any)?.messages) ? (res as any).messages : [];
+
+                            if (remote.length > 0) {
+                                const existingIds = new Set((historyRef.current || []).map((h) => h.id));
+
+                                const toAdd: HistoryItem[] = remote
+                                    .map((r: any) => {
+                                        const id = String(r?.id ?? "").trim();
+                                        if (!id) return null;
+
+                                        const ts =
+                                            typeof r?.createdAt === "number"
+                                                ? r.createdAt
+                                                : (() => {
+                                                    const d = new Date(
+                                                        r?.created_at ?? r?.createdAt ?? Date.now()
+                                                    );
+                                                    const ms = d.getTime();
+                                                    return Number.isFinite(ms) ? ms : Date.now();
+                                                })();
+
+                                        const text = String(r?.content ?? "").trim();
+                                        if (!text) return null;
+
+                                        return {
+                                            id,
+                                            text,
+                                            from: r?.role === "assistant" ? "bot" : "user",
+                                            timestamp: ts,
+                                            isSynced: true,
+                                            // emotion/intensity may not exist in chat payload; keep optional
+                                        } as HistoryItem;
+                                    })
+                                    .filter(Boolean) as HistoryItem[];
+
+                                const newOnes = toAdd.filter((it) => it?.id && !existingIds.has(it.id));
+
+                                if (newOnes.length > 0) {
+                                    setHistory((prev) =>
+                                        [...prev, ...newOnes].sort(
+                                            (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    debugWarn("runSync: remote chat pull failed (non-fatal):", err);
+                }
+
+                // ✅ One final pass after both remote pulls (history + chat)
+                dedupeAndSortHistory();
 
                 return pushRes;
             } finally {
