@@ -13,6 +13,7 @@
 import { buildApiUrl } from "../config/api";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 import type { HistoryItem } from "../state/HistoryContext";
+import { fetchWithTimeout as sharedFetchWithTimeout } from "../lib/network/fetchWithTimeout";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -38,26 +39,35 @@ async function fetchWithTimeout(
     const AC: any = (globalThis as any).AbortController;
     if (!AC) return fetch(url, init);
 
-    const controller = new AC();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-    // If caller already provided a signal, we respect it (best effort) by
-    // aborting both when either aborts.
+    // If caller already provided a signal, keep the existing behavior:
+    // - link provided signal to our timeout controller
+    // - still enforce timeout
     const providedSignal: any = (init as any)?.signal;
-    if (providedSignal?.aborted) controller.abort();
-    else if (providedSignal && typeof providedSignal.addEventListener === "function") {
-        providedSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    if (providedSignal) {
+        const controller = new AC();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+        if (providedSignal?.aborted) controller.abort();
+        else if (typeof providedSignal.addEventListener === "function") {
+            providedSignal.addEventListener("abort", () => controller.abort(), { once: true });
+        }
+
+        try {
+            return await fetch(url, { ...(init || {}), signal: controller.signal });
+        } catch (err) {
+            debugWarn(`${label}: fetch failed`, err);
+            throw err;
+        } finally {
+            clearTimeout(timeout);
+        }
     }
 
+    // Normal path: reuse shared util (prevents duplication)
     try {
-        const res = await fetch(url, { ...(init || {}), signal: controller.signal });
-        return res;
+        return await sharedFetchWithTimeout(url, init || {}, timeoutMs);
     } catch (err) {
-        // Add a tiny bit of context (debug-only) without changing outward error shape.
         debugWarn(`${label}: fetch failed`, err);
         throw err;
-    } finally {
-        clearTimeout(timeout);
     }
 }
 
