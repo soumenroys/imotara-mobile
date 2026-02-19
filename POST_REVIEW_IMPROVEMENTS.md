@@ -8,6 +8,7 @@
 ## Change Log (append-only)
 | Date | Area | What changed | Files | Risk | Verified |
 |------|------|--------------|-------|------|----------|
+| 2026-02-19 | Network | Added fetch timeout + AbortController for remote AI calls | src/api/aiClient.ts | Low | Yes |
 
 ## Planned Items
 - [ ] Stability polish
