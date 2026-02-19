@@ -263,7 +263,27 @@ export async function callImotaraAI(
         }
 
 
-        const data: any = await res.json();
+        const rawText = await res.text().catch(() => "");
+        let data: any = null;
+
+        try {
+            data = rawText ? JSON.parse(rawText) : {};
+        } catch (e) {
+            debugWarn("[imotara] cloud response was not valid JSON", {
+                status: res.status,
+                body: rawText.slice(0, 200),
+            });
+
+            return {
+                ok: false,
+                replyText: "",
+                errorMessage: "Invalid server response",
+                analysisSource: "cloud",
+                remoteUrl,
+                remoteStatus: res.status,
+                remoteError: rawText ? rawText.slice(0, 200) : "Invalid JSON",
+            };
+        }
 
         // Debug log – see in Metro console (gated for QA/prod cleanliness)
         debugLog("Imotara mobile AI raw response:", JSON.stringify(data, null, 2));
@@ -463,7 +483,19 @@ export async function fetchRemoteChatMessages(args: {
             return { messages: [] };
         }
 
-        const data: any = await res.json();
+        const rawText = await res.text().catch(() => "");
+        let data: any = null;
+
+        try {
+            data = rawText ? JSON.parse(rawText) : {};
+        } catch (e) {
+            debugWarn("[imotara] fetchRemoteChatMessages: invalid JSON", {
+                status: res.status,
+                body: rawText.slice(0, 200),
+            });
+            return { messages: [] };
+        }
+
         const messages = Array.isArray(data?.messages) ? (data.messages as RemoteChatMessage[]) : [];
         return { messages, serverTs: typeof data?.serverTs === "number" ? data.serverTs : undefined };
     } catch (err: any) {
