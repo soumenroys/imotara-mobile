@@ -239,6 +239,11 @@ export async function fetchRemoteHistorySince(
 
         const headers: Record<string, string> = { Accept: "application/json" };
 
+        // Correlation id (non-breaking): helps trace client↔server issues in logs
+        const requestId = `hist_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
+        headers["x-request-id"] = requestId; // common convention
+        headers["x-imotara-request-id"] = requestId; // app-specific (optional)
+
         const scope = (options?.userScope ?? "").trim();
         if (scope) {
             // Match ChatScreen behavior (cross-device continuity)
