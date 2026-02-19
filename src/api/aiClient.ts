@@ -7,30 +7,10 @@
 import { IMOTARA_API_BASE_URL } from "../config/api";
 import { debugLog, debugWarn } from "../config/debug";
 import { BN_SAD_REGEX, HI_STRESS_REGEX, isConfusedText } from "../lib/emotion/keywordMaps";
-
-// ---------------------------------------------------------------------------
-// Network safety (non-breaking): avoid hanging requests on poor networks.
-// Default is conservative; can be overridden per-call via opts.timeoutMs.
-// ---------------------------------------------------------------------------
-const DEFAULT_REMOTE_TIMEOUT_MS = 20000;
-
-async function fetchWithTimeout(
-    url: string,
-    init: RequestInit,
-    timeoutMs: number
-): Promise<Response> {
-    // If caller already passed a signal, respect it and do not override.
-    if (init?.signal) return fetch(url, init);
-
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
-
-    try {
-        return await fetch(url, { ...init, signal: controller.signal });
-    } finally {
-        clearTimeout(id);
-    }
-}
+import {
+    fetchWithTimeout,
+    DEFAULT_REMOTE_TIMEOUT_MS,
+} from "../lib/network/fetchWithTimeout";
 
 export type AnalyzeResponse = {
     ok: boolean;
