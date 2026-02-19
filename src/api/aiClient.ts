@@ -12,6 +12,9 @@ import {
     DEFAULT_REMOTE_TIMEOUT_MS,
 } from "../lib/network/fetchWithTimeout";
 
+// Mobile safety: avoid UI freezes if server returns an unexpectedly huge string.
+const MAX_REMOTE_REPLY_CHARS = 5000;
+
 export type AnalyzeResponse = {
     ok: boolean;
     replyText: string;
@@ -302,9 +305,17 @@ export async function callImotaraAI(
 
 
         // 1) Try common "direct reply" fields first
-        // ✅ /api/respond contract (strict):
+        // Backend contract (strict):
         // { message: string, reflectionSeed?: {...}, followUp?: string }
-        const replyText = String(data?.message ?? "").trim();
+        let replyText = String(data?.message ?? "").trim();
+
+        if (replyText.length > MAX_REMOTE_REPLY_CHARS) {
+            debugWarn("[imotara] cloud reply too long; truncating for mobile safety", {
+                len: replyText.length,
+                cap: MAX_REMOTE_REPLY_CHARS,
+            });
+            replyText = replyText.slice(0, MAX_REMOTE_REPLY_CHARS).trimEnd() + "…";
+        }
 
         if (!replyText) {
             return {
