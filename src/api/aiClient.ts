@@ -8,6 +8,29 @@ import { IMOTARA_API_BASE_URL } from "../config/api";
 import { debugLog, debugWarn } from "../config/debug";
 import { BN_SAD_REGEX, HI_STRESS_REGEX, isConfusedText } from "../lib/emotion/keywordMaps";
 
+// ---------------------------------------------------------------------------
+// Network safety (non-breaking): avoid hanging requests on poor networks.
+// Default is conservative; can be overridden per-call via opts.timeoutMs.
+// ---------------------------------------------------------------------------
+const DEFAULT_REMOTE_TIMEOUT_MS = 20000;
+
+async function fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number
+): Promise<Response> {
+    // If caller already passed a signal, respect it and do not override.
+    if (init?.signal) return fetch(url, init);
+
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
+
+    try {
+        return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+        clearTimeout(id);
+    }
+}
 
 export type AnalyzeResponse = {
     ok: boolean;
@@ -92,6 +115,9 @@ type CallAIOptions = {
     // ✅ NEW: allow mobile settings + light history to reach /api/respond
     analysisMode?: "auto" | "cloud" | "local";
     emotionInsightsEnabled?: boolean;
+
+    // ✅ Non-breaking: network timeout override (ms)
+    timeoutMs?: number;
 
     settings?: {
         relationshipTone?: ToneRelationship;
@@ -197,49 +223,51 @@ export async function callImotaraAI(
 
         const remoteUrl = `${IMOTARA_API_BASE_URL}/api/respond`;
 
-        const res = await fetch(remoteUrl, {
+        const res = await fetchWithTimeout(
+            remoteUrl,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    requestId,
+                    message,
 
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                requestId,
-                message,
+                    // ✅ Additive: also send analysisMode at top-level (server/web parity)
+                    ...(opts?.analysisMode ? { analysisMode: opts.analysisMode } : {}),
 
-                // ✅ Additive: also send analysisMode at top-level (server/web parity)
-                ...(opts?.analysisMode ? { analysisMode: opts.analysisMode } : {}),
-
-                // ✅ IMPORTANT: send toneContext at the TOP LEVEL (server contract)
-                ...(toneContext ? { toneContext } : {}),
-
-                // ✅ Keep context payload too (additive / backward compatible)
-                context: {
-                    source: "mobile",
-                    analysisMode: opts?.analysisMode,
-                    emotionInsightsEnabled: opts?.emotionInsightsEnabled,
-
-
-                    // keep this for older server parsing / debugging (non-breaking)
+                    // ✅ IMPORTANT: send toneContext at the TOP LEVEL (server contract)
                     ...(toneContext ? { toneContext } : {}),
 
-                    // soft persona hints (do NOT roleplay; just wording guidance)
-                    persona: opts?.settings
-                        ? {
-                            relationshipTone: opts.settings.relationshipTone,
-                            ageTone: opts.settings.ageTone,
-                            genderTone: opts.settings.genderTone,
-                        }
-                        : undefined,
+                    // ✅ Keep context payload too (additive / backward compatible)
+                    context: {
+                        source: "mobile",
+                        analysisMode: opts?.analysisMode,
+                        emotionInsightsEnabled: opts?.emotionInsightsEnabled,
 
-                    // last few messages for continuity (send both keys for max compatibility)
-                    recentMessages: opts?.recentMessages ?? undefined,
+                        // keep this for older server parsing / debugging (non-breaking)
+                        ...(toneContext ? { toneContext } : {}),
 
-                    // back-compat (older servers/clients might look for `recent`)
-                    recent: opts?.recentMessages ?? undefined,
-                },
-            }),
-        });
+                        // soft persona hints (do NOT roleplay; just wording guidance)
+                        persona: opts?.settings
+                            ? {
+                                relationshipTone: opts.settings.relationshipTone,
+                                ageTone: opts.settings.ageTone,
+                                genderTone: opts.settings.genderTone,
+                            }
+                            : undefined,
+
+                        // last few messages for continuity (send both keys for max compatibility)
+                        recentMessages: opts?.recentMessages ?? undefined,
+
+                        // back-compat (older servers/clients might look for `recent`)
+                        recent: opts?.recentMessages ?? undefined,
+                    },
+                }),
+            },
+            opts?.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS
+        );
 
         if (!res.ok) {
             const bodyText = await res.text().catch(() => "");
@@ -376,22 +404,23 @@ export async function callImotaraAI(
             remoteUrl,
         };
 
-
     } catch (error: any) {
         debugWarn("Imotara mobile AI fetch error:", error);
 
         const remoteUrl = `${IMOTARA_API_BASE_URL}/api/respond`;
+        const isTimeout =
+            error?.name === "AbortError" ||
+            String(error?.message ?? "").toLowerCase().includes("aborted");
 
         return {
             ok: false,
             replyText: "",
-            errorMessage: error?.message ?? "Network error",
+            errorMessage: isTimeout ? "Request timed out" : (error?.message ?? "Network error"),
             analysisSource: "cloud",
             remoteUrl,
-            remoteError: error?.message ?? String(error),
+            remoteError: isTimeout ? "timeout" : (error?.message ?? String(error)),
         };
     }
-
 }
 
 // ---------------------------------------------------------------------------
