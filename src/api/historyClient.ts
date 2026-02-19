@@ -294,8 +294,18 @@ export async function fetchRemoteHistorySince(
 
         debugLog("fetchRemoteHistorySince: fetched", items.length, "item(s), nextSince=", nextSince);
         return { items, nextSince };
-    } catch (err) {
-        debugWarn("fetchRemoteHistorySince: error talking to backend", err);
+    } catch (err: any) {
+        const isTimeout =
+            err?.name === "AbortError" ||
+            String(err?.message ?? "").toLowerCase().includes("aborted");
+
+        debugWarn(
+            isTimeout
+                ? "fetchRemoteHistorySince: timeout talking to backend"
+                : "fetchRemoteHistorySince: error talking to backend",
+            err
+        );
+
         return { items: [], nextSince: Number.isFinite(since) && since > 0 ? since : 0 };
     }
 }
