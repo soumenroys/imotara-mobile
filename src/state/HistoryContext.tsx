@@ -108,10 +108,21 @@ type HistoryContextValue = {
     setLicenseTier: (tier: LicenseTier) => void;
 };
 
-const STORAGE_KEY = "imotara_history_v1";
+// Base keys (scoped per chatLinkKey when present)
+const STORAGE_KEY_BASE = "imotara_history_v1";
 
-// ✅ Cursor for remote history incremental sync
-const HISTORY_REMOTE_SINCE_KEY = "imotara_history_remote_since_v1";
+// ✅ Cursor for remote history incremental sync (also should be scoped)
+const HISTORY_REMOTE_SINCE_KEY_BASE = "imotara_history_remote_since_v1";
+
+/**
+ * Storage keys must be scoped so different identities don't see each other's history.
+ * - If chatLinkKey exists: use per-scope key
+ * - Else: fall back to local-only bucket
+ */
+function scopedKey(base: string, chatLinkKey: unknown) {
+    const scope = String(chatLinkKey ?? "").trim();
+    return scope ? `${base}:${scope}` : `${base}:local`;
+}
 
 // ✅ Separate storage key for licensing
 const LICENSE_TIER_KEY = "imotara_license_tier_v1";
@@ -334,6 +345,12 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         historyRef.current = history;
     }, [history]);
 
+    // ✅ Keep latest Chat Link Key (scope) to prevent in-flight remote pulls from older scopes
+    const chatLinkKeyRef = useRef<string>("");
+    useEffect(() => {
+        chatLinkKeyRef.current = String(chatLinkKey ?? "").trim();
+    }, [chatLinkKey]);
+
     // ✅ Final guard: dedupe-by-id + stable timestamp sort (prevents rare overlap duplicates)
     const dedupeAndSortHistory = useCallback(() => {
         setHistory((prev) => {
@@ -376,14 +393,23 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         );
     }, []);
 
-    // Hydrate from AsyncStorage on mount
+    // ✅ Hydrate from AsyncStorage whenever Chat Link Key changes (prevents cross-scope leakage)
     useEffect(() => {
         const load = async () => {
+            // IMPORTANT: switching scope must clear in-memory history immediately
+            setHydrated(false);
+            setHistory([]);
+            historyRef.current = [];
+            remoteSinceRef.current = 0;
+
             try {
+                const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey);
+                const remoteSinceKey = scopedKey(HISTORY_REMOTE_SINCE_KEY_BASE, chatLinkKey);
+
                 const [rawHistory, rawTier, rawRemoteSince] = await Promise.all([
-                    AsyncStorage.getItem(STORAGE_KEY),
+                    AsyncStorage.getItem(historyKey),
                     AsyncStorage.getItem(LICENSE_TIER_KEY),
-                    AsyncStorage.getItem(HISTORY_REMOTE_SINCE_KEY),
+                    AsyncStorage.getItem(remoteSinceKey),
                 ]);
 
                 // 0) Remote cursor (since)
@@ -401,49 +427,37 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     if (Array.isArray(parsed)) {
                         const cleaned: HistoryItem[] = parsed
                             .filter((item) => item && typeof item === "object")
-                            .map((item) => ({
-                                id: String(
-                                    item.id ?? `${item.timestamp ?? Date.now()}`
-                                ),
-                                text: String(item.text ?? ""),
-                                from:
-                                    item.from === "user" || item.from === "bot"
-                                        ? item.from
-                                        : ("bot" as const),
-                                timestamp:
-                                    typeof item.timestamp === "number"
-                                        ? item.timestamp
-                                        : Date.now(),
-                                // ✅ Preserve emotion if present (additive; safe defaults)
-                                emotion:
-                                    typeof item.emotion === "string"
-                                        ? item.emotion
-                                        : undefined,
-                                intensity:
-                                    typeof item.intensity === "number" &&
-                                        Number.isFinite(item.intensity)
-                                        ? item.intensity
-                                        : undefined,
+                            .map((item) => {
+                                const id = String((item as any).id ?? "").trim();
 
-                                isSynced:
-                                    typeof item.isSynced === "boolean"
-                                        ? item.isSynced
-                                        : false,
+                                // HistoryItem in this project uses: text, from, timestamp
+                                const text = String((item as any).text ?? (item as any).content ?? "");
+                                const fromRaw = (item as any).from ?? (item as any).role ?? "user";
+                                const from = fromRaw === "assistant" ? "assistant" : "user";
 
-                            }));
+                                const timestampRaw = (item as any).timestamp ?? (item as any).createdAt;
+                                const timestamp =
+                                    typeof timestampRaw === "number" ? timestampRaw : Date.now();
+
+                                if (!id || !text) return null;
+
+                                return {
+                                    id,
+                                    text,
+                                    from,
+                                    timestamp,
+                                } as unknown as HistoryItem;
+                            })
+                            .filter(Boolean) as HistoryItem[];
 
                         setHistory(cleaned);
                     }
                 }
 
-                // 2) License Tier (defaults safely to FREE)
+                // 2) License tier
+                // Only set if it matches this app's LicenseTier union
                 if (rawTier && isValidTier(rawTier)) {
                     _setLicenseTier(rawTier);
-                } else if (rawTier) {
-                    // If corrupted/unknown, reset to FREE (do not crash)
-                    debugWarn("Unknown license tier in storage, resetting:", rawTier);
-                    _setLicenseTier("FREE");
-                    AsyncStorage.setItem(LICENSE_TIER_KEY, "FREE").catch(() => { });
                 }
             } catch (error) {
                 debugWarn("Failed to load history/license from storage:", error);
@@ -453,7 +467,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         };
 
         load();
-    }, []);
+    }, [chatLinkKey]);
 
     // ✅ Apply local history retention on FREE (but never delete unsynced items)
     useEffect(() => {
@@ -496,7 +510,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
         const save = async () => {
             try {
-                await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+                const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey);
+                await AsyncStorage.setItem(historyKey, JSON.stringify(history));
             } catch (error) {
                 debugWarn("Failed to save history to storage:", error);
             }
@@ -522,7 +537,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         setLastSyncResult(null);
         setLastSyncAt(null);
 
-        AsyncStorage.removeItem(STORAGE_KEY).catch((err) =>
+        const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey);
+        AsyncStorage.removeItem(historyKey).catch((err) =>
             debugWarn("Failed to clear history storage:", err)
         );
     };
@@ -746,8 +762,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                         nextSince >= 0
                     ) {
                         remoteSinceRef.current = nextSince;
-                        AsyncStorage.setItem(HISTORY_REMOTE_SINCE_KEY, String(nextSince)).catch(
-                            (err) => debugWarn("Failed to persist remote since cursor:", err)
+                        const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey);
+                        AsyncStorage.removeItem(historyKey).catch((err) =>
+                            debugWarn("Failed to clear history storage:", err)
                         );
                     }
                 } catch (err) {
@@ -762,7 +779,20 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                         const userScope = String(chatLinkKey ?? "").trim();
 
                         if (userScope) {
-                            const res = await fetchRemoteChatMessages({ userScope });
+                            // Capture the scope used for this request
+                            const requestedScope = userScope;
+
+                            const res = await fetchRemoteChatMessages({ userScope: requestedScope });
+
+                            // ✅ If scope changed while request was in-flight, ignore these results
+                            if (chatLinkKeyRef.current !== requestedScope) {
+                                return {
+                                    ok: false,
+                                    skipped: true,
+                                    reason: "scope-changed",
+                                } as any;
+                            }
+
                             const remote = Array.isArray((res as any)?.messages) ? (res as any).messages : [];
 
                             if (remote.length > 0) {
@@ -827,6 +857,10 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             pushHistoryToRemote,
             setSettingsLastSyncStatus,
             cloudSyncAllowed,
+
+            // ✅ Critical: ensures remote chat pull uses latest scope + mode
+            chatLinkKey,
+            analysisMode,
         ]
 
     );
