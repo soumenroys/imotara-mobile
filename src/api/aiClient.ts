@@ -6,14 +6,105 @@
 
 import { IMOTARA_API_BASE_URL } from "../config/api";
 import { debugLog, debugWarn } from "../config/debug";
-import { BN_SAD_REGEX, HI_STRESS_REGEX, isConfusedText } from "../lib/emotion/keywordMaps";
+import {
+    BN_SAD_REGEX,
+    HI_STRESS_REGEX,
+    isConfusedText,
+} from "../lib/emotion/keywordMaps";
 import {
     fetchWithTimeout,
     DEFAULT_REMOTE_TIMEOUT_MS,
 } from "../lib/network/fetchWithTimeout";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Mobile safety: avoid UI freezes if server returns an unexpectedly huge string.
 const MAX_REMOTE_REPLY_CHARS = 5000;
+
+// Preferred language override (mobile Settings can set this)
+const PREFERRED_LANGUAGE_KEY = "imotara_preferredLanguage";
+
+function normalizeLangCode(raw: unknown): "en" | "hi" | "bn" | undefined {
+    const s = String(raw ?? "").trim().toLowerCase();
+    if (!s) return undefined;
+    const base = s.split(/[-_]/)[0];
+    if (base === "en" || base === "hi" || base === "bn") return base;
+    return undefined;
+}
+
+async function getStoredPreferredLanguage(): Promise<"en" | "hi" | "bn" | undefined> {
+    try {
+        const raw = await AsyncStorage.getItem(PREFERRED_LANGUAGE_KEY);
+        return normalizeLangCode(raw);
+    } catch {
+        return undefined;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Language hinting (additive, non-breaking)
+// Goal: if user types in Bengali/Indic scripts, ask server for same language.
+// We do NOT translate locally. We only send hints via headers + body.
+// ---------------------------------------------------------------------------
+
+type ChatMessage = { role: "user" | "assistant"; content: string };
+
+function getDeviceLocaleSafe(): string {
+    // Use runtime Intl if available; fallback to English.
+    try {
+        // On RN Hermes, Intl is usually present; but guard anyway.
+        const loc = Intl?.DateTimeFormat?.().resolvedOptions?.().locale;
+        return typeof loc === "string" && loc.trim() ? loc : "en";
+    } catch {
+        return "en";
+    }
+}
+
+/**
+ * Very lightweight script-based language inference.
+ * Returns a BCP-47 tag usable for Accept-Language.
+ * (Non-breaking: server may ignore it, but it won't harm anything.)
+ */
+function inferLanguageFromText(text: string): string | undefined {
+    const t = String(text || "").trim();
+    if (!t) return undefined;
+
+    // Indic scripts
+    if (/[\u0980-\u09FF]/.test(t)) return "bn-IN"; // Bengali
+    if (/[\u0900-\u097F]/.test(t)) return "hi-IN"; // Devanagari (Hindi/Marathi/etc.)
+    if (/[\u0A00-\u0A7F]/.test(t)) return "pa-IN"; // Gurmukhi (Punjabi)
+    if (/[\u0A80-\u0AFF]/.test(t)) return "gu-IN"; // Gujarati
+    if (/[\u0B00-\u0B7F]/.test(t)) return "or-IN"; // Odia
+    if (/[\u0B80-\u0BFF]/.test(t)) return "ta-IN"; // Tamil
+    if (/[\u0C00-\u0C7F]/.test(t)) return "te-IN"; // Telugu
+    if (/[\u0C80-\u0CFF]/.test(t)) return "kn-IN"; // Kannada
+    if (/[\u0D00-\u0D7F]/.test(t)) return "ml-IN"; // Malayalam
+
+    // Romanized content: we can't reliably detect language; return undefined.
+    return undefined;
+}
+
+function pickPreferredLanguage(params: {
+    message: string;
+    recentMessages?: ChatMessage[];
+}): string {
+    // Prefer the current user message first
+    const fromCurrent = inferLanguageFromText(params.message);
+    if (fromCurrent) return fromCurrent;
+
+    // Then scan recent user messages (from newest to oldest)
+    const recent = params.recentMessages ?? [];
+    for (let i = recent.length - 1; i >= 0; i--) {
+        const m = recent[i];
+        if (!m || m.role !== "user") continue;
+        const hit = inferLanguageFromText(m.content);
+        if (hit) return hit;
+    }
+
+    // Fallback to device locale base, else English.
+    const device = getDeviceLocaleSafe();
+    const base = device.split("-")[0] || "en";
+    return base === "bn" ? "bn-IN" : base === "hi" ? "hi-IN" : device || "en";
+}
 
 export type AnalyzeResponse = {
     ok: boolean;
@@ -95,7 +186,7 @@ type CallAIOptions = {
     // Optional tone guidance for the remote AI (server supports this)
     toneContext?: ToneContextPayload;
 
-    // ✅ NEW: allow mobile settings + light history to reach /api/respond
+    // ✅ allow mobile settings + light history to reach /api/respond
     analysisMode?: "auto" | "cloud" | "local";
     emotionInsightsEnabled?: boolean;
 
@@ -129,7 +220,8 @@ function normalizeToneContext(
     // Treat ageTone as canonical. Only derive ageTone from ageRange (legacy input),
     // but do NOT auto-fill ageRange from ageTone (avoids redundant payload).
     if (next.user) {
-        if (!next.user.ageTone && next.user.ageRange) next.user.ageTone = next.user.ageRange;
+        if (!next.user.ageTone && next.user.ageRange)
+            next.user.ageTone = next.user.ageRange;
     }
 
     if (next.companion) {
@@ -139,7 +231,8 @@ function normalizeToneContext(
 
         // ✅ Critical: if companion tone is enabled, require a stable name
         const enabled = !!next.companion.enabled;
-        const name = typeof next.companion.name === "string" ? next.companion.name.trim() : "";
+        const name =
+            typeof next.companion.name === "string" ? next.companion.name.trim() : "";
 
         if (enabled && !name) {
             next.companion.name = "Imotara";
@@ -157,18 +250,14 @@ export async function callImotaraAI(
         const toneContext = normalizeToneContext(opts?.toneContext);
 
         // ✅ Mobile parity with web:
-        // If the caller provided `settings` (from Settings screen) but did not include
-        // matching fields in toneContext, fill them in (additive only).
-        //
+        // If the caller provided `settings` but did not include matching fields in toneContext, fill them in (additive only).
         // Cleanup: prefer ageTone as the canonical field.
-        // Only set ageRange if the field already exists on the object (back-compat).
         if (toneContext?.companion?.enabled && opts?.settings) {
             if (!toneContext.companion.ageTone && opts.settings.ageTone) {
                 toneContext.companion.ageTone = opts.settings.ageTone;
             }
 
-            // Back-compat bridge: only populate ageRange when it is already present
-            // on the companion object (so we don’t redundantly mirror by default).
+            // Back-compat bridge: only populate ageRange when it is already present on the object
             if (
                 !toneContext.companion.ageRange &&
                 opts.settings.ageTone &&
@@ -185,12 +274,39 @@ export async function callImotaraAI(
             }
         }
 
+        // ✅ language hint for server (additive)
+        // 1) If user selected a language in Settings, honor it strictly.
+        // 2) Else, fall back to script/device inference (current behavior).
+        const storedPreferred = await getStoredPreferredLanguage();
+        const inferred = pickPreferredLanguage({
+            message,
+            recentMessages: opts?.recentMessages,
+        });
+
+        // Base language (from Settings) is "en" | "hi" | "bn"
+        const preferredBase = storedPreferred ?? normalizeLangCode(inferred) ?? "en";
+
+        // Server-facing BCP-47 tag (more reliable for backend routing)
+        const preferredLanguage =
+            preferredBase === "hi"
+                ? "hi-IN"
+                : preferredBase === "bn"
+                    ? "bn-IN"
+                    : "en";
+
+        debugLog(
+            `[imotara] aiClient preferredLanguage: stored=${String(storedPreferred)} inferred=${String(
+                inferred
+            )} base=${preferredBase} final=${preferredLanguage}`
+        );
+
         // ✅ Unique per-call requestId (helps the server avoid accidental dedupe / repeats)
         const requestId = `m_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
         debugLog("[imotara] outbound request", {
             requestId,
             analysisMode: opts?.analysisMode,
+            preferredLanguage,
             messageLen: typeof message === "string" ? message.length : -1,
             messagePreview:
                 typeof message === "string" ? message.slice(0, 120) : String(message),
@@ -212,10 +328,29 @@ export async function callImotaraAI(
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+
+                    // ✅ Send base + region for maximum backend compatibility
+                    // Example: "hi,hi-IN;q=0.9,en;q=0.8"
+                    "Accept-Language":
+                        preferredBase === "hi"
+                            ? "hi,hi-IN;q=0.9,en;q=0.8"
+                            : preferredBase === "bn"
+                                ? "bn,bn-IN;q=0.9,en;q=0.8"
+                                : "en,en-IN;q=0.9",
                 },
                 body: JSON.stringify({
                     requestId,
                     message,
+
+                    // ✅ Back-compat: many servers expect base language codes in JSON ("hi" | "bn" | "en")
+                    preferredLanguage: preferredBase,
+
+                    // ✅ Additive: also send the BCP-47 tag explicitly
+                    preferredLanguageTag: preferredLanguage,
+
+                    // ✅ Additive aliases (safe if ignored; helps older parsers)
+                    language: preferredBase,
+                    locale: preferredLanguage,
 
                     // ✅ Additive: also send analysisMode at top-level (server/web parity)
                     ...(opts?.analysisMode ? { analysisMode: opts.analysisMode } : {}),
@@ -228,6 +363,12 @@ export async function callImotaraAI(
                         source: "mobile",
                         analysisMode: opts?.analysisMode,
                         emotionInsightsEnabled: opts?.emotionInsightsEnabled,
+
+                        // ✅ Keep BOTH forms in context as well
+                        preferredLanguage: preferredBase,
+                        preferredLanguageTag: preferredLanguage,
+                        language: preferredBase,
+                        locale: preferredLanguage,
 
                         // keep this for older server parsing / debugging (non-breaking)
                         ...(toneContext ? { toneContext } : {}),
@@ -265,12 +406,15 @@ export async function callImotaraAI(
             };
         }
 
-
         const rawText = await res.text().catch(() => "");
         let data: any = null;
 
         try {
             data = rawText ? JSON.parse(rawText) : {};
+
+            debugLog(
+                `[imotara] /api/respond languageUsed=${String(data?.meta?.languageUsed)} preferredLanguageSent=${preferredLanguage}`
+            );
         } catch (e) {
             debugWarn("[imotara] cloud response was not valid JSON", {
                 status: res.status,
@@ -288,21 +432,19 @@ export async function callImotaraAI(
             };
         }
 
-        // Debug log – see in Metro console (gated for QA/prod cleanliness)
-        debugLog("Imotara mobile AI raw response:", JSON.stringify(data, null, 2));
-
-        // ✅ Focused debug: confirm exactly what the server sent for emotion
-        debugLog("[imotara] cloud emotion fields", {
-            emotion: data?.emotion,
-            intensity: data?.intensity,
-            metaEmotion: data?.meta?.emotion,
-            metaIntensity: data?.meta?.intensity,
+        // Compact debug (keeps signal, avoids huge logs / UI freezes)
+        debugLog("[imotara] cloud response summary", {
+            requestId: data?.requestId,
+            messageLen: typeof data?.message === "string" ? data.message.length : undefined,
+            followUpLen: typeof data?.followUp === "string" ? data.followUp.length : undefined,
+            analysisSource: data?.meta?.analysisSource,
+            languageUsed: data?.meta?.languageUsed,
+            emotionLabel: data?.meta?.emotionLabel ?? data?.meta?.emotion?.primary,
             metaKeys:
                 data?.meta && typeof data.meta === "object"
                     ? Object.keys(data.meta)
                     : undefined,
         });
-
 
         // 1) Try common "direct reply" fields first
         // Backend contract (strict):
@@ -317,6 +459,7 @@ export async function callImotaraAI(
             replyText = replyText.slice(0, MAX_REMOTE_REPLY_CHARS).trimEnd() + "…";
         }
 
+        // Single, clear validation (covers "", whitespace-only, missing message)
         if (!replyText) {
             return {
                 ok: false,
@@ -325,23 +468,14 @@ export async function callImotaraAI(
             };
         }
 
-        if (!replyText.trim()) {
-            return {
-                ok: false,
-                replyText: "",
-                errorMessage: "No reply text returned from server",
-            };
-        }
-
         // ✅ Preserve server emotion signal (cloud often nests it under meta)
-        // Supports:
-        // - data.emotion: string
-        // - data.meta.emotionLabel: string
-        // - data.meta.emotion: { primary: string, intensity: "low"|"medium"|"high", ... }
         const meta = data?.meta;
 
         const metaEmotionObj =
-            meta && typeof meta === "object" && (meta as any).emotion && typeof (meta as any).emotion === "object"
+            meta &&
+                typeof meta === "object" &&
+                (meta as any).emotion &&
+                typeof (meta as any).emotion === "object"
                 ? (meta as any).emotion
                 : undefined;
 
@@ -356,7 +490,6 @@ export async function callImotaraAI(
                 : undefined;
 
         // ✅ If server doesn't send emotion, derive a safe fallback from the input message
-        // This prevents mobile UI from defaulting to neutral for Indian language inputs.
         if (!emotion) {
             const raw = String(message || "").trim();
 
@@ -377,7 +510,6 @@ export async function callImotaraAI(
             }
         }
 
-
         // intensity can be numeric or (in meta.emotion) a string level
         const intensityRaw =
             data?.intensity ??
@@ -397,7 +529,6 @@ export async function callImotaraAI(
                                 : undefined
                     : undefined;
 
-
         return {
             ok: true,
             replyText,
@@ -406,15 +537,18 @@ export async function callImotaraAI(
             reflectionSeed: data?.reflectionSeed,
             followUp: typeof data?.followUp === "string" ? data.followUp : undefined,
 
-            // ✅ NEW: used by ChatScreen to show correct mood chip
+            // ✅ preserve server meta for mobile ↔ web parity (FIX: was being dropped)
+            meta,
+
+            // ✅ used by ChatScreen to show correct mood chip
             emotion,
             intensity,
 
             // ✅ explicit source + diagnostics
             analysisSource: "cloud",
             remoteUrl,
+            remoteStatus: res.status,
         };
-
     } catch (error: any) {
         debugWarn("Imotara mobile AI fetch error:", error);
 
@@ -426,10 +560,12 @@ export async function callImotaraAI(
         return {
             ok: false,
             replyText: "",
-            errorMessage: isTimeout ? "Request timed out" : (error?.message ?? "Network error"),
+            errorMessage: isTimeout
+                ? "Request timed out"
+                : error?.message ?? "Network error",
             analysisSource: "cloud",
             remoteUrl,
-            remoteError: isTimeout ? "timeout" : (error?.message ?? String(error)),
+            remoteError: isTimeout ? "timeout" : error?.message ?? String(error),
         };
     }
 }
@@ -454,7 +590,10 @@ export type GetChatMessagesResponse = {
     serverTs?: number;
 };
 
-function buildChatMessagesUrl(params?: { threadId?: string; since?: number }): string {
+function buildChatMessagesUrl(params?: {
+    threadId?: string;
+    since?: number;
+}): string {
     const base = `${IMOTARA_API_BASE_URL}/api/chat/messages`;
     const q = new URLSearchParams();
 
@@ -468,13 +607,15 @@ function buildChatMessagesUrl(params?: { threadId?: string; since?: number }): s
     return qs ? `${base}?${qs}` : base;
 }
 
-
 export async function fetchRemoteChatMessages(args: {
     userScope: string;
     threadId?: string;
     since?: number;
 }): Promise<GetChatMessagesResponse> {
-    const remoteUrl = buildChatMessagesUrl({ threadId: args.threadId, since: args.since });
+    const remoteUrl = buildChatMessagesUrl({
+        threadId: args.threadId,
+        since: args.since,
+    });
 
     try {
         const res = await fetch(remoteUrl, {
@@ -507,8 +648,13 @@ export async function fetchRemoteChatMessages(args: {
             return { messages: [] };
         }
 
-        const messages = Array.isArray(data?.messages) ? (data.messages as RemoteChatMessage[]) : [];
-        return { messages, serverTs: typeof data?.serverTs === "number" ? data.serverTs : undefined };
+        const messages = Array.isArray(data?.messages)
+            ? (data.messages as RemoteChatMessage[])
+            : [];
+        return {
+            messages,
+            serverTs: typeof data?.serverTs === "number" ? data.serverTs : undefined,
+        };
     } catch (err: any) {
         debugWarn("[imotara] fetchRemoteChatMessages error", err);
         return { messages: [] };
@@ -552,4 +698,3 @@ export async function pushRemoteChatMessages(args: {
         return { ok: false, errorMessage: err?.message ?? "Network error" };
     }
 }
-
