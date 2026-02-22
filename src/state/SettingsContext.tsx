@@ -96,6 +96,13 @@ type SettingsContextValue = {
      */
     chatLinkKey: string;
     setChatLinkKey: (value: string) => void;
+
+    /**
+     * Device-only reply language preference (override).
+     * Used by ChatScreen for local hints and for consistent UX.
+     */
+    preferredLanguage: "en" | "hi" | "bn";
+    setPreferredLanguage: (value: "en" | "hi" | "bn") => void;
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -103,6 +110,9 @@ const SettingsContext = createContext<SettingsContextValue | undefined>(
 );
 
 const STORAGE_KEY = "imotara_settings_v1";
+
+// ✅ Keep compatibility with SettingsScreen’s existing storage key
+const PREFERRED_LANGUAGE_KEY = "imotara_preferredLanguage";
 
 // Keep this tiny + safe (no dependency on other files)
 function clampDelaySeconds(v: unknown, fallback: number): number {
@@ -220,7 +230,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     // ✅ Cross-device chat link key (optional)
     const [chatLinkKey, _setChatLinkKey] = useState<string>("");
+    // ✅ Device-only reply language
+    const [preferredLanguage, _setPreferredLanguage] = useState<"en" | "hi" | "bn">(
+        "en"
+    );
 
+    const setPreferredLanguage = (value: "en" | "hi" | "bn") => {
+        const v = String(value || "").trim().toLowerCase();
+        if (v === "en" || v === "hi" || v === "bn") {
+            _setPreferredLanguage(v as "en" | "hi" | "bn");
+        }
+    };
     const [hydrated, setHydrated] = useState(false);
 
 
@@ -253,9 +273,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const hydrate = async () => {
             try {
                 // ✅ hydrate settings + compute license gate in parallel
-                const [raw, rawTier] = await Promise.all([
+                const [raw, rawTier, rawLang] = await Promise.all([
                     AsyncStorage.getItem(STORAGE_KEY),
                     AsyncStorage.getItem(LICENSE_TIER_KEY),
+                    AsyncStorage.getItem(PREFERRED_LANGUAGE_KEY),
                 ]);
 
                 // 1) Settings payload
@@ -267,6 +288,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             _setEmotionInsightsEnabled(
                                 safeBool(parsed.emotionInsightsEnabled, true)
                             );
+                        }
+
+                        // ✅ Restore preferred language (new)
+                        if ("preferredLanguage" in parsed) {
+                            const v = String((parsed as any).preferredLanguage || "")
+                                .trim()
+                                .toLowerCase()
+                                .split(/[-_]/)[0];
+                            if (v === "en" || v === "hi" || v === "bn") {
+                                _setPreferredLanguage(v as "en" | "hi" | "bn");
+                            }
                         }
 
                         if ("showAssistantRepliesInHistory" in parsed) {
@@ -370,6 +402,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                     _setLocalUserScopeId((prev) => (prev && prev.trim() ? prev : makeLocalScopeId()));
                 }
 
+                // ✅ Back-compat: if payload didn't include it, read legacy key
+                if (alive) {
+                    _setPreferredLanguage((prev) => {
+                        if (prev === "en" || prev === "hi" || prev === "bn") return prev;
+
+                        const v = String(rawLang || "")
+                            .trim()
+                            .toLowerCase()
+                            .split(/[-_]/)[0];
+
+                        return v === "en" || v === "hi" || v === "bn"
+                            ? (v as "en" | "hi" | "bn")
+                            : "en";
+                    });
+                }
+
                 // 2) License tier → cloud sync gate
                 const tier: LicenseTier = isValidTier(rawTier) ? rawTier : "FREE";
                 const g = gate("CLOUD_SYNC", tier);
@@ -409,6 +457,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             analysisMode,
             toneContext,
 
+            // ✅ Device-only language
+            preferredLanguage,
+
             // ✅ Local device-only scope (prevents cross-user leakage when chatLinkKey is empty)
             localUserScopeId,
 
@@ -416,7 +467,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             chatLinkKey,
         };
 
-        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload)).catch((e) => {
+        Promise.all([
+            AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload)),
+            // ✅ Keep legacy key for compatibility
+            AsyncStorage.setItem(PREFERRED_LANGUAGE_KEY, preferredLanguage),
+        ]).catch((e) => {
             if (DEBUG_UI_ENABLED) console.warn("Settings save failed:", e);
         });
     }, [
@@ -535,6 +590,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 resetLocalUserScopeId,
                 chatLinkKey,
                 setChatLinkKey,
+                preferredLanguage,
+                setPreferredLanguage,
             }}
         >
             {children}

@@ -49,9 +49,6 @@ import { DONATION_PRESETS, formatINRFromPaise } from "../payments/donations";
 type DonationUIItem = { id: string; label: string; amount: number };
 const DONATION_UI_PRESETS = DONATION_PRESETS as readonly DonationUIItem[];
 
-// Preferred language override (used by src/api/aiClient.ts)
-const PREFERRED_LANGUAGE_KEY = "imotara_preferredLanguage";
-
 function prettyTier(tier: LicenseTier | string | undefined | null): string {
     const t = String(tier ?? "FREE").toUpperCase();
     switch (t) {
@@ -135,6 +132,9 @@ export default function SettingsScreen() {
         // ✅ Cross-device chat link key (optional)
         chatLinkKey,
         setChatLinkKey,
+
+        preferredLanguage,
+        setPreferredLanguage,
     } = useSettings();
 
     const messageCount = (history as HistoryRecord[]).length;
@@ -172,24 +172,7 @@ export default function SettingsScreen() {
 
     // ✅ Link key status (UI only)
     const [chatLinkStatus, setChatLinkStatus] = React.useState<string | null>(null);
-
-    // ✅ Language (device-only override)
-    const [preferredLanguage, setPreferredLanguage] = React.useState<"en" | "hi" | "bn">("en");
     const [languageStatus, setLanguageStatus] = React.useState<string | null>(null);
-
-    React.useEffect(() => {
-        (async () => {
-            try {
-                const raw = (await AsyncStorage.getItem(PREFERRED_LANGUAGE_KEY)) ?? "";
-                const base = raw.trim().toLowerCase().split(/[-_]/)[0];
-                if (base === "en" || base === "hi" || base === "bn") {
-                    setPreferredLanguage(base as "en" | "hi" | "bn");
-                }
-            } catch {
-                // ignore
-            }
-        })();
-    }, []);
 
     // ✅ Donation availability (graceful degradation for App Review / backend toggles)
     const [donationsEnabled, setDonationsEnabled] = React.useState(true);
@@ -1086,20 +1069,15 @@ export default function SettingsScreen() {
                             return (
                                 <TouchableOpacity
                                     key={opt.id}
-                                    onPress={async () => {
+                                    onPress={() => {
                                         setPreferredLanguage(opt.id);
-                                        try {
-                                            await AsyncStorage.setItem(PREFERRED_LANGUAGE_KEY, opt.id);
-                                            setLanguageStatus(
-                                                opt.id === "hi"
-                                                    ? "Hindi enabled."
-                                                    : opt.id === "bn"
-                                                        ? "Bengali enabled."
-                                                        : "English enabled."
-                                            );
-                                        } catch {
-                                            setLanguageStatus("Could not save language.");
-                                        }
+                                        setLanguageStatus(
+                                            opt.id === "hi"
+                                                ? "Hindi enabled."
+                                                : opt.id === "bn"
+                                                    ? "Bengali enabled."
+                                                    : "English enabled."
+                                        );
                                     }}
                                     style={{
                                         paddingHorizontal: 12,
