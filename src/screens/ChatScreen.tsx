@@ -1105,12 +1105,27 @@ export default function ChatScreen() {
     // ✅ 80/20: prevent double-send / overlapping async flows
     const isSendingRef = useRef(false);
 
+    // ✅ NEW: cancel in-flight AI request safely (additive)
+    const aiAbortRef = useRef<AbortController | null>(null);
+
     // ✅ 80/20: avoid setState on unmounted
     const mountedRef = useRef(true);
     useEffect(() => {
         mountedRef.current = true;
         return () => {
             mountedRef.current = false;
+
+            // ✅ cleanup timers
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+                typingTimeoutRef.current = null;
+            }
+
+            // ✅ cancel any in-flight AI request (additive)
+            if (aiAbortRef.current) {
+                aiAbortRef.current.abort();
+                aiAbortRef.current = null;
+            }
         };
     }, []);
 
@@ -1678,6 +1693,15 @@ export default function ChatScreen() {
         isSendingRef.current = true;
         sendStartedAtRef.current = Date.now();
 
+        // ✅ cancel any prior in-flight request (best-effort; additive)
+        if (aiAbortRef.current) {
+            aiAbortRef.current.abort();
+            aiAbortRef.current = null;
+        }
+
+        const abortController = new AbortController();
+        aiAbortRef.current = abortController;
+
         const timestamp = Date.now();
 
         // ✅ Phase 3.1 — persist user moodHint too (emoji-only + text)
@@ -1764,6 +1788,9 @@ export default function ChatScreen() {
                             analysisMode: analysisMode,
                             emotionInsightsEnabled: wantsInsights,
 
+                            // ✅ NEW: cancellation support (additive)
+                            signal: abortController.signal,
+
                             // ✅ persona hints: prefer companion settings when enabled, else fall back to user settings
                             settings: {
                                 relationshipTone:
@@ -1792,6 +1819,12 @@ export default function ChatScreen() {
                         })
                         : { ok: false, replyText: "" };
 
+                    // ✅ If cancelled (unmount or explicit abort), do nothing further
+                    if (abortController.signal.aborted || remote?.cancelled) {
+                        debugLog("[imotara] AI request ignored (cancelled)");
+                        return;
+                    }
+
                     debugLog("[imotara] remote:", {
                         ok: remote?.ok,
                         errorMessage: remote?.errorMessage,
@@ -1805,7 +1838,6 @@ export default function ChatScreen() {
                         analysisMode,
                         meta: remote?.meta,
                     });
-
 
                     const cloudAttempted = wantsCloud;
                     const cloudFailed =
@@ -2124,6 +2156,11 @@ export default function ChatScreen() {
                     smoothScrollToBottom(scrollViewRef);
                 }
                 finally {
+                    // ✅ clear the abort ref if this cycle owns it
+                    if (aiAbortRef.current === abortController) {
+                        aiAbortRef.current = null;
+                    }
+
                     if (!mountedRef.current) return;
 
                     setIsTyping(false);
