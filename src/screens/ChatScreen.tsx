@@ -3411,7 +3411,11 @@ export default function ChatScreen() {
                         borderTopWidth: 1,
                         borderTopColor: colors.border,
                         paddingHorizontal: 12,
-                        paddingVertical: 8,
+
+                        // ✅ Small comfort gap for Android gesture/nav bar + some keyboards
+                        paddingTop: 8,
+                        paddingBottom: Platform.OS === "android" ? 14 : 8,
+
                         backgroundColor: "rgba(15, 23, 42, 0.98)",
                     }}
                 >
