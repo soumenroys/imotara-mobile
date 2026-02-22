@@ -11,6 +11,8 @@ import {
     Animated,
     NativeSyntheticEvent,
     NativeScrollEvent,
+    KeyboardAvoidingView,
+    Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
@@ -2877,470 +2879,133 @@ export default function ChatScreen() {
     const isSendDisabled = input.trim().length === 0 || isTyping || isSendingRef.current;
 
     return (
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
-            {/* Header */}
-            <View
-                style={{
-                    paddingHorizontal: 16,
-                    paddingTop: 2,
-                    paddingBottom: 2,
-                    borderBottomWidth: 0.5,
-                    borderBottomColor: colors.border,
-                    backgroundColor: "rgba(15, 23, 42, 0.96)",
-                }}
-            >
+        <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+        >
+            <View style={{ flex: 1, backgroundColor: colors.background }}>
+                {/* Header */}
                 <View
                     style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
+                        paddingHorizontal: 16,
+                        paddingTop: 2,
+                        paddingBottom: 2,
+                        borderBottomWidth: 0.5,
+                        borderBottomColor: colors.border,
+                        backgroundColor: "rgba(15, 23, 42, 0.96)",
                     }}
                 >
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <View
+                        style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                        }}
+                    >
+                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                            <View
+                                style={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: 999,
+                                    marginRight: 6,
+                                    backgroundColor: hasUnsynced
+                                        ? "#fbbf24"
+                                        : (lastSyncStatus || "").toLowerCase().includes("failed")
+                                            ? "#f87171"
+                                            : colors.primary,
+                                }}
+                            />
+
+                            <Text
+                                style={{
+                                    fontSize: 18,
+                                    fontWeight: "700",
+                                    color: colors.textPrimary,
+                                }}
+                            >
+                                Imotara
+                            </Text>
+                        </View>
+
+                        <TouchableOpacity
+                            onPress={handleClearChat}
+                            accessibilityRole="button"
+                            accessibilityLabel="Clear chat"
+                            style={{
+                                paddingHorizontal: 10,
+                                paddingVertical: 6,
+                                borderRadius: 999,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                            }}
+                        >
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, fontWeight: "600" }}>
+                                Clear
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <Text
+                        style={{
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                            marginTop: 2,
+                            marginBottom: 4,
+                        }}
+                    >
+                        A calm space to talk about your feelings.
+                    </Text>
+
+                    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
                         <View
                             style={{
                                 width: 8,
                                 height: 8,
                                 borderRadius: 999,
                                 marginRight: 6,
-                                backgroundColor: hasUnsynced
-                                    ? "#fbbf24"
-                                    : (lastSyncStatus || "").toLowerCase().includes("failed")
-                                        ? "#f87171"
-                                        : colors.primary,
+                                backgroundColor: hasUnsynced ? "#f97373" : syncHintAccent,
                             }}
                         />
-
-                        <Text
-                            style={{
-                                fontSize: 18,
-                                fontWeight: "700",
-                                color: colors.textPrimary,
-                            }}
-                        >
-                            Imotara
+                        <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                            {syncHint}
                         </Text>
                     </View>
 
-                    <TouchableOpacity
-                        onPress={handleClearChat}
-                        accessibilityRole="button"
-                        accessibilityLabel="Clear chat"
-                        style={{
-                            paddingHorizontal: 10,
-                            paddingVertical: 6,
-                            borderRadius: 999,
-                            borderWidth: 1,
-                            borderColor: colors.border,
-                        }}
-                    >
-                        <Text style={{ fontSize: 12, color: colors.textSecondary, fontWeight: "600" }}>
-                            Clear
+                    {isSyncing && (
+                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                            Syncing your latest messages…
                         </Text>
-                    </TouchableOpacity>
+                    )}
+
+                    {showRecentlySyncedPulse && (
+                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                            ✅ All changes synced · Imotara cloud copy updated.
+                        </Text>
+                    )}
                 </View>
 
-                <Text
-                    style={{
-                        fontSize: 12,
-                        color: colors.textSecondary,
-                        marginTop: 2,
-                        marginBottom: 4,
-                    }}
-                >
-                    A calm space to talk about your feelings.
-                </Text>
-
-                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
-                    <View
-                        style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: 999,
-                            marginRight: 6,
-                            backgroundColor: hasUnsynced ? "#f97373" : syncHintAccent,
-                        }}
-                    />
-                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                        {syncHint}
-                    </Text>
-                </View>
-
-                {isSyncing && (
-                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-                        Syncing your latest messages…
-                    </Text>
-                )}
-
-                {showRecentlySyncedPulse && (
-                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-                        ✅ All changes synced · Imotara cloud copy updated.
-                    </Text>
-                )}
-            </View>
-
-            {/* Chat area */}
-            <View style={{ flex: 1 }}>
-                {DEBUG_UI_ENABLED && refreshing && (
-                    <Animated.View
-                        style={{
-                            position: "absolute",
-                            top: 10,
-                            left: 0,
-                            right: 0,
-                            alignItems: "center",
-                            zIndex: 20,
-                            opacity: pullAnim.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [0.2, 1],
-                            }),
-                            transform: [
-                                {
-                                    scale: pullAnim.interpolate({
-                                        inputRange: [0, 1],
-                                        outputRange: [0.9, 1.05],
-                                    }),
-                                },
-                            ],
-                        }}
-                    >
-                        <View
-                            style={{
-                                width: 18,
-                                height: 18,
-                                borderRadius: 999,
-                                backgroundColor: "rgba(56, 189, 248, 0.8)",
-                            }}
-                        />
-                    </Animated.View>
-                )}
-
-                <ScrollView
-                    ref={scrollViewRef}
-                    contentContainerStyle={{
-                        paddingHorizontal: 14,
-                        paddingTop: 4,
-                        paddingBottom: 80,
-                    }}
-                    onScroll={handleScroll}
-                    scrollEventThrottle={50}
-                    onScrollEndDrag={() => {
-                        if (!DEBUG_UI_ENABLED) return;
-                        if (pullOffset < -60) handleRefresh();
-                    }}
-                >
-                    {messages.length === 0 && (
-                        <View style={{ paddingTop: 24, paddingBottom: 16 }}>
-                            <Text
-                                style={{
-                                    fontSize: 15,
-                                    color: colors.textSecondary,
-                                    marginBottom: 6,
-                                }}
-                            >
-                                Welcome to Imotara.
-                            </Text>
-                            <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                                You can start by sharing how your day feels, something that
-                                bothered you, or something you’re looking forward to. Imotara
-                                listens without judgment.
-                            </Text>
-                        </View>
-                    )}
-
-                    {emotionInsightsEnabled && latestMoodHint && (
-                        <View
-                            style={{
-                                marginBottom: 12,
-                                paddingHorizontal: 12,
-                                paddingVertical: 8,
-                                borderRadius: 12,
-                                backgroundColor: "rgba(15, 23, 42, 0.9)",
-                                borderWidth: 1,
-                                borderColor: colors.border,
-                            }}
-                        >
-                            <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                                Mood glimpse
-                            </Text>
-                            <Text
-                                style={{
-                                    fontSize: 13,
-                                    color: colors.textPrimary,
-                                    marginTop: 2,
-                                }}
-                            >
-                                {latestMoodHint}
-                            </Text>
-
-                            {DEBUG_UI_ENABLED && (
-                                <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 4 }}>
-                                    (debug preview)
-                                </Text>
-                            )}
-                        </View>
-                    )}
-
-                    {DEBUG_UI_ENABLED && devQaRunning && (
-                        <View
-                            style={{
-                                marginBottom: 12,
-                                paddingHorizontal: 12,
-                                paddingVertical: 8,
-                                borderRadius: 12,
-                                backgroundColor: "rgba(15, 23, 42, 0.9)",
-                                borderWidth: 1,
-                                borderColor: colors.border,
-                            }}
-                        >
-                            <Text style={{ fontSize: 12, color: colors.textPrimary }}>
-                                QA running…
-                            </Text>
-                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-                                (DEV only) New runs are blocked until this finishes.
-                            </Text>
-                        </View>
-                    )}
-
-                    {DEBUG_UI_ENABLED && (
-                        <View style={{ marginBottom: 12 }}>
-                            <View
-                                style={{
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    flexWrap: "wrap",
-                                }}
-                            >
-                                <TouchableOpacity
-                                    onPress={() => void runDevQaSuite({ cloudProbe: devQaCloudProbe })}
-                                    style={{
-                                        alignSelf: "flex-start",
-                                        marginRight: 10,
-                                        marginBottom: 8,
-                                        borderRadius: 999,
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 8,
-                                        borderWidth: 1,
-                                        borderColor: colors.border,
-                                        backgroundColor: "rgba(15, 23, 42, 0.9)",
-                                    }}
-                                >
-                                    <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
-                                        Run QA 1–10 (DEV)
-                                    </Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    onPress={() => void runDevQaCloudOnly({ cloudProbe: devQaCloudProbe })}
-                                    style={{
-                                        alignSelf: "flex-start",
-                                        marginRight: 10,
-                                        marginBottom: 8,
-                                        borderRadius: 999,
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 8,
-                                        borderWidth: 1,
-                                        borderColor: colors.border,
-                                        backgroundColor: "rgba(15, 23, 42, 0.9)",
-                                    }}
-                                >
-                                    <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
-                                        Run QA 1–10 (Cloud) (DEV)
-                                    </Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    onPress={async () => {
-                                        const textToCopy =
-                                            (DEV_QA_LAST_REPORT || "").trim() || "No QA report generated yet.";
-                                        await Clipboard.setStringAsync(textToCopy);
-                                        debugLog("— IMOTARA DEV QA: copied report to clipboard —");
-
-                                    }}
-                                    style={{
-                                        alignSelf: "flex-start",
-                                        marginBottom: 8,
-                                        borderRadius: 999,
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 8,
-                                        borderWidth: 1,
-                                        borderColor: colors.border,
-                                        backgroundColor: "rgba(15, 23, 42, 0.9)",
-                                    }}
-                                >
-                                    <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
-                                        Copy QA Report (DEV)
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            {/* ✅ Local quick prompts (DEV) */}
-                            <View
-                                style={{
-                                    marginTop: 8,
-                                    paddingHorizontal: 12,
-                                    paddingVertical: 10,
-                                    borderRadius: 12,
-                                    backgroundColor: "rgba(15, 23, 42, 0.9)",
-                                    borderWidth: 1,
-                                    borderColor: colors.border,
-                                }}
-                            >
-                                <View
-                                    style={{
-                                        flexDirection: "row",
-                                        alignItems: "center",
-                                        justifyContent: "space-between",
-                                        gap: 10,
-                                    }}
-                                >
-                                    <Text style={{ fontSize: 11, color: colors.textSecondary, flex: 1 }}>
-                                        Local quick prompts (DEV) — tap to fill (auto-sends only in Local mode)
-                                    </Text>
-
-                                    {/* ✅ DEV badge: current analysis mode (no behavior change) */}
-                                    <View
-                                        style={{
-                                            alignSelf: "flex-start",
-                                            borderRadius: 999,
-                                            paddingHorizontal: 10,
-                                            paddingVertical: 6,
-                                            borderWidth: 1,
-                                            borderColor: colors.border,
-                                            backgroundColor: "rgba(2, 6, 23, 0.6)",
-                                        }}
-                                    >
-                                        <Text style={{ fontSize: 11, color: colors.textPrimary }}>
-                                            {analysisMode === "local" || !cloudSyncAllowed ? "Local" : "Cloud"}
-                                        </Text>
-
-                                    </View>
-                                </View>
-
-
-                                <View
-                                    style={{
-                                        flexDirection: "row",
-                                        flexWrap: "wrap",
-                                        marginTop: 8,
-                                    }}
-                                >
-                                    {LOCAL_DEV_TEST_PROMPTS.map((p, idx) => (
-                                        <TouchableOpacity
-                                            key={`local-dev-${idx}`}
-                                            onPress={() => runLocalDevPrompt(p)}
-                                            style={{
-                                                alignSelf: "flex-start",
-                                                marginRight: 8,
-                                                marginBottom: 8,
-                                                borderRadius: 999,
-                                                paddingHorizontal: 12,
-                                                paddingVertical: 8,
-                                                borderWidth: 1,
-                                                borderColor: colors.border,
-                                                backgroundColor: "rgba(2, 6, 23, 0.6)",
-                                                maxWidth: "100%",
-                                            }}
-                                        >
-                                            <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
-                                                {p}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
-                        </View>
-                    )}
-
-
-                    {/* Compatibility Gate (report-only) */}
-                    {DEBUG_UI_ENABLED && (() => {
-                        // Find the most recent message (typically bot) that carries compatibility meta
-                        let compat: any = null;
-
-                        for (let i = messages.length - 1; i >= 0; i--) {
-                            const c = messages[i]?.meta?.compatibility;
-                            if (c) {
-                                compat = c;
-                                break;
-                            }
-                        }
-
-                        if (!compat) return null;
-
-                        const summary =
-                            typeof compat.summary === "string"
-                                ? compat.summary
-                                : compat.ok === true
-                                    ? "OK"
-                                    : "NOT OK";
-
-                        return (
-                            <View
-                                style={{
-                                    marginBottom: 12,
-                                    paddingHorizontal: 12,
-                                    paddingVertical: 10,
-                                    borderRadius: 12,
-                                    backgroundColor: "rgba(15, 23, 42, 0.9)",
-                                    borderWidth: 1,
-                                    borderColor: colors.border,
-                                }}
-                            >
-                                <View
-                                    style={{
-                                        flexDirection: "row",
-                                        justifyContent: "space-between",
-                                        alignItems: "center",
-                                    }}
-                                >
-                                    <Text
-                                        style={{
-                                            fontSize: 11,
-                                            fontWeight: "600",
-                                            color: colors.textSecondary,
-                                        }}
-                                    >
-                                        Compatibility Gate
-                                    </Text>
-
-                                    <Text
-                                        style={{
-                                            fontSize: 11,
-                                            color: colors.textPrimary,
-                                        }}
-                                    >
-                                        {summary}
-                                    </Text>
-                                </View>
-
-                                <Text
-                                    style={{
-                                        marginTop: 8,
-                                        fontSize: 11,
-                                        color: colors.textSecondary,
-                                    }}
-                                >
-                                    {JSON.stringify(compat, null, 2)}
-                                </Text>
-                            </View>
-                        );
-                    })()}
-
-                    {messages.map((message, index) => renderBubble(message, index))}
-
-                    {isTyping && (
+                {/* Chat area */}
+                <View style={{ flex: 1 }}>
+                    {DEBUG_UI_ENABLED && refreshing && (
                         <Animated.View
                             style={{
-                                opacity: typingGlow.interpolate({
+                                position: "absolute",
+                                top: 10,
+                                left: 0,
+                                right: 0,
+                                alignItems: "center",
+                                zIndex: 20,
+                                opacity: pullAnim.interpolate({
                                     inputRange: [0, 1],
-                                    outputRange: [0.5, 1],
+                                    outputRange: [0.2, 1],
                                 }),
                                 transform: [
                                     {
-                                        scale: typingGlow.interpolate({
+                                        scale: pullAnim.interpolate({
                                             inputRange: [0, 1],
-                                            outputRange: [0.98, 1.03],
+                                            outputRange: [0.9, 1.05],
                                         }),
                                     },
                                 ],
@@ -3348,123 +3013,466 @@ export default function ChatScreen() {
                         >
                             <View
                                 style={{
-                                    alignSelf: "flex-start",
-                                    marginTop: 4,
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 6,
+                                    width: 18,
+                                    height: 18,
                                     borderRadius: 999,
-                                    backgroundColor: typingBubbleBg,
+                                    backgroundColor: "rgba(56, 189, 248, 0.8)",
+                                }}
+                            />
+                        </Animated.View>
+                    )}
+
+                    <ScrollView
+                        ref={scrollViewRef}
+                        contentContainerStyle={{
+                            paddingHorizontal: 14,
+                            paddingTop: 4,
+                            paddingBottom: 80,
+                        }}
+                        onScroll={handleScroll}
+                        scrollEventThrottle={50}
+                        onScrollEndDrag={() => {
+                            if (!DEBUG_UI_ENABLED) return;
+                            if (pullOffset < -60) handleRefresh();
+                        }}
+                    >
+                        {messages.length === 0 && (
+                            <View style={{ paddingTop: 24, paddingBottom: 16 }}>
+                                <Text
+                                    style={{
+                                        fontSize: 15,
+                                        color: colors.textSecondary,
+                                        marginBottom: 6,
+                                    }}
+                                >
+                                    Welcome to Imotara.
+                                </Text>
+                                <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                                    You can start by sharing how your day feels, something that
+                                    bothered you, or something you’re looking forward to. Imotara
+                                    listens without judgment.
+                                </Text>
+                            </View>
+                        )}
+
+                        {emotionInsightsEnabled && latestMoodHint && (
+                            <View
+                                style={{
+                                    marginBottom: 12,
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 8,
+                                    borderRadius: 12,
+                                    backgroundColor: "rgba(15, 23, 42, 0.9)",
                                     borderWidth: 1,
                                     borderColor: colors.border,
                                 }}
                             >
                                 <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                                    {typingStatusText || "Imotara is typing…"}
+                                    Mood glimpse
+                                </Text>
+                                <Text
+                                    style={{
+                                        fontSize: 13,
+                                        color: colors.textPrimary,
+                                        marginTop: 2,
+                                    }}
+                                >
+                                    {latestMoodHint}
+                                </Text>
+
+                                {DEBUG_UI_ENABLED && (
+                                    <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 4 }}>
+                                        (debug preview)
+                                    </Text>
+                                )}
+                            </View>
+                        )}
+
+                        {DEBUG_UI_ENABLED && devQaRunning && (
+                            <View
+                                style={{
+                                    marginBottom: 12,
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 8,
+                                    borderRadius: 12,
+                                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                    borderWidth: 1,
+                                    borderColor: colors.border,
+                                }}
+                            >
+                                <Text style={{ fontSize: 12, color: colors.textPrimary }}>
+                                    QA running…
+                                </Text>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                                    (DEV only) New runs are blocked until this finishes.
                                 </Text>
                             </View>
-                        </Animated.View>
-                    )}
-                </ScrollView>
+                        )}
 
-                {showScrollButton && (
-                    <Animated.View
-                        style={{
-                            position: "absolute",
-                            bottom: 80,
-                            right: 16,
-                            transform: [{ translateY: slideAnim }],
-                            opacity: fadeAnim,
-                        }}
-                    >
-                        <TouchableOpacity
-                            onPress={scrollToBottom}
+                        {DEBUG_UI_ENABLED && (
+                            <View style={{ marginBottom: 12 }}>
+                                <View
+                                    style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        flexWrap: "wrap",
+                                    }}
+                                >
+                                    <TouchableOpacity
+                                        onPress={() => void runDevQaSuite({ cloudProbe: devQaCloudProbe })}
+                                        style={{
+                                            alignSelf: "flex-start",
+                                            marginRight: 10,
+                                            marginBottom: 8,
+                                            borderRadius: 999,
+                                            paddingHorizontal: 12,
+                                            paddingVertical: 8,
+                                            borderWidth: 1,
+                                            borderColor: colors.border,
+                                            backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                        }}
+                                    >
+                                        <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
+                                            Run QA 1–10 (DEV)
+                                        </Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        onPress={() => void runDevQaCloudOnly({ cloudProbe: devQaCloudProbe })}
+                                        style={{
+                                            alignSelf: "flex-start",
+                                            marginRight: 10,
+                                            marginBottom: 8,
+                                            borderRadius: 999,
+                                            paddingHorizontal: 12,
+                                            paddingVertical: 8,
+                                            borderWidth: 1,
+                                            borderColor: colors.border,
+                                            backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                        }}
+                                    >
+                                        <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
+                                            Run QA 1–10 (Cloud) (DEV)
+                                        </Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        onPress={async () => {
+                                            const textToCopy =
+                                                (DEV_QA_LAST_REPORT || "").trim() || "No QA report generated yet.";
+                                            await Clipboard.setStringAsync(textToCopy);
+                                            debugLog("— IMOTARA DEV QA: copied report to clipboard —");
+
+                                        }}
+                                        style={{
+                                            alignSelf: "flex-start",
+                                            marginBottom: 8,
+                                            borderRadius: 999,
+                                            paddingHorizontal: 12,
+                                            paddingVertical: 8,
+                                            borderWidth: 1,
+                                            borderColor: colors.border,
+                                            backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                        }}
+                                    >
+                                        <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
+                                            Copy QA Report (DEV)
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* ✅ Local quick prompts (DEV) */}
+                                <View
+                                    style={{
+                                        marginTop: 8,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 10,
+                                        borderRadius: 12,
+                                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                        borderWidth: 1,
+                                        borderColor: colors.border,
+                                    }}
+                                >
+                                    <View
+                                        style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            gap: 10,
+                                        }}
+                                    >
+                                        <Text style={{ fontSize: 11, color: colors.textSecondary, flex: 1 }}>
+                                            Local quick prompts (DEV) — tap to fill (auto-sends only in Local mode)
+                                        </Text>
+
+                                        {/* ✅ DEV badge: current analysis mode (no behavior change) */}
+                                        <View
+                                            style={{
+                                                alignSelf: "flex-start",
+                                                borderRadius: 999,
+                                                paddingHorizontal: 10,
+                                                paddingVertical: 6,
+                                                borderWidth: 1,
+                                                borderColor: colors.border,
+                                                backgroundColor: "rgba(2, 6, 23, 0.6)",
+                                            }}
+                                        >
+                                            <Text style={{ fontSize: 11, color: colors.textPrimary }}>
+                                                {analysisMode === "local" || !cloudSyncAllowed ? "Local" : "Cloud"}
+                                            </Text>
+
+                                        </View>
+                                    </View>
+
+
+                                    <View
+                                        style={{
+                                            flexDirection: "row",
+                                            flexWrap: "wrap",
+                                            marginTop: 8,
+                                        }}
+                                    >
+                                        {LOCAL_DEV_TEST_PROMPTS.map((p, idx) => (
+                                            <TouchableOpacity
+                                                key={`local-dev-${idx}`}
+                                                onPress={() => runLocalDevPrompt(p)}
+                                                style={{
+                                                    alignSelf: "flex-start",
+                                                    marginRight: 8,
+                                                    marginBottom: 8,
+                                                    borderRadius: 999,
+                                                    paddingHorizontal: 12,
+                                                    paddingVertical: 8,
+                                                    borderWidth: 1,
+                                                    borderColor: colors.border,
+                                                    backgroundColor: "rgba(2, 6, 23, 0.6)",
+                                                    maxWidth: "100%",
+                                                }}
+                                            >
+                                                <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
+                                                    {p}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+                            </View>
+                        )}
+
+
+                        {/* Compatibility Gate (report-only) */}
+                        {DEBUG_UI_ENABLED && (() => {
+                            // Find the most recent message (typically bot) that carries compatibility meta
+                            let compat: any = null;
+
+                            for (let i = messages.length - 1; i >= 0; i--) {
+                                const c = messages[i]?.meta?.compatibility;
+                                if (c) {
+                                    compat = c;
+                                    break;
+                                }
+                            }
+
+                            if (!compat) return null;
+
+                            const summary =
+                                typeof compat.summary === "string"
+                                    ? compat.summary
+                                    : compat.ok === true
+                                        ? "OK"
+                                        : "NOT OK";
+
+                            return (
+                                <View
+                                    style={{
+                                        marginBottom: 12,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 10,
+                                        borderRadius: 12,
+                                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                        borderWidth: 1,
+                                        borderColor: colors.border,
+                                    }}
+                                >
+                                    <View
+                                        style={{
+                                            flexDirection: "row",
+                                            justifyContent: "space-between",
+                                            alignItems: "center",
+                                        }}
+                                    >
+                                        <Text
+                                            style={{
+                                                fontSize: 11,
+                                                fontWeight: "600",
+                                                color: colors.textSecondary,
+                                            }}
+                                        >
+                                            Compatibility Gate
+                                        </Text>
+
+                                        <Text
+                                            style={{
+                                                fontSize: 11,
+                                                color: colors.textPrimary,
+                                            }}
+                                        >
+                                            {summary}
+                                        </Text>
+                                    </View>
+
+                                    <Text
+                                        style={{
+                                            marginTop: 8,
+                                            fontSize: 11,
+                                            color: colors.textSecondary,
+                                        }}
+                                    >
+                                        {JSON.stringify(compat, null, 2)}
+                                    </Text>
+                                </View>
+                            );
+                        })()}
+
+                        {messages.map((message, index) => renderBubble(message, index))}
+
+                        {isTyping && (
+                            <Animated.View
+                                style={{
+                                    opacity: typingGlow.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [0.5, 1],
+                                    }),
+                                    transform: [
+                                        {
+                                            scale: typingGlow.interpolate({
+                                                inputRange: [0, 1],
+                                                outputRange: [0.98, 1.03],
+                                            }),
+                                        },
+                                    ],
+                                }}
+                            >
+                                <View
+                                    style={{
+                                        alignSelf: "flex-start",
+                                        marginTop: 4,
+                                        paddingHorizontal: 10,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        backgroundColor: typingBubbleBg,
+                                        borderWidth: 1,
+                                        borderColor: colors.border,
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                                        {typingStatusText || "Imotara is typing…"}
+                                    </Text>
+                                </View>
+                            </Animated.View>
+                        )}
+                    </ScrollView>
+
+                    {showScrollButton && (
+                        <Animated.View
                             style={{
-                                backgroundColor: colors.primary,
-                                paddingHorizontal: 14,
-                                paddingVertical: 8,
-                                borderRadius: 999,
-                                shadowColor: "#000",
-                                shadowOpacity: 0.25,
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowRadius: 4,
-                                elevation: 4,
+                                position: "absolute",
+                                bottom: 80,
+                                right: 16,
+                                transform: [{ translateY: slideAnim }],
+                                opacity: fadeAnim,
                             }}
                         >
-                            <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
-                                New messages ↓
-                            </Text>
-                        </TouchableOpacity>
-                    </Animated.View>
-                )}
-            </View>
-
-            {/* Input */}
-            <View
-                style={{
-                    borderTopWidth: 1,
-                    borderTopColor: colors.border,
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    backgroundColor: "rgba(15, 23, 42, 0.98)",
-                }}
-            >
-                <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
-                    <View
-                        style={{
-                            flex: 1,
-                            marginRight: 8,
-                            borderRadius: 999,
-                            borderWidth: 1,
-                            borderColor: colors.border,
-                            backgroundColor: "rgba(15, 23, 42, 1)",
-                            paddingHorizontal: 12,
-                            paddingVertical: 6,
-                            minHeight: 40,
-                            justifyContent: "center",
-                        }}
-                    >
-                        <TextInput
-                            value={input}
-                            onChangeText={setInput}
-                            multiline
-                            onContentSizeChange={(e) => {
-                                const height = e?.nativeEvent?.contentSize?.height ?? 40;
-                                const minHeight = 40;
-                                const maxHeight = 120;
-                                const nextHeight = Math.min(
-                                    Math.max(height + 14, minHeight),
-                                    maxHeight
-                                );
-                                setInputHeight(nextHeight);
-                            }}
-                            placeholder="Type something you feel..."
-                            placeholderTextColor="rgba(148, 163, 184, 0.9)"
-                            style={{
-                                color: colors.textPrimary,
-                                fontSize: 14,
-                                maxHeight: 120,
-                                minHeight: inputHeight,
-                            }}
-                        />
-                    </View>
-
-                    <TouchableOpacity
-                        onPress={handleSend}
-                        disabled={isSendDisabled}
-                        style={{
-                            opacity: isSendDisabled ? 0.4 : 1,
-                            paddingHorizontal: 14,
-                            paddingVertical: 10,
-                            borderRadius: 999,
-                            backgroundColor: colors.primary,
-                        }}
-                    >
-                        <Text style={{ color: "#fff", fontWeight: "700" }}>Send</Text>
-                    </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={scrollToBottom}
+                                style={{
+                                    backgroundColor: colors.primary,
+                                    paddingHorizontal: 14,
+                                    paddingVertical: 8,
+                                    borderRadius: 999,
+                                    shadowColor: "#000",
+                                    shadowOpacity: 0.25,
+                                    shadowOffset: { width: 0, height: 2 },
+                                    shadowRadius: 4,
+                                    elevation: 4,
+                                }}
+                            >
+                                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
+                                    New messages ↓
+                                </Text>
+                            </TouchableOpacity>
+                        </Animated.View>
+                    )}
                 </View>
-            </View>
 
-            {renderActionSheet()}
-        </View>
+                {/* Input */}
+                <View
+                    style={{
+                        borderTopWidth: 1,
+                        borderTopColor: colors.border,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        backgroundColor: "rgba(15, 23, 42, 0.98)",
+                    }}
+                >
+                    <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
+                        <View
+                            style={{
+                                flex: 1,
+                                marginRight: 8,
+                                borderRadius: 999,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                                backgroundColor: "rgba(15, 23, 42, 1)",
+                                paddingHorizontal: 12,
+                                paddingVertical: 6,
+                                minHeight: 40,
+                                justifyContent: "center",
+                            }}
+                        >
+                            <TextInput
+                                value={input}
+                                onChangeText={setInput}
+                                multiline
+                                onContentSizeChange={(e) => {
+                                    const height = e?.nativeEvent?.contentSize?.height ?? 40;
+                                    const minHeight = 40;
+                                    const maxHeight = 120;
+                                    const nextHeight = Math.min(
+                                        Math.max(height + 14, minHeight),
+                                        maxHeight
+                                    );
+                                    setInputHeight(nextHeight);
+                                }}
+                                placeholder="Type something you feel..."
+                                placeholderTextColor="rgba(148, 163, 184, 0.9)"
+                                style={{
+                                    color: colors.textPrimary,
+                                    fontSize: 14,
+                                    maxHeight: 120,
+                                    minHeight: inputHeight,
+                                }}
+                            />
+                        </View>
+
+                        <TouchableOpacity
+                            onPress={handleSend}
+                            disabled={isSendDisabled}
+                            style={{
+                                opacity: isSendDisabled ? 0.4 : 1,
+                                paddingHorizontal: 14,
+                                paddingVertical: 10,
+                                borderRadius: 999,
+                                backgroundColor: colors.primary,
+                            }}
+                        >
+                            <Text style={{ color: "#fff", fontWeight: "700" }}>Send</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {renderActionSheet()}
+            </View>
+        </KeyboardAvoidingView>
     );
 }
