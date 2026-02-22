@@ -296,6 +296,35 @@ function getMoodTintForHint(hint?: string): string {
     return colors.emotionNeutral;
 }
 
+const EMOJI_HAPPY = [
+    "😀",
+    "😃",
+    "😄",
+    "😁",
+    "😊",
+    "🙂",
+    "☺️",
+    "😍",
+    "🥰",
+    "😎",
+    "🥳",
+    "🎉",
+    "✨",
+    "😂",
+    "🤣",
+    "💚",
+    "💙",
+    "💛",
+    "❤️",
+    "🙌",
+    "👏",
+] as const;
+
+const EMOJI_SAD = ["😢", "😭", "😞", "😔", "😟", "🙁", "☹️", "💔", "🥺"] as const;
+const EMOJI_ANXIOUS = ["😰", "😨", "😱", "😬", "😮‍💨", "🫠"] as const;
+const EMOJI_ANGRY = ["😡", "😠", "🤬", "👿"] as const;
+const EMOJI_STUCK = ["🤔", "😕", "😵‍💫", "😶‍🌫️", "🫤"] as const;
+
 function getLocalMoodHint(text: string, preferredLanguage?: string): string {
     const raw = String(text ?? "");
     const lower = raw.toLowerCase();
@@ -355,43 +384,17 @@ function getLocalMoodHint(text: string, preferredLanguage?: string): string {
     // - "upset/frustrated" → angry tint
     // - "stuck/unsure" → confused tint
     // - "light/hope" → hopeful tint
-    const emojiHappy = [
-        "😀",
-        "😃",
-        "😄",
-        "😁",
-        "😊",
-        "🙂",
-        "☺️",
-        "😍",
-        "🥰",
-        "😎",
-        "🥳",
-        "🎉",
-        "✨",
-        "😂",
-        "🤣",
-        "💚",
-        "💙",
-        "💛",
-        "❤️",
-        "🙌",
-        "👏",
-    ];
-
-    const emojiSad = ["😢", "😭", "😞", "😔", "😟", "🙁", "☹️", "💔", "🥺"];
-    const emojiAnxious = ["😰", "😨", "😱", "😬", "😮‍💨", "🫠"];
-    const emojiAngry = ["😡", "😠", "🤬", "👿"];
-    const emojiStuck = ["🤔", "😕", "😵‍💫", "😶‍🌫️", "🫤"];
-
-    const containsEmoji = (arr: string[]) => arr.some((e) => raw.includes(e));
+    //
+    // Perf cleanup: avoid recreating emoji arrays on each call.
+    const containsAnyEmoji = (haystack: string, arr: readonly string[]) =>
+        arr.some((e) => haystack.includes(e));
 
     const emojiSignals = {
-        sad: containsEmoji(emojiSad),
-        anxious: containsEmoji(emojiAnxious),
-        angry: containsEmoji(emojiAngry),
-        stuck: containsEmoji(emojiStuck),
-        happy: containsEmoji(emojiHappy),
+        sad: containsAnyEmoji(raw, EMOJI_SAD),
+        anxious: containsAnyEmoji(raw, EMOJI_ANXIOUS),
+        angry: containsAnyEmoji(raw, EMOJI_ANGRY),
+        stuck: containsAnyEmoji(raw, EMOJI_STUCK),
+        happy: containsAnyEmoji(raw, EMOJI_HAPPY),
     };
 
     // Word-based mood inference (existing behavior preserved)
@@ -974,7 +977,7 @@ function isFirstBotReplyOfSession(
 
 export default function ChatScreen() {
 
-    console.log("[imotara] ChatScreen mounted");
+    if (DEBUG_UI_ENABLED) debugLog("[imotara] ChatScreen mounted");
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
