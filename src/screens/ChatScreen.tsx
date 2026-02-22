@@ -1191,6 +1191,9 @@ export default function ChatScreen() {
 
     const [showScrollButton, setShowScrollButton] = useState(false);
 
+    // ✅ NEW: track if user is near bottom to prevent snap-back (additive)
+    const isAtBottomRef = useRef(true);
+
     const [typingStatus, setTypingStatus] = useState<TypingStatus>("idle");
     const [typingGlow] = useState(new Animated.Value(0));
 
@@ -1667,7 +1670,6 @@ export default function ChatScreen() {
         }
     };
 
-
     const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
         const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
 
@@ -1675,6 +1677,10 @@ export default function ChatScreen() {
             contentSize.height - (contentOffset.y + layoutMeasurement.height);
 
         const atBottom = distanceFromBottom < 24;
+
+        // ✅ keep a ref (no re-render) so async updates can decide whether to scroll
+        isAtBottomRef.current = atBottom;
+
         setShowScrollButton(!atBottom && distanceFromBottom > 80);
     };
 
@@ -2088,12 +2094,17 @@ export default function ChatScreen() {
                         intensity: finalIntensity,
                     });
 
-
                     if (!mountedRef.current) return;
 
                     setTypingStatus("responding");
                     setMessages((prev) => [...prev, botMessage]);
-                    smoothScrollToBottom(scrollViewRef);
+
+                    // ✅ don't snap user to bottom if they're reading older messages
+                    if (isAtBottomRef.current) {
+                        smoothScrollToBottom(scrollViewRef);
+                    } else {
+                        setShowScrollButton(true);
+                    }
                 } catch (error) {
                     debugWarn("Imotara mobile AI error:", error);
 
@@ -2153,7 +2164,13 @@ export default function ChatScreen() {
 
                     setTypingStatus("responding");
                     setMessages((prev) => [...prev, botMessage]);
-                    smoothScrollToBottom(scrollViewRef);
+
+                    // ✅ don't snap user to bottom if they're reading older messages
+                    if (isAtBottomRef.current) {
+                        smoothScrollToBottom(scrollViewRef);
+                    } else {
+                        setShowScrollButton(true);
+                    }
                 }
                 finally {
                     // ✅ clear the abort ref if this cycle owns it
@@ -2222,7 +2239,13 @@ export default function ChatScreen() {
         }));
 
         setMessages(hydrated);
-        smoothScrollToBottom(scrollViewRef);
+
+        // ✅ history updates (e.g., sync flags) should not pull user to bottom
+        if (isAtBottomRef.current) {
+            smoothScrollToBottom(scrollViewRef);
+        } else {
+            setShowScrollButton(true);
+        }
     }, [history, messages.length]);
 
     // ✅ NEW: when history updates (e.g., after Sync Now), reflect isSynced/source changes in chat bubbles
