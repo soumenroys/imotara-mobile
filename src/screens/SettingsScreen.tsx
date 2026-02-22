@@ -1,7 +1,7 @@
 // src/screens/SettingsScreen.tsx
 import React from "react";
 import Constants from "expo-constants";
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
     View,
@@ -48,6 +48,9 @@ import { DONATION_PRESETS, formatINRFromPaise } from "../payments/donations";
  */
 type DonationUIItem = { id: string; label: string; amount: number };
 const DONATION_UI_PRESETS = DONATION_PRESETS as readonly DonationUIItem[];
+
+// Preferred language override (used by src/api/aiClient.ts)
+const PREFERRED_LANGUAGE_KEY = "imotara_preferredLanguage";
 
 function prettyTier(tier: LicenseTier | string | undefined | null): string {
     const t = String(tier ?? "FREE").toUpperCase();
@@ -125,11 +128,14 @@ export default function SettingsScreen() {
         toneContext,
         setToneContext,
 
+        // ✅ Local device-only scope (prevents cross-user leakage when chatLinkKey is empty)
+        localUserScopeId,
+        resetLocalUserScopeId,
+
         // ✅ Cross-device chat link key (optional)
         chatLinkKey,
         setChatLinkKey,
     } = useSettings();
-
 
     const messageCount = (history as HistoryRecord[]).length;
 
@@ -167,6 +173,39 @@ export default function SettingsScreen() {
     // ✅ Link key status (UI only)
     const [chatLinkStatus, setChatLinkStatus] = React.useState<string | null>(null);
 
+    // ✅ Language (device-only override)
+    const [preferredLanguage, setPreferredLanguage] = React.useState<"en" | "hi" | "bn">("en");
+    const [languageStatus, setLanguageStatus] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        (async () => {
+            try {
+                const raw = (await AsyncStorage.getItem(PREFERRED_LANGUAGE_KEY)) ?? "";
+                const base = raw.trim().toLowerCase().split(/[-_]/)[0];
+                if (base === "en" || base === "hi" || base === "bn") {
+                    setPreferredLanguage(base as "en" | "hi" | "bn");
+                }
+            } catch {
+                // ignore
+            }
+        })();
+    }, []);
+
+    // ✅ Donation availability (graceful degradation for App Review / backend toggles)
+    const [donationsEnabled, setDonationsEnabled] = React.useState(true);
+    const [donationsDisabledMsg, setDonationsDisabledMsg] = React.useState<string | null>(
+        null
+    );
+
+    const markDonationsDisabled = (msg?: string) => {
+        // Important: do not break existing flows; just disable the buttons and show a friendly message.
+        setDonationsEnabled(false);
+        setDonationsDisabledMsg(
+            (msg || "").trim() ||
+            "Donations are temporarily unavailable right now. Please try again later."
+        );
+    };
+
     const saveChatLinkKey = () => {
         const v = (chatLinkKey ?? "").trim();
         setChatLinkKey(v);
@@ -176,6 +215,23 @@ export default function SettingsScreen() {
     const clearChatLinkKey = () => {
         setChatLinkKey("");
         setChatLinkStatus("Link Key cleared.");
+    };
+
+    const handleResetLocalProfile = () => {
+        Alert.alert(
+            "Switch local profile (DEV)?",
+            "This simulates a different user on this device. Your current local messages won’t be deleted, but they will be hidden under a different local profile.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Switch",
+                    style: "destructive",
+                    onPress: () => {
+                        resetLocalUserScopeId();
+                    },
+                },
+            ]
+        );
     };
 
     const handleClearHistory = () => {
@@ -500,6 +556,16 @@ export default function SettingsScreen() {
     }
 
     const handleDonate = async (preset: { label: string; amount: number }) => {
+        // ✅ If backend disabled donations, don't let users (or App Review) hit a hard error modal
+        if (!donationsEnabled) {
+            Alert.alert(
+                "Donations unavailable",
+                donationsDisabledMsg ||
+                "Donations are temporarily unavailable right now. Please try again later.",
+                [{ text: "OK" }]
+            );
+            return;
+        }
 
         if (!RazorpayCheckout?.open) {
             Alert.alert(
@@ -560,12 +626,28 @@ export default function SettingsScreen() {
                 e?.message ||
                 "Could not start donation checkout. Please try again.";
 
+            const descLower = String(desc).toLowerCase();
+
             // If user cancelled, Razorpay commonly returns code 2 / "cancelled"
             const isCancel =
-                String(e?.code || "")
-                    .toLowerCase()
-                    .includes("cancel") ||
-                String(desc).toLowerCase().includes("cancel");
+                String(e?.code || "").toLowerCase().includes("cancel") ||
+                descLower.includes("cancel");
+
+            // ✅ Backend toggle: donations disabled (avoid scary error for App Review)
+            const isDisabledOnServer =
+                descLower.includes("donations are disabled") ||
+                descLower.includes("donation is disabled") ||
+                descLower.includes("disabled on server");
+
+            if (isDisabledOnServer) {
+                markDonationsDisabled(desc);
+                Alert.alert(
+                    "Donations unavailable",
+                    "Donations are temporarily unavailable right now. Please try again later.",
+                    [{ text: "OK" }]
+                );
+                return;
+            }
 
             Alert.alert(
                 isCancel ? "Donation cancelled" : "Donation error",
@@ -683,7 +765,7 @@ export default function SettingsScreen() {
                                         amount: p.amount,
                                     } as any)
                                 }
-                                disabled={busyRef.current.donate}
+                                disabled={busyRef.current.donate || !donationsEnabled}
                                 style={{
                                     paddingHorizontal: 12,
                                     paddingVertical: 6,
@@ -693,7 +775,8 @@ export default function SettingsScreen() {
                                     backgroundColor: "rgba(56, 189, 248, 0.12)",
                                     marginRight: 8,
                                     marginBottom: 8,
-                                    opacity: busyRef.current.donate ? 0.6 : 1,
+                                    opacity:
+                                        busyRef.current.donate || !donationsEnabled ? 0.6 : 1,
                                 }}
                             >
                                 <Text
@@ -716,8 +799,10 @@ export default function SettingsScreen() {
                             marginTop: 6,
                         }}
                     >
-                        Your chat data is never publicly exposed. Donations help cover
-                        hosting and development.
+                        {!donationsEnabled
+                            ? donationsDisabledMsg ||
+                            "Donations are temporarily unavailable right now."
+                            : "Your chat data is never publicly exposed. Donations help cover hosting and development."}
                     </Text>
                 </AppSurface>
 
@@ -972,6 +1057,72 @@ export default function SettingsScreen() {
                         </Text>
                     ) : null}
 
+                </AppSurface>
+
+                {/* ✅ Language (device-only) */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Language
+                    </Text>
+
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}>
+                        Choose the language Imotara uses for replies on this device.
+                    </Text>
+
+                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                        {[
+                            { id: "en" as const, label: "English" },
+                            { id: "hi" as const, label: "Hindi (हिन्दी)" },
+                            { id: "bn" as const, label: "Bengali (বাংলা)" },
+                        ].map((opt) => {
+                            const active = preferredLanguage === opt.id;
+                            return (
+                                <TouchableOpacity
+                                    key={opt.id}
+                                    onPress={async () => {
+                                        setPreferredLanguage(opt.id);
+                                        try {
+                                            await AsyncStorage.setItem(PREFERRED_LANGUAGE_KEY, opt.id);
+                                            setLanguageStatus(
+                                                opt.id === "hi"
+                                                    ? "Hindi enabled."
+                                                    : opt.id === "bn"
+                                                        ? "Bengali enabled."
+                                                        : "English enabled."
+                                            );
+                                        } catch {
+                                            setLanguageStatus("Could not save language.");
+                                        }
+                                    }}
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : "rgba(15, 23, 42, 0.9)",
+                                        marginRight: 8,
+                                        marginBottom: 8,
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 13, color: colors.textPrimary }}>{opt.label}</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    {languageStatus ? (
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
+                            {languageStatus}
+                        </Text>
+                    ) : null}
                 </AppSurface>
 
                 {/* ✅ Cross-device Link Key (optional) */}
@@ -1576,6 +1727,27 @@ export default function SettingsScreen() {
                                             : 1,
                                 }}
                             />
+
+                            <AppButton
+                                title="Reset Local Profile (DEV)"
+                                onPress={handleResetLocalProfile}
+                                variant="secondary"
+                                style={{
+                                    alignSelf: "flex-start",
+                                    borderRadius: 999,
+                                    marginBottom: 8,
+                                }}
+                            />
+
+                            <Text
+                                style={{
+                                    fontSize: 11,
+                                    color: colors.textSecondary,
+                                    marginBottom: 8,
+                                }}
+                            >
+                                Local profile: {String(localUserScopeId).slice(0, 18)}…
+                            </Text>
                         </>
                     )}
 

@@ -78,13 +78,25 @@ type SettingsContextValue = {
     setToneContext: (value: ToneContextPayload) => void;
 
     /**
+     * Local device-only identity scope.
+     * Used to prevent different “users” on the same device from seeing each other's local history
+     * when chatLinkKey is empty.
+     */
+    localUserScopeId: string;
+
+    /**
+     * Rotate the local scope id (acts like “switch user / new local profile”).
+     * Does NOT touch cloud history unless chatLinkKey is also changed elsewhere.
+     */
+    resetLocalUserScopeId: () => void;
+
+    /**
      * Optional: Cross-device chat link key.
      * If the same key is set on Web + Mobile, remote chat history can match.
      */
     chatLinkKey: string;
     setChatLinkKey: (value: string) => void;
 };
-
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
     undefined
@@ -107,6 +119,11 @@ function safeBool(v: unknown, fallback: boolean): boolean {
     if (["1", "true", "yes", "y", "on"].includes(s)) return true;
     if (["0", "false", "no", "n", "off"].includes(s)) return false;
     return fallback;
+}
+
+function makeLocalScopeId(): string {
+    // Small, dependency-free unique id (good enough for local scoping)
+    return `local_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 // ✅ Same key used by HistoryContext (we are only reading it here)
@@ -197,6 +214,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             gender: undefined,
         },
     });
+
+    // ✅ Local device-only scope (prevents cross-user leakage when chatLinkKey is empty)
+    const [localUserScopeId, _setLocalUserScopeId] = useState<string>(makeLocalScopeId());
 
     // ✅ Cross-device chat link key (optional)
     const [chatLinkKey, _setChatLinkKey] = useState<string>("");
@@ -316,6 +336,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             }
                         }
 
+                        // Restore local user scope id (optional; added later)
+                        if ("localUserScopeId" in parsed) {
+                            const v = (parsed as any).localUserScopeId;
+                            if (typeof v === "string" && v.trim()) {
+                                _setLocalUserScopeId(v.trim().slice(0, 80));
+                            }
+                        }
+
+                        // Restore local user scope id (optional; added later)
+                        if ("localUserScopeId" in parsed) {
+                            const v = (parsed as any).localUserScopeId;
+                            if (typeof v === "string" && v.trim()) {
+                                _setLocalUserScopeId(v.trim().slice(0, 80));
+                            }
+                        }
+
                         if ("lastSyncAt" in parsed) {
                             const v = parsed.lastSyncAt;
                             _setLastSyncAt(typeof v === "number" ? v : null);
@@ -327,6 +363,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             _setLastSyncStatus(typeof v === "string" ? v : null);
                         }
                     }
+                }
+
+                // Ensure localUserScopeId is always present even for older installs
+                if (alive) {
+                    _setLocalUserScopeId((prev) => (prev && prev.trim() ? prev : makeLocalScopeId()));
                 }
 
                 // 2) License tier → cloud sync gate
@@ -368,10 +409,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             analysisMode,
             toneContext,
 
+            // ✅ Local device-only scope (prevents cross-user leakage when chatLinkKey is empty)
+            localUserScopeId,
+
             // ✅ Optional: cross-device chat link key
             chatLinkKey,
         };
-
 
         AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload)).catch((e) => {
             if (DEBUG_UI_ENABLED) console.warn("Settings save failed:", e);
@@ -385,6 +428,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         lastSyncStatus,
         analysisMode,
         toneContext,
+        localUserScopeId,
         chatLinkKey,
     ]);
 
@@ -463,6 +507,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         _setChatLinkKey(v.slice(0, 80));
     };
 
+    const resetLocalUserScopeId = () => {
+        _setLocalUserScopeId(makeLocalScopeId());
+    };
 
     return (
         <SettingsContext.Provider
@@ -484,6 +531,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setAnalysisMode,
                 toneContext,
                 setToneContext,
+                localUserScopeId,
+                resetLocalUserScopeId,
                 chatLinkKey,
                 setChatLinkKey,
             }}

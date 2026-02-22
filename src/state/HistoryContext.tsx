@@ -119,9 +119,23 @@ const HISTORY_REMOTE_SINCE_KEY_BASE = "imotara_history_remote_since_v1";
  * - If chatLinkKey exists: use per-scope key
  * - Else: fall back to local-only bucket
  */
-function scopedKey(base: string, chatLinkKey: unknown) {
+/**
+ * Storage keys must be scoped so different identities don't see each other's history.
+ * - If chatLinkKey exists: use per-scope key (cross-device)
+ * - Else: use device-local scope id (prevents cross-user leakage on same device)
+ *
+ * We keep a legacy local key for safe migration from older builds.
+ */
+function legacyLocalKey(base: string) {
+    return `${base}:local`;
+}
+
+function scopedKey(base: string, chatLinkKey: unknown, localUserScopeId: unknown) {
     const scope = String(chatLinkKey ?? "").trim();
-    return scope ? `${base}:${scope}` : `${base}:local`;
+    if (scope) return `${base}:${scope}`;
+
+    const local = String(localUserScopeId ?? "").trim();
+    return local ? `${base}:local:${local}` : legacyLocalKey(base);
 }
 
 // ✅ Separate storage key for licensing
@@ -332,6 +346,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         // ✅ Privacy: if local-only, do not touch cloud
         analysisMode,
 
+        // ✅ Local device-only scope (prevents cross-user leakage when chatLinkKey is empty)
+        localUserScopeId,
+
         // ✅ Cross-device identity scope
         chatLinkKey,
 
@@ -403,14 +420,40 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             remoteSinceRef.current = 0;
 
             try {
-                const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey);
-                const remoteSinceKey = scopedKey(HISTORY_REMOTE_SINCE_KEY_BASE, chatLinkKey);
+                const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey, localUserScopeId);
+                const remoteSinceKey = scopedKey(
+                    HISTORY_REMOTE_SINCE_KEY_BASE,
+                    chatLinkKey,
+                    localUserScopeId
+                );
 
-                const [rawHistory, rawTier, rawRemoteSince] = await Promise.all([
+                // Legacy migration for older installs that stored local history in `${base}:local`
+                const shouldTryLegacyLocal = !String(chatLinkKey ?? "").trim();
+                const legacyHistoryKey = shouldTryLegacyLocal
+                    ? legacyLocalKey(STORAGE_KEY_BASE)
+                    : null;
+                const legacyRemoteSinceKey = shouldTryLegacyLocal
+                    ? legacyLocalKey(HISTORY_REMOTE_SINCE_KEY_BASE)
+                    : null;
+
+                const [
+                    rawHistoryNew,
+                    rawTier,
+                    rawRemoteSinceNew,
+                    rawHistoryLegacy,
+                    rawRemoteSinceLegacy,
+                ] = await Promise.all([
                     AsyncStorage.getItem(historyKey),
                     AsyncStorage.getItem(LICENSE_TIER_KEY),
                     AsyncStorage.getItem(remoteSinceKey),
+                    legacyHistoryKey ? AsyncStorage.getItem(legacyHistoryKey) : Promise.resolve(null),
+                    legacyRemoteSinceKey
+                        ? AsyncStorage.getItem(legacyRemoteSinceKey)
+                        : Promise.resolve(null),
                 ]);
+
+                const rawHistory = rawHistoryNew ?? rawHistoryLegacy;
+                const rawRemoteSince = rawRemoteSinceNew ?? rawRemoteSinceLegacy;
 
                 // 0) Remote cursor (since)
                 if (rawRemoteSince) {
@@ -418,6 +461,10 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     if (Number.isFinite(n) && n >= 0) {
                         remoteSinceRef.current = n;
                     }
+                }
+
+                if (!rawRemoteSinceNew && rawRemoteSinceLegacy && legacyRemoteSinceKey) {
+                    AsyncStorage.setItem(remoteSinceKey, rawRemoteSinceLegacy).catch(() => { });
                 }
 
                 // 1) History
@@ -451,6 +498,10 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                             .filter(Boolean) as HistoryItem[];
 
                         setHistory(cleaned);
+                        // If we loaded legacy local history, migrate it to the new scoped key
+                        if (!rawHistoryNew && rawHistoryLegacy && legacyHistoryKey) {
+                            AsyncStorage.setItem(historyKey, rawHistoryLegacy).catch(() => { });
+                        }
                     }
                 }
 
@@ -467,7 +518,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         };
 
         load();
-    }, [chatLinkKey]);
+    }, [chatLinkKey, localUserScopeId]);
 
     // ✅ Apply local history retention on FREE (but never delete unsynced items)
     useEffect(() => {
@@ -510,7 +561,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
         const save = async () => {
             try {
-                const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey);
+                const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey, localUserScopeId);
                 await AsyncStorage.setItem(historyKey, JSON.stringify(history));
             } catch (error) {
                 debugWarn("Failed to save history to storage:", error);
@@ -537,7 +588,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         setLastSyncResult(null);
         setLastSyncAt(null);
 
-        const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey);
+        const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey, localUserScopeId);
         AsyncStorage.removeItem(historyKey).catch((err) =>
             debugWarn("Failed to clear history storage:", err)
         );
@@ -762,7 +813,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                         nextSince >= 0
                     ) {
                         remoteSinceRef.current = nextSince;
-                        const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey);
+                        const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey, localUserScopeId);
                         AsyncStorage.removeItem(historyKey).catch((err) =>
                             debugWarn("Failed to clear history storage:", err)
                         );
