@@ -113,6 +113,9 @@ export type AnalyzeResponse = {
     followUp?: string | null;
     errorMessage?: string;
 
+    // ✅ NEW: caller can ignore cancelled requests safely (additive)
+    cancelled?: boolean;
+
     // ✅ optional diagnostics / parity fields (additive)
     analysisSource?: "cloud" | "local";
     meta?: unknown;
@@ -192,6 +195,9 @@ type CallAIOptions = {
 
     // ✅ Non-breaking: network timeout override (ms)
     timeoutMs?: number;
+
+    // ✅ NEW: allow caller to cancel in-flight request (additive)
+    signal?: AbortSignal;
 
     settings?: {
         relationshipTone?: ToneRelationship;
@@ -388,6 +394,9 @@ export async function callImotaraAI(
                         // back-compat (older servers/clients might look for `recent`)
                         recent: opts?.recentMessages ?? undefined,
                     },
+
+                    // ✅ NEW: optional cancellation (additive)
+                    signal: opts?.signal,
                 }),
             },
             opts?.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS
@@ -550,22 +559,34 @@ export async function callImotaraAI(
             remoteStatus: res.status,
         };
     } catch (error: any) {
-        debugWarn("Imotara mobile AI fetch error:", error);
-
         const remoteUrl = `${IMOTARA_API_BASE_URL}/api/respond`;
-        const isTimeout =
+
+        // ✅ If caller cancelled, treat as "silent" failure for UI (caller can ignore)
+        const cancelled = Boolean(opts?.signal?.aborted);
+
+        const isAbort =
             error?.name === "AbortError" ||
             String(error?.message ?? "").toLowerCase().includes("aborted");
 
+        // Avoid noisy warnings on intentional cancellation
+        if (!cancelled) {
+            debugWarn("Imotara mobile AI fetch error:", error);
+        } else {
+            debugLog("[imotara] AI request cancelled");
+        }
+
         return {
             ok: false,
+            cancelled,
             replyText: "",
-            errorMessage: isTimeout
-                ? "Request timed out"
-                : error?.message ?? "Network error",
+            errorMessage: cancelled
+                ? "Cancelled"
+                : isAbort
+                    ? "Request timed out"
+                    : error?.message ?? "Network error",
             analysisSource: "cloud",
             remoteUrl,
-            remoteError: isTimeout ? "timeout" : error?.message ?? String(error),
+            remoteError: cancelled ? "cancelled" : isAbort ? "timeout" : error?.message ?? String(error),
         };
     }
 }
