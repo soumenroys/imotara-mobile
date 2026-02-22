@@ -1872,6 +1872,9 @@ export default function ChatScreen() {
                     let moodHint: string | undefined;
                     let source: ChatMessageSource = "local";
 
+                    // ✅ Track whether we used deterministic aiClient fallback
+                    let usedDeterministicFallback = false;
+
                     // ✅ NEW: parity metadata (optional; safe if aiClient doesn't return it yet)
                     let reflectionSeed: ReflectionSeed | undefined;
                     let followUp: string | undefined;
@@ -1951,34 +1954,56 @@ export default function ChatScreen() {
                         }
 
                     } else {
-                        // 3) Otherwise fallback to NEW local reply engine
-                        const local = buildLocalReply(trimmed, toneContext);
+                        // 3) Otherwise fallback to local responses
+                        // Prefer deterministic short fallback from aiClient (when cloud was attempted and failed),
+                        // then fall back to the richer local reply engine (existing behavior).
+                        const localFallbackText =
+                            cloudFailed &&
+                                typeof (remote as any)?.localFallback?.replyText === "string" &&
+                                (remote as any).localFallback.replyText.trim().length > 0
+                                ? String((remote as any).localFallback.replyText).trim()
+                                : "";
 
-                        const localPrimary = getLocalMoodHintWithPrimary(trimmed).primary;
-                        moodHint = wantsInsights
-                            ? (getMoodHintFromEmotionPrimary(localPrimary) ?? "neutral")
-                            : undefined;
                         source = "local";
 
-                        reflectionSeed = local.reflectionSeed
-                            ? { ...local.reflectionSeed, title: local.reflectionSeed.title ?? "" }
-                            : undefined;
+                        if (localFallbackText) {
+                            // Minimal, stable, deterministic fallback:
+                            // Do NOT show moodHint sentence/labels for this path.
+                            usedDeterministicFallback = true;
+                            moodHint = undefined;
 
-                        // ✅ Phase 2.2.1 — avoid duplicating reflectionSeed prompt inside the message body (local source of truth)
-                        const prompt = local.reflectionSeed?.prompt?.trim();
-                        const baseMessage = stripReflectionSeedPromptFromMessage(local.message, prompt);
-
-                        replyText = (baseMessage || local.message) + (wantsCloud ? networkNote : "");
-
-                        // ✅ Phase 2.2.2 — local followUp parity + de-dupe (enhancement only)
-                        followUp =
-                            typeof prompt === "string" && prompt.trim()
-                                ? varyLocalFollowUpIfRepeated({
-                                    cacheKey: "local-followup",
-                                    followUp: prompt.trim(),
-                                    lowerUserMsg: trimmed.toLowerCase(),
-                                })
+                            replyText = localFallbackText + (wantsCloud ? networkNote : "");
+                            reflectionSeed = undefined;
+                            followUp = undefined;
+                        } else {
+                            const localPrimary = getLocalMoodHintWithPrimary(trimmed).primary;
+                            moodHint = wantsInsights
+                                ? (getMoodHintFromEmotionPrimary(localPrimary) ?? "neutral")
                                 : undefined;
+
+                            // Existing richer local reply engine (kept as fallback-of-fallback)
+                            const local = buildLocalReply(trimmed, toneContext);
+
+                            reflectionSeed = local.reflectionSeed
+                                ? { ...local.reflectionSeed, title: local.reflectionSeed.title ?? "" }
+                                : undefined;
+
+                            // ✅ Phase 2.2.1 — avoid duplicating reflectionSeed prompt inside the message body (local source of truth)
+                            const prompt = local.reflectionSeed?.prompt?.trim();
+                            const baseMessage = stripReflectionSeedPromptFromMessage(local.message, prompt);
+
+                            replyText = (baseMessage || local.message) + (wantsCloud ? networkNote : "");
+
+                            // ✅ Phase 2.2.2 — local followUp parity + de-dupe (enhancement only)
+                            followUp =
+                                typeof prompt === "string" && prompt.trim()
+                                    ? varyLocalFollowUpIfRepeated({
+                                        cacheKey: "local-followup",
+                                        followUp: prompt.trim(),
+                                        lowerUserMsg: trimmed.toLowerCase(),
+                                    })
+                                    : undefined;
+                        }
                     }
 
                     // ✅ Persist resolved emotion/intensity into history (cloud-preferred; additive only)
@@ -2055,7 +2080,7 @@ export default function ChatScreen() {
                         from: "bot",
                         text: replyText,
                         timestamp: botTimestamp,
-                        moodHint,
+                        moodHint: usedDeterministicFallback ? undefined : moodHint,
                         isSynced: false,
                         source,
 
