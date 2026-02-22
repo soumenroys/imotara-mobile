@@ -106,6 +106,13 @@ function pickPreferredLanguage(params: {
     return base === "bn" ? "bn-IN" : base === "hi" ? "hi-IN" : device || "en";
 }
 
+export type LocalFallbackInfo = {
+    replyText: string;
+    languageBase: "en" | "hi" | "bn";
+    variantIndex: number; // 0..2
+    reason: "http_error" | "invalid_json" | "network_error";
+};
+
 export type AnalyzeResponse = {
     ok: boolean;
     replyText: string;
@@ -125,10 +132,79 @@ export type AnalyzeResponse = {
     remoteStatus?: number;
     remoteError?: string;
 
+    // ✅ NEW: suggested local fallback (additive; UI can choose to use it)
+    localFallback?: LocalFallbackInfo;
+
     // ✅ carry emotion through so UI doesn't default to neutral
     emotion?: string;
     intensity?: number;
 };
+
+// NOTE: Keep this bank short + gentle (UI-safe) and always end with an inviting next question.
+// TODO (later): expand languageBase beyond en/hi/bn when the mobile UI + settings support it end-to-end.
+const LOCAL_FALLBACK_REPLIES: Record<"en" | "hi" | "bn", readonly string[]> = {
+    en: [
+        "I’m here with you. You don’t have to carry this alone. What’s the main thing bothering you right now?",
+        "Thanks for telling me. I’m listening. If you had to name it, what feeling is strongest at this moment?",
+        "Let’s take this slowly, one step at a time. What happened just before you started feeling this way?",
+    ],
+    hi: [
+        "मैं आपके साथ हूँ। आपको यह अकेले नहीं संभालना है। अभी सबसे ज़्यादा क्या परेशान कर रहा है?",
+        "बताने के लिए धन्यवाद। मैं सुन रहा/रही हूँ। इस समय सबसे तेज़ भावना कौन-सी लग रही है?",
+        "चलिए धीरे-धीरे, एक-एक कदम करते हैं। ये भावना शुरू होने से ठीक पहले क्या हुआ था?",
+    ],
+    bn: [
+        "আমি আপনার পাশে আছি—একটা করে নিই, আপনি একা নন। এই মুহূর্তে সবচেয়ে বেশি কী আপনাকে কষ্ট দিচ্ছে?",
+        "বলেছেন বলে ধন্যবাদ। আমি শুনছি। এখন সবচেয়ে শক্তিশালী অনুভূতিটা কী মনে হচ্ছে?",
+        "চলুন ধীরে ধীরে এগোই, এক ধাপ করে। এটা শুরু হওয়ার ঠিক আগে কী হয়েছিল?",
+    ],
+} as const;
+
+// Deterministic, fast hash (FNV-1a) → stable across runs/devices
+function hashToIndex(input: string, modulo: number): number {
+    let h = 2166136261;
+    for (let i = 0; i < input.length; i++) {
+        h ^= input.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    // >>> 0 makes it unsigned
+    return modulo > 0 ? ((h >>> 0) % modulo) : 0;
+}
+
+function makeLocalFallback(params: {
+    message: string;
+    languageBase: "en" | "hi" | "bn";
+    reason: LocalFallbackInfo["reason"];
+    recentMessages?: ChatMessage[];
+}): LocalFallbackInfo {
+    const bank = LOCAL_FALLBACK_REPLIES[params.languageBase] ?? LOCAL_FALLBACK_REPLIES.en;
+    const safeMessage = String(params.message ?? "");
+    let idx = hashToIndex(safeMessage, bank.length);
+
+    // ✅ Avoid consecutive repeats (deterministic rotation)
+    // If the newest assistant message equals the chosen fallback, rotate to next variant.
+    const recent = params.recentMessages ?? [];
+    let lastAssistantText = "";
+    for (let i = recent.length - 1; i >= 0; i--) {
+        const m = recent[i];
+        if (m?.role === "assistant") {
+            lastAssistantText = String(m.content ?? "").trim();
+            break;
+        }
+    }
+
+    const candidate = String(bank[idx] ?? bank[0] ?? "I’m here with you.").trim();
+    if (bank.length > 1 && lastAssistantText && lastAssistantText === candidate) {
+        idx = (idx + 1) % bank.length;
+    }
+
+    return {
+        replyText: bank[idx] ?? bank[0] ?? "I’m here with you.",
+        languageBase: params.languageBase,
+        variantIndex: idx,
+        reason: params.reason,
+    };
+}
 
 // Keep this local to mobile; mirrors server payload structure (tone only)
 export type ToneAgeRange =
@@ -404,6 +480,12 @@ export async function callImotaraAI(
 
         if (!res.ok) {
             const bodyText = await res.text().catch(() => "");
+            const localFallback = makeLocalFallback({
+                message,
+                languageBase: preferredBase === "hi" ? "hi" : preferredBase === "bn" ? "bn" : "en",
+                reason: "http_error",
+                recentMessages: opts?.recentMessages,
+            });
             return {
                 ok: false,
                 replyText: "",
@@ -412,6 +494,7 @@ export async function callImotaraAI(
                 remoteUrl,
                 remoteStatus: res.status,
                 remoteError: bodyText ? bodyText.slice(0, 200) : `HTTP ${res.status}`,
+                localFallback,
             };
         }
 
@@ -430,6 +513,13 @@ export async function callImotaraAI(
                 body: rawText.slice(0, 200),
             });
 
+            const localFallback = makeLocalFallback({
+                message,
+                languageBase: preferredBase === "hi" ? "hi" : preferredBase === "bn" ? "bn" : "en",
+                reason: "invalid_json",
+                recentMessages: opts?.recentMessages,
+            });
+
             return {
                 ok: false,
                 replyText: "",
@@ -438,6 +528,7 @@ export async function callImotaraAI(
                 remoteUrl,
                 remoteStatus: res.status,
                 remoteError: rawText ? rawText.slice(0, 200) : "Invalid JSON",
+                localFallback,
             };
         }
 
@@ -457,8 +548,9 @@ export async function callImotaraAI(
 
         // 1) Try common "direct reply" fields first
         // Backend contract (strict):
-        // { message: string, reflectionSeed?: {...}, followUp?: string }
-        let replyText = String(data?.message ?? "").trim();
+        // { replyText?: string, message: string, reflectionSeed?: {...}, followUp?: string }
+        // ✅ Prefer replyText (server parity), fallback to message for backward compatibility
+        let replyText = String(data?.replyText ?? data?.message ?? "").trim();
 
         if (replyText.length > MAX_REMOTE_REPLY_CHARS) {
             debugWarn("[imotara] cloud reply too long; truncating for mobile safety", {
@@ -575,6 +667,21 @@ export async function callImotaraAI(
             debugLog("[imotara] AI request cancelled");
         }
 
+        const inferredBase =
+            normalizeLangCode(
+                pickPreferredLanguage({
+                    message,
+                    recentMessages: opts?.recentMessages,
+                })
+            ) ?? "en";
+
+        const localFallback = makeLocalFallback({
+            message,
+            languageBase: inferredBase === "hi" ? "hi" : inferredBase === "bn" ? "bn" : "en",
+            reason: "network_error",
+            recentMessages: opts?.recentMessages,
+        });
+
         return {
             ok: false,
             cancelled,
@@ -587,6 +694,7 @@ export async function callImotaraAI(
             analysisSource: "cloud",
             remoteUrl,
             remoteError: cancelled ? "cancelled" : isAbort ? "timeout" : error?.message ?? String(error),
+            localFallback,
         };
     }
 }
