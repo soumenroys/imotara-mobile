@@ -54,3 +54,4 @@ imotara-play-*.json
 
 .dev-mobile.log
 .env
+.vscode/

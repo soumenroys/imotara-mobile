@@ -362,11 +362,15 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         historyRef.current = history;
     }, [history]);
 
-    // ✅ Keep latest Chat Link Key (scope) to prevent in-flight remote pulls from older scopes
-    const chatLinkKeyRef = useRef<string>("");
-    useEffect(() => {
-        chatLinkKeyRef.current = String(chatLinkKey ?? "").trim();
-    }, [chatLinkKey]);
+    // ✅ Keep latest effective scope to prevent in-flight remote pulls from older scopes
+// Prefer chatLinkKey (cross-device). Fallback to localUserScopeId (device-local privacy).
+const effectiveUserScopeRef = useRef<string>("");
+
+useEffect(() => {
+    const scope = String(chatLinkKey ?? "").trim();
+    const local = String(localUserScopeId ?? "").trim();
+    effectiveUserScopeRef.current = scope || local || "";
+}, [chatLinkKey, localUserScopeId]);
 
     // ✅ Final guard: dedupe-by-id + stable timestamp sort (prevents rare overlap duplicates)
     const dedupeAndSortHistory = useCallback(() => {
@@ -777,9 +781,19 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 // 2) Pull incremental remote → merge into local store (additive, hardened)
                 try {
                     const since = remoteSinceRef.current || 0;
-                    const pulled: FetchRemoteHistoryResult = await fetchRemoteHistorySince(since, {
-                        userScope: String(chatLinkKey ?? "").trim(),
-                    });
+
+const effectiveScope =
+    String(chatLinkKey ?? "").trim() || String(localUserScopeId ?? "").trim();
+
+// ✅ Privacy: never call cloud with empty scope (prevents cross-user/global leakage)
+if (!effectiveScope) {
+    setSettingsLastSyncStatus("Sync skipped · missing user scope on this device.");
+    return pushRes;
+}
+
+const pulled: FetchRemoteHistoryResult = await fetchRemoteHistorySince(since, {
+    userScope: effectiveScope,
+});
 
 
 
@@ -827,7 +841,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 try {
                     // Respect privacy/consent: local-only means never call cloud.
                     if (analysisMode !== "local") {
-                        const userScope = String(chatLinkKey ?? "").trim();
+                        const userScope =
+                            String(chatLinkKey ?? "").trim() || String(localUserScopeId ?? "").trim();
 
                         if (userScope) {
                             // Capture the scope used for this request
@@ -836,7 +851,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                             const res = await fetchRemoteChatMessages({ userScope: requestedScope });
 
                             // ✅ If scope changed while request was in-flight, ignore these results
-                            if (chatLinkKeyRef.current !== requestedScope) {
+                            if (effectiveUserScopeRef.current !== requestedScope) {
                                 return {
                                     ok: false,
                                     skipped: true,
