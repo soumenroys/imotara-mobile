@@ -19,1271 +19,1233 @@ const BOT_BUBBLE_BG = colors.surfaceSoft;
 const SESSION_GAP_MS = 45 * 60 * 1000;
 
 function getMoodEmojiForText(text: string): string {
-    const lower = (text || "").toLowerCase();
+  const lower = (text || "").toLowerCase();
 
-    const sad = [
-        "sad",
-        "down",
-        "lonely",
-        "tired",
-        "upset",
-        "hurt",
-        "empty",
-        "depressed",
-        "blue",
-        "cry",
-        "crying",
-        "low",
-    ];
-    const anxious = [
-        "worry",
-        "worried",
-        "anxious",
-        "scared",
-        "panic",
-        "nervous",
-        "stressed",
-        "overwhelmed",
-        "afraid",
-        "fear",
-    ];
-    const angry = [
-        "angry",
-        "mad",
-        "frustrated",
-        "annoyed",
-        "irritated",
-        "furious",
-        "rage",
-        "hate",
-    ];
-    const hopeful = [
-        "hope",
-        "hopeful",
-        "better",
-        "relieved",
-        "excited",
-        "good mood",
-        "feeling good",
-        "happy",
-        "joyful",
-        "cheerful",
-    ];
-    const stuck = [
-        "stuck",
-        "lost",
-        "confused",
-        "dont know",
-        "don’t know",
-        "no idea",
-        "numb",
-        "unsure",
-    ];
+  const sad = [
+    "sad",
+    "down",
+    "lonely",
+    "tired",
+    "upset",
+    "hurt",
+    "empty",
+    "depressed",
+    "blue",
+    "cry",
+    "crying",
+    "low",
+  ];
+  const anxious = [
+    "worry",
+    "worried",
+    "anxious",
+    "scared",
+    "panic",
+    "nervous",
+    "stressed",
+    "overwhelmed",
+    "afraid",
+    "fear",
+  ];
+  const angry = [
+    "angry",
+    "mad",
+    "frustrated",
+    "annoyed",
+    "irritated",
+    "furious",
+    "rage",
+    "hate",
+  ];
+  const hopeful = [
+    "hope",
+    "hopeful",
+    "better",
+    "relieved",
+    "excited",
+    "good mood",
+    "feeling good",
+    "happy",
+    "joyful",
+    "cheerful",
+  ];
+  const stuck = [
+    "stuck",
+    "lost",
+    "confused",
+    "dont know",
+    "don’t know",
+    "no idea",
+    "numb",
+    "unsure",
+  ];
 
-    const match = (arr: string[]) => arr.some((w) => lower.includes(w));
+  const match = (arr: string[]) => arr.some((w) => lower.includes(w));
 
-    if (match(sad)) return "💙";
-    if (match(anxious)) return "💛";
-    if (match(angry)) return "❤️";
-    if (match(stuck)) return "🟣";
-    if (match(hopeful)) return "💚";
+  if (match(sad)) return "💙";
+  if (match(anxious)) return "💛";
+  if (match(angry)) return "❤️";
+  if (match(stuck)) return "🟣";
+  if (match(hopeful)) return "💚";
 
-    return "⚪️";
+  return "⚪️";
 }
-
 
 function getEmotionSectionLabel(emoji: string): string {
-    switch (emoji) {
-        case "💙":
-            return "Low / Sad moments";
-        case "💛":
-            return "Worried / Anxious moments";
-        case "❤️":
-            return "Upset / Angry moments";
-        case "🟣":
-            return "Stuck / Confused moments";
-        case "💚":
-            return "Hopeful moments";
-        case "💜":
-            return "Happy / Joyful moments";
-        case "⚪️":
-        default:
-            return "Neutral / Mixed moments";
-    }
+  switch (emoji) {
+    case "💙":
+      return "Low / Sad moments";
+    case "💛":
+      return "Worried / Anxious moments";
+    case "❤️":
+      return "Upset / Angry moments";
+    case "🟣":
+      return "Stuck / Confused moments";
+    case "💚":
+      return "Hopeful moments";
+    case "💜":
+      return "Happy / Joyful moments";
+    case "⚪️":
+    default:
+      return "Neutral / Mixed moments";
+  }
 }
 
-
 function getMoodTintForTextBackground(text: string): string {
-    const emoji = getMoodEmojiForText(text);
+  const emoji = getMoodEmojiForText(text);
 
-    switch (emoji) {
-        case "💙":
-            return colors.emotionSad;
-        case "💛":
-            return colors.emotionAnxious;
-        case "❤️":
-            return colors.emotionAngry;
-        case "🟣":
-            return colors.emotionConfused;
-        case "💚":
-            return colors.emotionHopeful;
-        default:
-            return BOT_BUBBLE_BG;
-    }
+  switch (emoji) {
+    case "💙":
+      return colors.emotionSad;
+    case "💛":
+      return colors.emotionAnxious;
+    case "❤️":
+      return colors.emotionAngry;
+    case "🟣":
+      return colors.emotionConfused;
+    case "💚":
+      return colors.emotionHopeful;
+    default:
+      return BOT_BUBBLE_BG;
+  }
 }
 
 function getMoodHaloColor(text: string): string {
-    const emoji = getMoodEmojiForText(text);
+  const emoji = getMoodEmojiForText(text);
 
-    switch (emoji) {
-        case "💙":
-            return "rgba(96, 165, 250, 0.18)";
-        case "💛":
-            return "rgba(250, 204, 21, 0.18)";
-        case "❤️":
-            return "rgba(248, 113, 113, 0.18)";
-        case "🟣":
-            return "rgba(192, 132, 252, 0.18)";
-        case "💚":
-            return "rgba(74, 222, 128, 0.18)";
-        default:
-            return "rgba(148, 163, 184, 0.12)";
-    }
+  switch (emoji) {
+    case "💙":
+      return "rgba(96, 165, 250, 0.18)";
+    case "💛":
+      return "rgba(250, 204, 21, 0.18)";
+    case "❤️":
+      return "rgba(248, 113, 113, 0.18)";
+    case "🟣":
+      return "rgba(192, 132, 252, 0.18)";
+    case "💚":
+      return "rgba(74, 222, 128, 0.18)";
+    default:
+      return "rgba(148, 163, 184, 0.12)";
+  }
 }
 
 function getMoodEmojiForHistoryItem(item: HistoryRecord): string | null {
-    // ✅ Prefer persisted emotion first (new rows),
-    // then legacy moodHint.emotion,
-    // then moodHint.primary (most reliable fallback for older/local rows)
-    const primaryEmotion = (item as any)?.emotion;
-    const hintEmotion = (item as any)?.moodHint?.emotion;
-    const hintPrimary = (item as any)?.moodHint?.primary;
+  // ✅ Prefer persisted emotion first (new rows),
+  // then legacy moodHint.emotion,
+  // then moodHint.primary (most reliable fallback for older/local rows)
+  const primaryEmotion = (item as any)?.emotion;
+  const hintEmotion = (item as any)?.moodHint?.emotion;
+  const hintPrimary = (item as any)?.moodHint?.primary;
 
-    const emotionCandidate =
-        typeof primaryEmotion === "string" && primaryEmotion.trim()
-            ? primaryEmotion
-            : typeof hintEmotion === "string" && hintEmotion.trim()
-                ? hintEmotion
-                : typeof hintPrimary === "string" && hintPrimary.trim()
-                    ? hintPrimary
-                    : "";
+  const emotionCandidate =
+    typeof primaryEmotion === "string" && primaryEmotion.trim()
+      ? primaryEmotion
+      : typeof hintEmotion === "string" && hintEmotion.trim()
+        ? hintEmotion
+        : typeof hintPrimary === "string" && hintPrimary.trim()
+          ? hintPrimary
+          : "";
 
+  if (emotionCandidate) {
+    const e = emotionCandidate.trim().toLowerCase();
 
-    if (emotionCandidate) {
-        const e = emotionCandidate.trim().toLowerCase();
+    // Map stored emotion → EXISTING mood emoji system used across HistoryScreen
+    if (e === "joy" || e === "happy") return "💜";
+    if (e === "sadness" || e === "sad") return "💙";
 
-        // Map stored emotion → EXISTING mood emoji system used across HistoryScreen
-        if (e === "joy" || e === "happy") return "💜";
-        if (e === "sadness" || e === "sad") return "💙";
+    // ✅ Treat "stressed" as the same bucket as fear/anxiety
+    if (e === "stressed") return "💛";
+    if (e === "fear" || e === "anxiety" || e === "anxious") return "💛";
 
-        // ✅ Treat "stressed" as the same bucket as fear/anxiety
-        if (e === "stressed") return "💛";
-        if (e === "fear" || e === "anxiety" || e === "anxious") return "💛";
+    if (e === "anger" || e === "angry") return "❤️";
+    if (e === "hope" || e === "hopeful") return "💚";
+    if (e === "confused") return "🟣";
+    if (e === "neutral") return "⚪️";
 
-        if (e === "anger" || e === "angry") return "❤️";
-        if (e === "hope" || e === "hopeful") return "💚";
-        if (e === "confused") return "🟣";
-        if (e === "neutral") return "⚪️";
+    // Unknown-but-present emotion: keep neutral-safe (don’t re-guess from text)
+    return "⚪️";
+  }
 
-        // Unknown-but-present emotion: keep neutral-safe (don’t re-guess from text)
-        return "⚪️";
+  // Legacy fallback (older rows): infer from text (includes emoji-only)
+  const t = (item as any)?.text;
+  if (typeof t === "string" && t.trim()) return getMoodEmojiForText(t);
 
-
-    }
-
-    // Legacy fallback (older rows): infer from text (includes emoji-only)
-    const t = (item as any)?.text;
-    if (typeof t === "string" && t.trim()) return getMoodEmojiForText(t);
-
-    return null;
+  return null;
 }
 
-
-
 function getBaseTextForMood(items: HistoryRecord[], index: number): string {
-    const item = items[index];
+  const item = items[index];
 
-    if (item.from === "user") return item.text;
+  if (item.from === "user") return item.text;
 
-    for (let i = index - 1; i >= 0; i--) {
-        if (items[i].from === "user") return items[i].text;
-    }
+  for (let i = index - 1; i >= 0; i--) {
+    if (items[i].from === "user") return items[i].text;
+  }
 
-    return item.text;
+  return item.text;
 }
 
 function formatDateLabel(timestamp: number): string {
-    const d = new Date(timestamp);
-    const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(today.getDate() - 1);
+  const d = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
 
-    const sameDay = (a: Date, b: Date) =>
-        a.getFullYear() === b.getFullYear() &&
-        a.getMonth() === b.getMonth() &&
-        a.getDate() === b.getDate();
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
 
-    if (sameDay(d, today)) return "Today";
-    if (sameDay(d, yesterday)) return "Yesterday";
+  if (sameDay(d, today)) return "Today";
+  if (sameDay(d, yesterday)) return "Yesterday";
 
-    return d.toLocaleDateString();
+  return d.toLocaleDateString();
 }
 
 // RN/Android can be picky about locale options; this keeps it safe.
 function formatTimeLabelSafe(timestamp: number): string {
-    try {
-        return new Date(timestamp).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-        } as any);
-    } catch {
-        return new Date(timestamp).toLocaleTimeString();
-    }
+  try {
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    } as any);
+  } catch {
+    return new Date(timestamp).toLocaleTimeString();
+  }
 }
 
 export default function HistoryScreen() {
-    const navigation = useNavigation<any>();
+  const navigation = useNavigation<any>();
 
-    const {
-        history,
-        pushHistoryToRemote,
-        // Newly available in current checkpoint: deduped sync triggers.
-        runSync,
-        syncNow,
-        mergeRemoteHistory,
-        isSyncing,
-        lastSyncResult,
-        lastSyncAt: historyLastSyncAt,
-        hasUnsyncedChanges,
+  const {
+    history,
+    pushHistoryToRemote,
+    // Newly available in current checkpoint: deduped sync triggers.
+    runSync,
+    syncNow,
+    mergeRemoteHistory,
+    isSyncing,
+    lastSyncResult,
+    lastSyncAt: historyLastSyncAt,
+    hasUnsyncedChanges,
 
-        // ✅ Licensing (stored in HistoryContext)
-        licenseTier,
-    } = useHistoryStore() as any;
+    // ✅ Licensing (stored in HistoryContext)
+    licenseTier,
+  } = useHistoryStore() as any;
 
-    // ✅ Cloud sync gate (soft gating)
-    const cloudGate = gate("CLOUD_SYNC", licenseTier);
+  // ✅ Cloud sync gate (soft gating)
+  const cloudGate = gate("CLOUD_SYNC", licenseTier);
 
-    // 🚀 Launch Phase Override: Cloud sync free for all users
-    const canCloudSync = true;
+  // 🚀 Launch Phase Override: Cloud sync free for all users
+  const canCloudSync = true;
 
-    // ✅ TS-safe: reason exists only when enabled === false
-    const cloudGateReason =
-        !cloudGate.enabled ? cloudGate.reason : undefined;
+  // ✅ TS-safe: reason exists only when enabled === false
+  const cloudGateReason = !cloudGate.enabled ? cloudGate.reason : undefined;
 
-    const {
-        lastSyncAt,
-        lastSyncStatus,
-        autoSyncDelaySeconds,
-        showAssistantRepliesInHistory,
-        setShowAssistantRepliesInHistory,
-    } = useSettings();
+  const {
+    lastSyncAt,
+    lastSyncStatus,
+    autoSyncDelaySeconds,
+    showAssistantRepliesInHistory,
+    setShowAssistantRepliesInHistory,
+  } = useSettings();
 
-    const scrollRef = React.useRef<ScrollView>(null);
-    const [showScrollToLatest, setShowScrollToLatest] = React.useState(false);
-    const [showScrollToTop, setShowScrollToTop] = React.useState(false);
+  const scrollRef = React.useRef<ScrollView>(null);
+  const [showScrollToLatest, setShowScrollToLatest] = React.useState(false);
+  const [showScrollToTop, setShowScrollToTop] = React.useState(false);
 
-    // ✅ QA hardening: prevent state updates after leaving screen
-    const mountedRef = React.useRef(true);
-    React.useEffect(() => {
-        mountedRef.current = true;
-        return () => {
-            mountedRef.current = false;
-        };
-    }, []);
+  // ✅ QA hardening: prevent state updates after leaving screen
+  const mountedRef = React.useRef(true);
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-    // ✅ QA hardening: avoid repeated remote-load taps
-    const [isLoadingRemote, setIsLoadingRemote] = React.useState(false);
+  // ✅ QA hardening: avoid repeated remote-load taps
+  const [isLoadingRemote, setIsLoadingRemote] = React.useState(false);
 
-    // ✅ Avoid re-render churn on scroll by only setting state when value actually changes
-    const showTopRef = React.useRef(false);
-    const showLatestRef = React.useRef(false);
+  // ✅ Avoid re-render churn on scroll by only setting state when value actually changes
+  const showTopRef = React.useRef(false);
+  const showLatestRef = React.useRef(false);
 
-    const hasSyncError = React.useMemo(() => {
-        if (lastSyncResult && !lastSyncResult.ok) return true;
-        const lower = (lastSyncStatus || "").toLowerCase();
-        return lower.includes("failed") || lower.includes("error");
-    }, [lastSyncResult, lastSyncStatus]);
+  const hasSyncError = React.useMemo(() => {
+    if (lastSyncResult && !lastSyncResult.ok) return true;
+    const lower = (lastSyncStatus || "").toLowerCase();
+    return lower.includes("failed") || lower.includes("error");
+  }, [lastSyncResult, lastSyncStatus]);
 
-    const effectiveLastSyncAt = lastSyncAt || historyLastSyncAt || null;
+  const effectiveLastSyncAt = lastSyncAt || historyLastSyncAt || null;
 
-    const formattedLastSync = effectiveLastSyncAt
-        ? new Date(effectiveLastSyncAt).toLocaleString()
-        : null;
+  const formattedLastSync = effectiveLastSyncAt
+    ? new Date(effectiveLastSyncAt).toLocaleString()
+    : null;
 
-    // --- Emotion summary (lightweight, non-diagnostic) ---
-    const moodSummary = React.useMemo(() => {
-        // Phase 3.2: Prefer authoritative stored emotion; fall back to legacy moodHint.emotion
-        const userItems = history.filter((h: HistoryRecord) => {
-            if (h.from !== "user") return false;
+  // --- Emotion summary (lightweight, non-diagnostic) ---
+  const moodSummary = React.useMemo(() => {
+    // Phase 3.2: Prefer authoritative stored emotion; fall back to legacy moodHint.emotion
+    const userItems = history.filter((h: HistoryRecord) => {
+      if (h.from !== "user") return false;
 
-            const primaryEmotion = (h as any)?.emotion;
-            const hintEmotion = (h as any)?.moodHint?.emotion;
+      const primaryEmotion = (h as any)?.emotion;
+      const hintEmotion = (h as any)?.moodHint?.emotion;
 
-            return (
-                (typeof primaryEmotion === "string" && primaryEmotion.trim()) ||
-                (typeof hintEmotion === "string" && hintEmotion.trim())
-            );
-        });
+      return (
+        (typeof primaryEmotion === "string" && primaryEmotion.trim()) ||
+        (typeof hintEmotion === "string" && hintEmotion.trim())
+      );
+    });
 
+    // Require a minimum sample so the summary isn’t misleading
+    if (userItems.length < 2) return null;
 
-        // Require a minimum sample so the summary isn’t misleading
-        if (userItems.length < 2) return null;
+    const emojis: string[] = [];
+    for (const item of userItems) {
+      const emoji = getMoodEmojiForHistoryItem(item);
+      if (emoji) emojis.push(emoji);
+    }
 
-        const emojis: string[] = [];
-        for (const item of userItems) {
-            const emoji = getMoodEmojiForHistoryItem(item);
-            if (emoji) emojis.push(emoji);
-        }
+    if (emojis.length === 0) return null;
 
+    const counts: Record<string, number> = {};
+    for (const emoji of emojis) {
+      counts[emoji] = (counts[emoji] || 0) + 1;
+    }
 
-        if (emojis.length === 0) return null;
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const [dominantEmoji, dominantCount] = sorted[0] || [];
+    if (!dominantEmoji) return null;
 
-        const counts: Record<string, number> = {};
-        for (const emoji of emojis) {
-            counts[emoji] = (counts[emoji] || 0) + 1;
-        }
+    const total = emojis.length;
+    const ratio = total > 0 ? dominantCount / total : 0;
 
-        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-        const [dominantEmoji, dominantCount] = sorted[0] || [];
-        if (!dominantEmoji) return null;
+    let note = "";
+    if (ratio >= 0.6) {
+      note = "This shows up the most lately.";
+    } else if (ratio >= 0.4) {
+      note = "This shows up often lately.";
+    } else {
+      note = "Your recent mood looks mixed.";
+    }
 
-        const total = emojis.length;
-        const ratio = total > 0 ? dominantCount / total : 0;
+    return {
+      emoji: dominantEmoji,
+      label: getEmotionSectionLabel(dominantEmoji),
+      note,
+      total,
+    };
+  }, [history]);
 
-        let note = "";
-        if (ratio >= 0.6) {
-            note = "This shows up the most lately.";
-        } else if (ratio >= 0.4) {
-            note = "This shows up often lately.";
-        } else {
-            note = "Your recent mood looks mixed.";
-        }
+  const unsyncedCount = React.useMemo(
+    () => history.filter((h: HistoryRecord) => !h.isSynced).length,
+    [history],
+  );
 
-        return {
-            emoji: dominantEmoji,
-            label: getEmotionSectionLabel(dominantEmoji),
-            note,
-            total,
-        };
-    }, [history]);
+  const topChip = React.useMemo(() => {
+    // ✅ If cloud sync is not available (Premium-gated), never show scary sync errors
+    if (!canCloudSync) {
+      return {
+        label: "Device-only · cloud sync is off",
+        variant: "neutral" as const,
+        icon: "📱",
+      };
+    }
 
+    if (!effectiveLastSyncAt) {
+      return {
+        label: "Sync status: never synced",
+        variant: "neutral" as const,
+        icon: "☁",
+      };
+    }
 
+    const lower = (lastSyncStatus || "").toLowerCase();
 
-    const unsyncedCount = React.useMemo(
-        () => history.filter((h: HistoryRecord) => !h.isSynced).length,
-        [history]
+    if (hasSyncError) {
+      return {
+        label: "Sync issue · history is only on this device",
+        variant: "danger" as const,
+        icon: "⚠",
+      };
+    }
+
+    if (
+      lower.includes("pushed") ||
+      lower.includes("merged") ||
+      lower.includes("synced")
+    ) {
+      return {
+        label: "Synced · recent history backed up",
+        variant: "primary" as const,
+        icon: "✓",
+      };
+    }
+
+    return {
+      label: "Sync checked recently",
+      variant: "neutral" as const,
+      icon: "☁",
+    };
+  }, [effectiveLastSyncAt, lastSyncStatus, hasSyncError, canCloudSync]);
+
+  const showPremiumAlert = React.useCallback(() => {
+    Alert.alert(
+      "Premium feature",
+      cloudGateReason || "Cloud sync is available with Premium.",
+      [{ text: "OK" }],
     );
+  }, [cloudGateReason]);
 
-    const topChip = React.useMemo(() => {
-        // ✅ If cloud sync is not available (Premium-gated), never show scary sync errors
-        if (!canCloudSync) {
-            return {
-                label: "Device-only · cloud sync is off",
-                variant: "neutral" as const,
-                icon: "📱",
-            };
-        }
+  const handleLoadRemote = React.useCallback(async () => {
+    // debug button is already gated, but keep this safe if called elsewhere
+    if (!DEBUG_UI_ENABLED) return;
 
-        if (!effectiveLastSyncAt) {
-            return {
-                label: "Sync status: never synced",
-                variant: "neutral" as const,
-                icon: "☁",
-            };
-        }
+    // ✅ Soft gate
+    if (!canCloudSync) {
+      showPremiumAlert();
+      return;
+    }
 
-        const lower = (lastSyncStatus || "").toLowerCase();
+    if (isLoadingRemote) return;
+    setIsLoadingRemote(true);
 
-        if (hasSyncError) {
-            return {
-                label: "Sync issue · history is only on this device",
-                variant: "danger" as const,
-                icon: "⚠",
-            };
-        }
+    try {
+      const remote = await fetchRemoteHistory();
 
-        if (
-            lower.includes("pushed") ||
-            lower.includes("merged") ||
-            lower.includes("synced")
-        ) {
-            return {
-                label: "Synced · recent history backed up",
-                variant: "primary" as const,
-                icon: "✓",
-            };
-        }
+      if (!Array.isArray(remote)) {
+        Alert.alert("Remote fetch", "Unexpected response format.");
+        return;
+      }
 
-        return {
-            label: "Sync checked recently",
-            variant: "neutral" as const,
-            icon: "☁",
-        };
-    }, [effectiveLastSyncAt, lastSyncStatus, hasSyncError, canCloudSync]);
+      // This returns accurate added counts in the current checkpoint.
+      const result = mergeRemoteHistory(remote);
 
-    const showPremiumAlert = React.useCallback(() => {
+      if (result.normalized === 0) {
         Alert.alert(
-            "Premium feature",
-            cloudGateReason || "Cloud sync is available with Premium.",
-            [{ text: "OK" }]
+          "Remote history",
+          remote.length === 0
+            ? "Backend returned 0 item(s) so far."
+            : "No valid items found on the backend yet.",
         );
-    }, [cloudGateReason]);
+        return;
+      }
 
-    const handleLoadRemote = React.useCallback(async () => {
-        // debug button is already gated, but keep this safe if called elsewhere
-        if (!DEBUG_UI_ENABLED) return;
+      if (result.added === 0) {
+        Alert.alert(
+          "Remote history",
+          `No new items. Local history already contains all ${result.normalized} remote item(s).`,
+        );
+      } else {
+        Alert.alert(
+          "Remote history",
+          `Merged ${result.added} new item(s) into local history.`,
+        );
+      }
+    } catch (error) {
+      console.warn("handleLoadRemote error:", error);
+      Alert.alert(
+        "Remote history error",
+        "Could not load remote history right now. Please try again later.",
+      );
+    } finally {
+      if (mountedRef.current) setIsLoadingRemote(false);
+    }
+  }, [isLoadingRemote, mergeRemoteHistory, canCloudSync, showPremiumAlert]);
 
-        // ✅ Soft gate
-        if (!canCloudSync) {
-            showPremiumAlert();
-            return;
-        }
+  const handleRetrySync = React.useCallback(async () => {
+    // ✅ Soft gate
+    if (!canCloudSync) {
+      showPremiumAlert();
+      return;
+    }
 
-        if (isLoadingRemote) return;
-        setIsLoadingRemote(true);
+    if (isSyncing) return;
 
-        try {
-            const remote = await fetchRemoteHistory();
+    try {
+      // Prefer deduped trigger if available; fall back to existing function.
+      const syncFn =
+        typeof syncNow === "function"
+          ? syncNow
+          : typeof runSync === "function"
+            ? runSync
+            : pushHistoryToRemote;
 
-            if (!Array.isArray(remote)) {
-                Alert.alert("Remote fetch", "Unexpected response format.");
-                return;
-            }
+      const result = await syncFn({ reason: "HistoryScreen: manual sync" });
 
-            // This returns accurate added counts in the current checkpoint.
-            const result = mergeRemoteHistory(remote);
+      if (result.ok) {
+        const pushedCount =
+          typeof result.pushed === "number" ? result.pushed : 0;
+        Alert.alert(
+          "Sync complete",
+          pushedCount > 0
+            ? `Pushed ${pushedCount} item(s) to the cloud.`
+            : "Everything is already in sync.",
+        );
+      } else {
+        Alert.alert(
+          "Sync issue",
+          result.errorMessage ||
+            "Could not sync right now. Please try again later.",
+        );
+      }
+    } catch (error) {
+      console.warn("handleRetrySync error:", error);
+      Alert.alert(
+        "Sync error",
+        "Could not sync right now. Please try again later.",
+      );
+    }
+  }, [
+    isSyncing,
+    pushHistoryToRemote,
+    runSync,
+    syncNow,
+    canCloudSync,
+    showPremiumAlert,
+  ]);
 
-            if (result.normalized === 0) {
-                Alert.alert(
-                    "Remote history",
-                    remote.length === 0
-                        ? "Backend returned 0 item(s) so far."
-                        : "No valid items found on the backend yet."
-                );
-                return;
-            }
+  const handleGoToChat = React.useCallback(() => {
+    // keep behavior safe across any route name differences
+    try {
+      navigation.navigate("Chat");
+      return;
+    } catch {}
+    try {
+      navigation.navigate("ChatScreen");
+      return;
+    } catch {}
+  }, [navigation]);
 
-            if (result.added === 0) {
-                Alert.alert(
-                    "Remote history",
-                    `No new items. Local history already contains all ${result.normalized} remote item(s).`
-                );
-            } else {
-                Alert.alert(
-                    "Remote history",
-                    `Merged ${result.added} new item(s) into local history.`
-                );
-            }
-        } catch (error) {
-            console.warn("handleLoadRemote error:", error);
-            Alert.alert(
-                "Remote history error",
-                "Could not load remote history right now. Please try again later."
-            );
-        } finally {
-            if (mountedRef.current) setIsLoadingRemote(false);
-        }
-    }, [isLoadingRemote, mergeRemoteHistory, canCloudSync, showPremiumAlert]);
+  // Phase 2.4: hide assistant replies by default (toggleable + persisted)
+  const showAssistantReplies = showAssistantRepliesInHistory;
+  const setShowAssistantReplies = setShowAssistantRepliesInHistory;
 
-    const handleRetrySync = React.useCallback(async () => {
-        // ✅ Soft gate
-        if (!canCloudSync) {
-            showPremiumAlert();
-            return;
-        }
+  const sortedHistory = React.useMemo(
+    () => [...history].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)),
+    [history],
+  );
 
-        if (isSyncing) return;
+  // List-only filter (does NOT affect stored history; just controls what is shown)
+  const visibleHistory = React.useMemo(() => {
+    if (showAssistantReplies) return sortedHistory;
+    return sortedHistory.filter((h: HistoryRecord) => h.from === "user");
+  }, [sortedHistory, showAssistantReplies]);
 
-        try {
-            // Prefer deduped trigger if available; fall back to existing function.
-            const syncFn =
-                typeof syncNow === "function"
-                    ? syncNow
-                    : typeof runSync === "function"
-                        ? runSync
-                        : pushHistoryToRemote;
+  const groupedHistory = React.useMemo(() => {
+    const groups: { label: string; items: HistoryRecord[] }[] = [];
 
-            const result = await syncFn({ reason: "HistoryScreen: manual sync" });
+    let currentLabel: string | null = null;
+    let currentItems: HistoryRecord[] = [];
 
-            if (result.ok) {
-                const pushedCount =
-                    typeof result.pushed === "number" ? result.pushed : 0;
-                Alert.alert(
-                    "Sync complete",
-                    pushedCount > 0
-                        ? `Pushed ${pushedCount} item(s) to the cloud.`
-                        : "Everything is already in sync."
-                );
-            } else {
-                Alert.alert(
-                    "Sync issue",
-                    result.errorMessage ||
-                    "Could not sync right now. Please try again later."
-                );
-            }
-        } catch (error) {
-            console.warn("handleRetrySync error:", error);
-            Alert.alert(
-                "Sync error",
-                "Could not sync right now. Please try again later."
-            );
-        }
-    }, [
-        isSyncing,
-        pushHistoryToRemote,
-        runSync,
-        syncNow,
-        canCloudSync,
-        showPremiumAlert,
-    ]);
+    visibleHistory.forEach((item) => {
+      const label = formatDateLabel(item.timestamp);
 
-    const handleGoToChat = React.useCallback(() => {
-        // keep behavior safe across any route name differences
-        try {
-            navigation.navigate("Chat");
-            return;
-        } catch { }
-        try {
-            navigation.navigate("ChatScreen");
-            return;
-        } catch { }
-    }, [navigation]);
-
-    // Phase 2.4: hide assistant replies by default (toggleable + persisted)
-    const showAssistantReplies = showAssistantRepliesInHistory;
-    const setShowAssistantReplies = setShowAssistantRepliesInHistory;
-
-    const sortedHistory = React.useMemo(
-        () => [...history].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)),
-        [history]
-    );
-
-    // List-only filter (does NOT affect stored history; just controls what is shown)
-    const visibleHistory = React.useMemo(() => {
-        if (showAssistantReplies) return sortedHistory;
-        return sortedHistory.filter((h: HistoryRecord) => h.from === "user");
-    }, [sortedHistory, showAssistantReplies]);
-
-    const groupedHistory = React.useMemo(() => {
-        const groups: { label: string; items: HistoryRecord[] }[] = [];
-
-        let currentLabel: string | null = null;
-        let currentItems: HistoryRecord[] = [];
-
-        visibleHistory.forEach((item) => {
-            const label = formatDateLabel(item.timestamp);
-
-            if (label !== currentLabel) {
-                if (currentItems.length > 0 && currentLabel) {
-                    groups.push({ label: currentLabel, items: currentItems });
-                }
-                currentLabel = label;
-                currentItems = [item];
-            } else {
-                currentItems.push(item);
-            }
-        });
-
+      if (label !== currentLabel) {
         if (currentItems.length > 0 && currentLabel) {
-            groups.push({ label: currentLabel, items: currentItems });
+          groups.push({ label: currentLabel, items: currentItems });
         }
+        currentLabel = label;
+        currentItems = [item];
+      } else {
+        currentItems.push(item);
+      }
+    });
 
-        return groups;
-    }, [visibleHistory]);
+    if (currentItems.length > 0 && currentLabel) {
+      groups.push({ label: currentLabel, items: currentItems });
+    }
 
-    const retryLabel = isSyncing
-        ? "Syncing…"
-        : !canCloudSync
-            ? "Sync (Premium)"
-            : !hasUnsyncedChanges && !hasSyncError
-                ? "Up to date"
-                : hasSyncError
-                    ? "Try sync again now"
-                    : "Sync now";
+    return groups;
+  }, [visibleHistory]);
 
-    const isEmpty = visibleHistory.length === 0;
+  const retryLabel = isSyncing
+    ? "Syncing…"
+    : !canCloudSync
+      ? "Sync (Premium)"
+      : !hasUnsyncedChanges && !hasSyncError
+        ? "Up to date"
+        : hasSyncError
+          ? "Try sync again now"
+          : "Sync now";
 
-    return (
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
-            <ScrollView
-                ref={scrollRef}
-                contentContainerStyle={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    paddingBottom: 80,
-                }}
-                onScroll={(e) => {
-                    const { contentOffset, contentSize, layoutMeasurement } =
-                        e.nativeEvent;
+  const isEmpty = visibleHistory.length === 0;
 
-                    const distanceFromBottom =
-                        contentSize.height -
-                        (contentOffset.y + layoutMeasurement.height);
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          paddingBottom: 80,
+        }}
+        onScroll={(e) => {
+          const { contentOffset, contentSize, layoutMeasurement } =
+            e.nativeEvent;
 
-                    const nextShowLatest = distanceFromBottom > 120;
-                    const nextShowTop = contentOffset.y > 80;
+          const distanceFromBottom =
+            contentSize.height - (contentOffset.y + layoutMeasurement.height);
 
-                    if (nextShowLatest !== showLatestRef.current) {
-                        showLatestRef.current = nextShowLatest;
-                        setShowScrollToLatest(nextShowLatest);
-                    }
-                    if (nextShowTop !== showTopRef.current) {
-                        showTopRef.current = nextShowTop;
-                        setShowScrollToTop(nextShowTop);
-                    }
-                }}
-                scrollEventThrottle={50}
-            >
-                <Text
-                    style={{
-                        fontSize: 22,
-                        fontWeight: "700",
-                        marginBottom: 4,
-                        color: colors.textPrimary,
-                    }}
-                >
-                    Emotion History (Mobile)
-                </Text>
+          const nextShowLatest = distanceFromBottom > 120;
+          const nextShowTop = contentOffset.y > 80;
 
-                <Text
-                    style={{
-                        fontSize: 13,
-                        color: colors.textSecondary,
-                        marginBottom: 6,
-                    }}
-                >
-                    A simple preview of your recent conversations with Imotara on
-                    this device.
-                </Text>
+          if (nextShowLatest !== showLatestRef.current) {
+            showLatestRef.current = nextShowLatest;
+            setShowScrollToLatest(nextShowLatest);
+          }
+          if (nextShowTop !== showTopRef.current) {
+            showTopRef.current = nextShowTop;
+            setShowScrollToTop(nextShowTop);
+          }
+        }}
+        scrollEventThrottle={50}
+      >
+        <Text
+          style={{
+            fontSize: 22,
+            fontWeight: "700",
+            marginBottom: 4,
+            color: colors.textPrimary,
+          }}
+        >
+          Emotion History (Mobile)
+        </Text>
 
-                <View style={{ marginTop: 4, marginBottom: 6 }}>
-                    <AppChip
-                        label={topChip.label}
-                        variant={topChip.variant}
-                        icon={topChip.icon}
-                        animate
-                    />
-                </View>
+        <Text
+          style={{
+            fontSize: 13,
+            color: colors.textSecondary,
+            marginBottom: 6,
+          }}
+        >
+          A simple preview of your recent conversations with Imotara on this
+          device.
+        </Text>
 
-                {moodSummary ? (
-                    <View
-                        style={{
-                            marginBottom: 10,
-                            borderRadius: 16,
-                            borderWidth: 1,
-                            borderColor: colors.border,
-                            backgroundColor: colors.surface,
-                            padding: 12,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                                marginBottom: 4,
-                            }}
-                        >
-                            Quick mood summary
-                        </Text>
-
-                        <Text
-                            style={{
-                                fontSize: 14,
-                                fontWeight: "700",
-                                color: colors.textPrimary,
-                                marginBottom: 3,
-                            }}
-                        >
-                            {moodSummary.emoji} {moodSummary.label}
-                        </Text>
-
-                        <Text
-                            style={{
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                                lineHeight: 16,
-                            }}
-                        >
-                            {moodSummary.note} (Based on your last {moodSummary.total} messages.)
-                        </Text>
-                    </View>
-                ) : (
-                    <View
-                        style={{
-                            marginBottom: 10,
-                            borderRadius: 16,
-                            borderWidth: 1,
-                            borderColor: colors.border,
-                            backgroundColor: colors.surface,
-                            padding: 12,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                                marginBottom: 4,
-                            }}
-                        >
-                            Quick mood summary
-                        </Text>
-
-                        <Text
-                            style={{
-                                fontSize: 14,
-                                fontWeight: "700",
-                                color: colors.textPrimary,
-                                marginBottom: 3,
-                            }}
-                        >
-                            ⚪️ Not enough recent mood data yet
-                        </Text>
-
-                        <Text
-                            style={{
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                                lineHeight: 16,
-                            }}
-                        >
-                            This appears after a few messages are captured with mood hints.
-                        </Text>
-                    </View>
-                )}
-
-
-                {formattedLastSync && (
-                    <Text
-                        style={{
-                            fontSize: 12,
-                            color: colors.textSecondary,
-                            marginBottom: 4,
-                        }}
-                    >
-                        Last sync: {formattedLastSync}
-                    </Text>
-                )}
-
-                {(unsyncedCount > 0 || hasUnsyncedChanges) && (
-                    <View style={{ marginBottom: 8 }}>
-                        <Text
-                            style={{
-                                fontSize: 11,
-                                color: hasSyncError
-                                    ? "#fecaca"
-                                    : colors.textSecondary,
-                                fontWeight: hasSyncError ? "600" : "400",
-                            }}
-                        >
-                            Unsynced messages on this device: {unsyncedCount}
-                        </Text>
-
-                        <Text
-                            style={{
-                                marginTop: 2,
-                                fontSize: 11,
-                                color: hasSyncError
-                                    ? "#fecaca"
-                                    : colors.textSecondary,
-                            }}
-                        >
-                            {hasSyncError
-                                ? "Imotara couldn’t reach the cloud recently. Your messages are safe on this device and will sync when the connection recovers."
-                                : autoSyncDelaySeconds > 0
-                                    ? `Imotara will auto-sync these in about ${autoSyncDelaySeconds}s when you’re online.`
-                                    : "Imotara will sync these the next time you tap Sync."}
-                        </Text>
-
-                        <AppButton
-                            title={retryLabel}
-                            onPress={handleRetrySync}
-                            disabled={isSyncing || !canCloudSync || (!hasUnsyncedChanges && !hasSyncError)}
-                            variant="primary"
-                            size="sm"
-                            style={{
-                                alignSelf: "flex-start",
-                                marginTop: 6,
-                                borderRadius: 999,
-                                paddingHorizontal: 12,
-                                paddingVertical: 6,
-                                borderColor:
-                                    isSyncing || !canCloudSync
-                                        ? "rgba(148, 163, 184, 0.7)"
-                                        : colors.primary,
-                                backgroundColor:
-                                    isSyncing || !canCloudSync
-                                        ? "rgba(148, 163, 184, 0.2)"
-                                        : "rgba(56, 189, 248, 0.18)",
-                                opacity: isSyncing || !canCloudSync ? 0.7 : 1,
-                            }}
-                            textStyle={{
-                                fontSize: 11,
-                                fontWeight: "600",
-                                color: colors.textPrimary,
-                            }}
-                        />
-
-                        <TouchableOpacity
-                            onPress={() => setShowAssistantReplies(!showAssistantReplies)}
-                            style={{
-                                marginTop: 10,
-                                alignSelf: "flex-start",
-                                borderRadius: 999,
-                                paddingHorizontal: 12,
-                                paddingVertical: 8,
-                                borderWidth: 1,
-                                borderColor: "rgba(255,255,255,0.18)",
-                                backgroundColor: showAssistantReplies
-                                    ? "rgba(56, 189, 248, 0.14)"
-                                    : "rgba(148, 163, 184, 0.10)",
-                            }}
-                        >
-                            <Text
-                                style={{
-                                    fontSize: 12,
-                                    color: colors.textPrimary,
-                                }}
-                            >
-                                {showAssistantReplies ? "Hide assistant replies" : "Show assistant replies"}
-                            </Text>
-                        </TouchableOpacity>
-
-                        {!canCloudSync && (
-                            <Text
-                                style={{
-                                    marginTop: 6,
-                                    fontSize: 11,
-                                    color: colors.textSecondary,
-                                }}
-                            >
-                                {!cloudGate.enabled
-                                    ? (cloudGate as any).reason || "Cloud sync is available with Premium."
-                                    : null}
-                            </Text>
-                        )}
-
-                        {isSyncing && (
-                            <Text
-                                style={{
-                                    marginTop: 4,
-                                    fontSize: 11,
-                                    color: colors.textSecondary,
-                                    fontStyle: "italic",
-                                }}
-                            >
-                                Syncing in background…
-                            </Text>
-                        )}
-                    </View>
-                )}
-
-                {/* Debug-only: Load remote history */}
-                {DEBUG_UI_ENABLED && (
-                    <AppButton
-                        title={
-                            isLoadingRemote
-                                ? "Loading remote…"
-                                : !canCloudSync
-                                    ? "Load Remote (Premium)"
-                                    : "Load Remote History"
-                        }
-                        onPress={handleLoadRemote}
-                        disabled={isLoadingRemote || !canCloudSync}
-                        variant="success"
-                        size="sm"
-                        style={{
-                            alignSelf: "flex-start",
-                            marginBottom: 16,
-                            opacity: isLoadingRemote || !canCloudSync ? 0.7 : 1,
-                        }}
-                    />
-                )}
-
-                {/* ✅ Step 6: First-use empty state */}
-                {isEmpty && (
-                    <View
-                        style={{
-                            marginTop: 12,
-                            borderRadius: 18,
-                            borderWidth: 1,
-                            borderColor: colors.border,
-                            backgroundColor: colors.surfaceSoft,
-                            padding: 16,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 16,
-                                fontWeight: "700",
-                                color: colors.textPrimary,
-                                marginBottom: 6,
-                            }}
-                        >
-                            Your story starts here ✨
-                        </Text>
-
-                        <Text
-                            style={{
-                                fontSize: 13,
-                                color: colors.textSecondary,
-                                lineHeight: 18,
-                                marginBottom: 12,
-                            }}
-                        >
-                            When you chat with Imotara, your conversation appears
-                            here as an “Emotion History” so you can notice
-                            patterns, moods, and growth over time.
-                        </Text>
-
-                        <AppButton
-                            title="Start in Chat"
-                            onPress={handleGoToChat}
-                            variant="primary"
-                            style={{
-                                alignSelf: "flex-start",
-                                borderRadius: 999,
-                                paddingHorizontal: 16,
-                            }}
-                        />
-
-                        <Text
-                            style={{
-                                marginTop: 10,
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                            }}
-                        >
-                            Tip: long-press a message later to see the timestamp.
-                        </Text>
-                    </View>
-                )}
-
-                {/* History list */}
-                {groupedHistory.map((group) => (
-                    <View key={group.label} style={{ marginBottom: 18 }}>
-                        <Text
-                            style={{
-                                alignSelf: "center",
-                                marginBottom: 8,
-                                paddingHorizontal: 12,
-                                paddingVertical: 4,
-                                borderRadius: 999,
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                                backgroundColor: colors.surfaceSoft,
-                            }}
-                        >
-                            {group.label}
-                        </Text>
-
-                        {group.items.map((item, index) => {
-                            const isUser = item.from === "user";
-                            const moodBaseText = getBaseTextForMood(
-                                group.items,
-                                index
-                            );
-
-                            let emotionHeader: string | null = null;
-                            if (!isUser) {
-                                const emoji = getMoodEmojiForText(moodBaseText);
-                                const label = getEmotionSectionLabel(emoji);
-
-                                const hasPrevious = group.items
-                                    .slice(0, index)
-                                    .some((prev, prevIdx) => {
-                                        if (prev.from !== "bot") return false;
-                                        const prevBase = getBaseTextForMood(
-                                            group.items,
-                                            prevIdx
-                                        );
-                                        return (
-                                            getMoodEmojiForText(prevBase) ===
-                                            emoji
-                                        );
-                                    });
-
-                                if (!hasPrevious) {
-                                    emotionHeader = `${emoji} ${label}`;
-                                }
-                            }
-
-                            let showSessionDivider = false;
-                            if (index > 0) {
-                                const prev = group.items[index - 1];
-                                const gap = item.timestamp - (prev.timestamp ?? 0);
-                                if (gap > SESSION_GAP_MS)
-                                    showSessionDivider = true;
-                            }
-
-                            const bubbleBackground = isUser
-                                ? USER_BUBBLE_BG
-                                : getMoodTintForTextBackground(moodBaseText);
-
-                            const moodHaloColor = !isUser
-                                ? getMoodHaloColor(moodBaseText)
-                                : "transparent";
-
-                            const chipVariant = item.isSynced
-                                ? ("primary" as const)
-                                : hasSyncError
-                                    ? ("danger" as const)
-                                    : ("warning" as const);
-
-                            const chipLabel = item.isSynced
-                                ? "Synced to cloud"
-                                : hasSyncError
-                                    ? "Sync issue · device only"
-                                    : "On this device only";
-
-                            const chipIcon = item.isSynced
-                                ? "✓"
-                                : hasSyncError
-                                    ? "⚠"
-                                    : "📱";
-
-                            return (
-                                <View key={item.id}>
-                                    {showSessionDivider && (
-                                        <View
-                                            style={{
-                                                alignSelf: "center",
-                                                marginVertical: 6,
-                                                flexDirection: "row",
-                                                alignItems: "center",
-                                            }}
-                                        >
-                                            <View
-                                                style={{
-                                                    flex: 1,
-                                                    height: 1,
-                                                    backgroundColor: colors.border,
-                                                    opacity: 0.5,
-                                                    marginRight: 8,
-                                                }}
-                                            />
-                                            <Text
-                                                style={{
-                                                    fontSize: 11,
-                                                    color: colors.textSecondary,
-                                                }}
-                                            >
-                                                New session
-                                            </Text>
-                                            <View
-                                                style={{
-                                                    flex: 1,
-                                                    height: 1,
-                                                    backgroundColor: colors.border,
-                                                    opacity: 0.5,
-                                                    marginLeft: 8,
-                                                }}
-                                            />
-                                        </View>
-                                    )}
-
-                                    {emotionHeader && (
-                                        <Text
-                                            style={{
-                                                marginTop: 4,
-                                                marginBottom: 2,
-                                                fontSize: 11,
-                                                color: colors.textSecondary,
-                                                alignSelf: "flex-start",
-                                            }}
-                                        >
-                                            {emotionHeader}
-                                        </Text>
-                                    )}
-
-                                    <View
-                                        style={{
-                                            alignSelf: isUser
-                                                ? "flex-end"
-                                                : "flex-start",
-                                            maxWidth: "80%",
-                                            padding: isUser ? 0 : 4,
-                                            borderRadius: isUser ? 0 : 20,
-                                            backgroundColor: moodHaloColor,
-                                            marginBottom: 10,
-                                        }}
-                                    >
-                                        <TouchableOpacity
-                                            activeOpacity={0.9}
-                                            onLongPress={() =>
-                                                Alert.alert(
-                                                    "Message timestamp",
-                                                    new Date(
-                                                        item.timestamp
-                                                    ).toLocaleString()
-                                                )
-                                            }
-                                            delayLongPress={250}
-                                            style={{
-                                                alignSelf: "flex-start",
-                                                maxWidth: "100%",
-                                                backgroundColor: bubbleBackground,
-                                                paddingHorizontal: 12,
-                                                paddingVertical: 8,
-                                                borderRadius: 16,
-                                                borderWidth: 1,
-                                                borderColor: colors.border,
-                                            }}
-                                        >
-                                            <Text
-                                                style={{
-                                                    fontSize: 12,
-                                                    fontWeight: "600",
-                                                    color: colors.textSecondary,
-                                                    marginBottom: 2,
-                                                }}
-                                            >
-                                                {isUser
-                                                    ? "You"
-                                                    : `Imotara ${getMoodEmojiForText(
-                                                        moodBaseText
-                                                    )}`}
-                                            </Text>
-
-                                            <Text
-                                                style={{
-                                                    fontSize: 14,
-                                                    color: colors.textPrimary,
-                                                }}
-                                            >
-                                                {item.text}
-                                            </Text>
-
-                                            <Text
-                                                style={{
-                                                    fontSize: 11,
-                                                    color: colors.textSecondary,
-                                                    marginTop: 4,
-                                                }}
-                                            >
-                                                {formatTimeLabelSafe(item.timestamp)}
-                                            </Text>
-
-                                            <AppChip
-                                                label={chipLabel}
-                                                variant={chipVariant}
-                                                icon={chipIcon}
-                                                animate
-                                                style={{
-                                                    alignSelf: isUser
-                                                        ? "flex-end"
-                                                        : "flex-start",
-                                                    marginTop: 6,
-                                                }}
-                                            />
-
-                                            {!item.isSynced && (
-                                                <AppButton
-                                                    title={
-                                                        isLoadingRemote
-                                                            ? "Checking cloud…"
-                                                            : !canCloudSync
-                                                                ? "Cloud copy (Premium)"
-                                                                : "Tap to check cloud copy"
-                                                    }
-                                                    onPress={() => {
-                                                        if (!canCloudSync) {
-                                                            showPremiumAlert();
-                                                            return;
-                                                        }
-                                                        handleLoadRemote();
-                                                    }}
-                                                    disabled={isLoadingRemote || !canCloudSync}
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    style={{
-                                                        alignSelf: isUser
-                                                            ? "flex-end"
-                                                            : "flex-start",
-                                                        marginTop: 4,
-                                                        borderWidth: 0,
-                                                        paddingHorizontal: 0,
-                                                        paddingVertical: 0,
-                                                        opacity:
-                                                            isLoadingRemote || !canCloudSync
-                                                                ? 0.7
-                                                                : 1,
-                                                    }}
-                                                    textStyle={{
-                                                        fontSize: 11,
-                                                        fontWeight: "500",
-                                                        color: "#93c5fd",
-                                                        textDecorationLine:
-                                                            "underline",
-                                                    }}
-                                                />
-                                            )}
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            );
-                        })}
-                    </View>
-                ))}
-            </ScrollView>
-
-            {(showScrollToTop || showScrollToLatest) && (
-                <View
-                    style={{
-                        position: "absolute",
-                        bottom: 20,
-                        right: 20,
-                        alignItems: "flex-end",
-                    }}
-                >
-                    {showScrollToTop && (
-                        <AppButton
-                            title="↑ Top"
-                            onPress={() =>
-                                scrollRef.current?.scrollTo({
-                                    y: 0,
-                                    animated: true,
-                                })
-                            }
-                            variant="primary"
-                            size="sm"
-                            style={{
-                                borderRadius: 999,
-                                marginBottom: 10,
-                                paddingHorizontal: 16,
-                                paddingVertical: 8,
-                                shadowColor: "#000",
-                                shadowOpacity: 0.25,
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowRadius: 4,
-                                elevation: 4,
-                            }}
-                        />
-                    )}
-
-                    {showScrollToLatest && (
-                        <AppButton
-                            title="↓ Latest"
-                            onPress={() =>
-                                scrollRef.current?.scrollToEnd({
-                                    animated: true,
-                                })
-                            }
-                            variant="primary"
-                            size="sm"
-                            style={{
-                                borderRadius: 999,
-                                paddingHorizontal: 16,
-                                paddingVertical: 10,
-                                shadowColor: "#000",
-                                shadowOpacity: 0.25,
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowRadius: 4,
-                                elevation: 4,
-                            }}
-                        />
-                    )}
-                </View>
-            )}
+        <View style={{ marginTop: 4, marginBottom: 6 }}>
+          <AppChip
+            label={topChip.label}
+            variant={topChip.variant}
+            icon={topChip.icon}
+            animate
+          />
         </View>
-    );
+
+        {moodSummary ? (
+          <View
+            style={{
+              marginBottom: 10,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+              padding: 12,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 12,
+                color: colors.textSecondary,
+                marginBottom: 4,
+              }}
+            >
+              Quick mood summary
+            </Text>
+
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: "700",
+                color: colors.textPrimary,
+                marginBottom: 3,
+              }}
+            >
+              {moodSummary.emoji} {moodSummary.label}
+            </Text>
+
+            <Text
+              style={{
+                fontSize: 12,
+                color: colors.textSecondary,
+                lineHeight: 16,
+              }}
+            >
+              {moodSummary.note} (Based on your last {moodSummary.total}{" "}
+              messages.)
+            </Text>
+          </View>
+        ) : (
+          <View
+            style={{
+              marginBottom: 10,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+              padding: 12,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 12,
+                color: colors.textSecondary,
+                marginBottom: 4,
+              }}
+            >
+              Quick mood summary
+            </Text>
+
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: "700",
+                color: colors.textPrimary,
+                marginBottom: 3,
+              }}
+            >
+              ⚪️ Not enough recent mood data yet
+            </Text>
+
+            <Text
+              style={{
+                fontSize: 12,
+                color: colors.textSecondary,
+                lineHeight: 16,
+              }}
+            >
+              This appears after a few messages are captured with mood hints.
+            </Text>
+          </View>
+        )}
+
+        {formattedLastSync && (
+          <Text
+            style={{
+              fontSize: 12,
+              color: colors.textSecondary,
+              marginBottom: 4,
+            }}
+          >
+            Last sync: {formattedLastSync}
+          </Text>
+        )}
+
+        {(unsyncedCount > 0 || hasUnsyncedChanges) && (
+          <View style={{ marginBottom: 8 }}>
+            <Text
+              style={{
+                fontSize: 11,
+                color: hasSyncError ? "#fecaca" : colors.textSecondary,
+                fontWeight: hasSyncError ? "600" : "400",
+              }}
+            >
+              Unsynced messages on this device: {unsyncedCount}
+            </Text>
+
+            <Text
+              style={{
+                marginTop: 2,
+                fontSize: 11,
+                color: hasSyncError ? "#fecaca" : colors.textSecondary,
+              }}
+            >
+              {hasSyncError
+                ? "Imotara couldn’t reach the cloud recently. Your messages are safe on this device and will sync when the connection recovers."
+                : autoSyncDelaySeconds > 0
+                  ? `Imotara will auto-sync these in about ${autoSyncDelaySeconds}s when you’re online.`
+                  : "Imotara will sync these the next time you tap Sync."}
+            </Text>
+
+            <AppButton
+              title={retryLabel}
+              onPress={handleRetrySync}
+              disabled={
+                isSyncing ||
+                !canCloudSync ||
+                (!hasUnsyncedChanges && !hasSyncError)
+              }
+              variant="primary"
+              size="sm"
+              style={{
+                alignSelf: "flex-start",
+                marginTop: 6,
+                borderRadius: 999,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderColor:
+                  isSyncing || !canCloudSync
+                    ? "rgba(148, 163, 184, 0.7)"
+                    : colors.primary,
+                backgroundColor:
+                  isSyncing || !canCloudSync
+                    ? "rgba(148, 163, 184, 0.2)"
+                    : "rgba(56, 189, 248, 0.18)",
+                opacity: isSyncing || !canCloudSync ? 0.7 : 1,
+              }}
+              textStyle={{
+                fontSize: 11,
+                fontWeight: "600",
+                color: colors.textPrimary,
+              }}
+            />
+
+            <TouchableOpacity
+              onPress={() => setShowAssistantReplies(!showAssistantReplies)}
+              style={{
+                marginTop: 10,
+                alignSelf: "flex-start",
+                borderRadius: 999,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.18)",
+                backgroundColor: showAssistantReplies
+                  ? "rgba(56, 189, 248, 0.14)"
+                  : "rgba(148, 163, 184, 0.10)",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: colors.textPrimary,
+                }}
+              >
+                {showAssistantReplies
+                  ? "Hide assistant replies"
+                  : "Show assistant replies"}
+              </Text>
+            </TouchableOpacity>
+
+            {!canCloudSync && (
+              <Text
+                style={{
+                  marginTop: 6,
+                  fontSize: 11,
+                  color: colors.textSecondary,
+                }}
+              >
+                {!cloudGate.enabled
+                  ? (cloudGate as any).reason ||
+                    "Cloud sync is available with Premium."
+                  : null}
+              </Text>
+            )}
+
+            {isSyncing && (
+              <Text
+                style={{
+                  marginTop: 4,
+                  fontSize: 11,
+                  color: colors.textSecondary,
+                  fontStyle: "italic",
+                }}
+              >
+                Syncing in background…
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Debug-only: Load remote history */}
+        {DEBUG_UI_ENABLED && (
+          <AppButton
+            title={
+              isLoadingRemote
+                ? "Loading remote…"
+                : !canCloudSync
+                  ? "Load Remote (Premium)"
+                  : "Load Remote History"
+            }
+            onPress={handleLoadRemote}
+            disabled={isLoadingRemote || !canCloudSync}
+            variant="success"
+            size="sm"
+            style={{
+              alignSelf: "flex-start",
+              marginBottom: 16,
+              opacity: isLoadingRemote || !canCloudSync ? 0.7 : 1,
+            }}
+          />
+        )}
+
+        {/* ✅ Step 6: First-use empty state */}
+        {isEmpty && (
+          <View
+            style={{
+              marginTop: 12,
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.surfaceSoft,
+              padding: 16,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: "700",
+                color: colors.textPrimary,
+                marginBottom: 6,
+              }}
+            >
+              Your story starts here ✨
+            </Text>
+
+            <Text
+              style={{
+                fontSize: 13,
+                color: colors.textSecondary,
+                lineHeight: 18,
+                marginBottom: 12,
+              }}
+            >
+              When you chat with Imotara, your conversation appears here as an
+              “Emotion History” so you can notice patterns, moods, and growth
+              over time.
+            </Text>
+
+            <AppButton
+              title="Start in Chat"
+              onPress={handleGoToChat}
+              variant="primary"
+              style={{
+                alignSelf: "flex-start",
+                borderRadius: 999,
+                paddingHorizontal: 16,
+              }}
+            />
+
+            <Text
+              style={{
+                marginTop: 10,
+                fontSize: 12,
+                color: colors.textSecondary,
+              }}
+            >
+              Tip: long-press a message later to see the timestamp.
+            </Text>
+          </View>
+        )}
+
+        {/* History list */}
+        {groupedHistory.map((group) => (
+          <View key={group.label} style={{ marginBottom: 18 }}>
+            <Text
+              style={{
+                alignSelf: "center",
+                marginBottom: 8,
+                paddingHorizontal: 12,
+                paddingVertical: 4,
+                borderRadius: 999,
+                fontSize: 12,
+                color: colors.textSecondary,
+                backgroundColor: colors.surfaceSoft,
+              }}
+            >
+              {group.label}
+            </Text>
+
+            {group.items.map((item, index) => {
+              const isUser = item.from === "user";
+              const moodBaseText = getBaseTextForMood(group.items, index);
+
+              let emotionHeader: string | null = null;
+              if (!isUser) {
+                const emoji = getMoodEmojiForText(moodBaseText);
+                const label = getEmotionSectionLabel(emoji);
+
+                const hasPrevious = group.items
+                  .slice(0, index)
+                  .some((prev, prevIdx) => {
+                    if (prev.from !== "bot") return false;
+                    const prevBase = getBaseTextForMood(group.items, prevIdx);
+                    return getMoodEmojiForText(prevBase) === emoji;
+                  });
+
+                if (!hasPrevious) {
+                  emotionHeader = `${emoji} ${label}`;
+                }
+              }
+
+              let showSessionDivider = false;
+              if (index > 0) {
+                const prev = group.items[index - 1];
+                const gap = item.timestamp - (prev.timestamp ?? 0);
+                if (gap > SESSION_GAP_MS) showSessionDivider = true;
+              }
+
+              const bubbleBackground = isUser
+                ? USER_BUBBLE_BG
+                : getMoodTintForTextBackground(moodBaseText);
+
+              const moodHaloColor = !isUser
+                ? getMoodHaloColor(moodBaseText)
+                : "transparent";
+
+              const chipVariant = item.isSynced
+                ? ("primary" as const)
+                : hasSyncError
+                  ? ("danger" as const)
+                  : ("warning" as const);
+
+              const chipLabel = item.isSynced
+                ? "Synced to cloud"
+                : hasSyncError
+                  ? "Sync issue · device only"
+                  : "On this device only";
+
+              const chipIcon = item.isSynced ? "✓" : hasSyncError ? "⚠" : "📱";
+
+              return (
+                <View key={item.id}>
+                  {showSessionDivider && (
+                    <View
+                      style={{
+                        alignSelf: "center",
+                        marginVertical: 6,
+                        flexDirection: "row",
+                        alignItems: "center",
+                      }}
+                    >
+                      <View
+                        style={{
+                          flex: 1,
+                          height: 1,
+                          backgroundColor: colors.border,
+                          opacity: 0.5,
+                          marginRight: 8,
+                        }}
+                      />
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: colors.textSecondary,
+                        }}
+                      >
+                        New session
+                      </Text>
+                      <View
+                        style={{
+                          flex: 1,
+                          height: 1,
+                          backgroundColor: colors.border,
+                          opacity: 0.5,
+                          marginLeft: 8,
+                        }}
+                      />
+                    </View>
+                  )}
+
+                  {emotionHeader && (
+                    <Text
+                      style={{
+                        marginTop: 4,
+                        marginBottom: 2,
+                        fontSize: 11,
+                        color: colors.textSecondary,
+                        alignSelf: "flex-start",
+                      }}
+                    >
+                      {emotionHeader}
+                    </Text>
+                  )}
+
+                  <View
+                    style={{
+                      alignSelf: isUser ? "flex-end" : "flex-start",
+                      maxWidth: "80%",
+                      padding: isUser ? 0 : 4,
+                      borderRadius: isUser ? 0 : 20,
+                      backgroundColor: moodHaloColor,
+                      marginBottom: 10,
+                    }}
+                  >
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onLongPress={() =>
+                        Alert.alert(
+                          "Message timestamp",
+                          new Date(item.timestamp).toLocaleString(),
+                        )
+                      }
+                      delayLongPress={250}
+                      style={{
+                        alignSelf: "flex-start",
+                        maxWidth: "100%",
+                        backgroundColor: bubbleBackground,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 16,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: "600",
+                          color: colors.textSecondary,
+                          marginBottom: 2,
+                        }}
+                      >
+                        {isUser
+                          ? "You"
+                          : `Imotara ${getMoodEmojiForText(moodBaseText)}`}
+                      </Text>
+
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          color: colors.textPrimary,
+                        }}
+                      >
+                        {item.text}
+                      </Text>
+
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: colors.textSecondary,
+                          marginTop: 4,
+                        }}
+                      >
+                        {formatTimeLabelSafe(item.timestamp)}
+                      </Text>
+
+                      <AppChip
+                        label={chipLabel}
+                        variant={chipVariant}
+                        icon={chipIcon}
+                        animate
+                        style={{
+                          alignSelf: isUser ? "flex-end" : "flex-start",
+                          marginTop: 6,
+                        }}
+                      />
+
+                      {!item.isSynced && (
+                        <AppButton
+                          title={
+                            isLoadingRemote
+                              ? "Checking cloud…"
+                              : !canCloudSync
+                                ? "Cloud copy (Premium)"
+                                : "Tap to check cloud copy"
+                          }
+                          onPress={() => {
+                            if (!canCloudSync) {
+                              showPremiumAlert();
+                              return;
+                            }
+                            handleLoadRemote();
+                          }}
+                          disabled={isLoadingRemote || !canCloudSync}
+                          variant="ghost"
+                          size="sm"
+                          style={{
+                            alignSelf: isUser ? "flex-end" : "flex-start",
+                            marginTop: 4,
+                            borderWidth: 0,
+                            paddingHorizontal: 0,
+                            paddingVertical: 0,
+                            opacity: isLoadingRemote || !canCloudSync ? 0.7 : 1,
+                          }}
+                          textStyle={{
+                            fontSize: 11,
+                            fontWeight: "500",
+                            color: "#93c5fd",
+                            textDecorationLine: "underline",
+                          }}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ))}
+      </ScrollView>
+
+      {(showScrollToTop || showScrollToLatest) && (
+        <View
+          style={{
+            position: "absolute",
+            bottom: 20,
+            right: 20,
+            alignItems: "flex-end",
+          }}
+        >
+          {showScrollToTop && (
+            <AppButton
+              title="↑ Top"
+              onPress={() =>
+                scrollRef.current?.scrollTo({
+                  y: 0,
+                  animated: true,
+                })
+              }
+              variant="primary"
+              size="sm"
+              style={{
+                borderRadius: 999,
+                marginBottom: 10,
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                shadowColor: "#000",
+                shadowOpacity: 0.25,
+                shadowOffset: { width: 0, height: 2 },
+                shadowRadius: 4,
+                elevation: 4,
+              }}
+            />
+          )}
+
+          {showScrollToLatest && (
+            <AppButton
+              title="↓ Latest"
+              onPress={() =>
+                scrollRef.current?.scrollToEnd({
+                  animated: true,
+                })
+              }
+              variant="primary"
+              size="sm"
+              style={{
+                borderRadius: 999,
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+                shadowColor: "#000",
+                shadowOpacity: 0.25,
+                shadowOffset: { width: 0, height: 2 },
+                shadowRadius: 4,
+                elevation: 4,
+              }}
+            />
+          )}
+        </View>
+      )}
+    </View>
+  );
 }
