@@ -6,432 +6,481 @@
 
 import { IMOTARA_API_BASE_URL } from "../config/api";
 import { debugLog, debugWarn } from "../config/debug";
-import { BN_SAD_REGEX, HI_STRESS_REGEX, isConfusedText } from "../lib/emotion/keywordMaps";
 import {
-    fetchWithTimeout,
-    DEFAULT_REMOTE_TIMEOUT_MS,
+  BN_SAD_REGEX,
+  HI_STRESS_REGEX,
+  isConfusedText,
+} from "../lib/emotion/keywordMaps";
+import {
+  fetchWithTimeout,
+  DEFAULT_REMOTE_TIMEOUT_MS,
 } from "../lib/network/fetchWithTimeout";
 
 // Mobile safety: avoid UI freezes if server returns an unexpectedly huge string.
 const MAX_REMOTE_REPLY_CHARS = 5000;
 
 export type AnalyzeResponse = {
-    ok: boolean;
-    replyText: string;
-    reflectionSeed?: any;
-    followUp?: string | null;
-    errorMessage?: string;
+  ok: boolean;
+  replyText: string;
+  reflectionSeed?: any;
+  followUp?: string | null;
+  errorMessage?: string;
 
-    // ✅ optional diagnostics / parity fields (additive)
-    analysisSource?: "cloud" | "local";
-    meta?: unknown;
+  // ✅ optional diagnostics / parity fields (additive)
+  analysisSource?: "cloud" | "local";
+  meta?: unknown;
 
-    // ✅ NEW: transport diagnostics (additive)
-    remoteUrl?: string;
-    remoteStatus?: number;
-    remoteError?: string;
+  // ✅ NEW: transport diagnostics (additive)
+  remoteUrl?: string;
+  remoteStatus?: number;
+  remoteError?: string;
 
-    // ✅ carry emotion through so UI doesn't default to neutral
-    emotion?: string;
-    intensity?: number;
+  // ✅ carry emotion through so UI doesn't default to neutral
+  emotion?: string;
+  intensity?: number;
 };
 
 // Keep this local to mobile; mirrors server payload structure (tone only)
 export type ToneAgeRange =
-    | "prefer_not"
-    | "under_13"
-    | "13_17"
-    | "18_24"
-    | "25_34"
-    | "35_44"
-    | "45_54"
-    | "55_64"
-    | "65_plus";
+  | "prefer_not"
+  | "under_13"
+  | "13_17"
+  | "18_24"
+  | "25_34"
+  | "35_44"
+  | "45_54"
+  | "55_64"
+  | "65_plus";
 
 export type ToneGender =
-    | "prefer_not"
-    | "female"
-    | "male"
-    | "nonbinary"
-    | "other";
+  | "prefer_not"
+  | "female"
+  | "male"
+  | "nonbinary"
+  | "other";
 
 // Mirrors web “Relationship vibe”
 export type ToneRelationship =
-    | "prefer_not"
-    | "mentor"
-    | "elder"
-    | "friend"
-    | "coach"
-    | "sibling"
-    | "junior_buddy"
-    | "parent_like"
-    | "partner_like";
+  | "prefer_not"
+  | "mentor"
+  | "elder"
+  | "friend"
+  | "coach"
+  | "sibling"
+  | "junior_buddy"
+  | "parent_like"
+  | "partner_like";
 
 export type ToneContextPayload = {
-    user?: {
-        name?: string;
+  user?: {
+    name?: string;
 
-        // ✅ parity with web: ageTone preferred, ageRange legacy fallback
-        ageTone?: ToneAgeRange;
-        ageRange?: ToneAgeRange;
+    // ✅ parity with web: ageTone preferred, ageRange legacy fallback
+    ageTone?: ToneAgeRange;
+    ageRange?: ToneAgeRange;
 
-        gender?: ToneGender;
-        relationship?: ToneRelationship;
-    };
-    companion?: {
-        enabled?: boolean;
-        name?: string;
+    gender?: ToneGender;
+    relationship?: ToneRelationship;
+  };
+  companion?: {
+    enabled?: boolean;
+    name?: string;
 
-        // ✅ parity with web: ageTone preferred, ageRange legacy fallback
-        ageTone?: ToneAgeRange;
-        ageRange?: ToneAgeRange;
+    // ✅ parity with web: ageTone preferred, ageRange legacy fallback
+    ageTone?: ToneAgeRange;
+    ageRange?: ToneAgeRange;
 
-        gender?: ToneGender;
-        relationship?: ToneRelationship;
-    };
+    gender?: ToneGender;
+    relationship?: ToneRelationship;
+  };
 };
 
 type CallAIOptions = {
-    // Optional tone guidance for the remote AI (server supports this)
-    toneContext?: ToneContextPayload;
+  // Optional tone guidance for the remote AI (server supports this)
+  toneContext?: ToneContextPayload;
 
-    // ✅ NEW: allow mobile settings + light history to reach /api/respond
-    analysisMode?: "auto" | "cloud" | "local";
-    emotionInsightsEnabled?: boolean;
+  // ✅ NEW: allow mobile settings + light history to reach /api/respond
+  analysisMode?: "auto" | "cloud" | "local";
+  emotionInsightsEnabled?: boolean;
 
-    // ✅ Non-breaking: network timeout override (ms)
-    timeoutMs?: number;
+  // ✅ Non-breaking: network timeout override (ms)
+  timeoutMs?: number;
 
-    settings?: {
-        relationshipTone?: ToneRelationship;
-        ageTone?: ToneAgeRange;
-        genderTone?: ToneGender;
-    };
+  settings?: {
+    relationshipTone?: ToneRelationship;
+    ageTone?: ToneAgeRange;
+    genderTone?: ToneGender;
+  };
 
-    // lightweight last-N messages
-    recentMessages?: Array<{
-        role: "user" | "assistant";
-        content: string;
-    }>;
+  // lightweight last-N messages
+  recentMessages?: Array<{
+    role: "user" | "assistant";
+    content: string;
+  }>;
 };
 
 function normalizeToneContext(
-    input?: ToneContextPayload
+  input?: ToneContextPayload,
 ): ToneContextPayload | undefined {
-    if (!input || typeof input !== "object") return undefined;
+  if (!input || typeof input !== "object") return undefined;
 
-    const next: ToneContextPayload = {
-        user: input.user ? { ...input.user } : undefined,
-        companion: input.companion ? { ...input.companion } : undefined,
-    };
+  const next: ToneContextPayload = {
+    user: input.user ? { ...input.user } : undefined,
+    companion: input.companion ? { ...input.companion } : undefined,
+  };
 
-    // ✅ Parity bridge (minimal + non-redundant):
-    // Treat ageTone as canonical. Only derive ageTone from ageRange (legacy input),
-    // but do NOT auto-fill ageRange from ageTone (avoids redundant payload).
-    if (next.user) {
-        if (!next.user.ageTone && next.user.ageRange) next.user.ageTone = next.user.ageRange;
+  // ✅ Parity bridge (minimal + non-redundant):
+  // Treat ageTone as canonical. Only derive ageTone from ageRange (legacy input),
+  // but do NOT auto-fill ageRange from ageTone (avoids redundant payload).
+  if (next.user) {
+    if (!next.user.ageTone && next.user.ageRange)
+      next.user.ageTone = next.user.ageRange;
+  }
+
+  if (next.companion) {
+    if (!next.companion.ageTone && next.companion.ageRange) {
+      next.companion.ageTone = next.companion.ageRange;
     }
 
-    if (next.companion) {
-        if (!next.companion.ageTone && next.companion.ageRange) {
-            next.companion.ageTone = next.companion.ageRange;
-        }
+    // ✅ Critical: if companion tone is enabled, require a stable name
+    const enabled = !!next.companion.enabled;
+    const name =
+      typeof next.companion.name === "string" ? next.companion.name.trim() : "";
 
-        // ✅ Critical: if companion tone is enabled, require a stable name
-        const enabled = !!next.companion.enabled;
-        const name = typeof next.companion.name === "string" ? next.companion.name.trim() : "";
-
-        if (enabled && !name) {
-            next.companion.name = "Imotara";
-        }
+    if (enabled && !name) {
+      next.companion.name = "Imotara";
     }
+  }
 
-    return next;
+  return next;
 }
 
 export async function callImotaraAI(
-    message: string,
-    opts?: CallAIOptions
+  message: string,
+  opts?: CallAIOptions,
 ): Promise<AnalyzeResponse> {
-    try {
-        const toneContext = normalizeToneContext(opts?.toneContext);
+  try {
+    const toneContext = normalizeToneContext(opts?.toneContext);
 
-        // ✅ Mobile parity with web:
-        // If the caller provided `settings` (from Settings screen) but did not include
-        // matching fields in toneContext, fill them in (additive only).
-        //
-        // Cleanup: prefer ageTone as the canonical field.
-        // Only set ageRange if the field already exists on the object (back-compat).
-        if (toneContext?.companion?.enabled && opts?.settings) {
-            if (!toneContext.companion.ageTone && opts.settings.ageTone) {
-                toneContext.companion.ageTone = opts.settings.ageTone;
-            }
+    // ✅ Mobile parity with web:
+    // If the caller provided `settings` (from Settings screen) but did not include
+    // matching fields in toneContext, fill them in (additive only).
+    //
+    // Cleanup: prefer ageTone as the canonical field.
+    // Only set ageRange if the field already exists on the object (back-compat).
+    if (toneContext?.companion?.enabled && opts?.settings) {
+      if (!toneContext.companion.ageTone && opts.settings.ageTone) {
+        toneContext.companion.ageTone = opts.settings.ageTone;
+      }
 
-            // Back-compat bridge: only populate ageRange when it is already present
-            // on the companion object (so we don’t redundantly mirror by default).
-            if (
-                !toneContext.companion.ageRange &&
-                opts.settings.ageTone &&
-                ("ageRange" in toneContext.companion)
-            ) {
-                toneContext.companion.ageRange = opts.settings.ageTone;
-            }
+      // Back-compat bridge: only populate ageRange when it is already present
+      // on the companion object (so we don’t redundantly mirror by default).
+      if (
+        !toneContext.companion.ageRange &&
+        opts.settings.ageTone &&
+        "ageRange" in toneContext.companion
+      ) {
+        toneContext.companion.ageRange = opts.settings.ageTone;
+      }
 
-            if (!toneContext.companion.relationship && opts.settings.relationshipTone) {
-                toneContext.companion.relationship = opts.settings.relationshipTone;
-            }
-            if (!toneContext.companion.gender && opts.settings.genderTone) {
-                toneContext.companion.gender = opts.settings.genderTone;
-            }
-        }
-
-        // ✅ Unique per-call requestId (helps the server avoid accidental dedupe / repeats)
-        const requestId = `m_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-
-        debugLog("[imotara] outbound request", {
-            requestId,
-            analysisMode: opts?.analysisMode,
-            messageLen: typeof message === "string" ? message.length : -1,
-            messagePreview:
-                typeof message === "string" ? message.slice(0, 120) : String(message),
-            companion: {
-                enabled: toneContext?.companion?.enabled,
-                name: toneContext?.companion?.name,
-                relationship: toneContext?.companion?.relationship,
-                ageTone: toneContext?.companion?.ageTone,
-                ageRange: toneContext?.companion?.ageRange,
-                gender: toneContext?.companion?.gender,
-            },
-        });
-
-        const remoteUrl = `${IMOTARA_API_BASE_URL}/api/respond`;
-
-        const res = await fetchWithTimeout(
-            remoteUrl,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    requestId,
-                    message,
-
-                    // ✅ Additive: also send analysisMode at top-level (server/web parity)
-                    ...(opts?.analysisMode ? { analysisMode: opts.analysisMode } : {}),
-
-                    // ✅ IMPORTANT: send toneContext at the TOP LEVEL (server contract)
-                    ...(toneContext ? { toneContext } : {}),
-
-                    // ✅ Keep context payload too (additive / backward compatible)
-                    context: {
-                        source: "mobile",
-                        analysisMode: opts?.analysisMode,
-                        emotionInsightsEnabled: opts?.emotionInsightsEnabled,
-
-                        // keep this for older server parsing / debugging (non-breaking)
-                        ...(toneContext ? { toneContext } : {}),
-
-                        // soft persona hints (do NOT roleplay; just wording guidance)
-                        persona: opts?.settings
-                            ? {
-                                relationshipTone: opts.settings.relationshipTone,
-                                ageTone: opts.settings.ageTone,
-                                genderTone: opts.settings.genderTone,
-                            }
-                            : undefined,
-
-                        // last few messages for continuity (send both keys for max compatibility)
-                        recentMessages: opts?.recentMessages ?? undefined,
-
-                        // back-compat (older servers/clients might look for `recent`)
-                        recent: opts?.recentMessages ?? undefined,
-                    },
-                }),
-            },
-            opts?.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS
-        );
-
-        if (!res.ok) {
-            const bodyText = await res.text().catch(() => "");
-            return {
-                ok: false,
-                replyText: "",
-                errorMessage: `HTTP ${res.status}`,
-                analysisSource: "cloud",
-                remoteUrl,
-                remoteStatus: res.status,
-                remoteError: bodyText ? bodyText.slice(0, 200) : `HTTP ${res.status}`,
-            };
-        }
-
-
-        const rawText = await res.text().catch(() => "");
-        let data: any = null;
-
-        try {
-            data = rawText ? JSON.parse(rawText) : {};
-        } catch (e) {
-            debugWarn("[imotara] cloud response was not valid JSON", {
-                status: res.status,
-                body: rawText.slice(0, 200),
-            });
-
-            return {
-                ok: false,
-                replyText: "",
-                errorMessage: "Invalid server response",
-                analysisSource: "cloud",
-                remoteUrl,
-                remoteStatus: res.status,
-                remoteError: rawText ? rawText.slice(0, 200) : "Invalid JSON",
-            };
-        }
-
-        // Debug log – see in Metro console (gated for QA/prod cleanliness)
-        debugLog("Imotara mobile AI raw response:", JSON.stringify(data, null, 2));
-
-        // ✅ Focused debug: confirm exactly what the server sent for emotion
-        debugLog("[imotara] cloud emotion fields", {
-            emotion: data?.emotion,
-            intensity: data?.intensity,
-            metaEmotion: data?.meta?.emotion,
-            metaIntensity: data?.meta?.intensity,
-            metaKeys:
-                data?.meta && typeof data.meta === "object"
-                    ? Object.keys(data.meta)
-                    : undefined,
-        });
-
-
-        // 1) Try common "direct reply" fields first
-        // Backend contract (strict):
-        // { message: string, reflectionSeed?: {...}, followUp?: string }
-        let replyText = String(data?.message ?? "").trim();
-
-        if (replyText.length > MAX_REMOTE_REPLY_CHARS) {
-            debugWarn("[imotara] cloud reply too long; truncating for mobile safety", {
-                len: replyText.length,
-                cap: MAX_REMOTE_REPLY_CHARS,
-            });
-            replyText = replyText.slice(0, MAX_REMOTE_REPLY_CHARS).trimEnd() + "…";
-        }
-
-        if (!replyText) {
-            return {
-                ok: false,
-                replyText: "",
-                errorMessage: "Invalid /api/respond response: missing message",
-            };
-        }
-
-        if (!replyText.trim()) {
-            return {
-                ok: false,
-                replyText: "",
-                errorMessage: "No reply text returned from server",
-            };
-        }
-
-        // ✅ Preserve server emotion signal (cloud often nests it under meta)
-        // Supports:
-        // - data.emotion: string
-        // - data.meta.emotionLabel: string
-        // - data.meta.emotion: { primary: string, intensity: "low"|"medium"|"high", ... }
-        const meta = data?.meta;
-
-        const metaEmotionObj =
-            meta && typeof meta === "object" && (meta as any).emotion && typeof (meta as any).emotion === "object"
-                ? (meta as any).emotion
-                : undefined;
-
-        const emotionRaw =
-            data?.emotion ??
-            (meta && typeof meta === "object" ? (meta as any).emotionLabel : undefined) ??
-            metaEmotionObj?.primary;
-
-        let emotion =
-            typeof emotionRaw === "string" && emotionRaw.trim()
-                ? emotionRaw.trim()
-                : undefined;
-
-        // ✅ If server doesn't send emotion, derive a safe fallback from the input message
-        // This prevents mobile UI from defaulting to neutral for Indian language inputs.
-        if (!emotion) {
-            const raw = String(message || "").trim();
-
-            if (HI_STRESS_REGEX.test(raw)) emotion = "stressed";
-            else if (BN_SAD_REGEX.test(raw)) emotion = "sad";
-            else if (isConfusedText(raw)) emotion = "confused";
-            else {
-                // ✅ Extra safety: romanized Hindi confused (common user inputs)
-                const t = raw.toLowerCase().replace(/\s+/g, " ");
-                if (
-                    /\bsamajh nahi aa raha\b/.test(t) ||
-                    /\bsamajh nahi aa rahi\b/.test(t) ||
-                    /\bkya karu\b/.test(t) ||
-                    /\bwhat should i do\b/.test(t)
-                ) {
-                    emotion = "confused";
-                }
-            }
-        }
-
-
-        // intensity can be numeric or (in meta.emotion) a string level
-        const intensityRaw =
-            data?.intensity ??
-            (meta && typeof meta === "object" ? (meta as any).intensity : undefined) ??
-            metaEmotionObj?.intensity;
-
-        const intensity =
-            typeof intensityRaw === "number" && Number.isFinite(intensityRaw)
-                ? intensityRaw
-                : typeof intensityRaw === "string"
-                    ? intensityRaw === "high"
-                        ? 1
-                        : intensityRaw === "medium"
-                            ? 0.66
-                            : intensityRaw === "low"
-                                ? 0.33
-                                : undefined
-                    : undefined;
-
-
-        return {
-            ok: true,
-            replyText,
-
-            // ✅ carry through parity fields if server provides them
-            reflectionSeed: data?.reflectionSeed,
-            followUp: typeof data?.followUp === "string" ? data.followUp : undefined,
-
-            // ✅ NEW: used by ChatScreen to show correct mood chip
-            emotion,
-            intensity,
-
-            // ✅ explicit source + diagnostics
-            analysisSource: "cloud",
-            remoteUrl,
-        };
-
-    } catch (error: any) {
-        debugWarn("Imotara mobile AI fetch error:", error);
-
-        const remoteUrl = `${IMOTARA_API_BASE_URL}/api/respond`;
-        const isTimeout =
-            error?.name === "AbortError" ||
-            String(error?.message ?? "").toLowerCase().includes("aborted");
-
-        return {
-            ok: false,
-            replyText: "",
-            errorMessage: isTimeout ? "Request timed out" : (error?.message ?? "Network error"),
-            analysisSource: "cloud",
-            remoteUrl,
-            remoteError: isTimeout ? "timeout" : (error?.message ?? String(error)),
-        };
+      if (
+        !toneContext.companion.relationship &&
+        opts.settings.relationshipTone
+      ) {
+        toneContext.companion.relationship = opts.settings.relationshipTone;
+      }
+      if (!toneContext.companion.gender && opts.settings.genderTone) {
+        toneContext.companion.gender = opts.settings.genderTone;
+      }
     }
+
+    // ✅ Unique per-call requestId (helps the server avoid accidental dedupe / repeats)
+    const requestId = `m_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+    debugLog("[imotara] outbound request", {
+      requestId,
+      analysisMode: opts?.analysisMode,
+      messageLen: typeof message === "string" ? message.length : -1,
+      messagePreview:
+        typeof message === "string" ? message.slice(0, 120) : String(message),
+      companion: {
+        enabled: toneContext?.companion?.enabled,
+        name: toneContext?.companion?.name,
+        relationship: toneContext?.companion?.relationship,
+        ageTone: toneContext?.companion?.ageTone,
+        ageRange: toneContext?.companion?.ageRange,
+        gender: toneContext?.companion?.gender,
+      },
+    });
+
+    const remoteUrl = `${IMOTARA_API_BASE_URL}/api/respond`;
+
+    const res = await fetchWithTimeout(
+      remoteUrl,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          requestId,
+          message,
+
+          // ✅ Additive: also send analysisMode at top-level (server/web parity)
+          ...(opts?.analysisMode ? { analysisMode: opts.analysisMode } : {}),
+
+          // ✅ IMPORTANT: send toneContext at the TOP LEVEL (server contract)
+          ...(toneContext ? { toneContext } : {}),
+
+          // ✅ Keep context payload too (additive / backward compatible)
+          context: {
+            source: "mobile",
+            analysisMode: opts?.analysisMode,
+            emotionInsightsEnabled: opts?.emotionInsightsEnabled,
+
+            // keep this for older server parsing / debugging (non-breaking)
+            ...(toneContext ? { toneContext } : {}),
+
+            // soft persona hints (do NOT roleplay; just wording guidance)
+            persona: opts?.settings
+              ? {
+                  relationshipTone: opts.settings.relationshipTone,
+                  ageTone: opts.settings.ageTone,
+                  genderTone: opts.settings.genderTone,
+                }
+              : undefined,
+
+            // last few messages for continuity (send both keys for max compatibility)
+            recentMessages: opts?.recentMessages ?? undefined,
+
+            // back-compat (older servers/clients might look for `recent`)
+            recent: opts?.recentMessages ?? undefined,
+          },
+        }),
+      },
+      opts?.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS,
+    );
+
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      return {
+        ok: false,
+        replyText: "",
+        errorMessage: `HTTP ${res.status}`,
+        analysisSource: "cloud",
+        remoteUrl,
+        remoteStatus: res.status,
+        remoteError: bodyText ? bodyText.slice(0, 200) : `HTTP ${res.status}`,
+      };
+    }
+
+    const rawText = await res.text().catch(() => "");
+    let data: any = null;
+
+    try {
+      data = rawText ? JSON.parse(rawText) : {};
+    } catch (e) {
+      debugWarn("[imotara] cloud response was not valid JSON", {
+        status: res.status,
+        body: rawText.slice(0, 200),
+      });
+
+      return {
+        ok: false,
+        replyText: "",
+        errorMessage: "Invalid server response",
+        analysisSource: "cloud",
+        remoteUrl,
+        remoteStatus: res.status,
+        remoteError: rawText ? rawText.slice(0, 200) : "Invalid JSON",
+      };
+    }
+
+    // Debug log – see in Metro console (gated for QA/prod cleanliness)
+    debugLog("Imotara mobile AI raw response:", JSON.stringify(data, null, 2));
+
+    // ✅ Focused debug: confirm exactly what the server sent for emotion
+    debugLog("[imotara] cloud emotion fields", {
+      emotion: data?.emotion,
+      intensity: data?.intensity,
+      metaEmotion: data?.meta?.emotion,
+      metaIntensity: data?.meta?.intensity,
+      metaKeys:
+        data?.meta && typeof data.meta === "object"
+          ? Object.keys(data.meta)
+          : undefined,
+    });
+
+    // 1) Try common "direct reply" fields first
+    // Backend contract (strict):
+    // { message: string, reflectionSeed?: {...}, followUp?: string }
+    let replyText = String(data?.message ?? "").trim();
+
+    if (replyText.length > MAX_REMOTE_REPLY_CHARS) {
+      debugWarn(
+        "[imotara] cloud reply too long; truncating for mobile safety",
+        {
+          len: replyText.length,
+          cap: MAX_REMOTE_REPLY_CHARS,
+        },
+      );
+      replyText = replyText.slice(0, MAX_REMOTE_REPLY_CHARS).trimEnd() + "…";
+    }
+
+    if (!replyText) {
+      return {
+        ok: false,
+        replyText: "",
+        errorMessage: "Invalid /api/respond response: missing message",
+      };
+    }
+
+    if (!replyText.trim()) {
+      return {
+        ok: false,
+        replyText: "",
+        errorMessage: "No reply text returned from server",
+      };
+    }
+
+    // ✅ Preserve server emotion signal (cloud often nests it under meta)
+    // Supports:
+    // - data.emotion: string
+    // - data.meta.emotionLabel: string
+    // - data.meta.emotion: { primary: string, intensity: "low"|"medium"|"high", ... }
+    const meta = data?.meta;
+
+    const metaEmotionObj =
+      meta &&
+      typeof meta === "object" &&
+      (meta as any).emotion &&
+      typeof (meta as any).emotion === "object"
+        ? (meta as any).emotion
+        : undefined;
+
+    const emotionRaw =
+      data?.emotion ??
+      (meta && typeof meta === "object"
+        ? (meta as any).emotionLabel
+        : undefined) ??
+      metaEmotionObj?.primary;
+
+    let emotion =
+      typeof emotionRaw === "string" && emotionRaw.trim()
+        ? emotionRaw.trim()
+        : undefined;
+
+    // ✅ If server doesn't send emotion, derive a safe fallback from the input message
+    // This prevents mobile UI from defaulting to neutral for Indian language inputs.
+    if (!emotion) {
+      const raw = String(message || "").trim();
+      const t = raw.toLowerCase().replace(/\s+/g, " ");
+
+      // 1) Emoji-first shortcuts (QA cases)
+      // Only apply emoji rules when the input is basically emojis/symbols (prevents accidental matches)
+      const emojiOnly =
+        raw.length > 0 && !/[a-z0-9\u0900-\u097F\u0980-\u09FF]/i.test(raw);
+
+      if (emojiOnly) {
+        // 😂😂😂 -> joy
+        if (/[😂😄😆🤣]/.test(raw)) {
+          emotion = "joy";
+        }
+        // 👍 -> neutral (simple positive acknowledgement)
+        else if (/[👍✅]/.test(raw)) {
+          emotion = "neutral";
+        }
+      } else if (/\b(lol|lmao|rofl)\b/.test(t)) {
+        emotion = "joy";
+      }
+
+      // 2) Existing Indian language keyword maps
+      else if (HI_STRESS_REGEX.test(raw)) emotion = "stressed";
+      else if (BN_SAD_REGEX.test(raw)) emotion = "sad";
+      // 3) English lightweight fallbacks (covers your failing QA lines)
+      else if (/\b(lonely|down|depressed|sad)\b/.test(t)) emotion = "sad";
+      else if (/\b(stressed|stress|worried|anxious|panic)\b/.test(t))
+        emotion = "stressed";
+      else if (/\b(frustrated|angry|mad|furious|irritated)\b/.test(t))
+        emotion = "angry";
+      else if (/\b(hopeful|optimistic)\b/.test(t) || /✨/.test(raw))
+        emotion = "hopeful";
+      // 4) Confusion detection (existing)
+      else if (isConfusedText(raw)) emotion = "confused";
+      else {
+        // ✅ Extra safety: romanized Hindi confused (common user inputs)
+        if (
+          /\bsamajh nahi aa raha\b/.test(t) ||
+          /\bsamajh nahi aa rahi\b/.test(t) ||
+          /\bkya karu\b/.test(t) ||
+          /\bwhat should i do\b/.test(t)
+        ) {
+          emotion = "confused";
+        }
+      }
+    }
+
+    // intensity can be numeric or (in meta.emotion) a string level
+    const intensityRaw =
+      data?.intensity ??
+      (meta && typeof meta === "object"
+        ? (meta as any).intensity
+        : undefined) ??
+      metaEmotionObj?.intensity;
+
+    const intensity =
+      typeof intensityRaw === "number" && Number.isFinite(intensityRaw)
+        ? intensityRaw
+        : typeof intensityRaw === "string"
+          ? intensityRaw === "high"
+            ? 1
+            : intensityRaw === "medium"
+              ? 0.66
+              : intensityRaw === "low"
+                ? 0.33
+                : undefined
+          : undefined;
+
+    return {
+      ok: true,
+      replyText,
+
+      // ✅ carry through parity fields if server provides them
+      reflectionSeed: data?.reflectionSeed,
+      followUp: typeof data?.followUp === "string" ? data.followUp : undefined,
+
+      // ✅ IMPORTANT: keep the server meta so QA/UI can read meta.emotionLabel, meta.emotion.primary, etc.
+      meta: data?.meta,
+
+      // ✅ used by ChatScreen to show correct mood chip
+      emotion,
+      intensity,
+
+      // ✅ explicit source + diagnostics
+      analysisSource: "cloud",
+      remoteUrl,
+    };
+  } catch (error: any) {
+    debugWarn("Imotara mobile AI fetch error:", error);
+
+    const remoteUrl = `${IMOTARA_API_BASE_URL}/api/respond`;
+    const isTimeout =
+      error?.name === "AbortError" ||
+      String(error?.message ?? "")
+        .toLowerCase()
+        .includes("aborted");
+
+    return {
+      ok: false,
+      replyText: "",
+      errorMessage: isTimeout
+        ? "Request timed out"
+        : (error?.message ?? "Network error"),
+      analysisSource: "cloud",
+      remoteUrl,
+      remoteError: isTimeout ? "timeout" : (error?.message ?? String(error)),
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -441,115 +490,124 @@ export async function callImotaraAI(
 // ---------------------------------------------------------------------------
 
 export type RemoteChatMessage = {
+  id: string;
+  userScope: string;
+  threadId: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: number;
+};
+
+export type GetChatMessagesResponse = {
+  messages: RemoteChatMessage[];
+  serverTs?: number;
+};
+
+function buildChatMessagesUrl(params?: {
+  threadId?: string;
+  since?: number;
+}): string {
+  const base = `${IMOTARA_API_BASE_URL}/api/chat/messages`;
+  const q = new URLSearchParams();
+
+  if (params?.threadId) q.set("threadId", params.threadId);
+  if (typeof params?.since === "number") q.set("since", String(params.since));
+
+  // DEV-only cache-bypass to avoid stale CDN responses during deployments
+  if (__DEV__) q.set("ts", String(Date.now()));
+
+  const qs = q.toString();
+  return qs ? `${base}?${qs}` : base;
+}
+
+export async function fetchRemoteChatMessages(args: {
+  userScope: string;
+  threadId?: string;
+  since?: number;
+}): Promise<GetChatMessagesResponse> {
+  const remoteUrl = buildChatMessagesUrl({
+    threadId: args.threadId,
+    since: args.since,
+  });
+
+  try {
+    const res = await fetch(remoteUrl, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "x-imotara-user": args.userScope,
+      },
+    });
+
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      debugWarn("[imotara] fetchRemoteChatMessages failed", {
+        status: res.status,
+        body: bodyText.slice(0, 200),
+      });
+      return { messages: [] };
+    }
+
+    const rawText = await res.text().catch(() => "");
+    let data: any = null;
+
+    try {
+      data = rawText ? JSON.parse(rawText) : {};
+    } catch (e) {
+      debugWarn("[imotara] fetchRemoteChatMessages: invalid JSON", {
+        status: res.status,
+        body: rawText.slice(0, 200),
+      });
+      return { messages: [] };
+    }
+
+    const messages = Array.isArray(data?.messages)
+      ? (data.messages as RemoteChatMessage[])
+      : [];
+    return {
+      messages,
+      serverTs: typeof data?.serverTs === "number" ? data.serverTs : undefined,
+    };
+  } catch (err: any) {
+    debugWarn("[imotara] fetchRemoteChatMessages error", err);
+    return { messages: [] };
+  }
+}
+
+export async function pushRemoteChatMessages(args: {
+  userScope: string;
+  messages: Array<{
     id: string;
-    userScope: string;
     threadId: string;
     role: "user" | "assistant";
     content: string;
     createdAt: number;
-};
-
-export type GetChatMessagesResponse = {
-    messages: RemoteChatMessage[];
-    serverTs?: number;
-};
-
-function buildChatMessagesUrl(params?: { threadId?: string; since?: number }): string {
-    const base = `${IMOTARA_API_BASE_URL}/api/chat/messages`;
-    const q = new URLSearchParams();
-
-    if (params?.threadId) q.set("threadId", params.threadId);
-    if (typeof params?.since === "number") q.set("since", String(params.since));
-
-    // DEV-only cache-bypass to avoid stale CDN responses during deployments
-    if (__DEV__) q.set("ts", String(Date.now()));
-
-    const qs = q.toString();
-    return qs ? `${base}?${qs}` : base;
-}
-
-
-export async function fetchRemoteChatMessages(args: {
-    userScope: string;
-    threadId?: string;
-    since?: number;
-}): Promise<GetChatMessagesResponse> {
-    const remoteUrl = buildChatMessagesUrl({ threadId: args.threadId, since: args.since });
-
-    try {
-        const res = await fetch(remoteUrl, {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-                "x-imotara-user": args.userScope,
-            },
-        });
-
-        if (!res.ok) {
-            const bodyText = await res.text().catch(() => "");
-            debugWarn("[imotara] fetchRemoteChatMessages failed", {
-                status: res.status,
-                body: bodyText.slice(0, 200),
-            });
-            return { messages: [] };
-        }
-
-        const rawText = await res.text().catch(() => "");
-        let data: any = null;
-
-        try {
-            data = rawText ? JSON.parse(rawText) : {};
-        } catch (e) {
-            debugWarn("[imotara] fetchRemoteChatMessages: invalid JSON", {
-                status: res.status,
-                body: rawText.slice(0, 200),
-            });
-            return { messages: [] };
-        }
-
-        const messages = Array.isArray(data?.messages) ? (data.messages as RemoteChatMessage[]) : [];
-        return { messages, serverTs: typeof data?.serverTs === "number" ? data.serverTs : undefined };
-    } catch (err: any) {
-        debugWarn("[imotara] fetchRemoteChatMessages error", err);
-        return { messages: [] };
-    }
-}
-
-export async function pushRemoteChatMessages(args: {
-    userScope: string;
-    messages: Array<{
-        id: string;
-        threadId: string;
-        role: "user" | "assistant";
-        content: string;
-        createdAt: number;
-    }>;
+  }>;
 }): Promise<{ ok: boolean; errorMessage?: string }> {
-    const remoteUrl = `${IMOTARA_API_BASE_URL}/api/chat/messages`;
+  const remoteUrl = `${IMOTARA_API_BASE_URL}/api/chat/messages`;
 
-    try {
-        const res = await fetch(remoteUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-imotara-user": args.userScope,
-            },
-            body: JSON.stringify({ messages: args.messages }),
-        });
+  try {
+    const res = await fetch(remoteUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-imotara-user": args.userScope,
+      },
+      body: JSON.stringify({ messages: args.messages }),
+    });
 
-        if (!res.ok) {
-            const bodyText = await res.text().catch(() => "");
-            debugWarn("[imotara] pushRemoteChatMessages failed", {
-                status: res.status,
-                body: bodyText.slice(0, 200),
-            });
-            return { ok: false, errorMessage: `HTTP ${res.status}` };
-        }
-
-        return { ok: true };
-    } catch (err: any) {
-        debugWarn("[imotara] pushRemoteChatMessages error", err);
-        return { ok: false, errorMessage: err?.message ?? "Network error" };
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      debugWarn("[imotara] pushRemoteChatMessages failed", {
+        status: res.status,
+        body: bodyText.slice(0, 200),
+      });
+      return { ok: false, errorMessage: `HTTP ${res.status}` };
     }
-}
 
+    return { ok: true };
+  } catch (err: any) {
+    debugWarn("[imotara] pushRemoteChatMessages error", err);
+    return { ok: false, errorMessage: err?.message ?? "Network error" };
+  }
+}
