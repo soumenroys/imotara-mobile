@@ -301,8 +301,10 @@ export async function callImotaraAI(
 
     // ✅ Focused debug: confirm exactly what the server sent for emotion
     debugLog("[imotara] cloud emotion fields", {
+      requestId: data?.requestId,
       emotion: data?.emotion,
       intensity: data?.intensity,
+      metaEmotionLabel: data?.meta?.emotionLabel,
       metaEmotion: data?.meta?.emotion,
       metaIntensity: data?.meta?.intensity,
       metaKeys:
@@ -382,12 +384,13 @@ export async function callImotaraAI(
         raw.length > 0 && !/[a-z0-9\u0900-\u097F\u0980-\u09FF]/i.test(raw);
 
       if (emojiOnly) {
-        // 😂😂😂 -> joy
-        if (/[😂😄😆🤣]/.test(raw)) {
+        // Unicode-safe emoji detection (prevents surrogate-pair false matches)
+        // 😂 (1F602), 😄 (1F604), 😆 (1F606), 🤣 (1F923)
+        if (/[\u{1F602}\u{1F604}\u{1F606}\u{1F923}]/u.test(raw)) {
           emotion = "joy";
         }
-        // 👍 -> neutral (simple positive acknowledgement)
-        else if (/[👍✅]/.test(raw)) {
+        // 👍 (1F44D) or ✅ (2705)
+        else if (/[\u{1F44D}\u{2705}]/u.test(raw)) {
           emotion = "neutral";
         }
       } else if (/\b(lol|lmao|rofl)\b/.test(t)) {

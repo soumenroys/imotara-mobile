@@ -1228,23 +1228,6 @@ export default function ChatScreen() {
     prompt: string,
   ): Promise<string | undefined> => {
     try {
-      const raw = String(prompt ?? "").trim();
-      const emojiOnly =
-        raw.length > 0 && !/[a-z0-9\u0900-\u097F\u0980-\u09FF]/i.test(raw);
-
-      // ✅ DEV-QA normalization: keep emoji expectations stable
-      // (Cloud model may label 👍 as joy; QA expects neutral.)
-      if (emojiOnly) {
-        // Use Unicode codepoint regex with 'u' flag to avoid surrogate-pair false matches
-
-        // 👍 (U+1F44D)
-        if (/\u{1F44D}/u.test(raw)) return "neutral";
-
-        // 😂 (1F602), 😄 (1F604), 😆 (1F606), 🤣 (1F923)
-        if (/[\u{1F602}\u{1F604}\u{1F606}\u{1F923}]/u.test(raw)) {
-          return "joy";
-        }
-      }
 
       const remote: any = await callImotaraAI(prompt, {
         toneContext: toneContext
