@@ -155,6 +155,48 @@ function normalizeToneContext(
   return next;
 }
 
+function deriveEmotionHintFromMessage(message: string): string | undefined {
+  const raw = String(message || "").trim();
+  if (!raw) return undefined;
+
+  const t = raw.toLowerCase().replace(/\s+/g, " ");
+
+  // Emoji-only inputs (QA cases)
+  const emojiOnly =
+    raw.length > 0 && !/[a-z0-9\u0900-\u097F\u0980-\u09FF]/i.test(raw);
+
+  if (emojiOnly) {
+    // 😂 😄 😆 🤣
+    if (/[\u{1F602}\u{1F604}\u{1F606}\u{1F923}]/u.test(raw)) return "joy";
+    // 👍 ✅
+    if (/[\u{1F44D}\u{2705}]/u.test(raw)) return "neutral";
+  }
+
+  // Indian language keyword maps
+  if (HI_STRESS_REGEX.test(raw)) return "stressed";
+  if (BN_SAD_REGEX.test(raw)) return "sad";
+
+  // English lightweight fallbacks (covers failing QA)
+  if (/\b(lonely|down|depressed|sad)\b/.test(t)) return "sad";
+  if (/\b(stressed|stress|worried|anxious|panic)\b/.test(t)) return "stressed";
+  if (/\b(frustrated|angry|mad|furious|irritated)\b/.test(t)) return "angry";
+  if (/\b(hopeful|optimistic)\b/.test(t) || /✨/.test(raw)) return "hopeful";
+
+  if (isConfusedText(raw)) return "confused";
+
+  // Romanized Hindi confusion (common)
+  if (
+    /\bsamajh nahi aa raha\b/.test(t) ||
+    /\bsamajh nahi aa rahi\b/.test(t) ||
+    /\bkya karu\b/.test(t) ||
+    /\bwhat should i do\b/.test(t)
+  ) {
+    return "confused";
+  }
+
+  return undefined;
+}
+
 export async function callImotaraAI(
   message: string,
   opts?: CallAIOptions,
@@ -215,6 +257,8 @@ export async function callImotaraAI(
 
     const remoteUrl = `${IMOTARA_API_BASE_URL}/api/respond`;
 
+    const emotionHint = deriveEmotionHintFromMessage(message);
+
     const res = await fetchWithTimeout(
       remoteUrl,
       {
@@ -226,22 +270,23 @@ export async function callImotaraAI(
           requestId,
           message,
 
-          // ✅ Additive: also send analysisMode at top-level (server/web parity)
           ...(opts?.analysisMode ? { analysisMode: opts.analysisMode } : {}),
 
-          // ✅ IMPORTANT: send toneContext at the TOP LEVEL (server contract)
+          // ✅ Additive: provide a soft hint (server may ignore; safe if unused)
+          ...(emotionHint ? { emotionHint } : {}),
+
           ...(toneContext ? { toneContext } : {}),
 
-          // ✅ Keep context payload too (additive / backward compatible)
           context: {
             source: "mobile",
             analysisMode: opts?.analysisMode,
             emotionInsightsEnabled: opts?.emotionInsightsEnabled,
 
-            // keep this for older server parsing / debugging (non-breaking)
+            // ✅ Back-compat: include hint in context too (safe if ignored)
+            ...(emotionHint ? { emotionHint } : {}),
+
             ...(toneContext ? { toneContext } : {}),
 
-            // soft persona hints (do NOT roleplay; just wording guidance)
             persona: opts?.settings
               ? {
                   relationshipTone: opts.settings.relationshipTone,
@@ -250,10 +295,7 @@ export async function callImotaraAI(
                 }
               : undefined,
 
-            // last few messages for continuity (send both keys for max compatibility)
             recentMessages: opts?.recentMessages ?? undefined,
-
-            // back-compat (older servers/clients might look for `recent`)
             recent: opts?.recentMessages ?? undefined,
           },
         }),
@@ -372,55 +414,67 @@ export async function callImotaraAI(
         ? emotionRaw.trim()
         : undefined;
 
-    // ✅ If server doesn't send emotion, derive a safe fallback from the input message
-    // This prevents mobile UI from defaulting to neutral for Indian language inputs.
-    if (!emotion) {
+    // ✅ Local fallback (computed always so we can override cloud "neutral" when it's clearly wrong)
+    const localFallbackEmotion = (() => {
       const raw = String(message || "").trim();
+      if (!raw) return undefined;
+
       const t = raw.toLowerCase().replace(/\s+/g, " ");
 
       // 1) Emoji-first shortcuts (QA cases)
-      // Only apply emoji rules when the input is basically emojis/symbols (prevents accidental matches)
       const emojiOnly =
         raw.length > 0 && !/[a-z0-9\u0900-\u097F\u0980-\u09FF]/i.test(raw);
 
       if (emojiOnly) {
         // Unicode-safe emoji detection (prevents surrogate-pair false matches)
         // 😂 (1F602), 😄 (1F604), 😆 (1F606), 🤣 (1F923)
-        if (/[\u{1F602}\u{1F604}\u{1F606}\u{1F923}]/u.test(raw)) {
-          emotion = "joy";
-        }
+        if (/[\u{1F602}\u{1F604}\u{1F606}\u{1F923}]/u.test(raw)) return "joy";
         // 👍 (1F44D) or ✅ (2705)
-        else if (/[\u{1F44D}\u{2705}]/u.test(raw)) {
-          emotion = "neutral";
-        }
+        if (/[\u{1F44D}\u{2705}]/u.test(raw)) return "neutral";
       } else if (/\b(lol|lmao|rofl)\b/.test(t)) {
-        emotion = "joy";
+        return "joy";
       }
 
       // 2) Existing Indian language keyword maps
-      else if (HI_STRESS_REGEX.test(raw)) emotion = "stressed";
-      else if (BN_SAD_REGEX.test(raw)) emotion = "sad";
+      if (HI_STRESS_REGEX.test(raw)) return "stressed";
+      if (BN_SAD_REGEX.test(raw)) return "sad";
+
       // 3) English lightweight fallbacks (covers your failing QA lines)
-      else if (/\b(lonely|down|depressed|sad)\b/.test(t)) emotion = "sad";
-      else if (/\b(stressed|stress|worried|anxious|panic)\b/.test(t))
-        emotion = "stressed";
-      else if (/\b(frustrated|angry|mad|furious|irritated)\b/.test(t))
-        emotion = "angry";
-      else if (/\b(hopeful|optimistic)\b/.test(t) || /✨/.test(raw))
-        emotion = "hopeful";
+      if (/\b(lonely|down|depressed|sad)\b/.test(t)) return "sad";
+      if (/\b(stressed|stress|worried|anxious|panic)\b/.test(t))
+        return "stressed";
+      if (/\b(frustrated|angry|mad|furious|irritated)\b/.test(t))
+        return "angry";
+      if (/\b(hopeful|optimistic)\b/.test(t) || /✨/.test(raw))
+        return "hopeful";
+
       // 4) Confusion detection (existing)
-      else if (isConfusedText(raw)) emotion = "confused";
-      else {
-        // ✅ Extra safety: romanized Hindi confused (common user inputs)
-        if (
-          /\bsamajh nahi aa raha\b/.test(t) ||
-          /\bsamajh nahi aa rahi\b/.test(t) ||
-          /\bkya karu\b/.test(t) ||
-          /\bwhat should i do\b/.test(t)
-        ) {
-          emotion = "confused";
-        }
+      if (isConfusedText(raw)) return "confused";
+
+      // ✅ Extra safety: romanized Hindi confused (common user inputs)
+      if (
+        /\bsamajh nahi aa raha\b/.test(t) ||
+        /\bsamajh nahi aa rahi\b/.test(t) ||
+        /\bkya karu\b/.test(t) ||
+        /\bwhat should i do\b/.test(t)
+      ) {
+        return "confused";
       }
+
+      return undefined;
+    })();
+
+    // If server doesn't send emotion at all, use local fallback.
+    if (!emotion) {
+      emotion = localFallbackEmotion;
+    }
+    // If server says "neutral" but local fallback is clearly non-neutral, override.
+    else if (
+      emotion === "neutral" &&
+      localFallbackEmotion &&
+      localFallbackEmotion !== "neutral"
+    ) {
+      emotion = localFallbackEmotion;
     }
 
     // intensity can be numeric or (in meta.emotion) a string level

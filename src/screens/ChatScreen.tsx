@@ -303,6 +303,17 @@ function getMoodTintForHint(hint?: string): string {
     return colors.emotionAngry;
   if (text.includes("stuck") || text.includes("unsure"))
     return colors.emotionConfused;
+
+  // ✅ NEW: joy/happy/playful should tint green
+  if (
+    text.includes("joy") ||
+    text.includes("playful") ||
+    text.includes("playfulness") ||
+    text.includes("happy")
+  ) {
+    return colors.emotionHopeful;
+  }
+
   if (text.includes("light") || text.includes("hope"))
     return colors.emotionHopeful;
 
@@ -499,6 +510,25 @@ function getLocalMoodHintWithPrimary(text: string): {
 } {
   const t = text.trim().toLowerCase();
 
+  // ✅ NEW: emoji-only joy detection (so 😂😂😂 becomes "joy", not "hopeful"/neutral)
+  const raw = String(text ?? "").trim();
+  const emojiOnly =
+    raw.length > 0 && !/[a-z0-9\u0900-\u097F\u0980-\u09FF]/i.test(raw);
+
+  if (emojiOnly) {
+    // 😂 😄 😆 🤣 😀 😃 😁 😊
+    if (
+      /[\u{1F602}\u{1F604}\u{1F606}\u{1F923}\u{1F600}\u{1F603}\u{1F601}\u{1F60A}]/u.test(
+        raw,
+      )
+    ) {
+      return {
+        primary: "joy",
+        hint: "I can sense some joy or playfulness in what you’re sharing.",
+      };
+    }
+  }
+
   // mirrored buckets from getLocalMoodHint (keep in sync; additive)
   const sadWords = [
     "sad",
@@ -628,6 +658,7 @@ function getDefaultIntensityForPrimary(primary?: string): number | undefined {
   if (p === "sadness") return 0.7;
   if (p === "anger") return 0.7;
   if (p === "hopeful") return 0.55;
+  if (p === "joy") return 0.55;
 
   return undefined;
 }
@@ -1228,7 +1259,6 @@ export default function ChatScreen() {
     prompt: string,
   ): Promise<string | undefined> => {
     try {
-
       const remote: any = await callImotaraAI(prompt, {
         toneContext: toneContext
           ? {
@@ -1288,9 +1318,10 @@ export default function ChatScreen() {
         return x;
       };
 
-      // Prefer canonical field first (server now guarantees meta.emotionLabel),
-      // then fall back safely to other shapes, and finally derive from meta.emotion.primary.
+      // Prefer the same canonical field the mobile UI uses first (aiClient.ts returns `emotion`).
+      // This keeps QA-CLOUD aligned with what the app would actually show.
       const directLabel =
+        remote?.emotion ??
         remote?.meta?.emotionLabel ??
         remote?.response?.meta?.emotionLabel ??
         remote?.emotionLabel;
