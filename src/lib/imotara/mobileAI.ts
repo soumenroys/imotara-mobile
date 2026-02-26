@@ -41,7 +41,7 @@ function localFallback(userText: string, insightsEnabled: boolean): MobileAIResu
 
     return {
         replyText:
-            "I hear you. In the full version I respond with deeper empathy and insight. This preview uses a local fallback.",
+            "I hear you. In the full version I respond with deeper empathy and insight. This version uses a local fallback.",
         moodHint,
         source: "local-fallback",
     };

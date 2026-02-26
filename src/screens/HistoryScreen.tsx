@@ -652,7 +652,7 @@ export default function HistoryScreen() {
                         marginBottom: 6,
                     }}
                 >
-                    A simple preview of your recent conversations with Imotara on
+                    A simple view of your recent conversations with Imotara on
                     this device.
                 </Text>
 

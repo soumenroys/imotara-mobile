@@ -2,7 +2,7 @@
 //
 // Small helper to call the Imotara AI backend from the mobile app.
 // Returns a plain replyText + basic error info so ChatScreen can decide
-// whether to fallback to local preview.
+// whether to fallback to local version.
 
 import { IMOTARA_API_BASE_URL } from "../config/api";
 import { debugLog, debugWarn } from "../config/debug";

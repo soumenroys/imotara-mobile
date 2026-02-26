@@ -639,7 +639,7 @@ export default function SettingsScreen() {
                         marginBottom: 24,
                     }}
                 >
-                    Imotara Mobile (preview). By default your messages stay on this
+                    Imotara Mobile. By default your messages stay on this
                     device. From here you can try early emotion insights and sync
                     options — future versions will add full cloud backup controls and
                     teen safety settings.
@@ -753,7 +753,7 @@ export default function SettingsScreen() {
                             marginTop: 6,
                         }}
                     >
-                        Billing is not enabled in this preview. This plan flag is used
+                        Billing is not enabled yet. This plan flag is used
                         only to prepare feature gating (e.g., cloud sync / history depth)
                         for a future release.
                     </Text>
@@ -835,7 +835,7 @@ export default function SettingsScreen() {
                     )}
                 </AppSurface>
 
-                {/* Emotion Insights (preview) card */}
+                {/* Emotion Insights card */}
                 <AppSurface style={{ marginBottom: 16 }}>
                     <View
                         style={{
@@ -852,7 +852,7 @@ export default function SettingsScreen() {
                                 fontWeight: "500",
                             }}
                         >
-                            Emotion Insights (Preview)
+                            Emotion Insights
                         </Text>
                         <Switch
                             value={emotionInsightsEnabled}
@@ -874,7 +874,7 @@ export default function SettingsScreen() {
                     >
                         When enabled, Imotara will try to give you deeper emotional
                         reflections, suggestions, and gentle prompts in the chat. In
-                        this early preview, analysis still runs locally on your device.
+                        this early version, analysis still runs locally on your device.
                     </Text>
 
                     <Text

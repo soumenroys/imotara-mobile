@@ -2752,7 +2752,7 @@ export default function ChatScreen() {
           <Text
             style={{ marginLeft: 6, fontSize: 11, color: colors.textSecondary }}
           >
-            (mobile preview)
+            (mobile)
           </Text>
 
           <View style={{ flex: 1 }} />
@@ -2931,7 +2931,7 @@ export default function ChatScreen() {
                     marginTop: 4,
                   }}
                 >
-                  (debug preview)
+                  (debug)
                 </Text>
               )}
             </View>
