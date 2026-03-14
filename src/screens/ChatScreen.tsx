@@ -29,6 +29,7 @@ import { useSettings } from "../state/SettingsContext";
 import { useColors } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
 import { callImotaraAI } from "../api/aiClient";
+import { useVoiceInput } from "../hooks/useVoiceInput";
 
 import { LinearGradient } from "expo-linear-gradient";
 import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
@@ -847,6 +848,12 @@ export default function ChatScreen() {
 
   // Breathing modal
   const [breathingVisible, setBreathingVisible] = useState(false);
+
+  // Voice input
+  const voiceInput = useVoiceInput(
+    (text) => setInput((prev) => prev ? `${prev} ${text}` : text),
+    process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL,
+  );
 
   // Message reactions — messageId → emoji
   const [reactions, setReactions] = useState<Map<string, string>>(new Map());
@@ -3102,12 +3109,51 @@ export default function ChatScreen() {
                       borderRadius: 999,
                       borderWidth: 1,
                       borderColor: colors.border,
-                      backgroundColor: "rgba(30, 41, 59, 0.7)",
+                      backgroundColor: colors.surfaceSoft,
                       marginBottom: 4,
                     }}
                   >
                     <Text style={{ fontSize: 14, marginRight: 6 }}>{emoji}</Text>
                     <Text style={{ fontSize: 12, color: colors.textPrimary }}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Multilingual starters — shows Imotara understands Indian languages */}
+              <Text
+                style={{ fontSize: 11, color: colors.textSecondary, marginTop: 16, marginBottom: 8, opacity: 0.7 }}
+              >
+                Or try in your language:
+              </Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                {[
+                  { flag: "🇮🇳", lang: "हिंदी",   text: "मन ठीक नहीं है" },
+                  { flag: "🇮🇳", lang: "বাংলা",   text: "মন খারাপ লাগছে" },
+                  { flag: "🇮🇳", lang: "தமிழ்",  text: "romba kashtama irukku" },
+                  { flag: "🇮🇳", lang: "తెలుగు", text: "chala stress ga undi" },
+                  { flag: "🇮🇳", lang: "ಕನ್ನಡ",  text: "tumba bejar agide" },
+                  { flag: "🇮🇳", lang: "മലയാളം", text: "valiya vishamamundu" },
+                  { flag: "🇮🇳", lang: "ગુજરાતી", text: "man kharap che" },
+                  { flag: "🇮🇳", lang: "ਪੰਜਾਬੀ", text: "man kharab aa" },
+                  { flag: "🇮🇳", lang: "ଓଡ଼ିଆ",  text: "mana kharap laguchhi" },
+                  { flag: "🇮🇳", lang: "मराठी",  text: "man kharab aahe" },
+                ].map(({ flag, lang, text }) => (
+                  <TouchableOpacity
+                    key={lang}
+                    onPress={() => handleSend(text)}
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.surface,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <Text style={{ fontSize: 10, color: colors.primary, fontWeight: "700" }}>{lang}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -3526,8 +3572,19 @@ export default function ChatScreen() {
                 );
                 setInputHeight(nextHeight);
               }}
-              placeholder="Type something you feel..."
-              placeholderTextColor="rgba(148, 163, 184, 0.9)"
+              placeholder={
+                voiceInput.state === "recording"
+                  ? `Recording… ${Math.round(voiceInput.durationMs / 1000)}s`
+                  : voiceInput.state === "transcribing"
+                  ? "Transcribing voice…"
+                  : "Type something you feel…"
+              }
+              editable={voiceInput.state === "idle"}
+              placeholderTextColor={
+                voiceInput.state === "recording"
+                  ? "rgba(239,68,68,0.9)"
+                  : "rgba(148, 163, 184, 0.9)"
+              }
               style={{
                 color: colors.textPrimary,
                 fontSize: 14,
@@ -3536,6 +3593,44 @@ export default function ChatScreen() {
               }}
             />
           </View>
+
+          {/* Mic button — hold to record, tap again to stop */}
+          <TouchableOpacity
+            onPress={async () => {
+              if (voiceInput.state === "idle") {
+                await voiceInput.startRecording();
+              } else if (voiceInput.state === "recording") {
+                await voiceInput.stopRecording();
+              }
+            }}
+            disabled={voiceInput.state === "transcribing"}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              borderRadius: 999,
+              backgroundColor:
+                voiceInput.state === "recording"
+                  ? "rgba(239,68,68,0.2)"
+                  : colors.surfaceSoft,
+              borderWidth: 1,
+              borderColor:
+                voiceInput.state === "recording"
+                  ? "rgba(239,68,68,0.6)"
+                  : colors.border,
+              marginRight: 6,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            accessibilityLabel={voiceInput.state === "recording" ? "Stop recording" : "Start voice input"}
+          >
+            <Text style={{ fontSize: 16 }}>
+              {voiceInput.state === "transcribing"
+                ? "⏳"
+                : voiceInput.state === "recording"
+                ? "⏹️"
+                : "🎙️"}
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => handleSend()}

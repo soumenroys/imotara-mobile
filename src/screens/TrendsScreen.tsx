@@ -281,6 +281,106 @@ export default function TrendsScreen() {
         })}
       </View>
 
+      {/* Weekly emotion report */}
+      {sorted.length > 0 && (() => {
+        const now = new Date();
+        // Sunday = 0; show report from Sunday onwards
+        const dayOfWeek = now.getDay();
+        const weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - dayOfWeek);
+        weekStart.setHours(0, 0, 0, 0);
+        const weekStartLabel = weekStart.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+        const weekEndLabel = now.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
+        // Positive emotions ratio
+        const positiveCount = weekEmotions.filter(
+          (e) => e === "hopeful" || e === "joy"
+        ).length;
+        const positiveRatio = weekEmotions.length > 0
+          ? Math.round((positiveCount / weekEmotions.length) * 100)
+          : 0;
+
+        // Insight line
+        let insight = "";
+        if (topEmotion === "hopeful" || topEmotion === "joy") {
+          insight = "You had a positive week overall. Keep nurturing what's working.";
+        } else if (topEmotion === "sadness") {
+          insight = "This week felt heavy. Be gentle with yourself — one step at a time.";
+        } else if (topEmotion === "stressed") {
+          insight = "Stress dominated this week. Consider a breathing break when it peaks.";
+        } else if (topEmotion === "anger") {
+          insight = "Frustration showed up often. Your feelings are valid.";
+        } else if (topEmotion === "confused") {
+          insight = "Uncertainty was present this week. Clarity often comes with rest.";
+        } else {
+          insight = "You showed up and reflected. That matters.";
+        }
+
+        return (
+          <View style={{ marginTop: 28 }}>
+            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textSecondary, marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+              Weekly report
+            </Text>
+            <View style={{
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+              padding: 16,
+            }}>
+              <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 8 }}>
+                {weekStartLabel} — {weekEndLabel}
+              </Text>
+
+              {/* Dominant emotion */}
+              {topEmotion && (
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+                  <Text style={{ fontSize: 28, marginRight: 10 }}>{EMOTION_META[topEmotion].emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>Most felt</Text>
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary }}>{EMOTION_META[topEmotion].label}</Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>Positive</Text>
+                    <Text style={{ fontSize: 20, fontWeight: "800", color: positiveRatio >= 50 ? "#22c55e" : colors.textSecondary }}>
+                      {positiveRatio}%
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Emotion distribution pills */}
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                {sorted.slice(0, 4).map(([emotion, count]) => (
+                  <View
+                    key={emotion}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 999,
+                      backgroundColor: EMOTION_META[emotion as EmotionBucket].color,
+                      gap: 4,
+                    }}
+                  >
+                    <Text style={{ fontSize: 12 }}>{EMOTION_META[emotion as EmotionBucket].emoji}</Text>
+                    <Text style={{ fontSize: 11, color: "#fff", fontWeight: "600" }}>{count}x</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Insight */}
+              <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, fontStyle: "italic", lineHeight: 18 }}>
+                  {insight}
+                </Text>
+              </View>
+            </View>
+          </View>
+        );
+      })()}
+
       <View style={{ height: 32 }} />
     </ScrollView>
   );

@@ -18,7 +18,8 @@
       "buildNumber": "9",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "Imotara needs access to your photo library only if you choose to upload or attach an image."
+        "NSPhotoLibraryUsageDescription": "Imotara needs access to your photo library only if you choose to upload or attach an image.",
+        "NSMicrophoneUsageDescription": "Imotara uses the microphone so you can share how you feel by speaking instead of typing."
       }
     },
     "android": {
@@ -29,7 +30,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.RECORD_AUDIO"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
