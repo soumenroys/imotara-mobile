@@ -30,6 +30,12 @@ import { useColors } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
 import { callImotaraAI } from "../api/aiClient";
 import { useVoiceInput } from "../hooks/useVoiceInput";
+import {
+    detectMemories,
+    addMemory,
+    loadMemories,
+    buildMemoryContext,
+} from "../state/companionMemory";
 
 import { LinearGradient } from "expo-linear-gradient";
 import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
@@ -1582,9 +1588,23 @@ export default function ChatScreen() {
           const wantsCloud = analysisMode !== "local";
           const wantsInsights = emotionInsightsEnabled;
 
+          // ── Companion memory ──────────────────────────────────
+          // Detect facts from user's message and persist them
+          const newFacts = detectMemories(trimmed);
+          for (const fact of newFacts) {
+              void addMemory({ text: fact, source: trimmed.slice(0, 80) });
+          }
+          // Load stored memories and build context prefix
+          const memories = await loadMemories();
+          const memoryContext = buildMemoryContext(memories);
+          // Prepend to prompt so both cloud and local AI are aware
+          const promptWithMemory = memoryContext
+              ? `${memoryContext}\nUser message: ${trimmed}`
+              : trimmed;
+
           // 1) Try cloud if allowed by Analysis Mode
           const remote: any = wantsCloud
-            ? await callImotaraAI(trimmed, {
+            ? await callImotaraAI(promptWithMemory, {
                 // ✅ always send toneContext if present (server can decide what to use)
                 // ✅ parity: ensure ageTone is present (fallback to ageRange) when sending
                 toneContext: toneContext
@@ -1763,6 +1783,7 @@ export default function ChatScreen() {
             const localRecentCtx: LocalRecentContext = {
               recentUserTexts: messages.filter((m) => m.from === "user").slice(-5).map((m) => m.text),
               recentAssistantTexts: messages.filter((m) => m.from === "bot").slice(-3).map((m) => m.text),
+              emotionMemory: memoryContext || undefined,
             };
             const local = buildLocalReply(trimmed, toneContext, localRecentCtx);
 
@@ -2903,6 +2924,34 @@ export default function ChatScreen() {
           >
             (mobile)
           </Text>
+
+          {/* AI mode badge */}
+          <View
+            style={{
+              marginLeft: 8,
+              paddingHorizontal: 7,
+              paddingVertical: 2,
+              borderRadius: 999,
+              backgroundColor: analysisMode === "local"
+                ? "rgba(139, 92, 246, 0.18)"
+                : "rgba(59, 130, 246, 0.18)",
+              borderWidth: 1,
+              borderColor: analysisMode === "local"
+                ? "rgba(139, 92, 246, 0.45)"
+                : "rgba(59, 130, 246, 0.45)",
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 10,
+                fontWeight: "600",
+                color: analysisMode === "local" ? "#a78bfa" : "#60a5fa",
+                letterSpacing: 0.3,
+              }}
+            >
+              {analysisMode === "local" ? "LOCAL" : "CLOUD"}
+            </Text>
+          </View>
 
           <View style={{ flex: 1 }} />
 

@@ -22,6 +22,11 @@ import {
     cancelCheckInReminder,
     isCheckInReminderEnabled,
 } from "../notifications/checkInReminder";
+import {
+    loadMemories,
+    clearMemories,
+    type MemoryItem,
+} from "../state/companionMemory";
 import { fetchRemoteHistory } from "../api/historyClient";
 import AppSeparator from "../components/ui/AppSeparator";
 import AppSurface from "../components/ui/AppSurface";
@@ -202,6 +207,28 @@ export default function SettingsScreen() {
         } finally {
             if (mountedRef.current) setReminderLoading(false);
         }
+    };
+
+    // Companion memory
+    const [memories, setMemories] = React.useState<MemoryItem[]>([]);
+    React.useEffect(() => {
+        loadMemories().then(setMemories).catch(() => {});
+    }, []);
+    const handleClearMemories = () => {
+        Alert.alert(
+            "Clear companion memory?",
+            "Imotara will forget what it has learned about you. This cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Clear",
+                    style: "destructive",
+                    onPress: () => {
+                        clearMemories().then(() => setMemories([])).catch(() => {});
+                    },
+                },
+            ]
+        );
     };
 
     // ✅ Link key status (UI only)
@@ -1007,6 +1034,48 @@ export default function SettingsScreen() {
                             thumbColor="#ffffff"
                         />
                     </View>
+                </AppSurface>
+
+                {/* Companion memory */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: memories.length > 0 ? 10 : 0 }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
+                                Companion memory
+                            </Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                                {memories.length === 0
+                                    ? "Nothing stored yet — Imotara will learn from your conversations."
+                                    : `${memories.length} thing${memories.length !== 1 ? "s" : ""} remembered`}
+                            </Text>
+                        </View>
+                        {memories.length > 0 && (
+                            <TouchableOpacity onPress={handleClearMemories} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                <Text style={{ fontSize: 12, color: "rgba(248,113,113,0.9)", fontWeight: "600" }}>Clear</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                    {memories.slice(0, 5).map((m) => (
+                        <View
+                            key={m.id}
+                            style={{
+                                flexDirection: "row",
+                                alignItems: "flex-start",
+                                paddingVertical: 4,
+                                borderTopWidth: 1,
+                                borderTopColor: colors.border,
+                                gap: 6,
+                            }}
+                        >
+                            <Text style={{ fontSize: 11, color: colors.primary, marginTop: 1 }}>●</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>{m.text}</Text>
+                        </View>
+                    ))}
+                    {memories.length > 5 && (
+                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 6 }}>
+                            +{memories.length - 5} more
+                        </Text>
+                    )}
                 </AppSurface>
 
                 {/* ✅ Analysis Mode (Local / Cloud / Auto) */}
