@@ -432,8 +432,10 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
                                 // HistoryItem in this project uses: text, from, timestamp
                                 const text = String((item as any).text ?? (item as any).content ?? "");
-                                const fromRaw = (item as any).from ?? (item as any).role ?? "user";
-                                const from = fromRaw === "assistant" ? "assistant" : "user";
+
+                                // Correctly map "user" → "user", everything else ("bot"/"assistant") → "bot"
+                                const fromRaw = String((item as any).from ?? (item as any).role ?? "user");
+                                const from: "user" | "bot" = fromRaw === "user" ? "user" : "bot";
 
                                 const timestampRaw = (item as any).timestamp ?? (item as any).createdAt;
                                 const timestamp =
@@ -441,12 +443,26 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
                                 if (!id || !text) return null;
 
+                                // Preserve optional metadata so moodSummary and sync state survive restarts
+                                const emotionRaw = (item as any).emotion;
+                                const intensityRaw = (item as any).intensity;
+                                const isSyncedRaw = (item as any).isSynced;
+
                                 return {
                                     id,
                                     text,
                                     from,
                                     timestamp,
-                                } as unknown as HistoryItem;
+                                    ...(typeof emotionRaw === "string" && emotionRaw.trim()
+                                        ? { emotion: emotionRaw.trim() }
+                                        : {}),
+                                    ...(typeof intensityRaw === "number" && Number.isFinite(intensityRaw)
+                                        ? { intensity: intensityRaw }
+                                        : {}),
+                                    ...(typeof isSyncedRaw === "boolean"
+                                        ? { isSynced: isSyncedRaw }
+                                        : {}),
+                                } as HistoryItem;
                             })
                             .filter(Boolean) as HistoryItem[];
 

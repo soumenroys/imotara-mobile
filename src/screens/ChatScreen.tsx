@@ -1544,10 +1544,11 @@ export default function ChatScreen() {
 
     const timestamp = Date.now();
 
-    // ✅ Phase 3.1 — persist user moodHint too (emoji-only + text)
-    // This is additive and mirrors the existing bot-side moodHint behavior.
+    // ✅ Phase 3.1 — persist user moodHint + emotion for history moodSummary
     const wantsInsights = emotionInsightsEnabled;
-    const userMoodHint = wantsInsights ? getLocalMoodHint(trimmed) : undefined;
+    const userMood = wantsInsights ? getLocalMoodHintWithPrimary(trimmed) : null;
+    const userMoodHint = userMood?.hint;
+    const userEmotion = userMood?.primary ?? undefined;
 
     const userMessage: ChatMessage = {
       id: `u-${timestamp}`,
@@ -1565,8 +1566,8 @@ export default function ChatScreen() {
       timestamp: userMessage.timestamp,
       isSynced: false,
 
-      // ✅ Already supported (bot uses it). Now user messages get it too.
-      moodHint: userMoodHint,
+      // ✅ emotion required for moodSummary / session insight card in HistoryScreen
+      ...(userEmotion ? { emotion: userEmotion } : {}),
     });
 
     setMessages((prev) => [...prev, userMessage]);
