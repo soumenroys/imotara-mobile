@@ -18,9 +18,14 @@ export type UseVoiceInputResult = {
 
 const MAX_DURATION_MS = 60_000;
 
-/** Returns expo-av Audio or null if not available (Expo Go). */
-function getAudio(): typeof import("expo-av").Audio | null {
+/** Returns expo-av Audio or null if not available (Expo Go / unlinked builds). */
+function getAudio(): any {
     try {
+        // requireOptionalNativeModule returns null instead of throwing when the
+        // native module isn't linked — safe to call in Expo Go / simulator.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { requireOptionalNativeModule } = require("expo-modules-core");
+        if (!requireOptionalNativeModule("ExponentAV")) return null;
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         return require("expo-av").Audio;
     } catch {
