@@ -10,6 +10,7 @@ import {
   Pressable,
   Animated,
   Vibration,
+  Share,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from "react-native";
@@ -844,6 +845,19 @@ export default function ChatScreen() {
   // Breathing modal
   const [breathingVisible, setBreathingVisible] = useState(false);
 
+  // Message reactions — messageId → emoji
+  const [reactions, setReactions] = useState<Map<string, string>>(new Map());
+  const addReaction = (messageId: string, emoji: string) => {
+    setReactions((prev) => {
+      const next = new Map(prev);
+      // Toggle off if same emoji tapped again
+      if (next.get(messageId) === emoji) next.delete(messageId);
+      else next.set(messageId, emoji);
+      return next;
+    });
+    setActionMessage(null);
+  };
+
   // ✅ Read store once, but allow optional newer helpers safely (no behavior loss)
   const store = useHistoryStore() as any;
   const {
@@ -1406,6 +1420,24 @@ export default function ChatScreen() {
   const handleShowTimestamp = (msg: ChatMessage) => {
     Alert.alert("Message timestamp", new Date(msg.timestamp).toLocaleString());
     setActionMessage(null);
+  };
+
+  const handleExportChat = async () => {
+    if (messages.length === 0) {
+      Alert.alert("Nothing to export", "Start a conversation first.");
+      return;
+    }
+    const lines = messages.map((m) => {
+      const who = m.from === "user" ? "You" : "Imotara";
+      const time = new Date(m.timestamp).toLocaleString();
+      return `[${time}] ${who}: ${m.text}`;
+    });
+    const transcript = `Imotara Chat Export\n${"=".repeat(40)}\n\n${lines.join("\n\n")}`;
+    try {
+      await Share.share({ message: transcript, title: "Imotara Chat" });
+    } catch {
+      Alert.alert("Export failed", "Could not open the share sheet.");
+    }
   };
 
   // ✅ Explicit "sync now" action (uses deduped sync trigger when available)
@@ -2448,6 +2480,11 @@ export default function ChatScreen() {
           </Text>
         </View>
 
+        {/* Reaction emoji */}
+        {reactions.get(message.id) && (
+          <Text style={{ fontSize: 18, marginTop: 4 }}>{reactions.get(message.id)}</Text>
+        )}
+
         {/* ✅ continuity note */}
         {!isUser && showContinuityNote && (
           <Text
@@ -2654,6 +2691,28 @@ export default function ChatScreen() {
             </Text>
           </View>
 
+          {/* Emoji reactions */}
+          <View style={{ flexDirection: "row", justifyContent: "space-around", paddingVertical: 10, marginBottom: 4 }}>
+            {["👍", "💙", "🙏", "✨", "🤔", "❤️"].map((emoji) => {
+              const isActive = reactions.get(actionMessage.id) === emoji;
+              return (
+                <TouchableOpacity
+                  key={emoji}
+                  onPress={() => addReaction(actionMessage.id, emoji)}
+                  style={{
+                    padding: 8,
+                    borderRadius: 999,
+                    backgroundColor: isActive ? "rgba(56,189,248,0.18)" : "transparent",
+                    borderWidth: isActive ? 1 : 0,
+                    borderColor: colors.primary,
+                  }}
+                >
+                  <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           <TouchableOpacity
             onPress={() => handleCopyMessage(actionMessage.text)}
             style={{ paddingVertical: 10 }}
@@ -2727,6 +2786,15 @@ export default function ChatScreen() {
           >
             <Text style={{ fontSize: 14, color: "#fecaca" }}>
               {deleteLabel}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => { setActionMessage(null); void handleExportChat(); }}
+            style={{ paddingVertical: 10 }}
+          >
+            <Text style={{ fontSize: 14, color: colors.textPrimary }}>
+              Export chat
             </Text>
           </TouchableOpacity>
 
