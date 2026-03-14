@@ -1,26 +1,32 @@
 // src/hooks/useVoiceInput.ts
 // Records audio via expo-av and returns the URI for STT transcription.
-// Transcription uses the Web Speech API shim via fetch to the cloud,
-// or falls back to a placeholder so local mode still works gracefully.
+// Uses lazy require so the app doesn't crash in Expo Go / Simulator
+// builds where the native module isn't linked yet.
 
 import { useState, useRef, useCallback } from "react";
 import { Alert, Platform } from "react-native";
-import { Audio } from "expo-av";
 
 export type VoiceInputState = "idle" | "recording" | "transcribing" | "error";
 
 export type UseVoiceInputResult = {
     state: VoiceInputState;
-    /** Start recording. Returns false if permission was denied. */
     startRecording: () => Promise<boolean>;
-    /** Stop recording and transcribe. Calls onTranscript with the result. */
     stopRecording: () => Promise<void>;
-    /** Cancel without transcribing. */
     cancelRecording: () => Promise<void>;
     durationMs: number;
 };
 
-const MAX_DURATION_MS = 60_000; // 1 minute cap
+const MAX_DURATION_MS = 60_000;
+
+/** Returns expo-av Audio or null if not available (Expo Go). */
+function getAudio(): typeof import("expo-av").Audio | null {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        return require("expo-av").Audio;
+    } catch {
+        return null;
+    }
+}
 
 export function useVoiceInput(
     onTranscript: (text: string) => void,
@@ -28,7 +34,7 @@ export function useVoiceInput(
 ): UseVoiceInputResult {
     const [state, setState] = useState<VoiceInputState>("idle");
     const [durationMs, setDurationMs] = useState(0);
-    const recordingRef = useRef<Audio.Recording | null>(null);
+    const recordingRef = useRef<any>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const startTsRef = useRef<number>(0);
 
@@ -42,6 +48,14 @@ export function useVoiceInput(
     const startRecording = useCallback(async (): Promise<boolean> => {
         if (Platform.OS === "web") {
             Alert.alert("Voice input", "Voice input is not supported in the web browser.");
+            return false;
+        }
+        const Audio = getAudio();
+        if (!Audio) {
+            Alert.alert(
+                "Voice input unavailable",
+                "Voice input requires a full native build. It is not available in Expo Go.",
+            );
             return false;
         }
         try {
@@ -67,7 +81,6 @@ export function useVoiceInput(
             setDurationMs(0);
             setState("recording");
 
-            // Tick duration counter
             timerRef.current = setInterval(() => {
                 const elapsed = Date.now() - startTsRef.current;
                 setDurationMs(elapsed);
@@ -91,15 +104,17 @@ export function useVoiceInput(
         if (!recording) { setState("idle"); return; }
 
         setState("transcribing");
+        const Audio = getAudio();
         try {
             await recording.stopAndUnloadAsync();
-            await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+            if (Audio) {
+                await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+            }
             const uri = recording.getURI();
             recordingRef.current = null;
 
             if (!uri) throw new Error("No recording URI");
 
-            // Attempt cloud transcription if API base is configured
             let transcript = "";
             if (apiBaseUrl) {
                 try {
@@ -116,14 +131,13 @@ export function useVoiceInput(
                     const json = await res.json().catch(() => null);
                     transcript = json?.text ?? "";
                 } catch {
-                    // transcription unavailable — fall through to prompt
+                    // transcription unavailable — fall through
                 }
             }
 
             if (transcript.trim()) {
                 onTranscript(transcript.trim());
             } else {
-                // Graceful fallback: let user know transcription isn't available
                 Alert.alert(
                     "Voice recorded",
                     "Cloud transcription is not set up yet. Your recording was captured but cannot be converted to text automatically right now.",
@@ -142,10 +156,11 @@ export function useVoiceInput(
         clearTimer();
         const recording = recordingRef.current;
         recordingRef.current = null;
+        const Audio = getAudio();
         if (recording) {
             try {
                 await recording.stopAndUnloadAsync();
-                await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+                if (Audio) await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
             } catch { /* ignore */ }
         }
         setState("idle");
