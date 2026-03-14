@@ -206,7 +206,88 @@ export const GRATITUDE_REGEX =
 // --------------------------------------------------
 
 export const CRISIS_HINT_REGEX =
-    /(i\s+want\s+to\s+die|want\s+to\s+die|kill\s+myself|end\s+my\s+life|ending\s+everything|end\s+everything|i\s+feel\s+like\s+ending\s+everything|don'?t\s+want\s+to\s+live|cannot\s+go\s+on|can'?t\s+go\s+on|can'?t\s+take\s+it\s+anymore|cannot\s+take\s+it\s+anymore|life\s+has\s+no\s+meaning|life\s+feels\s+meaningless|ami\s+marte\s+chai|marte\s+chai|ami\s+morte\s+chai|morte\s+chai|ami\s+ar\s+parchi\s+na|ar\s+parchi\s+na|amar\s+bachte\s+ichcha\s+korch?e\s+na|bachte\s+ichhe\s+korch?e\s+na|bachte\s+icche\s+korch?e\s+na|more\s+jete\s+ichhe\s+korch?e|morte\s+ichhe\s+korch?e|bachbo\s+na|banchte\s+chai\s+na|mar\s+jana\s+hai|jeene\s+ka\s+mann\s+nahi|jeene\s+ka\s+man\s+nahi|jeena\s+nahi\s+hai|life\s+ka\s+koi\s+matlab\s+nahi|main\s+marna\s+chahta\s+hu|main\s+marna\s+chahti\s+hu|marna\s+chahta\s+hoon|marna\s+chahti\s+hoon|main\s+jeena\s+nahi\s+chahta|main\s+jeena\s+nahi\s+chahti|আমি\s+মরতে\s+চাই|আমার\s+মরতে\s+ইচ্ছে\s+করছে|বাঁচতে\s+ইচ্ছে\s+করছে\s+না|আমি\s+বাঁচতে\s+চাই\s+না|আমি\s+আর\s+পারছি\s+না|মুझे\s+मर\s+जाना\s+है|मैं\s+मरना\s+चाहता\s+हूँ|मैं\s+मरना\s+चाहती\s+हूँ|जीने\s+का\s+मन\s+नहीं\s+है|ज़िंदगी\s+का\s+कोई\s+मतलब\s+नहीं)/i;
+    new RegExp(
+        [
+            // --- English ---
+            "i\\s+want\\s+to\\s+die", "want\\s+to\\s+die", "kill\\s+myself",
+            "end\\s+my\\s+life", "ending\\s+everything", "end\\s+everything",
+            "i\\s+feel\\s+like\\s+ending\\s+everything",
+            "don'?t\\s+want\\s+to\\s+live", "cannot\\s+go\\s+on", "can'?t\\s+go\\s+on",
+            "can'?t\\s+take\\s+it\\s+anymore", "cannot\\s+take\\s+it\\s+anymore",
+            "life\\s+has\\s+no\\s+meaning", "life\\s+feels\\s+meaningless",
+            "no\\s+reason\\s+to\\s+live", "better\\s+off\\s+dead",
+
+            // --- Bengali (Romanized + Unicode) ---
+            "ami\\s+marte\\s+chai", "marte\\s+chai", "ami\\s+morte\\s+chai", "morte\\s+chai",
+            "ami\\s+ar\\s+parchi\\s+na", "ar\\s+parchi\\s+na",
+            "amar\\s+bachte\\s+ichcha\\s+korch?e\\s+na",
+            "bachte\\s+ichhe\\s+korch?e\\s+na", "bachte\\s+icche\\s+korch?e\\s+na",
+            "more\\s+jete\\s+ichhe\\s+korch?e", "morte\\s+ichhe\\s+korch?e",
+            "bachbo\\s+na", "banchte\\s+chai\\s+na",
+            "আমি\\s+মরতে\\s+চাই", "আমার\\s+মরতে\\s+ইচ্ছে\\s+করছে",
+            "বাঁচতে\\s+ইচ্ছে\\s+করছে\\s+না", "আমি\\s+বাঁচতে\\s+চাই\\s+না",
+            "আমি\\s+আর\\s+পারছি\\s+না",
+
+            // --- Hindi (Romanized + Devanagari) ---
+            "mar\\s+jana\\s+hai", "jeene\\s+ka\\s+mann\\s+nahi",
+            "jeene\\s+ka\\s+man\\s+nahi", "jeena\\s+nahi\\s+hai",
+            "life\\s+ka\\s+koi\\s+matlab\\s+nahi",
+            "main\\s+marna\\s+chahta\\s+hu", "main\\s+marna\\s+chahti\\s+hu",
+            "marna\\s+chahta\\s+hoon", "marna\\s+chahti\\s+hoon",
+            "main\\s+jeena\\s+nahi\\s+chahta", "main\\s+jeena\\s+nahi\\s+chahti",
+            "मुझे\\s+मर\\s+जाना\\s+है", "मैं\\s+मरना\\s+चाहता\\s+हूँ",
+            "मैं\\s+मरना\\s+चाहती\\s+हूँ", "जीने\\s+का\\s+मन\\s+नहीं\\s+है",
+            "ज़िंदगी\\s+का\\s+कोई\\s+मतलब\\s+नहीं", "जिंदगी\\s+खत्म\\s+करना\\s+है",
+            "जीना\\s+नहीं\\s+चाहता", "जीना\\s+नहीं\\s+चाहती",
+
+            // --- Tamil (Romanized) ---
+            "saka\\s+venum", "saaganum", "saaga\\s+venum",
+            "vaazhakka\\s+virupam\\s+illai", "vaazhve\\s+venam",
+            "inikku\\s+mela\\s+vaazha\\s+mudiyaadu",
+            "en\\s+uyir\\s+edukkanum",
+
+            // --- Telugu (Romanized) ---
+            "chachipovaalanipistundi", "chaavaalani\\s+undi",
+            "jeevitam\\s+adi\\s+cheyaalani\\s+undi",
+            "badukonu\\s+ishtam\\s+ledu", "jeevitam\\s+ardham\\s+kaadu",
+            "chachipovaadam\\s+maname",
+
+            // --- Gujarati (Romanized + Unicode) ---
+            "mari\\s+javun\\s+che", "jevan\\s+nu\\s+man\\s+nathi",
+            "jivanu\\s+man\\s+nathi", "jivan\\s+pura\\s+karvu\\s+che",
+            "aatmahatya\\s+karvu\\s+che",
+            "મરી\\s+જવું\\s+છે", "જીવવું\\s+નથી", "આત્મહત્યા\\s+કરવી\\s+છે",
+
+            // --- Kannada (Romanized + Unicode) ---
+            "saayabeku", "saayabeku\\s+anisutte", "jeevana\\s+mugisabeku",
+            "badukalu\\s+ishtavilla", "badukina\\s+arthavilla",
+            "ಸಾಯಬೇಕು", "ಜೀವನ\\s+ಮುಗಿಸಬೇಕು", "ಬದುಕಲು\\s+ಇಷ್ಟವಿಲ್ಲ",
+
+            // --- Malayalam (Romanized + Unicode) ---
+            "marikkanam", "marikkanam\\s+pola\\s+thonum",
+            "jeevitham\\s+aakanam", "jeevitham\\s+theerkkanam",
+            "veendum\\s+vazhakka\\s+thonunnilla",
+            "മരിക്കണം", "ജീവിതം\\s+മതിയായി", "ജീവിക്കണ്ട",
+
+            // --- Punjabi (Romanized + Gurmukhi) ---
+            "mar\\s+jaana\\s+chahunda\\s+haan", "mar\\s+jaana\\s+chahundi\\s+haan",
+            "jeona\\s+nahi\\s+chahunda", "zindagi\\s+khatam\\s+karna\\s+chahunda",
+            "ਮਰ\\s+ਜਾਣਾ\\s+ਚਾਹੁੰਦਾ", "ਜ਼ਿੰਦਗੀ\\s+ਖਤਮ\\s+ਕਰਨੀ\\s+ਹੈ",
+            "ਜਿਉਣਾ\\s+ਨਹੀਂ\\s+ਚਾਹੁੰਦਾ",
+
+            // --- Odia (Romanized + Unicode) ---
+            "mariba\\s+chahuchhi", "jibana\\s+sesa\\s+karibaku\\s+uchhi",
+            "banchiba\\s+uchha\\s+nahi",
+            "ମରିବା\\s+ଚାହୁଁଛି", "ଜୀବନ\\s+ଶେଷ\\s+କରିବାକୁ\\s+ଇଚ୍ଛା",
+
+            // --- Marathi (Romanized + Devanagari) ---
+            "maraycha\\s+aahe", "jeena\\s+nako\\s+aahe",
+            "jiv\\s+dyaava\\s+vatta\\s+aahe", "aayushya\\s+sampavaycha\\s+aahe",
+            "मरायचे\\s+आहे", "जगणे\\s+नको\\s+आहे",
+            "जीव\\s+द्यावा\\s+वाटते", "आयुष्य\\s+संपवायचे\\s+आहे",
+        ].join("|"),
+        "i"
+    );
 
 // --------------------------------------------------
 // English confusion / mental overload

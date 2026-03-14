@@ -1,6 +1,6 @@
 // src/screens/TrendsScreen.tsx
 // Emotion trends — local history analysis, no external chart library needed.
-// Shows: weekly emotion frequency bars, dominant emotion per day, summary.
+// Shows: streak, weekly emotion frequency bars, dominant emotion per day, summary.
 
 import React, { useMemo } from "react";
 import { View, Text, ScrollView } from "react-native";
@@ -46,6 +46,35 @@ function dayLabel(date: Date): string {
   return date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" });
 }
 
+function toDateKey(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function todayKey(): string {
+  return toDateKey(Date.now());
+}
+
+/** Returns consecutive-day streak ending today (or yesterday). */
+function computeStreak(activeDays: Set<string>): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let streak = 0;
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const key = toDateKey(d.getTime());
+    if (activeDays.has(key)) {
+      streak++;
+    } else {
+      // Allow today to be empty (user hasn't chatted yet today)
+      if (i === 0) continue;
+      break;
+    }
+  }
+  return streak;
+}
+
 export default function TrendsScreen() {
   const colors = useColors();
   const store = useHistoryStore() as any;
@@ -63,12 +92,21 @@ export default function TrendsScreen() {
   const sevenDaysAgo = Date.now() - 7 * 86_400_000;
   const recent = userMsgs.filter((m) => m.timestamp >= sevenDaysAgo);
 
+  // All days that have any user message (for streak calculation)
+  const allActiveDays = useMemo(() => {
+    const s = new Set<string>();
+    for (const m of userMsgs) s.add(toDateKey(m.timestamp));
+    return s;
+  }, [userMsgs]);
+
+  const streak = useMemo(() => computeStreak(allActiveDays), [allActiveDays]);
+  const chattedToday = allActiveDays.has(todayKey());
+
   // Group by calendar day (key = "YYYY-MM-DD")
   const byDay = useMemo(() => {
     const map: Record<string, EmotionBucket[]> = {};
     for (const m of recent) {
-      const d = new Date(m.timestamp);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const key = toDateKey(m.timestamp);
       if (!map[key]) map[key] = [];
       map[key].push(mapEmotionToKey(m.emotion ?? m.moodHint));
     }
@@ -82,9 +120,8 @@ export default function TrendsScreen() {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
       d.setDate(d.getDate() - i);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const key = toDateKey(d.getTime());
       const emotions = byDay[key] ?? [];
-      // Dominant = most frequent
       const freq: Partial<Record<EmotionBucket, number>> = {};
       for (const e of emotions) freq[e] = (freq[e] ?? 0) + 1;
       const dominant = (Object.entries(freq).sort((a, b) => (b[1] as number) - (a[1] as number))[0]?.[0] ?? "neutral") as EmotionBucket;
@@ -120,6 +157,35 @@ export default function TrendsScreen() {
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: 16 }}
     >
+      {/* Streak card */}
+      <View
+        style={{
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: streak >= 3 ? "rgba(250,204,21,0.4)" : colors.border,
+          backgroundColor: streak >= 3 ? "rgba(250,204,21,0.08)" : colors.surface,
+          padding: 16,
+          marginBottom: 16,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 14,
+        }}
+      >
+        <Text style={{ fontSize: 36 }}>{streak >= 7 ? "🔥" : streak >= 3 ? "⚡" : "💬"}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 22, fontWeight: "800", color: streak >= 3 ? "#fbbf24" : colors.textPrimary }}>
+            {streak} day{streak !== 1 ? "s" : ""} in a row
+          </Text>
+          <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+            {streak === 0
+              ? "Start chatting to begin your streak"
+              : chattedToday
+              ? "Keep going — you chatted today!"
+              : "Chat today to keep your streak alive"}
+          </Text>
+        </View>
+      </View>
+
       {/* Summary card */}
       {topEmotion && (
         <View

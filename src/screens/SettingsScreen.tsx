@@ -17,6 +17,11 @@ import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import { useTheme } from "../theme/ThemeContext";
+import {
+    scheduleCheckInReminder,
+    cancelCheckInReminder,
+    isCheckInReminderEnabled,
+} from "../notifications/checkInReminder";
 import { fetchRemoteHistory } from "../api/historyClient";
 import AppSeparator from "../components/ui/AppSeparator";
 import AppSurface from "../components/ui/AppSurface";
@@ -164,6 +169,40 @@ export default function SettingsScreen() {
         syncNow: boolean;
         donate: boolean;
     }>({ testRemote: false, pushOnly: false, syncNow: false, donate: false });
+
+    // ✅ Daily check-in reminder
+    const [reminderEnabled, setReminderEnabled] = React.useState(false);
+    const [reminderLoading, setReminderLoading] = React.useState(false);
+    React.useEffect(() => {
+        isCheckInReminderEnabled().then(setReminderEnabled).catch(() => {});
+    }, []);
+
+    const handleReminderToggle = async (value: boolean) => {
+        if (reminderLoading) return;
+        setReminderLoading(true);
+        try {
+            if (value) {
+                const ok = await scheduleCheckInReminder();
+                if (!mountedRef.current) return;
+                if (ok) {
+                    setReminderEnabled(true);
+                } else {
+                    Alert.alert(
+                        "Permission needed",
+                        "Please allow notifications in your device settings to enable daily reminders.",
+                        [{ text: "OK" }]
+                    );
+                }
+            } else {
+                await cancelCheckInReminder();
+                if (mountedRef.current) setReminderEnabled(false);
+            }
+        } catch {
+            // non-fatal
+        } finally {
+            if (mountedRef.current) setReminderLoading(false);
+        }
+    };
 
     // ✅ Link key status (UI only)
     const [chatLinkStatus, setChatLinkStatus] = React.useState<string | null>(null);
@@ -946,6 +985,27 @@ export default function SettingsScreen() {
                                 Switch to {isDark ? "Light" : "Dark"}
                             </Text>
                         </TouchableOpacity>
+                    </View>
+                </AppSurface>
+
+                {/* Daily check-in reminder */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
+                                Daily check-in reminder
+                            </Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                                A gentle nudge at 8 PM every day
+                            </Text>
+                        </View>
+                        <Switch
+                            value={reminderEnabled}
+                            onValueChange={handleReminderToggle}
+                            disabled={reminderLoading}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
                     </View>
                 </AppSurface>
 

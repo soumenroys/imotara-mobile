@@ -11,6 +11,7 @@ import {
   Animated,
   Vibration,
   Share,
+  Linking,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from "react-native";
@@ -2597,14 +2598,20 @@ export default function ChatScreen() {
               <View style={{ marginTop: 10, gap: 6 }}>
                 {[
                   { label: "iCall (India)", number: "9152987821" },
-                  { label: "Vandrevala Foundation", number: "1860-2662-345" },
-                  { label: "NIMHANS Helpline", number: "080-46110007" },
+                  { label: "Vandrevala Foundation", number: "18602662345" },
+                  { label: "NIMHANS Helpline", number: "08046110007" },
                   { label: "Emergency", number: "112" },
                 ].map(({ label, number }) => (
-                  <View key={label} style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <TouchableOpacity
+                    key={label}
+                    onPress={() => Linking.openURL(`tel:${number}`)}
+                    style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 }}
+                    accessibilityRole="link"
+                    accessibilityLabel={`Call ${label}: ${number}`}
+                  >
                     <Text style={{ fontSize: 12, color: "#fde68a", opacity: 0.85 }}>{label}</Text>
-                    <Text style={{ fontSize: 12, color: "#fde68a", fontWeight: "600" }}>{number}</Text>
-                  </View>
+                    <Text style={{ fontSize: 12, color: "#fde68a", fontWeight: "700", textDecorationLine: "underline" }}>{number}</Text>
+                  </TouchableOpacity>
                 ))}
               </View>
               <Text style={{ marginTop: 10, fontSize: 11, color: "#fde68a", opacity: 0.7 }}>

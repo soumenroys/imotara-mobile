@@ -41,7 +41,15 @@
     },
     "owner": "soumenroys",
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0ea5e9",
+          "sounds": []
+        }
+      ]
     ]
   }
 }
