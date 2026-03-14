@@ -132,6 +132,9 @@ export const GU_ANGER_REGEX =
 export const GU_FEAR_REGEX =
     /(ડર|ડર લાગે છે|મને ડર લાગે છે|ઘબરાય|ઘબરાઈ ગયો|ઘબરાઈ ગઈ|બહુ ડર લાગે છે|\bdar\b|\bdar\s+lage\s+che\b|\bmane\s+dar\s+lage\s+che\b|\bghabray\b|\bghabrayi\b)/i;
 
+export const GU_CONFUSED_REGEX =
+    /(સમજાતું નથી|માથું ચકરાય છે|શું કરવું|ગૂંચવણ|ગૂંચવાઈ ગયો|ગૂંચવાઈ ગઈ|\bsamjhay na\b|\bsamjatu nathi\b|\bshu karvu\b|\bmathu chakray\b|\bgoonchan\b|\bgumchdvayu\b|\bkya karu\b|\bsamjhay nathi\b)/i;
+
 // --------------------------------------------------
 // Kannada emotion regexes
 // --------------------------------------------------
@@ -147,6 +150,9 @@ export const KN_ANGER_REGEX =
 
 export const KN_FEAR_REGEX =
     /(ಭಯ|ಹೆದರಿಕೆ|\bbhaya (aa)?guttide\b|\bhedarike (aa)?gide\b|\bhedarike\b|\bbhaya agide\b)/i;
+
+export const KN_CONFUSED_REGEX =
+    /(ತಿಳಿಯುತ್ತಿಲ್ಲ|ಅರ್ಥ ಆಗುತ್ತಿಲ್ಲ|ಏನು ಮಾಡಬೇಕು|ತಲೆ ಗೊಂದಲ|ಮನಸ್ಸು ಗೊಂದಲ|\barthu aaguvudilla\b|\bsamje kuda illa\b|\benu maadabeku\b|\btala gondala\b|\bmanasu gondala\b|\btumba confused\b|\byana maadali\b)/i;
 
 // --------------------------------------------------
 // Malayalam emotion regexes
@@ -164,6 +170,9 @@ export const ML_ANGER_REGEX =
 export const ML_FEAR_REGEX =
     /(ഭയം|പേടി|\bbhayam undu\b|\bpedi thonum\b|\bbhayam thonum\b|\bpedi thonikkunnu\b)/i;
 
+export const ML_CONFUSED_REGEX =
+    /(മനസ്സിലാകുന്നില്ല|എന്ത് ചെയ്യണം|ആശയക്കുഴപ്പം|\bmanassil aakunnilla\b|\benthu cheyyanum\b|\baashayakuzhappam\b|\bconfused aanu\b|\bsamshayam undu\b|\bbudhimuttundu\b|\benthu cheyyano ariyilla\b)/i;
+
 // --------------------------------------------------
 // Punjabi emotion regexes
 // --------------------------------------------------
@@ -179,6 +188,9 @@ export const PA_ANGER_REGEX =
 
 export const PA_FEAR_REGEX =
     /(ਡਰ|ਘਬਰਾਹਟ|\bdar lagd(a|i) aa\b|\bghabra re(ha|hi) haan\b|\bdar lagg reha\b)/i;
+
+export const PA_CONFUSED_REGEX =
+    /(ਸਮਝ ਨਹੀਂ ਆਉਂਦਾ|ਮੱਥਾ ਖਾਲੀ|ਕੀ ਕਰਾਂ|ਮਨ ਗੁੰਮਿਆ|\bsamajh nahi aunda\b|\bmatha kaali\b|\bkya karan\b|\bman gumiya\b|\bconfused haan\b|\bsochna band\b|\bkuch samajh nahi\b)/i;
 
 // --------------------------------------------------
 // Odia emotion regexes
@@ -196,6 +208,9 @@ export const OR_ANGER_REGEX =
 export const OR_FEAR_REGEX =
     /(ଭୟ|ଡର|\bbhaya laguchhi\b|\bdara laguchhi\b|\bbhaya (aa)?suchhi\b)/i;
 
+export const OR_CONFUSED_REGEX =
+    /(ବୁଝିବି ନାହିଁ|ମୁଣ୍ଡ ଗୁଡ଼ୁଥାଏ|କଣ କରିବି|\bbujibi nahi\b|\bmunda guduthahe\b|\bkana karibi\b|\bsamajhila nahi\b|\bconfused laguchhi\b|\bkichi bujhapadi nahi\b)/i;
+
 // --------------------------------------------------
 // Marathi emotion regexes
 // --------------------------------------------------
@@ -211,6 +226,9 @@ export const MR_ANGER_REGEX =
 
 export const MR_FEAR_REGEX =
     /(भीती|काळजी|घाबरणे|\bbhiti vatat aahe\b|\bkalji vatat aahe\b|\bghabrat aahe\b)/i;
+
+export const MR_CONFUSED_REGEX =
+    /(समजत नाही|काय करावं|डोक्यात गोंधळ|काय करू|\bsamjat nahi\b|\bkay karave\b|\bkay karu\b|\bdokyat gondhal\b|\bconfused aahe\b|\bkahi samajh nahi\b|\bgondhal laglay\b)/i;
 
 // --------------------------------------------------
 // Gratitude detection — English + all Indian languages
@@ -389,11 +407,23 @@ export function isConfusedText(text: string): boolean {
     HI_CONFUSED_REGEX.lastIndex = 0;
     BN_CONFUSED_REGEX.lastIndex = 0;
     TA_CONFUSED_REGEX.lastIndex = 0;
+    GU_CONFUSED_REGEX.lastIndex = 0;
+    KN_CONFUSED_REGEX.lastIndex = 0;
+    ML_CONFUSED_REGEX.lastIndex = 0;
+    PA_CONFUSED_REGEX.lastIndex = 0;
+    OR_CONFUSED_REGEX.lastIndex = 0;
+    MR_CONFUSED_REGEX.lastIndex = 0;
 
     return (
         CONFUSED_EN_REGEX.test(input) ||
         HI_CONFUSED_REGEX.test(input) ||
         BN_CONFUSED_REGEX.test(input) ||
-        TA_CONFUSED_REGEX.test(input)
+        TA_CONFUSED_REGEX.test(input) ||
+        GU_CONFUSED_REGEX.test(input) ||
+        KN_CONFUSED_REGEX.test(input) ||
+        ML_CONFUSED_REGEX.test(input) ||
+        PA_CONFUSED_REGEX.test(input) ||
+        OR_CONFUSED_REGEX.test(input) ||
+        MR_CONFUSED_REGEX.test(input)
     );
 }
