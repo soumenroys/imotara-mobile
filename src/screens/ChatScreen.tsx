@@ -9,9 +9,17 @@ import {
   Alert,
   Pressable,
   Animated,
+  Vibration,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from "react-native";
+
+// Haptic helpers (Vibration API — no native deps needed)
+const haptic = {
+  tap: () => { try { Vibration.vibrate(10); } catch {} },
+  receive: () => { try { Vibration.vibrate([0, 8, 40, 8]); } catch {} },
+  error: () => { try { Vibration.vibrate([0, 30, 60, 30]); } catch {} },
+};
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 import { useHistoryStore } from "../state/HistoryContext";
@@ -25,6 +33,7 @@ import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
 // NEW: lifecycle hook (additive)
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
+import { BreathingModal } from "../components/imotara/BreathingModal";
 import type { ReflectionSeed } from "../lib/reflectionSeedContract";
 import {
   buildLocalReply,
@@ -42,6 +51,7 @@ import {
   OR_SAD_REGEX, OR_STRESS_REGEX, MR_SAD_REGEX, MR_STRESS_REGEX,
   GRATITUDE_REGEX,
   CONFUSED_EN_REGEX,
+  CRISIS_HINT_REGEX,
   isConfusedText,
 } from "../lib/emotion/keywordMaps";
 
@@ -826,6 +836,14 @@ export default function ChatScreen() {
   // ✅ Action sheet state
   const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
 
+  // Crisis safety card — tracks which bot message IDs have been dismissed
+  const [dismissedCrisisCards, setDismissedCrisisCards] = useState<Set<string>>(new Set());
+  const dismissCrisisCard = (id: string) =>
+    setDismissedCrisisCards((prev) => new Set([...prev, id]));
+
+  // Breathing modal
+  const [breathingVisible, setBreathingVisible] = useState(false);
+
   // ✅ Read store once, but allow optional newer helpers safely (no behavior loss)
   const store = useHistoryStore() as any;
   const {
@@ -1466,13 +1484,14 @@ export default function ChatScreen() {
     onScroll(e);
   };
 
-  const handleSend = () => {
-    const trimmed = input.trim();
+  const handleSend = (overrideText?: string) => {
+    const trimmed = (overrideText ?? input).trim();
     if (!trimmed) return;
 
     // ✅ 80/20: block double taps / overlapping send cycles
     if (isTyping || isSendingRef.current) return;
     isSendingRef.current = true;
+    haptic.tap();
     sendStartedAtRef.current = Date.now();
 
     const timestamp = Date.now();
@@ -1867,6 +1886,7 @@ export default function ChatScreen() {
           if (!mountedRef.current) return;
 
           setTypingStatus("responding");
+          haptic.receive();
           setMessages((prev) => [...prev, botMessage]);
           smoothScrollToBottom(scrollViewRef);
         } catch (error) {
@@ -1947,6 +1967,7 @@ export default function ChatScreen() {
           if (!mountedRef.current) return;
 
           setTypingStatus("responding");
+          haptic.receive();
           setMessages((prev) => [...prev, botMessage]);
           smoothScrollToBottom(scrollViewRef);
         } finally {
@@ -2025,6 +2046,63 @@ export default function ChatScreen() {
       }),
     );
   }, [history]); // intentionally NOT depending on `messages` to avoid loops
+
+  // Time-aware greeting + companion memory signal
+  // Fires once per app session when messages hydrate.
+  const greetingInjectedRef = useRef(false);
+  useEffect(() => {
+    if (greetingInjectedRef.current) return;
+    // Wait until hydration settles (history loaded)
+    const now = Date.now();
+    const hour = new Date().getHours();
+    const name = toneContext?.user?.name ?? "";
+
+    const timeGreet =
+      hour < 12
+        ? name ? `Good morning, ${name}.` : "Good morning."
+        : hour < 17
+          ? name ? `Good afternoon, ${name}.` : "Good afternoon."
+          : name ? `Good evening, ${name}.` : "Good evening.";
+
+    let greetText = "";
+
+    if (messages.length === 0) {
+      // Fresh start — simple welcome
+      greetText = `${timeGreet} I'm Imotara, and I'm here with you. How are you feeling right now?`;
+    } else {
+      // Returning session — check time gap and last emotion
+      const lastMsg = [...messages].sort((a, b) => b.timestamp - a.timestamp)[0];
+      const gapHours = (now - (lastMsg?.timestamp ?? now)) / 3_600_000;
+
+      if (gapHours >= 6) {
+        // Check last strong emotion from bot replies
+        const lastBotMsgs = messages.filter((m) => m.from === "bot").slice(-3);
+        const prevEmotion = lastBotMsgs
+          .map((m) => m.moodHint ?? "")
+          .find((h) => /low|tense|worried|upset|frustrated|stuck/i.test(h));
+
+        if (prevEmotion) {
+          greetText = `${timeGreet} Last time we talked, things seemed a little heavy. How are you doing now?`;
+        } else {
+          greetText = `${timeGreet} Good to have you back. How has your day been?`;
+        }
+      }
+    }
+
+    if (!greetText) return;
+
+    greetingInjectedRef.current = true;
+    const greetMsg: ChatMessage = {
+      id: `greeting-${now}`,
+      from: "bot",
+      text: greetText,
+      timestamp: now,
+      isSynced: false,
+      source: "local",
+    };
+    setMessages((prev) => [greetMsg, ...prev.filter((m) => !m.id.startsWith("greeting-"))]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history.length]);
 
   const handleInputChange = (text: string) => {
     setInput(text);
@@ -2444,6 +2522,58 @@ export default function ChatScreen() {
             </LinearGradient>
           )}
         </Pressable>
+
+        {/* Crisis safety card — shown below bot reply when preceding user message matches */}
+        {!isUser && (() => {
+          const prevMsg = messages[index - 1];
+          if (!prevMsg || prevMsg.from !== "user") return null;
+          if (!CRISIS_HINT_REGEX.test(prevMsg.text)) return null;
+          if (dismissedCrisisCards.has(message.id)) return null;
+          return (
+            <View
+              style={{
+                marginTop: 2,
+                marginBottom: 6,
+                marginLeft: 4,
+                maxWidth: "88%",
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: "rgba(251, 191, 36, 0.35)",
+                backgroundColor: "rgba(251, 191, 36, 0.10)",
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+              }}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: "#fde68a", flex: 1 }}>
+                  {"\u{1F49B}"} If things feel urgent right now
+                </Text>
+                <TouchableOpacity
+                  onPress={() => dismissCrisisCard(message.id)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={{ fontSize: 14, color: "#fde68a", opacity: 0.7, marginLeft: 8 }}>x</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ marginTop: 10, gap: 6 }}>
+                {[
+                  { label: "iCall (India)", number: "9152987821" },
+                  { label: "Vandrevala Foundation", number: "1860-2662-345" },
+                  { label: "NIMHANS Helpline", number: "080-46110007" },
+                  { label: "Emergency", number: "112" },
+                ].map(({ label, number }) => (
+                  <View key={label} style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <Text style={{ fontSize: 12, color: "#fde68a", opacity: 0.85 }}>{label}</Text>
+                    <Text style={{ fontSize: 12, color: "#fde68a", fontWeight: "600" }}>{number}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={{ marginTop: 10, fontSize: 11, color: "#fde68a", opacity: 0.7 }}>
+                You don't have to face this alone.
+              </Text>
+            </View>
+          );
+        })()}
       </View>
     );
   };
@@ -2692,6 +2822,24 @@ export default function ChatScreen() {
 
           <View style={{ flex: 1 }} />
 
+          {/* Breathing exercise button */}
+          <TouchableOpacity
+            onPress={() => setBreathingVisible(true)}
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: "rgba(255,255,255,0.06)",
+              marginRight: 8,
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Breathing exercise"
+          >
+            <Text style={{ fontSize: 16 }}>{"🫁"}</Text>
+          </TouchableOpacity>
+
           {messages.length > 0 && (
             <TouchableOpacity
               onPress={handleClearLocalChat}
@@ -2762,6 +2910,30 @@ export default function ChatScreen() {
             ✅ All changes synced · Imotara cloud copy updated.
           </Text>
         )}
+
+        {/* Privacy mode badge */}
+        {(analysisMode === "local" || !cloudSyncAllowed) && (
+          <View
+            style={{
+              alignSelf: "flex-start",
+              marginTop: 4,
+              marginBottom: 2,
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 10,
+              paddingVertical: 3,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: "rgba(34, 197, 94, 0.35)",
+              backgroundColor: "rgba(34, 197, 94, 0.10)",
+            }}
+          >
+            <Text style={{ fontSize: 10, marginRight: 4 }}>{"\uD83D\uDD12"}</Text>
+            <Text style={{ fontSize: 10, color: "#86efac", fontWeight: "600" }}>
+              Device only — no data leaves your phone
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Chat area */}
@@ -2817,19 +2989,51 @@ export default function ChatScreen() {
           {messages.length === 0 && (
             <View style={{ paddingTop: 24, paddingBottom: 16 }}>
               <Text
-                style={{
-                  fontSize: 15,
-                  color: colors.textSecondary,
-                  marginBottom: 6,
-                }}
+                style={{ fontSize: 15, color: colors.textSecondary, marginBottom: 6 }}
               >
-                Welcome to Imotara.
+                {toneContext?.user?.name
+                  ? `Welcome, ${toneContext.user.name}.`
+                  : "Welcome to Imotara."}
               </Text>
-              <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                You can start by sharing how your day feels, something that
-                bothered you, or something you're looking forward to. Imotara
-                listens without judgment.
+              <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 20 }}>
+                Start by sharing how you feel — Imotara listens without judgment.
               </Text>
+
+              {/* Conversation starters */}
+              <Text
+                style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 10, opacity: 0.7 }}
+              >
+                Not sure where to begin? Tap one:
+              </Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {[
+                  { emoji: "😔", label: "I'm feeling low today" },
+                  { emoji: "😰", label: "I'm stressed and overwhelmed" },
+                  { emoji: "😡", label: "Something really upset me" },
+                  { emoji: "😕", label: "I feel stuck and don't know what to do" },
+                  { emoji: "💬", label: "I just need to talk" },
+                  { emoji: "🌟", label: "Something good happened today" },
+                ].map(({ emoji, label }) => (
+                  <TouchableOpacity
+                    key={label}
+                    onPress={() => handleSend(label)}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: "rgba(30, 41, 59, 0.7)",
+                      marginBottom: 4,
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, marginRight: 6 }}>{emoji}</Text>
+                    <Text style={{ fontSize: 12, color: colors.textPrimary }}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           )}
 
@@ -3257,7 +3461,7 @@ export default function ChatScreen() {
           </View>
 
           <TouchableOpacity
-            onPress={handleSend}
+            onPress={() => handleSend()}
             disabled={isSendDisabled}
             style={{
               opacity: isSendDisabled ? 0.4 : 1,
@@ -3273,6 +3477,11 @@ export default function ChatScreen() {
       </View>
 
       {renderActionSheet()}
+
+      <BreathingModal
+        visible={breathingVisible}
+        onClose={() => setBreathingVisible(false)}
+      />
     </View>
   );
 }
