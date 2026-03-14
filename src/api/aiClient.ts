@@ -7,14 +7,15 @@
 import { IMOTARA_API_BASE_URL } from "../config/api";
 import { debugLog, debugWarn } from "../config/debug";
 import {
-  BN_SAD_REGEX, BN_STRESS_REGEX, BN_ANGER_REGEX,
-  HI_STRESS_REGEX,
-  TA_SAD_REGEX, TA_STRESS_REGEX,
-  GU_SAD_REGEX, GU_STRESS_REGEX,
-  KN_SAD_REGEX, KN_STRESS_REGEX,
-  ML_SAD_REGEX, ML_STRESS_REGEX,
-  PA_SAD_REGEX, PA_STRESS_REGEX,
-  OR_SAD_REGEX, MR_SAD_REGEX, MR_STRESS_REGEX,
+  BN_SAD_REGEX, BN_STRESS_REGEX, BN_ANGER_REGEX, BN_FEAR_REGEX,
+  HI_SAD_REGEX, HI_STRESS_REGEX, HI_ANGER_REGEX, HI_FEAR_REGEX,
+  TA_SAD_REGEX, TA_STRESS_REGEX, TA_ANGER_REGEX, TA_FEAR_REGEX,
+  GU_SAD_REGEX, GU_STRESS_REGEX, GU_ANGER_REGEX, GU_FEAR_REGEX,
+  KN_SAD_REGEX, KN_STRESS_REGEX, KN_ANGER_REGEX, KN_FEAR_REGEX,
+  ML_SAD_REGEX, ML_STRESS_REGEX, ML_ANGER_REGEX, ML_FEAR_REGEX,
+  PA_SAD_REGEX, PA_STRESS_REGEX, PA_ANGER_REGEX, PA_FEAR_REGEX,
+  OR_SAD_REGEX, OR_STRESS_REGEX, OR_ANGER_REGEX, OR_FEAR_REGEX,
+  MR_SAD_REGEX, MR_STRESS_REGEX, MR_ANGER_REGEX, MR_FEAR_REGEX,
   GRATITUDE_REGEX,
   isConfusedText,
 } from "../lib/emotion/keywordMaps";
@@ -182,18 +183,33 @@ function deriveEmotionHintFromMessage(message: string): string | undefined {
   // Multilingual emotion detection
   if (isConfusedText(raw)) return "confused";
   if (
-    BN_SAD_REGEX.test(raw) || TA_SAD_REGEX.test(raw) ||
-    GU_SAD_REGEX.test(raw) || KN_SAD_REGEX.test(raw) ||
-    ML_SAD_REGEX.test(raw) || PA_SAD_REGEX.test(raw) ||
-    OR_SAD_REGEX.test(raw) || MR_SAD_REGEX.test(raw)
+    HI_SAD_REGEX.test(raw) || BN_SAD_REGEX.test(raw) ||
+    TA_SAD_REGEX.test(raw) || GU_SAD_REGEX.test(raw) ||
+    KN_SAD_REGEX.test(raw) || ML_SAD_REGEX.test(raw) ||
+    PA_SAD_REGEX.test(raw) || OR_SAD_REGEX.test(raw) ||
+    MR_SAD_REGEX.test(raw)
   ) return "sad";
   if (
     HI_STRESS_REGEX.test(raw) || BN_STRESS_REGEX.test(raw) ||
     TA_STRESS_REGEX.test(raw) || GU_STRESS_REGEX.test(raw) ||
     KN_STRESS_REGEX.test(raw) || ML_STRESS_REGEX.test(raw) ||
-    PA_STRESS_REGEX.test(raw) || MR_STRESS_REGEX.test(raw)
+    PA_STRESS_REGEX.test(raw) || OR_STRESS_REGEX.test(raw) ||
+    MR_STRESS_REGEX.test(raw)
   ) return "stressed";
-  if (BN_ANGER_REGEX.test(raw)) return "angry";
+  if (
+    HI_ANGER_REGEX.test(raw) || BN_ANGER_REGEX.test(raw) ||
+    TA_ANGER_REGEX.test(raw) || GU_ANGER_REGEX.test(raw) ||
+    KN_ANGER_REGEX.test(raw) || ML_ANGER_REGEX.test(raw) ||
+    PA_ANGER_REGEX.test(raw) || OR_ANGER_REGEX.test(raw) ||
+    MR_ANGER_REGEX.test(raw)
+  ) return "angry";
+  if (
+    HI_FEAR_REGEX.test(raw) || BN_FEAR_REGEX.test(raw) ||
+    TA_FEAR_REGEX.test(raw) || GU_FEAR_REGEX.test(raw) ||
+    KN_FEAR_REGEX.test(raw) || ML_FEAR_REGEX.test(raw) ||
+    PA_FEAR_REGEX.test(raw) || OR_FEAR_REGEX.test(raw) ||
+    MR_FEAR_REGEX.test(raw)
+  ) return "anxious";
   if (GRATITUDE_REGEX.test(raw)) return "hopeful";
 
   // English lightweight fallbacks
@@ -446,18 +462,31 @@ export async function callImotaraAI(
       // 2) Multilingual emotion detection
       if (isConfusedText(raw)) return "confused";
       if (
-        BN_SAD_REGEX.test(raw) || TA_SAD_REGEX.test(raw) ||
-        GU_SAD_REGEX.test(raw) || KN_SAD_REGEX.test(raw) ||
-        ML_SAD_REGEX.test(raw) || PA_SAD_REGEX.test(raw) ||
-        OR_SAD_REGEX.test(raw) || MR_SAD_REGEX.test(raw)
+        HI_SAD_REGEX.test(raw) || BN_SAD_REGEX.test(raw) ||
+        TA_SAD_REGEX.test(raw) || GU_SAD_REGEX.test(raw) ||
+        KN_SAD_REGEX.test(raw) || ML_SAD_REGEX.test(raw) ||
+        PA_SAD_REGEX.test(raw) || OR_SAD_REGEX.test(raw) ||
+        MR_SAD_REGEX.test(raw)
       ) return "sad";
       if (
         HI_STRESS_REGEX.test(raw) || BN_STRESS_REGEX.test(raw) ||
         TA_STRESS_REGEX.test(raw) || GU_STRESS_REGEX.test(raw) ||
         KN_STRESS_REGEX.test(raw) || ML_STRESS_REGEX.test(raw) ||
-        PA_STRESS_REGEX.test(raw) || MR_STRESS_REGEX.test(raw)
+        PA_STRESS_REGEX.test(raw) || OR_STRESS_REGEX.test(raw) ||
+        MR_STRESS_REGEX.test(raw)
       ) return "stressed";
-      if (BN_ANGER_REGEX.test(raw)) return "angry";
+      if (
+        HI_ANGER_REGEX.test(raw) || BN_ANGER_REGEX.test(raw) ||
+        GU_ANGER_REGEX.test(raw) || KN_ANGER_REGEX.test(raw) ||
+        ML_ANGER_REGEX.test(raw) || PA_ANGER_REGEX.test(raw) ||
+        OR_ANGER_REGEX.test(raw) || MR_ANGER_REGEX.test(raw)
+      ) return "angry";
+      if (
+        HI_FEAR_REGEX.test(raw) || BN_FEAR_REGEX.test(raw) ||
+        GU_FEAR_REGEX.test(raw) || KN_FEAR_REGEX.test(raw) ||
+        ML_FEAR_REGEX.test(raw) || PA_FEAR_REGEX.test(raw) ||
+        OR_FEAR_REGEX.test(raw) || MR_FEAR_REGEX.test(raw)
+      ) return "anxious";
       if (GRATITUDE_REGEX.test(raw)) return "hopeful";
 
       // 3) English lightweight fallbacks
