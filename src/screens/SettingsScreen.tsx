@@ -17,6 +17,7 @@ import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import colors from "../theme/colors";
+import { useTheme } from "../theme/ThemeContext";
 import { fetchRemoteHistory } from "../api/historyClient";
 import AppSeparator from "../components/ui/AppSeparator";
 import AppSurface from "../components/ui/AppSurface";
@@ -130,6 +131,7 @@ export default function SettingsScreen() {
         setChatLinkKey,
     } = useSettings();
 
+    const { themeMode, toggleTheme, isDark } = useTheme();
 
     const messageCount = (history as HistoryRecord[]).length;
 
@@ -552,6 +554,34 @@ export default function SettingsScreen() {
 
             // 🔁 Auto-confirm once webhook records the receipt
             void pollDonationConfirmation(result?.razorpay_payment_id);
+
+            // 🔓 Verify payment and unlock license tier
+            const paymentId = result?.razorpay_payment_id;
+            if (paymentId) {
+                const base = getApiBaseUrl();
+                if (base) {
+                    fetch(`${base}/api/license/verify-payment`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ paymentId, chatLinkKey: chatLinkKey || "" }),
+                    })
+                        .then((r) => r.json())
+                        .then((data: any) => {
+                            if (data?.ok && data?.tier && mountedRef.current) {
+                                const newTier = String(data.tier).toUpperCase();
+                                if (typeof setLicenseTier === "function") {
+                                    setLicenseTier(newTier as any);
+                                }
+                                if (mountedRef.current) {
+                                    setLastSyncStatus(
+                                        `${newTier} plan unlocked. Thank you for supporting Imotara 🙏`
+                                    );
+                                }
+                            }
+                        })
+                        .catch(() => {});
+                }
+            }
         } catch (e: any) {
             // Razorpay cancellation often returns a structured error
             const desc =
@@ -887,6 +917,37 @@ export default function SettingsScreen() {
                         This toggle does not send any extra data to the cloud yet. It
                         is a design placeholder for future AI-powered insights.
                     </Text>
+                </AppSurface>
+
+                {/* Appearance */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 6 }}>
+                        Appearance
+                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                            {isDark ? "Dark mode" : "Light mode"}
+                        </Text>
+                        <TouchableOpacity
+                            onPress={toggleTheme}
+                            style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                paddingHorizontal: 14,
+                                paddingVertical: 8,
+                                borderRadius: 999,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                                backgroundColor: isDark ? "rgba(30,41,59,0.7)" : "rgba(226,232,240,0.9)",
+                                gap: 6,
+                            }}
+                        >
+                            <Text style={{ fontSize: 16 }}>{isDark ? "\uD83C\uDF19" : "\u2600\uFE0F"}</Text>
+                            <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600" }}>
+                                Switch to {isDark ? "Light" : "Dark"}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                 </AppSurface>
 
                 {/* ✅ Analysis Mode (Local / Cloud / Auto) */}

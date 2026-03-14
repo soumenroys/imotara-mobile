@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import ChatScreen from "../screens/ChatScreen";
 import HistoryScreen from "../screens/HistoryScreen";
 import SettingsScreen from "../screens/SettingsScreen";
+import TrendsScreen from "../screens/TrendsScreen";
 import colors from "../theme/colors";
 
 // lifecycle hook + history store
@@ -109,6 +110,8 @@ export default function RootNavigator() {
                                     : "chatbubble-ellipses-outline";
                             } else if (route.name === "History") {
                                 iconName = focused ? "time" : "time-outline";
+                            } else if (route.name === "Trends") {
+                                iconName = focused ? "bar-chart" : "bar-chart-outline";
                             } else {
                                 iconName = focused ? "settings" : "settings-outline";
                             }
@@ -128,6 +131,11 @@ export default function RootNavigator() {
                         name="History"
                         component={HistoryScreen}
                         options={{ title: "History" }}
+                    />
+                    <Tab.Screen
+                        name="Trends"
+                        component={TrendsScreen}
+                        options={{ title: "Trends" }}
                     />
                     <Tab.Screen
                         name="Settings"
