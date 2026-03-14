@@ -1,4 +1,7 @@
 // src/config/debug.ts
+// Some TS setups don't include Node typings, so `global` may be unknown.
+// We declare it here to avoid build/type errors without changing runtime behavior.
+declare const global: any;
 
 /**
  * Global switch to show / hide debug-only UI across the app.
@@ -20,17 +23,17 @@
  * Accepts: boolean | number | string | undefined
  */
 function parseBool(v: unknown): boolean | undefined {
-    if (v === null || v === undefined) return undefined;
+  if (v === null || v === undefined) return undefined;
 
-    if (typeof v === "boolean") return v;
-    if (typeof v === "number") return v === 1;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v === 1;
 
-    const s = String(v).trim().toLowerCase();
+  const s = String(v).trim().toLowerCase();
 
-    if (["1", "true", "yes", "y", "on"].includes(s)) return true;
-    if (["0", "false", "no", "n", "off"].includes(s)) return false;
+  if (["1", "true", "yes", "y", "on"].includes(s)) return true;
+  if (["0", "false", "no", "n", "off"].includes(s)) return false;
 
-    return undefined;
+  return undefined;
 }
 
 /**
@@ -38,10 +41,9 @@ function parseBool(v: unknown): boolean | undefined {
  * (Multiple guards to avoid crashes in unusual runtimes.)
  */
 export const __DEV__ =
-    typeof global !== "undefined" &&
-        typeof (global as any).__DEV__ === "boolean"
-        ? (global as any).__DEV__
-        : process?.env?.NODE_ENV !== "production";
+  typeof global !== "undefined" && typeof (global as any).__DEV__ === "boolean"
+    ? (global as any).__DEV__
+    : process?.env?.NODE_ENV !== "production";
 
 /**
  * Convenience flag (read-only)
@@ -52,41 +54,41 @@ export const IS_PROD = !__DEV__;
  * Read explicit debug override from env (if provided).
  */
 const envOverride = parseBool(
-    // Expo public env (preferred)
-    process?.env?.EXPO_PUBLIC_IMOTARA_DEBUG_UI ??
+  // Expo public env (preferred)
+  process?.env?.EXPO_PUBLIC_IMOTARA_DEBUG_UI ??
     // Fallback for older setups
-    process?.env?.IMOTARA_DEBUG_UI
+    process?.env?.IMOTARA_DEBUG_UI,
 );
 
 /**
  * Final debug UI enablement flag.
  *
  * Resolution order:
- * 1. Explicit env override (if defined)
+ * 1. Explicit env override (if defined)  ✅ can enable even in prod
  * 2. Dev mode default
  */
 export const DEBUG_UI_ENABLED: boolean =
-    IS_PROD ? false : (typeof envOverride === "boolean" ? envOverride : __DEV__);
-
+  typeof envOverride === "boolean" ? envOverride : __DEV__;
 
 export function debugLog(...args: any[]) {
-    // Never log in production builds, even if DEBUG_UI is forced on.
-    if (!__DEV__) return;
-    if (DEBUG_UI_ENABLED) {
-        // eslint-disable-next-line no-console
-        console.log(...args);
-    }
+  // Allow logs ONLY when explicitly enabled via env in production.
+  if (IS_PROD && envOverride !== true) return;
+
+  if (DEBUG_UI_ENABLED) {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
 }
 
 /**
  * Optional helper for gated warnings.
  */
 export function debugWarn(...args: any[]) {
-    // Never warn in production builds, even if DEBUG_UI is forced on.
-    if (!__DEV__) return;
-    if (DEBUG_UI_ENABLED) {
-        // eslint-disable-next-line no-console
-        console.warn(...args);
-    }
-}
+  // Allow warns ONLY when explicitly enabled via env in production.
+  if (IS_PROD && envOverride !== true) return;
 
+  if (DEBUG_UI_ENABLED) {
+    // eslint-disable-next-line no-console
+    console.warn(...args);
+  }
+}

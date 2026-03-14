@@ -1,6 +1,6 @@
-# Imotara v0.0.1 — Public Preview
+# Imotara v0.0.1 — Public Version
 
-Date: 2026-01-25
+Date: 2026-02-26
 
 ## What’s included
 - Calm chat experience (local-first)
@@ -8,9 +8,9 @@ Date: 2026-01-25
 - Reflection seed prompts (optional)
 - Emotion History view + export
 
-## What’s intentionally limited/hidden in public preview
+## What’s intentionally limited/hidden in this version
 - Remote sync controls (disabled until stable)
 
 ## Tags
 - Web: v0.0.1
-- Mobile: v0.0.1-mobile
+- Mobile: v1.0.2-mobile

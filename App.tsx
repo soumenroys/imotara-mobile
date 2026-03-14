@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { KeyboardAvoidingView, Platform, View, Text } from "react-native";
 import RootNavigator from "./src/navigation/RootNavigator";
 import AppThemeProvider from "./src/theme/AppThemeProvider";
+import { ThemeProvider } from "./src/theme/ThemeContext";
 import HistoryProvider from "./src/state/HistoryContext";
 import { SettingsProvider } from "./src/state/SettingsContext";
 
@@ -43,6 +44,7 @@ function AppShell() {
 
   return (
     <AppThemeProvider>
+      <ThemeProvider>
       {/* Settings MUST wrap HistoryProvider because HistoryProvider calls useSettings() */}
       <SettingsProvider>
         <HistoryProvider>
@@ -57,6 +59,7 @@ function AppShell() {
           <StatusBar style="auto" />
         </HistoryProvider>
       </SettingsProvider>
+      </ThemeProvider>
     </AppThemeProvider>
   );
 }

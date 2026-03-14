@@ -2,62 +2,42 @@
 //
 // Unified AI entry point for mobile.
 // DO NOT import ChatScreen logic here.
-// DO NOT modify ChatScreen until this layer is stable.
 
 import { callImotaraAI } from "../../api/aiClient";
+import type { ToneContextPayload } from "../../api/aiClient";
+import { buildLocalReply, type LocalRecentContext } from "../ai/local/localReplyEngine";
 
 export type MobileAIResult = {
     replyText: string;
     moodHint?: string;
     source: "remote" | "local-fallback";
-
-    // structured fields from backend
     followUp?: string;
-    reflectionSeed?: any; // typed later, preserved now
+    reflectionSeed?: any;
 };
 
-/** lightweight local fallback (existing behaviour) */
-function localFallback(userText: string, insightsEnabled: boolean): MobileAIResult {
-    const lower = userText.toLowerCase();
-
-    const sadWords = ["sad", "down", "lonely", "tired", "upset", "hurt"];
-    const anxiousWords = ["worry", "worried", "anxious", "scared", "panic"];
-    const angryWords = ["angry", "mad", "frustrated", "annoyed", "irritated"];
-    const hopefulWords = ["hope", "excited", "looking forward", "grateful"];
-
-    let moodHint = undefined;
-
-    if (insightsEnabled) {
-        if (sadWords.some((w) => lower.includes(w))) {
-            moodHint = "It sounds like you're feeling low.";
-        } else if (anxiousWords.some((w) => lower.includes(w))) {
-            moodHint = "It sounds like something is worrying you.";
-        } else if (angryWords.some((w) => lower.includes(w))) {
-            moodHint = "It sounds like something has really upset you.";
-        } else if (hopefulWords.some((w) => lower.includes(w))) {
-            moodHint = "I can hear a bit of hope or excitement in this.";
-        }
-    }
-
+function localFallback(
+    userText: string,
+    toneContext?: ToneContextPayload,
+    recentContext?: LocalRecentContext
+): MobileAIResult {
+    const result = buildLocalReply(userText, toneContext, recentContext);
     return {
-        replyText:
-            "I hear you. In the full version I respond with deeper empathy and insight. This preview uses a local fallback.",
-        moodHint,
+        replyText: result.message,
+        moodHint: undefined,
         source: "local-fallback",
+        reflectionSeed: result.reflectionSeed,
     };
 }
 
-/** Main AI entry */
 export async function runMobileAI(
     userText: string,
-    insightsEnabled: boolean
+    insightsEnabled: boolean,
+    toneContext?: ToneContextPayload,
+    recentContext?: LocalRecentContext
 ): Promise<MobileAIResult> {
     try {
-        const remote = await callImotaraAI(userText);
+        const remote = await callImotaraAI(userText, toneContext ? { toneContext } : undefined);
 
-        // ✅ Canonical response alignment (Baby Step 7.1)
-        // Backend returns: { message, followUp?, reflectionSeed?, meta? }
-        // Mobile expects: replyText
         const message =
             typeof (remote as any)?.message === "string"
                 ? String((remote as any).message)
@@ -70,19 +50,16 @@ export async function runMobileAI(
                 replyText: message,
                 moodHint: undefined,
                 source: "remote",
-
                 followUp:
                     typeof (remote as any)?.followUp === "string"
                         ? (remote as any).followUp
                         : undefined,
-
-                reflectionSeed:
-                    (remote as any)?.reflectionSeed ?? undefined,
+                reflectionSeed: (remote as any)?.reflectionSeed ?? undefined,
             };
         }
 
-        return localFallback(userText, insightsEnabled);
+        return localFallback(userText, toneContext, recentContext);
     } catch {
-        return localFallback(userText, insightsEnabled);
+        return localFallback(userText, toneContext, recentContext);
     }
 }

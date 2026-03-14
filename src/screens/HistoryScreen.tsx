@@ -6,7 +6,8 @@ import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import { fetchRemoteHistory } from "../api/historyClient";
-import colors from "../theme/colors";
+import { useColors } from "../theme/ThemeContext";
+import type { ColorPalette } from "../theme/colors";
 import AppButton from "../components/ui/AppButton";
 import AppChip from "../components/ui/AppChip";
 import { DEBUG_UI_ENABLED } from "../config/debug";
@@ -14,79 +15,67 @@ import { DEBUG_UI_ENABLED } from "../config/debug";
 // ✅ Licensing gates
 import { gate } from "../licensing/featureGates";
 
+// ✅ Multilingual emotion detection
+import {
+    BN_SAD_REGEX, BN_STRESS_REGEX, BN_ANGER_REGEX,
+    HI_STRESS_REGEX,
+    TA_SAD_REGEX, TA_STRESS_REGEX,
+    GU_SAD_REGEX, GU_STRESS_REGEX, GU_ANGER_REGEX,
+    KN_SAD_REGEX, KN_STRESS_REGEX, KN_ANGER_REGEX,
+    ML_SAD_REGEX, ML_STRESS_REGEX, ML_ANGER_REGEX,
+    PA_SAD_REGEX, PA_STRESS_REGEX, PA_ANGER_REGEX,
+    OR_SAD_REGEX, OR_STRESS_REGEX, OR_ANGER_REGEX,
+    MR_SAD_REGEX, MR_STRESS_REGEX, MR_ANGER_REGEX,
+    GRATITUDE_REGEX,
+    isConfusedText,
+} from "../lib/emotion/keywordMaps";
+
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
-const BOT_BUBBLE_BG = colors.surfaceSoft;
 const SESSION_GAP_MS = 45 * 60 * 1000;
 
 function getMoodEmojiForText(text: string): string {
-    const lower = (text || "").toLowerCase();
+    const t = text || "";
+    const lower = t.toLowerCase();
 
-    const sad = [
-        "sad",
-        "down",
-        "lonely",
-        "tired",
-        "upset",
-        "hurt",
-        "empty",
-        "depressed",
-        "blue",
-        "cry",
-        "crying",
-        "low",
-    ];
-    const anxious = [
-        "worry",
-        "worried",
-        "anxious",
-        "scared",
-        "panic",
-        "nervous",
-        "stressed",
-        "overwhelmed",
-        "afraid",
-        "fear",
-    ];
-    const angry = [
-        "angry",
-        "mad",
-        "frustrated",
-        "annoyed",
-        "irritated",
-        "furious",
-        "rage",
-        "hate",
-    ];
-    const hopeful = [
-        "hope",
-        "hopeful",
-        "better",
-        "relieved",
-        "excited",
-        "good mood",
-        "feeling good",
-        "happy",
-        "joyful",
-        "cheerful",
-    ];
-    const stuck = [
-        "stuck",
-        "lost",
-        "confused",
-        "dont know",
-        "don’t know",
-        "no idea",
-        "numb",
-        "unsure",
-    ];
+    // Confused / stuck (checked first — overlaps with sad)
+    if (isConfusedText(t)) return "🟣";
+    if (/\b(stuck|lost|confused|dont know|don't know|no idea|numb|unsure)\b/.test(lower)) return "🟣";
 
-    const match = (arr: string[]) => arr.some((w) => lower.includes(w));
+    // Sad — multilingual
+    if (
+        BN_SAD_REGEX.test(t) || TA_SAD_REGEX.test(t) ||
+        GU_SAD_REGEX.test(t) || KN_SAD_REGEX.test(t) ||
+        ML_SAD_REGEX.test(t) || PA_SAD_REGEX.test(t) ||
+        OR_SAD_REGEX.test(t) || MR_SAD_REGEX.test(t) ||
+        /\b(sad|down|lonely|tired|upset|hurt|empty|depressed|blue|cry|crying|low|hopeless|grieve)\b/.test(lower) ||
+        /(udaas|dukhi|dukh|koshto|sogama|kashtama|mon kharap)\b/i.test(lower)
+    ) return "💙";
 
-    if (match(sad)) return "💙";
-    if (match(anxious)) return "💛";
-    if (match(angry)) return "❤️";
-    if (match(stuck)) return "🟣";
-    if (match(hopeful)) return "💚";
+    // Anxious / stress — multilingual
+    if (
+        HI_STRESS_REGEX.test(t) || BN_STRESS_REGEX.test(t) ||
+        TA_STRESS_REGEX.test(t) || GU_STRESS_REGEX.test(t) ||
+        KN_STRESS_REGEX.test(t) || ML_STRESS_REGEX.test(t) ||
+        PA_STRESS_REGEX.test(t) || OR_STRESS_REGEX.test(t) ||
+        MR_STRESS_REGEX.test(t) ||
+        /\b(worry|worried|anxious|scared|panic|nervous|stressed|overwhelmed|afraid|fear|tension)\b/.test(lower)
+    ) return "💛";
+
+    // Angry — multilingual
+    if (
+        BN_ANGER_REGEX.test(t) || GU_ANGER_REGEX.test(t) ||
+        KN_ANGER_REGEX.test(t) || ML_ANGER_REGEX.test(t) ||
+        PA_ANGER_REGEX.test(t) || OR_ANGER_REGEX.test(t) ||
+        MR_ANGER_REGEX.test(t) ||
+        /\b(angry|mad|frustrated|annoyed|irritated|furious|rage|hate)\b/.test(lower) ||
+        /(gussa|rag|rosh|kopa|kopam|deshyam)\b/i.test(lower)
+    ) return "❤️";
+
+    // Hopeful / grateful
+    if (
+        GRATITUDE_REGEX.test(t) ||
+        /\b(hope|hopeful|better|relieved|excited|good mood|feeling good|happy|joyful|cheerful|grateful|thankful)\b/.test(lower)
+    ) return "💚";
 
     return "⚪️";
 }
@@ -113,7 +102,7 @@ function getEmotionSectionLabel(emoji: string): string {
 }
 
 
-function getMoodTintForTextBackground(text: string): string {
+function getMoodTintForTextBackground(text: string, colors: ColorPalette): string {
     const emoji = getMoodEmojiForText(text);
 
     switch (emoji) {
@@ -128,7 +117,7 @@ function getMoodTintForTextBackground(text: string): string {
         case "💚":
             return colors.emotionHopeful;
         default:
-            return BOT_BUBBLE_BG;
+            return colors.surfaceSoft;
     }
 }
 
@@ -185,7 +174,7 @@ function getMoodEmojiForHistoryItem(item: HistoryRecord): string | null {
         if (e === "confused") return "🟣";
         if (e === "neutral") return "⚪️";
 
-        // Unknown-but-present emotion: keep neutral-safe (don’t re-guess from text)
+        // Unknown-but-present emotion: keep neutral-safe (don't re-guess from text)
         return "⚪️";
 
 
@@ -242,6 +231,7 @@ function formatTimeLabelSafe(timestamp: number): string {
 }
 
 export default function HistoryScreen() {
+    const colors = useColors();
     const navigation = useNavigation<any>();
 
     const {
@@ -326,7 +316,7 @@ export default function HistoryScreen() {
         });
 
 
-        // Require a minimum sample so the summary isn’t misleading
+        // Require a minimum sample so the summary isn't misleading
         if (userItems.length < 2) return null;
 
         const emojis: string[] = [];
@@ -652,7 +642,7 @@ export default function HistoryScreen() {
                         marginBottom: 6,
                     }}
                 >
-                    A simple preview of your recent conversations with Imotara on
+                    A simple view of your recent conversations with Imotara on
                     this device.
                 </Text>
 
@@ -788,9 +778,9 @@ export default function HistoryScreen() {
                             }}
                         >
                             {hasSyncError
-                                ? "Imotara couldn’t reach the cloud recently. Your messages are safe on this device and will sync when the connection recovers."
+                                ? "Imotara couldn't reach the cloud recently. Your messages are safe on this device and will sync when the connection recovers."
                                 : autoSyncDelaySeconds > 0
-                                    ? `Imotara will auto-sync these in about ${autoSyncDelaySeconds}s when you’re online.`
+                                    ? `Imotara will auto-sync these in about ${autoSyncDelaySeconds}s when you're online.`
                                     : "Imotara will sync these the next time you tap Sync."}
                         </Text>
 
@@ -931,7 +921,7 @@ export default function HistoryScreen() {
                             }}
                         >
                             When you chat with Imotara, your conversation appears
-                            here as an “Emotion History” so you can notice
+                            here as an "Emotion History" so you can notice
                             patterns, moods, and growth over time.
                         </Text>
 
@@ -1017,7 +1007,7 @@ export default function HistoryScreen() {
 
                             const bubbleBackground = isUser
                                 ? USER_BUBBLE_BG
-                                : getMoodTintForTextBackground(moodBaseText);
+                                : getMoodTintForTextBackground(moodBaseText, colors);
 
                             const moodHaloColor = !isUser
                                 ? getMoodHaloColor(moodBaseText)

@@ -1,7 +1,7 @@
 // src/screens/SettingsScreen.tsx
 import React from "react";
 import Constants from "expo-constants";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+
 
 import {
     View,
@@ -16,7 +16,17 @@ import {
 import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
-import colors from "../theme/colors";
+import { useTheme } from "../theme/ThemeContext";
+import {
+    scheduleCheckInReminder,
+    cancelCheckInReminder,
+    isCheckInReminderEnabled,
+} from "../notifications/checkInReminder";
+import {
+    loadMemories,
+    clearMemories,
+    type MemoryItem,
+} from "../state/companionMemory";
 import { fetchRemoteHistory } from "../api/historyClient";
 import AppSeparator from "../components/ui/AppSeparator";
 import AppSurface from "../components/ui/AppSurface";
@@ -48,9 +58,6 @@ import { DONATION_PRESETS, formatINRFromPaise } from "../payments/donations";
  */
 type DonationUIItem = { id: string; label: string; amount: number };
 const DONATION_UI_PRESETS = DONATION_PRESETS as readonly DonationUIItem[];
-
-// Preferred language override (used by src/api/aiClient.ts)
-const PREFERRED_LANGUAGE_KEY = "imotara_preferredLanguage";
 
 function prettyTier(tier: LicenseTier | string | undefined | null): string {
     const t = String(tier ?? "FREE").toUpperCase();
@@ -128,14 +135,12 @@ export default function SettingsScreen() {
         toneContext,
         setToneContext,
 
-        // ✅ Local device-only scope (prevents cross-user leakage when chatLinkKey is empty)
-        localUserScopeId,
-        resetLocalUserScopeId,
-
         // ✅ Cross-device chat link key (optional)
         chatLinkKey,
         setChatLinkKey,
     } = useSettings();
+
+    const { themeMode, toggleTheme, isDark, colors } = useTheme();
 
     const messageCount = (history as HistoryRecord[]).length;
 
@@ -170,41 +175,64 @@ export default function SettingsScreen() {
         donate: boolean;
     }>({ testRemote: false, pushOnly: false, syncNow: false, donate: false });
 
-    // ✅ Link key status (UI only)
-    const [chatLinkStatus, setChatLinkStatus] = React.useState<string | null>(null);
-
-    // ✅ Language (device-only override)
-    const [preferredLanguage, setPreferredLanguage] = React.useState<"en" | "hi" | "bn">("en");
-    const [languageStatus, setLanguageStatus] = React.useState<string | null>(null);
-
+    // ✅ Daily check-in reminder
+    const [reminderEnabled, setReminderEnabled] = React.useState(false);
+    const [reminderLoading, setReminderLoading] = React.useState(false);
     React.useEffect(() => {
-        (async () => {
-            try {
-                const raw = (await AsyncStorage.getItem(PREFERRED_LANGUAGE_KEY)) ?? "";
-                const base = raw.trim().toLowerCase().split(/[-_]/)[0];
-                if (base === "en" || base === "hi" || base === "bn") {
-                    setPreferredLanguage(base as "en" | "hi" | "bn");
-                }
-            } catch {
-                // ignore
-            }
-        })();
+        isCheckInReminderEnabled().then(setReminderEnabled).catch(() => {});
     }, []);
 
-    // ✅ Donation availability (graceful degradation for App Review / backend toggles)
-    const [donationsEnabled, setDonationsEnabled] = React.useState(true);
-    const [donationsDisabledMsg, setDonationsDisabledMsg] = React.useState<string | null>(
-        null
-    );
+    const handleReminderToggle = async (value: boolean) => {
+        if (reminderLoading) return;
+        setReminderLoading(true);
+        try {
+            if (value) {
+                const ok = await scheduleCheckInReminder();
+                if (!mountedRef.current) return;
+                if (ok) {
+                    setReminderEnabled(true);
+                } else {
+                    Alert.alert(
+                        "Permission needed",
+                        "Please allow notifications in your device settings to enable daily reminders.",
+                        [{ text: "OK" }]
+                    );
+                }
+            } else {
+                await cancelCheckInReminder();
+                if (mountedRef.current) setReminderEnabled(false);
+            }
+        } catch {
+            // non-fatal
+        } finally {
+            if (mountedRef.current) setReminderLoading(false);
+        }
+    };
 
-    const markDonationsDisabled = (msg?: string) => {
-        // Important: do not break existing flows; just disable the buttons and show a friendly message.
-        setDonationsEnabled(false);
-        setDonationsDisabledMsg(
-            (msg || "").trim() ||
-            "Donations are temporarily unavailable right now. Please try again later."
+    // Companion memory
+    const [memories, setMemories] = React.useState<MemoryItem[]>([]);
+    React.useEffect(() => {
+        loadMemories().then(setMemories).catch(() => {});
+    }, []);
+    const handleClearMemories = () => {
+        Alert.alert(
+            "Clear companion memory?",
+            "Imotara will forget what it has learned about you. This cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Clear",
+                    style: "destructive",
+                    onPress: () => {
+                        clearMemories().then(() => setMemories([])).catch(() => {});
+                    },
+                },
+            ]
         );
     };
+
+    // ✅ Link key status (UI only)
+    const [chatLinkStatus, setChatLinkStatus] = React.useState<string | null>(null);
 
     const saveChatLinkKey = () => {
         const v = (chatLinkKey ?? "").trim();
@@ -215,23 +243,6 @@ export default function SettingsScreen() {
     const clearChatLinkKey = () => {
         setChatLinkKey("");
         setChatLinkStatus("Link Key cleared.");
-    };
-
-    const handleResetLocalProfile = () => {
-        Alert.alert(
-            "Switch local profile (DEV)?",
-            "This simulates a different user on this device. Your current local messages won’t be deleted, but they will be hidden under a different local profile.",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Switch",
-                    style: "destructive",
-                    onPress: () => {
-                        resetLocalUserScopeId();
-                    },
-                },
-            ]
-        );
     };
 
     const handleClearHistory = () => {
@@ -556,16 +567,6 @@ export default function SettingsScreen() {
     }
 
     const handleDonate = async (preset: { label: string; amount: number }) => {
-        // ✅ If backend disabled donations, don't let users (or App Review) hit a hard error modal
-        if (!donationsEnabled) {
-            Alert.alert(
-                "Donations unavailable",
-                donationsDisabledMsg ||
-                "Donations are temporarily unavailable right now. Please try again later.",
-                [{ text: "OK" }]
-            );
-            return;
-        }
 
         if (!RazorpayCheckout?.open) {
             Alert.alert(
@@ -618,6 +619,34 @@ export default function SettingsScreen() {
 
             // 🔁 Auto-confirm once webhook records the receipt
             void pollDonationConfirmation(result?.razorpay_payment_id);
+
+            // 🔓 Verify payment and unlock license tier
+            const paymentId = result?.razorpay_payment_id;
+            if (paymentId) {
+                const base = getApiBaseUrl();
+                if (base) {
+                    fetch(`${base}/api/license/verify-payment`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ paymentId, chatLinkKey: chatLinkKey || "" }),
+                    })
+                        .then((r) => r.json())
+                        .then((data: any) => {
+                            if (data?.ok && data?.tier && mountedRef.current) {
+                                const newTier = String(data.tier).toUpperCase();
+                                if (typeof setLicenseTier === "function") {
+                                    setLicenseTier(newTier as any);
+                                }
+                                if (mountedRef.current) {
+                                    setLastSyncStatus(
+                                        `${newTier} plan unlocked. Thank you for supporting Imotara 🙏`
+                                    );
+                                }
+                            }
+                        })
+                        .catch(() => {});
+                }
+            }
         } catch (e: any) {
             // Razorpay cancellation often returns a structured error
             const desc =
@@ -626,28 +655,12 @@ export default function SettingsScreen() {
                 e?.message ||
                 "Could not start donation checkout. Please try again.";
 
-            const descLower = String(desc).toLowerCase();
-
             // If user cancelled, Razorpay commonly returns code 2 / "cancelled"
             const isCancel =
-                String(e?.code || "").toLowerCase().includes("cancel") ||
-                descLower.includes("cancel");
-
-            // ✅ Backend toggle: donations disabled (avoid scary error for App Review)
-            const isDisabledOnServer =
-                descLower.includes("donations are disabled") ||
-                descLower.includes("donation is disabled") ||
-                descLower.includes("disabled on server");
-
-            if (isDisabledOnServer) {
-                markDonationsDisabled(desc);
-                Alert.alert(
-                    "Donations unavailable",
-                    "Donations are temporarily unavailable right now. Please try again later.",
-                    [{ text: "OK" }]
-                );
-                return;
-            }
+                String(e?.code || "")
+                    .toLowerCase()
+                    .includes("cancel") ||
+                String(desc).toLowerCase().includes("cancel");
 
             Alert.alert(
                 isCancel ? "Donation cancelled" : "Donation error",
@@ -721,7 +734,7 @@ export default function SettingsScreen() {
                         marginBottom: 24,
                     }}
                 >
-                    Imotara Mobile (preview). By default your messages stay on this
+                    Imotara Mobile. By default your messages stay on this
                     device. From here you can try early emotion insights and sync
                     options — future versions will add full cloud backup controls and
                     teen safety settings.
@@ -765,7 +778,7 @@ export default function SettingsScreen() {
                                         amount: p.amount,
                                     } as any)
                                 }
-                                disabled={busyRef.current.donate || !donationsEnabled}
+                                disabled={busyRef.current.donate}
                                 style={{
                                     paddingHorizontal: 12,
                                     paddingVertical: 6,
@@ -775,8 +788,7 @@ export default function SettingsScreen() {
                                     backgroundColor: "rgba(56, 189, 248, 0.12)",
                                     marginRight: 8,
                                     marginBottom: 8,
-                                    opacity:
-                                        busyRef.current.donate || !donationsEnabled ? 0.6 : 1,
+                                    opacity: busyRef.current.donate ? 0.6 : 1,
                                 }}
                             >
                                 <Text
@@ -799,10 +811,8 @@ export default function SettingsScreen() {
                             marginTop: 6,
                         }}
                     >
-                        {!donationsEnabled
-                            ? donationsDisabledMsg ||
-                            "Donations are temporarily unavailable right now."
-                            : "Your chat data is never publicly exposed. Donations help cover hosting and development."}
+                        Your chat data is never publicly exposed. Donations help cover
+                        hosting and development.
                     </Text>
                 </AppSurface>
 
@@ -838,7 +848,7 @@ export default function SettingsScreen() {
                             marginTop: 6,
                         }}
                     >
-                        Billing is not enabled in this preview. This plan flag is used
+                        Billing is not enabled yet. This plan flag is used
                         only to prepare feature gating (e.g., cloud sync / history depth)
                         for a future release.
                     </Text>
@@ -920,7 +930,7 @@ export default function SettingsScreen() {
                     )}
                 </AppSurface>
 
-                {/* Emotion Insights (preview) card */}
+                {/* Emotion Insights card */}
                 <AppSurface style={{ marginBottom: 16 }}>
                     <View
                         style={{
@@ -937,7 +947,7 @@ export default function SettingsScreen() {
                                 fontWeight: "500",
                             }}
                         >
-                            Emotion Insights (Preview)
+                            Emotion Insights
                         </Text>
                         <Switch
                             value={emotionInsightsEnabled}
@@ -959,7 +969,7 @@ export default function SettingsScreen() {
                     >
                         When enabled, Imotara will try to give you deeper emotional
                         reflections, suggestions, and gentle prompts in the chat. In
-                        this early preview, analysis still runs locally on your device.
+                        this early version, analysis still runs locally on your device.
                     </Text>
 
                     <Text
@@ -972,6 +982,100 @@ export default function SettingsScreen() {
                         This toggle does not send any extra data to the cloud yet. It
                         is a design placeholder for future AI-powered insights.
                     </Text>
+                </AppSurface>
+
+                {/* Appearance */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 6 }}>
+                        Appearance
+                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                            {isDark ? "Dark mode" : "Light mode"}
+                        </Text>
+                        <TouchableOpacity
+                            onPress={toggleTheme}
+                            style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                paddingHorizontal: 14,
+                                paddingVertical: 8,
+                                borderRadius: 999,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                                backgroundColor: isDark ? "rgba(30,41,59,0.7)" : "rgba(226,232,240,0.9)",
+                                gap: 6,
+                            }}
+                        >
+                            <Text style={{ fontSize: 16 }}>{isDark ? "\uD83C\uDF19" : "\u2600\uFE0F"}</Text>
+                            <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600" }}>
+                                Switch to {isDark ? "Light" : "Dark"}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </AppSurface>
+
+                {/* Daily check-in reminder */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
+                                Daily check-in reminder
+                            </Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                                A gentle nudge at 8 PM every day
+                            </Text>
+                        </View>
+                        <Switch
+                            value={reminderEnabled}
+                            onValueChange={handleReminderToggle}
+                            disabled={reminderLoading}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+                </AppSurface>
+
+                {/* Companion memory */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: memories.length > 0 ? 10 : 0 }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
+                                Companion memory
+                            </Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                                {memories.length === 0
+                                    ? "Nothing stored yet — Imotara will learn from your conversations."
+                                    : `${memories.length} thing${memories.length !== 1 ? "s" : ""} remembered`}
+                            </Text>
+                        </View>
+                        {memories.length > 0 && (
+                            <TouchableOpacity onPress={handleClearMemories} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                <Text style={{ fontSize: 12, color: "rgba(248,113,113,0.9)", fontWeight: "600" }}>Clear</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                    {memories.slice(0, 5).map((m) => (
+                        <View
+                            key={m.id}
+                            style={{
+                                flexDirection: "row",
+                                alignItems: "flex-start",
+                                paddingVertical: 4,
+                                borderTopWidth: 1,
+                                borderTopColor: colors.border,
+                                gap: 6,
+                            }}
+                        >
+                            <Text style={{ fontSize: 11, color: colors.primary, marginTop: 1 }}>●</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>{m.text}</Text>
+                        </View>
+                    ))}
+                    {memories.length > 5 && (
+                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 6 }}>
+                            +{memories.length - 5} more
+                        </Text>
+                    )}
                 </AppSurface>
 
                 {/* ✅ Analysis Mode (Local / Cloud / Auto) */}
@@ -1057,72 +1161,6 @@ export default function SettingsScreen() {
                         </Text>
                     ) : null}
 
-                </AppSurface>
-
-                {/* ✅ Language (device-only) */}
-                <AppSurface style={{ marginBottom: 16 }}>
-                    <Text
-                        style={{
-                            fontSize: 14,
-                            color: colors.textPrimary,
-                            marginBottom: 6,
-                            fontWeight: "500",
-                        }}
-                    >
-                        Language
-                    </Text>
-
-                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}>
-                        Choose the language Imotara uses for replies on this device.
-                    </Text>
-
-                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                        {[
-                            { id: "en" as const, label: "English" },
-                            { id: "hi" as const, label: "Hindi (हिन्दी)" },
-                            { id: "bn" as const, label: "Bengali (বাংলা)" },
-                        ].map((opt) => {
-                            const active = preferredLanguage === opt.id;
-                            return (
-                                <TouchableOpacity
-                                    key={opt.id}
-                                    onPress={async () => {
-                                        setPreferredLanguage(opt.id);
-                                        try {
-                                            await AsyncStorage.setItem(PREFERRED_LANGUAGE_KEY, opt.id);
-                                            setLanguageStatus(
-                                                opt.id === "hi"
-                                                    ? "Hindi enabled."
-                                                    : opt.id === "bn"
-                                                        ? "Bengali enabled."
-                                                        : "English enabled."
-                                            );
-                                        } catch {
-                                            setLanguageStatus("Could not save language.");
-                                        }
-                                    }}
-                                    style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
-                                        borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : "rgba(15, 23, 42, 0.9)",
-                                        marginRight: 8,
-                                        marginBottom: 8,
-                                    }}
-                                >
-                                    <Text style={{ fontSize: 13, color: colors.textPrimary }}>{opt.label}</Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
-
-                    {languageStatus ? (
-                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
-                            {languageStatus}
-                        </Text>
-                    ) : null}
                 </AppSurface>
 
                 {/* ✅ Cross-device Link Key (optional) */}
@@ -1414,9 +1452,9 @@ export default function SettingsScreen() {
                                 </Text>
 
                                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6, lineHeight: 16 }}>
-                                    “Under 13” + “{relationshipLabel[relationship] || relationship}” can create a tone
+                                    "Under 13" + "{relationshipLabel[relationship] || relationship}" can create a tone
                                     conflict and sometimes makes replies feel awkward or repetitive. You can keep it,
-                                    but for smoother replies try “Junior buddy” or “Sibling”.
+                                    but for smoother replies try "Junior buddy" or "Sibling".
                                 </Text>
 
                                 <View style={{ flexDirection: "row", marginTop: 10 }}>
@@ -1727,27 +1765,6 @@ export default function SettingsScreen() {
                                             : 1,
                                 }}
                             />
-
-                            <AppButton
-                                title="Reset Local Profile (DEV)"
-                                onPress={handleResetLocalProfile}
-                                variant="secondary"
-                                style={{
-                                    alignSelf: "flex-start",
-                                    borderRadius: 999,
-                                    marginBottom: 8,
-                                }}
-                            />
-
-                            <Text
-                                style={{
-                                    fontSize: 11,
-                                    color: colors.textSecondary,
-                                    marginBottom: 8,
-                                }}
-                            >
-                                Local profile: {String(localUserScopeId).slice(0, 18)}…
-                            </Text>
                         </>
                     )}
 

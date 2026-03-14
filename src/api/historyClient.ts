@@ -1,8 +1,8 @@
 // src/api/historyClient.ts
 //
 // Tiny client to talk to the Imotara backend history API.
-// - fetchRemoteHistory → read-only (used by Settings → “Test Remote History Fetch”
-//   and by HistoryScreen → “Load Remote History (debug)”)
+// - fetchRemoteHistory → read-only (used by Settings → "Test Remote History Fetch"
+//   and by HistoryScreen → "Load Remote History (debug)")
 // - pushRemoteHistory  → best-effort batch push of local history to backend
 //
 // Design notes:
