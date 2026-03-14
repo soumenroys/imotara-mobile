@@ -8,6 +8,7 @@ import {
     ViewStyle,
     TextStyle,
 } from "react-native";
+import { useColors } from "../../theme/ThemeContext";
 
 export type AppButtonVariant =
     | "primary"
@@ -71,6 +72,7 @@ export const AppButton: React.FC<AppButtonProps> = ({
     loading = false,
     debounceMs = 450,
 }) => {
+    const colors = useColors();
     // Prevent double-presses without changing any upstream logic
     const lastPressAtRef = useRef<number>(0);
 
@@ -92,6 +94,25 @@ export const AppButton: React.FC<AppButtonProps> = ({
 
     const label = loading ? `${title}…` : title;
 
+    // Resolve variant colors — primary/secondary/ghost adapt to theme
+    const containerVariantStyle: ViewStyle = variant === "primary"
+        ? { backgroundColor: colors.primary, borderColor: colors.primary }
+        : variant === "secondary"
+        ? { backgroundColor: colors.surfaceSoft, borderColor: colors.border }
+        : variant === "ghost"
+        ? { backgroundColor: "transparent", borderColor: colors.border }
+        : variant === "destructive"
+        ? { backgroundColor: "rgba(248,113,113,0.14)", borderColor: "rgba(248,113,113,0.55)" }
+        : { backgroundColor: "rgba(34,197,94,0.14)", borderColor: "rgba(34,197,94,0.55)" };
+
+    const textVariantColor = variant === "primary"
+        ? "#ffffff"
+        : variant === "destructive"
+        ? "#fecaca"
+        : variant === "success"
+        ? "rgba(187,247,208,1)"
+        : colors.textPrimary;
+
     return (
         <TouchableOpacity
             onPress={handlePress}
@@ -101,12 +122,12 @@ export const AppButton: React.FC<AppButtonProps> = ({
             style={[
                 styles.base,
                 size === "sm" ? styles.sizeSm : styles.sizeMd,
-                variantStyles.container[variant],
+                containerVariantStyle,
                 isDisabled && styles.disabled,
                 style,
             ]}
         >
-            <Text style={[styles.text, variantStyles.text[variant], textStyle]}>
+            <Text style={[styles.text, { color: textVariantColor }, textStyle]}>
                 {label}
             </Text>
         </TouchableOpacity>
@@ -137,54 +158,5 @@ const styles = StyleSheet.create({
     },
 });
 
-/**
- * Variant palette:
- * - primary: current look (backward compatible)
- * - secondary: softer outline/button for non-primary actions
- * - destructive: for delete/clear actions
- * - ghost: minimal, text-like action
- * - success: used for safe debug/load actions (HistoryScreen)
- */
-const variantStyles = {
-    container: StyleSheet.create({
-        primary: {
-            backgroundColor: "#3A3F58", // previous default
-            borderColor: "rgba(255,255,255,0.12)",
-        },
-        secondary: {
-            backgroundColor: "rgba(58, 63, 88, 0.35)",
-            borderColor: "rgba(255,255,255,0.14)",
-        },
-        destructive: {
-            backgroundColor: "rgba(248, 113, 113, 0.14)",
-            borderColor: "rgba(248, 113, 113, 0.55)",
-        },
-        ghost: {
-            backgroundColor: "transparent",
-            borderColor: "rgba(255,255,255,0.10)",
-        },
-        success: {
-            backgroundColor: "rgba(34, 197, 94, 0.14)",
-            borderColor: "rgba(34, 197, 94, 0.55)",
-        },
-    }),
-    text: StyleSheet.create({
-        primary: {
-            color: "#ffffff",
-        },
-        secondary: {
-            color: "#ffffff",
-        },
-        destructive: {
-            color: "#fecaca",
-        },
-        ghost: {
-            color: "rgba(255,255,255,0.85)",
-        },
-        success: {
-            color: "rgba(187, 247, 208, 1)",
-        },
-    }),
-};
 
 export default AppButton;

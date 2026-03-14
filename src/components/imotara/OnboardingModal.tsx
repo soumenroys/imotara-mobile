@@ -12,7 +12,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import colors from "../../theme/colors";
+import { useColors } from "../../theme/ThemeContext";
+import type { ColorPalette } from "../../theme/colors";
 
 type Relationship =
   | "prefer_not"
@@ -71,6 +72,8 @@ type Props = {
 };
 
 export function OnboardingModal({ visible, onComplete }: Props) {
+  const colors = useColors();
+  const styles = makeStyles(colors);
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [relationship, setRelationship] = useState<Relationship>("friend");
@@ -213,92 +216,94 @@ export function OnboardingModal({ visible, onComplete }: Props) {
   );
 }
 
-const styles = {
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 20,
-  } as const,
-  dotsRow: {
-    flexDirection: "row" as const,
-    gap: 8,
-    marginBottom: 32,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.border,
-  },
-  dotActive: {
-    backgroundColor: colors.primary,
-    width: 24,
-  },
-  stepLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginBottom: 8,
-    textTransform: "uppercase" as const,
-    letterSpacing: 1,
-  },
-  heading: {
-    fontSize: 22,
-    fontWeight: "700" as const,
-    color: colors.textPrimary,
-    marginBottom: 10,
-    lineHeight: 30,
-  },
-  subheading: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 24,
-    lineHeight: 20,
-  },
-  input: {
-    backgroundColor: colors.surfaceSoft,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: colors.textPrimary,
-  },
-  optionRow: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "rgba(30, 41, 59, 0.4)",
-    marginBottom: 10,
-  },
-  optionRowSelected: {
-    borderColor: colors.primary,
-    backgroundColor: "rgba(56, 189, 248, 0.08)",
-  },
-  optionLabel: {
-    fontSize: 14,
-    fontWeight: "600" as const,
-    color: colors.textPrimary,
-    marginBottom: 2,
-  },
-  optionDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: "center" as const,
-    marginBottom: 8,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: "700" as const,
-    color: "#0f172a",
-  },
-};
+function makeStyles(colors: ColorPalette) {
+  return {
+    container: {
+      flex: 1,
+      paddingHorizontal: 24,
+      paddingTop: 60,
+      paddingBottom: 20,
+    } as const,
+    dotsRow: {
+      flexDirection: "row" as const,
+      gap: 8,
+      marginBottom: 32,
+    },
+    dot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.border,
+    },
+    dotActive: {
+      backgroundColor: colors.primary,
+      width: 24,
+    },
+    stepLabel: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      marginBottom: 8,
+      textTransform: "uppercase" as const,
+      letterSpacing: 1,
+    },
+    heading: {
+      fontSize: 22,
+      fontWeight: "700" as const,
+      color: colors.textPrimary,
+      marginBottom: 10,
+      lineHeight: 30,
+    },
+    subheading: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      marginBottom: 24,
+      lineHeight: 20,
+    },
+    input: {
+      backgroundColor: colors.surfaceSoft,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      fontSize: 16,
+      color: colors.textPrimary,
+    },
+    optionRow: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      padding: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceSoft,
+      marginBottom: 10,
+    },
+    optionRowSelected: {
+      borderColor: colors.primary,
+      backgroundColor: colors.emotionHopeful,
+    },
+    optionLabel: {
+      fontSize: 14,
+      fontWeight: "600" as const,
+      color: colors.textPrimary,
+      marginBottom: 2,
+    },
+    optionDesc: {
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    button: {
+      backgroundColor: colors.primary,
+      borderRadius: 14,
+      paddingVertical: 16,
+      alignItems: "center" as const,
+      marginBottom: 8,
+    },
+    buttonText: {
+      fontSize: 16,
+      fontWeight: "700" as const,
+      color: "#0f172a",
+    },
+  };
+}

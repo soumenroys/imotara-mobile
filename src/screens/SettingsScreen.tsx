@@ -16,7 +16,6 @@ import {
 import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
-import colors from "../theme/colors";
 import { useTheme } from "../theme/ThemeContext";
 import { fetchRemoteHistory } from "../api/historyClient";
 import AppSeparator from "../components/ui/AppSeparator";
@@ -131,7 +130,7 @@ export default function SettingsScreen() {
         setChatLinkKey,
     } = useSettings();
 
-    const { themeMode, toggleTheme, isDark } = useTheme();
+    const { themeMode, toggleTheme, isDark, colors } = useTheme();
 
     const messageCount = (history as HistoryRecord[]).length;
 

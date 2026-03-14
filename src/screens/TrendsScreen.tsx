@@ -5,7 +5,7 @@
 import React, { useMemo } from "react";
 import { View, Text, ScrollView } from "react-native";
 import { useHistoryStore } from "../state/HistoryContext";
-import colors from "../theme/colors";
+import { useColors } from "../theme/ThemeContext";
 
 type EmotionBucket =
   | "sadness"
@@ -47,6 +47,7 @@ function dayLabel(date: Date): string {
 }
 
 export default function TrendsScreen() {
+  const colors = useColors();
   const store = useHistoryStore() as any;
   const history: any[] = store.history ?? [];
 

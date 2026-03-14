@@ -9,19 +9,19 @@ import ChatScreen from "../screens/ChatScreen";
 import HistoryScreen from "../screens/HistoryScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import TrendsScreen from "../screens/TrendsScreen";
-import colors from "../theme/colors";
-
 // lifecycle hook + history store
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 
 import { OnboardingModal, type OnboardingResult } from "../components/imotara/OnboardingModal";
+import { useColors } from "../theme/ThemeContext";
 
 const Tab = createBottomTabNavigator();
 const ONBOARDING_KEY = "imotara.onboarding.done.v1";
 
 export default function RootNavigator() {
+    const colors = useColors();
     // --- Lifecycle-driven "resume" sync (deduped) ---
     const history = useHistoryStore();
     const { toneContext, setToneContext, setAnalysisMode } = useSettings() as any;

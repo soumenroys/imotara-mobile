@@ -6,7 +6,8 @@ import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import { fetchRemoteHistory } from "../api/historyClient";
-import colors from "../theme/colors";
+import { useColors } from "../theme/ThemeContext";
+import type { ColorPalette } from "../theme/colors";
 import AppButton from "../components/ui/AppButton";
 import AppChip from "../components/ui/AppChip";
 import { DEBUG_UI_ENABLED } from "../config/debug";
@@ -30,7 +31,6 @@ import {
 } from "../lib/emotion/keywordMaps";
 
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
-const BOT_BUBBLE_BG = colors.surfaceSoft;
 const SESSION_GAP_MS = 45 * 60 * 1000;
 
 function getMoodEmojiForText(text: string): string {
@@ -102,7 +102,7 @@ function getEmotionSectionLabel(emoji: string): string {
 }
 
 
-function getMoodTintForTextBackground(text: string): string {
+function getMoodTintForTextBackground(text: string, colors: ColorPalette): string {
     const emoji = getMoodEmojiForText(text);
 
     switch (emoji) {
@@ -117,7 +117,7 @@ function getMoodTintForTextBackground(text: string): string {
         case "💚":
             return colors.emotionHopeful;
         default:
-            return BOT_BUBBLE_BG;
+            return colors.surfaceSoft;
     }
 }
 
@@ -231,6 +231,7 @@ function formatTimeLabelSafe(timestamp: number): string {
 }
 
 export default function HistoryScreen() {
+    const colors = useColors();
     const navigation = useNavigation<any>();
 
     const {
@@ -1006,7 +1007,7 @@ export default function HistoryScreen() {
 
                             const bubbleBackground = isUser
                                 ? USER_BUBBLE_BG
-                                : getMoodTintForTextBackground(moodBaseText);
+                                : getMoodTintForTextBackground(moodBaseText, colors);
 
                             const moodHaloColor = !isUser
                                 ? getMoodHaloColor(moodBaseText)

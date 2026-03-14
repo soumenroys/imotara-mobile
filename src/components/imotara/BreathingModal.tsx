@@ -11,7 +11,7 @@ import {
   Vibration,
   Pressable,
 } from "react-native";
-import colors from "../../theme/colors";
+import { useColors } from "../../theme/ThemeContext";
 
 type Pattern = {
   name: string;
@@ -55,6 +55,7 @@ type Props = {
 };
 
 export function BreathingModal({ visible, onClose }: Props) {
+  const colors = useColors();
   const [selectedPattern, setSelectedPattern] = useState(0);
   const [running, setRunning] = useState(false);
   const [phaseIndex, setPhaseIndex] = useState(0);

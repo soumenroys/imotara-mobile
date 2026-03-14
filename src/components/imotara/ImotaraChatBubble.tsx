@@ -3,7 +3,8 @@ import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Pressable, Animated } from "react-native";
 import AppSurface from "../ui/AppSurface";
 import AppText from "../ui/AppText";
-import colors from "../../theme/colors";
+import { useColors } from "../../theme/ThemeContext";
+import type { ColorPalette } from "../../theme/colors";
 import { LinearGradient } from "expo-linear-gradient";
 
 export type ImotaraChatBubbleProps = {
@@ -32,7 +33,7 @@ function getMoodEmoji(hint?: string | null): string {
     return "⚪️";
 }
 
-function getMoodTint(hint?: string | null): string {
+function getMoodTint(hint: string | null | undefined, colors: ColorPalette): string {
     if (!hint) return colors.emotionNeutral;
     const t = hint.toLowerCase();
     if (t.includes("low")) return colors.emotionSad;
@@ -64,8 +65,9 @@ export const ImotaraChatBubble: React.FC<ImotaraChatBubbleProps> = ({
     onLongPress,
     onRetrySync,
 }) => {
+    const colors = useColors();
     const moodEmoji = !isUser ? getMoodEmoji(emotion) : "";
-    const tint = !isUser ? getMoodTint(emotion) : null;
+    const tint = !isUser ? getMoodTint(emotion, colors) : null;
     const gradient = tint ? getMoodGradient(tint) : null;
 
     // ------------------------

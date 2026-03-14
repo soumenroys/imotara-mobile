@@ -25,7 +25,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
-import colors from "../theme/colors";
+import { useColors } from "../theme/ThemeContext";
+import type { ColorPalette } from "../theme/colors";
 import { callImotaraAI } from "../api/aiClient";
 
 import { LinearGradient } from "expo-linear-gradient";
@@ -311,7 +312,7 @@ function getMoodEmojiForHint(hint?: string): string {
 }
 
 // moodHint → bubbleTint mapping
-function getMoodTintForHint(hint?: string): string {
+function getMoodTintForHint(hint: string | undefined, colors: ColorPalette): string {
   if (!hint) return colors.emotionNeutral;
   const text = hint.toLowerCase();
 
@@ -825,6 +826,7 @@ function isFirstBotReplyOfSession(
 
 export default function ChatScreen() {
   console.log("[imotara] ChatScreen mounted");
+  const colors = useColors();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -2210,7 +2212,7 @@ export default function ChatScreen() {
 
     if (!isUser) {
       const tintSource = message.moodHint || message.text;
-      const tint = getMoodTintForHint(tintSource);
+      const tint = getMoodTintForHint(tintSource, colors);
       const gradient = getMoodGradient(tint);
       gradientStart = gradient.start;
       gradientEnd = gradient.end;
@@ -2836,7 +2838,7 @@ export default function ChatScreen() {
 
   const typingBubbleBg = useMemo(() => {
     if (!isTyping) return "rgba(15, 23, 42, 0.9)";
-    if (latestMoodHint) return getMoodTintForHint(latestMoodHint);
+    if (latestMoodHint) return getMoodTintForHint(latestMoodHint, colors);
     return "rgba(15, 23, 42, 0.9)";
   }, [isTyping, latestMoodHint]);
 

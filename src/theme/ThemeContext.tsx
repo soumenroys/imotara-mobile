@@ -57,3 +57,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 export function useTheme() {
     return useContext(ThemeContext);
 }
+
+/** Convenience hook — returns the active palette (DARK or LIGHT). */
+export function useColors() {
+    return useContext(ThemeContext).colors;
+}
