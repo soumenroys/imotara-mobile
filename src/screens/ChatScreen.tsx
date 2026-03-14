@@ -29,10 +29,18 @@ import type { ReflectionSeed } from "../lib/reflectionSeedContract";
 import {
   buildLocalReply,
   LOCAL_DEV_TEST_PROMPTS,
+  type LocalRecentContext,
 } from "../lib/ai/local/localReplyEngine";
 import {
-  BN_SAD_REGEX,
+  BN_SAD_REGEX, BN_STRESS_REGEX, BN_ANGER_REGEX,
   HI_STRESS_REGEX,
+  TA_SAD_REGEX, TA_STRESS_REGEX,
+  GU_SAD_REGEX, GU_STRESS_REGEX,
+  KN_SAD_REGEX, KN_STRESS_REGEX,
+  ML_SAD_REGEX, ML_STRESS_REGEX,
+  PA_SAD_REGEX, PA_STRESS_REGEX,
+  OR_SAD_REGEX, OR_STRESS_REGEX, MR_SAD_REGEX, MR_STRESS_REGEX,
+  GRATITUDE_REGEX,
   CONFUSED_EN_REGEX,
   isConfusedText,
 } from "../lib/emotion/keywordMaps";
@@ -50,7 +58,7 @@ type ChatMessage = {
   moodHint?: string;
   isSynced?: boolean;
   source?: ChatMessageSource;
-  isPending?: boolean; // for “Syncing…” state
+  isPending?: boolean; // for "Syncing…" state
 
   // ✅ NEW: parity metadata (from /api/respond)
   reflectionSeed?: ReflectionSeed;
@@ -81,8 +89,8 @@ function varyLocalFollowUpIfRepeated(params: {
   const normalize = (s: string) =>
     String(s ?? "")
       .toLowerCase()
-      .replace(/[’‘]/g, "'")
-      .replace(/[“”]/g, '"')
+      .replace(/['']/g, "'")
+      .replace(/[""]/g, '"')
       .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")
       .replace(/[^a-z0-9]+/g, " ")
       .replace(/\s+/g, " ")
@@ -105,7 +113,7 @@ function varyLocalFollowUpIfRepeated(params: {
     lowerUserMsg,
   );
   const isOverwhelm =
-    /\b(overwhelm|overwhelmed|pressure|too much|piling up|burnt out|burned out|can['’]t focus|distract)\b/.test(
+    /\b(overwhelm|overwhelmed|pressure|too much|piling up|burnt out|burned out|can['']t focus|distract)\b/.test(
       lowerUserMsg,
     );
   const isDecision =
@@ -116,20 +124,20 @@ function varyLocalFollowUpIfRepeated(params: {
   const alternates = isLonely
     ? [
         "When does it hit hardest — evenings, weekends, or even around people?",
-        "Do you feel like you’re missing someone specific, or more a general sense of disconnection?",
+        "Do you feel like you're missing someone specific, or more a general sense of disconnection?",
         "What would feel like a tiny bit of support today — a message, a call, or just being heard?",
       ]
     : isOverwhelm
       ? [
           "If we shrink it to one thing, what feels most urgent?",
-          "What’s heaviest right now — time, energy, or expectations?",
+          "What's heaviest right now — time, energy, or expectations?",
           "Do you want to vent first, or pick one tiny next step together?",
         ]
       : isDecision
         ? [
             "Which option gives you more peace a week from now?",
             "If you chose based on one value, what would it be?",
-            "What’s the cost of waiting vs choosing now?",
+            "What's the cost of waiting vs choosing now?",
           ]
         : [
             "What would help most right now — comfort, clarity, or a practical next step?",
@@ -151,8 +159,8 @@ function stripReflectionSeedPromptFromMessage(
   const normalize = (s: string) =>
     String(s ?? "")
       .toLowerCase()
-      .replace(/[’‘]/g, "'")
-      .replace(/[“”]/g, '"')
+      .replace(/['']/g, "'")
+      .replace(/[""]/g, '"')
       .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")
       .replace(/[^a-z0-9]+/g, " ")
       .replace(/\s+/g, " ")
@@ -375,116 +383,45 @@ function getLocalMoodHint(text: string): string {
     happy: containsEmoji(emojiHappy),
   };
 
-  // Word-based mood inference (existing behavior preserved)
-  const sadWords = [
-    // English
-    "sad",
-    "down",
-    "lonely",
-    "tired",
-    "upset",
-    "hurt",
-    "empty",
-    "depressed",
-    "blue",
-    "cry",
-    "crying",
-
-    // ✅ Bengali (additive) — fixes prompt #8: “আমি খুব মন খারাপ করছি”
-    "মন খারাপ",
-    "খারাপ লাগছে",
-    "দুঃখ",
-    "কষ্ট",
-    "কাঁদ",
-    "কান্না",
-    "একলা",
-    "একাকী",
-  ];
-
-  const anxiousWords = [
-    // English
-    "worry",
-    "worried",
-    "anxious",
-    "scared",
-    "panic",
-    "nervous",
-    "stressed",
-    "overwhelmed",
-    "afraid",
-    "fear",
-
-    // ✅ Hindi/Devanagari (additive) — fixes prompt #9: “मैं बहुत परेशान हूँ”
-    "परेशान",
-    "तनाव",
-    "चिंता",
-    "घबराहट",
-    "बेचैन",
-  ];
-
-  const angryWords = [
-    "angry",
-    "mad",
-    "frustrated",
-    "annoyed",
-    "irritated",
-    "furious",
-    "rage",
-    "hate",
-  ];
-  const hopefulWords = [
-    "hope",
-    "hopeful",
-    "excited",
-    "looking forward",
-    "grateful",
-    "thankful",
-    "relieved",
-    "better",
-    "good mood",
-    "feeling good",
-    "happy",
-    "joyful",
-    "cheerful",
-  ];
-  const stuckWords = [
-    "stuck",
-    "lost",
-    "confused",
-    "don’t know",
-    "dont know",
-    "no idea",
-    "numb",
-
-    // ✅ Additive: common indecision phrasing → confused
-    "not sure what to do",
-    "not sure what i do",
-    "not sure what to do next",
-  ];
-
-  const containsAny = (arr: string[]) => arr.some((w) => lower.includes(w));
-
-  // ✅ Priority: explicit words first (unchanged behavior for normal messages)
-  if (containsAny(sadWords)) {
-    return "You seem a bit low. It’s okay to feel this way — Imotara is here with you.";
+  // Multilingual mood inference via keywordMaps regexes
+  if (isConfusedText(raw) || CONFUSED_EN_REGEX.test(lower) ||
+      /\b(stuck|lost|confused|don't know|dont know|no idea|numb|not sure what to do)\b/.test(lower)) {
+    return "You sound a bit stuck or unsure. It's okay to take time to untangle things.";
   }
-  if (containsAny(anxiousWords)) {
+  if (
+    BN_SAD_REGEX.test(raw) || TA_SAD_REGEX.test(raw) ||
+    GU_SAD_REGEX.test(raw) || KN_SAD_REGEX.test(raw) ||
+    ML_SAD_REGEX.test(raw) || PA_SAD_REGEX.test(raw) ||
+    OR_SAD_REGEX.test(raw) || MR_SAD_REGEX.test(raw) ||
+    /\b(sad|down|lonely|tired|upset|hurt|empty|depressed|blue|cry|crying|hopeless)\b/.test(lower)
+  ) {
+    return "You seem a bit low. It's okay to feel this way — Imotara is here with you.";
+  }
+  if (
+    HI_STRESS_REGEX.test(raw) || BN_STRESS_REGEX.test(raw) ||
+    TA_STRESS_REGEX.test(raw) || GU_STRESS_REGEX.test(raw) ||
+    KN_STRESS_REGEX.test(raw) || ML_STRESS_REGEX.test(raw) ||
+    PA_STRESS_REGEX.test(raw) || MR_STRESS_REGEX.test(raw) ||
+    /\b(worry|worried|anxious|scared|panic|nervous|stressed|overwhelmed|afraid|fear)\b/.test(lower)
+  ) {
     return "It sounds like something is making you feel tense or worried.";
   }
-  if (containsAny(angryWords)) {
+  if (
+    BN_ANGER_REGEX.test(raw) ||
+    /\b(angry|mad|frustrated|annoyed|irritated|furious|rage|hate)\b/.test(lower)
+  ) {
     return "It sounds like something has really upset or frustrated you.";
   }
-  if (containsAny(stuckWords) || CONFUSED_EN_REGEX.test(lower)) {
-    return "You sound a bit stuck or unsure. It’s okay to take time to untangle things.";
-  }
-
-  if (containsAny(hopefulWords)) {
-    return "I can sense a little bit of light or hope in what you’re saying.";
+  if (
+    GRATITUDE_REGEX.test(raw) ||
+    /\b(hope|hopeful|excited|looking forward|grateful|thankful|relieved|better|good mood|feeling good|happy|joyful|cheerful)\b/.test(lower)
+  ) {
+    return "I can sense a little bit of light or hope in what you're saying.";
   }
 
   // ✅ If no word match, fall back to emoji signals (NEW)
   if (emojiSignals.sad) {
-    return "You seem a bit low. It’s okay to feel this way — Imotara is here with you.";
+    return "You seem a bit low. It's okay to feel this way — Imotara is here with you.";
   }
   if (emojiSignals.anxious) {
     return "It sounds like something is making you feel tense or worried.";
@@ -493,13 +430,13 @@ function getLocalMoodHint(text: string): string {
     return "It sounds like something has really upset or frustrated you.";
   }
   if (emojiSignals.stuck) {
-    return "You sound a bit stuck or unsure. It’s okay to take time to untangle things.";
+    return "You sound a bit stuck or unsure. It's okay to take time to untangle things.";
   }
   if (emojiSignals.happy) {
-    return "I can sense a little bit of light or hope in what you’re saying.";
+    return "I can sense a little bit of light or hope in what you're saying.";
   }
 
-  return "I’m listening closely. However you’re feeling, it matters here.";
+  return "I'm listening closely. However you're feeling, it matters here.";
 }
 
 // ✅ Additive: same logic, but returns a stable primary label + hint.
@@ -524,127 +461,86 @@ function getLocalMoodHintWithPrimary(text: string): {
     ) {
       return {
         primary: "joy",
-        hint: "I can sense some joy or playfulness in what you’re sharing.",
+        hint: "I can sense some joy or playfulness in what you're sharing.",
       };
     }
   }
 
-  // mirrored buckets from getLocalMoodHint (keep in sync; additive)
-  const sadWords = [
-    "sad",
-    "lonely",
-    "hopeless",
-    "empty",
-    "down",
-    "depressed",
-    "cry",
-    "miserable",
-  ];
-  const anxiousWords = [
-    "anxious",
-    "anxiety",
-    "panic",
-    "panicking",
-    "scared",
-    "fear",
-    "worried",
-    "worry",
-    "nervous",
-    "tense",
-    "stress",
-    "stressed",
-  ];
-  const angryWords = [
-    "angry",
-    "anger",
-    "furious",
-    "mad",
-    "irritated",
-    "annoyed",
-    "rage",
-    "frustrated",
-  ];
-  const stuckWords = [
-    "stuck",
-    "lost",
-    "confused",
-    "don’t know",
-    "dont know",
-    "no idea",
-    "numb",
-    "not sure what to do",
-    "not sure what i do",
-    "not sure what to do next",
-  ];
-  const hopefulWords = [
-    "hope",
-    "hopeful",
-    "better",
-    "improving",
-    "relieved",
-    "grateful",
-    "happy",
-    "joy",
-    "excited",
-  ];
-
-  const containsAny = (list: string[]) => list.some((w) => t.includes(w));
-
-  // ✅ Non-English / mixed-script detection (additive, centralized)
-  // Fix: romanized Bengali/Hinglish like "kichu bhalo lagchhe na" / "mood off"
-  if (HI_STRESS_REGEX.test(text || "")) {
-    return {
-      primary: "stressed",
-      hint: "It sounds like something is making you feel tense or worried.",
-    };
-  }
-  if (BN_SAD_REGEX.test(text || "")) {
-    return {
-      primary: "sadness",
-      hint: "You seem a bit low. It’s okay to feel this way — Imotara is here with you.",
-    };
-  }
-  if (CONFUSED_EN_REGEX.test(text || "")) {
+  // mirrored buckets from getLocalMoodHint (keep in sync; multilingual regex-based)
+  // Confused first (overlaps with sad in some languages)
+  if (
+    isConfusedText(raw) ||
+    CONFUSED_EN_REGEX.test(t) ||
+    /\b(stuck|lost|confused|don't know|dont know|no idea|numb|not sure)\b/.test(t)
+  ) {
     return {
       primary: "confused",
-      hint: "You sound a bit stuck or unsure. It’s okay to take time to untangle things.",
+      hint: "You sound a bit stuck or unsure. It's okay to take time to untangle things.",
     };
   }
 
-  if (containsAny(anxiousWords)) {
+  // Sad — 10 Indian languages
+  if (
+    BN_SAD_REGEX.test(raw) ||
+    TA_SAD_REGEX.test(raw) ||
+    GU_SAD_REGEX.test(raw) ||
+    KN_SAD_REGEX.test(raw) ||
+    ML_SAD_REGEX.test(raw) ||
+    PA_SAD_REGEX.test(raw) ||
+    OR_SAD_REGEX.test(raw) ||
+    MR_SAD_REGEX.test(raw) ||
+    /\b(sad|lonely|hopeless|empty|down|depressed|cry|miserable)\b/.test(t)
+  ) {
+    return {
+      primary: "sadness",
+      hint: "You seem a bit low. It's okay to feel this way — Imotara is here with you.",
+    };
+  }
+
+  // Stressed / anxious — 10 Indian languages
+  if (
+    HI_STRESS_REGEX.test(raw) ||
+    BN_STRESS_REGEX.test(raw) ||
+    TA_STRESS_REGEX.test(raw) ||
+    GU_STRESS_REGEX.test(raw) ||
+    KN_STRESS_REGEX.test(raw) ||
+    ML_STRESS_REGEX.test(raw) ||
+    PA_STRESS_REGEX.test(raw) ||
+    OR_STRESS_REGEX.test(raw) ||
+    MR_STRESS_REGEX.test(raw) ||
+    /\b(anxious|anxiety|panic|panicking|scared|fear|worried|worry|nervous|tense|stress|stressed)\b/.test(t)
+  ) {
     return {
       primary: "stressed",
       hint: "It sounds like something is making you feel tense or worried.",
     };
   }
-  if (containsAny(sadWords)) {
-    return {
-      primary: "sadness",
-      hint: "You seem a bit low. It’s okay to feel this way — Imotara is here with you.",
-    };
-  }
-  if (containsAny(angryWords)) {
+
+  // Angry — multilingual
+  if (
+    BN_ANGER_REGEX.test(raw) ||
+    /\b(angry|anger|furious|mad|irritated|annoyed|rage|frustrated)\b/.test(t)
+  ) {
     return {
       primary: "anger",
       hint: "It sounds like something has really upset or frustrated you.",
     };
   }
-  if (containsAny(stuckWords)) {
-    return {
-      primary: "confused",
-      hint: "You sound a bit stuck or unsure. It’s okay to take time to untangle things.",
-    };
-  }
-  if (containsAny(hopefulWords)) {
+
+  // Hopeful / grateful — multilingual
+  if (
+    GRATITUDE_REGEX.test(raw) ||
+    /\b(hope|hopeful|better|improving|relieved|grateful|happy|joy|excited)\b/.test(t)
+  ) {
     return {
       primary: "hopeful",
-      hint: "I can sense a little bit of light or hope in what you’re saying.",
+      hint: "I can sense a little bit of light or hope in what you're saying.",
     };
   }
 
   return {
     primary: undefined,
-    hint: "I’m listening closely. However you’re feeling, it matters here.",
+    hint: "I'm listening closely. However you're feeling, it matters here.",
   };
 }
 
@@ -671,7 +567,7 @@ type DevQaCase = { id: number; prompt: string; expected: string };
 const DEV_QA_CASES: DevQaCase[] = [
   {
     id: 1,
-    prompt: "I can’t focus today. Work is piling up.",
+    prompt: "I can't focus today. Work is piling up.",
     expected: "confused",
   },
   { id: 2, prompt: "😂😂😂", expected: "joy" },
@@ -679,8 +575,8 @@ const DEV_QA_CASES: DevQaCase[] = [
   { id: 4, prompt: "আমি খুব মন খারাপ করছি", expected: "sad" },
   { id: 5, prompt: "मैं बहुत परेशान हूँ", expected: "stressed" },
   { id: 6, prompt: "I feel lonely and down", expected: "sad" },
-  { id: 7, prompt: "I’m stressed and worried", expected: "stressed" },
-  { id: 8, prompt: "I’m so frustrated right now", expected: "angry" },
+  { id: 7, prompt: "I'm stressed and worried", expected: "stressed" },
+  { id: 8, prompt: "I'm so frustrated right now", expected: "angry" },
   { id: 9, prompt: "Not sure what to do…", expected: "confused" },
   { id: 10, prompt: "I feel hopeful today ✨", expected: "hopeful" },
   { id: 11, prompt: "I cannot focus today", expected: "confused" },
@@ -848,8 +744,8 @@ function stripReflectionPromptFromMessage(
   const normalize = (s: string) =>
     s
       .toLowerCase()
-      .replace(/[’‘]/g, "'")
-      .replace(/[“”]/g, '"')
+      .replace(/['']/g, "'")
+      .replace(/[""]/g, '"')
       .replace(/\s+/g, " ")
       .trim();
 
@@ -1494,7 +1390,7 @@ export default function ChatScreen() {
     setActionMessage(null);
   };
 
-  // ✅ Explicit “sync now” action (uses deduped sync trigger when available)
+  // ✅ Explicit "sync now" action (uses deduped sync trigger when available)
   const handleSyncNowForMessage = async (msg: ChatMessage) => {
     try {
       // ✅ Hardening: don't start a sync attempt when cloud is gated off
@@ -1693,7 +1589,7 @@ export default function ChatScreen() {
             followUp: remote?.followUp,
             reflectionSeed: remote?.reflectionSeed,
 
-            // What we need to debug “Cloud but same reply”
+            // What we need to debug "Cloud but same reply"
             analysisMode,
             meta: remote?.meta,
           });
@@ -1803,7 +1699,11 @@ export default function ChatScreen() {
             }
           } else {
             // 3) Otherwise fallback to NEW local reply engine
-            const local = buildLocalReply(trimmed, toneContext);
+            const localRecentCtx: LocalRecentContext = {
+              recentUserTexts: messages.filter((m) => m.from === "user").slice(-5).map((m) => m.text),
+              recentAssistantTexts: messages.filter((m) => m.from === "bot").slice(-3).map((m) => m.text),
+            };
+            const local = buildLocalReply(trimmed, toneContext, localRecentCtx);
 
             moodHint = wantsInsights ? getLocalMoodHint(trimmed) : undefined;
             source = "local";
@@ -1975,7 +1875,11 @@ export default function ChatScreen() {
           const wantsCloud = analysisMode !== "local" && cloudSyncAllowed;
           const wantsInsights = emotionInsightsEnabled;
 
-          const local = buildLocalReply(trimmed, toneContext);
+          const localRecentCtxErr: LocalRecentContext = {
+            recentUserTexts: messages.filter((m) => m.from === "user").slice(-5).map((m) => m.text),
+            recentAssistantTexts: messages.filter((m) => m.from === "bot").slice(-3).map((m) => m.text),
+          };
+          const local = buildLocalReply(trimmed, toneContext, localRecentCtxErr);
 
           const reflectionSeed = local.reflectionSeed
             ? {
@@ -2346,7 +2250,7 @@ export default function ChatScreen() {
         <Text style={{ fontSize: 14, color: colors.textPrimary }} selectable>
           {(() => {
             // If a reflection seed prompt is being shown in the card,
-            // don’t show the same prompt again inside message.text.
+            // don't show the same prompt again inside message.text.
             if (isUser) return message.text;
 
             // Only strip the reflection prompt if we are actually showing the reflection card (local-only).
@@ -2923,7 +2827,7 @@ export default function ChatScreen() {
               </Text>
               <Text style={{ fontSize: 13, color: colors.textSecondary }}>
                 You can start by sharing how your day feels, something that
-                bothered you, or something you’re looking forward to. Imotara
+                bothered you, or something you're looking forward to. Imotara
                 listens without judgment.
               </Text>
             </View>

@@ -1263,9 +1263,9 @@ export default function SettingsScreen() {
                                 </Text>
 
                                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6, lineHeight: 16 }}>
-                                    “Under 13” + “{relationshipLabel[relationship] || relationship}” can create a tone
+                                    "Under 13" + "{relationshipLabel[relationship] || relationship}" can create a tone
                                     conflict and sometimes makes replies feel awkward or repetitive. You can keep it,
-                                    but for smoother replies try “Junior buddy” or “Sibling”.
+                                    but for smoother replies try "Junior buddy" or "Sibling".
                                 </Text>
 
                                 <View style={{ flexDirection: "row", marginTop: 10 }}>

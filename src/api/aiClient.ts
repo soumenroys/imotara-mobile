@@ -7,8 +7,15 @@
 import { IMOTARA_API_BASE_URL } from "../config/api";
 import { debugLog, debugWarn } from "../config/debug";
 import {
-  BN_SAD_REGEX,
+  BN_SAD_REGEX, BN_STRESS_REGEX, BN_ANGER_REGEX,
   HI_STRESS_REGEX,
+  TA_SAD_REGEX, TA_STRESS_REGEX,
+  GU_SAD_REGEX, GU_STRESS_REGEX,
+  KN_SAD_REGEX, KN_STRESS_REGEX,
+  ML_SAD_REGEX, ML_STRESS_REGEX,
+  PA_SAD_REGEX, PA_STRESS_REGEX,
+  OR_SAD_REGEX, MR_SAD_REGEX, MR_STRESS_REGEX,
+  GRATITUDE_REGEX,
   isConfusedText,
 } from "../lib/emotion/keywordMaps";
 import {
@@ -59,7 +66,7 @@ export type ToneGender =
   | "nonbinary"
   | "other";
 
-// Mirrors web “Relationship vibe”
+// Mirrors web "Relationship vibe"
 export type ToneRelationship =
   | "prefer_not"
   | "mentor"
@@ -172,27 +179,28 @@ function deriveEmotionHintFromMessage(message: string): string | undefined {
     if (/[\u{1F44D}\u{2705}]/u.test(raw)) return "neutral";
   }
 
-  // Indian language keyword maps
-  if (HI_STRESS_REGEX.test(raw)) return "stressed";
-  if (BN_SAD_REGEX.test(raw)) return "sad";
+  // Multilingual emotion detection
+  if (isConfusedText(raw)) return "confused";
+  if (
+    BN_SAD_REGEX.test(raw) || TA_SAD_REGEX.test(raw) ||
+    GU_SAD_REGEX.test(raw) || KN_SAD_REGEX.test(raw) ||
+    ML_SAD_REGEX.test(raw) || PA_SAD_REGEX.test(raw) ||
+    OR_SAD_REGEX.test(raw) || MR_SAD_REGEX.test(raw)
+  ) return "sad";
+  if (
+    HI_STRESS_REGEX.test(raw) || BN_STRESS_REGEX.test(raw) ||
+    TA_STRESS_REGEX.test(raw) || GU_STRESS_REGEX.test(raw) ||
+    KN_STRESS_REGEX.test(raw) || ML_STRESS_REGEX.test(raw) ||
+    PA_STRESS_REGEX.test(raw) || MR_STRESS_REGEX.test(raw)
+  ) return "stressed";
+  if (BN_ANGER_REGEX.test(raw)) return "angry";
+  if (GRATITUDE_REGEX.test(raw)) return "hopeful";
 
-  // English lightweight fallbacks (covers failing QA)
+  // English lightweight fallbacks
   if (/\b(lonely|down|depressed|sad)\b/.test(t)) return "sad";
   if (/\b(stressed|stress|worried|anxious|panic)\b/.test(t)) return "stressed";
   if (/\b(frustrated|angry|mad|furious|irritated)\b/.test(t)) return "angry";
-  if (/\b(hopeful|optimistic)\b/.test(t) || /✨/.test(raw)) return "hopeful";
-
-  if (isConfusedText(raw)) return "confused";
-
-  // Romanized Hindi confusion (common)
-  if (
-    /\bsamajh nahi aa raha\b/.test(t) ||
-    /\bsamajh nahi aa rahi\b/.test(t) ||
-    /\bkya karu\b/.test(t) ||
-    /\bwhat should i do\b/.test(t)
-  ) {
-    return "confused";
-  }
+  if (/\b(hopeful|optimistic|grateful|thankful)\b/.test(t) || /✨/.test(raw)) return "hopeful";
 
   return undefined;
 }
@@ -216,7 +224,7 @@ export async function callImotaraAI(
       }
 
       // Back-compat bridge: only populate ageRange when it is already present
-      // on the companion object (so we don’t redundantly mirror by default).
+      // on the companion object (so we don't redundantly mirror by default).
       if (
         !toneContext.companion.ageRange &&
         opts.settings.ageTone &&
@@ -435,23 +443,33 @@ export async function callImotaraAI(
         return "joy";
       }
 
-      // 2) Existing Indian language keyword maps
-      if (HI_STRESS_REGEX.test(raw)) return "stressed";
-      if (BN_SAD_REGEX.test(raw)) return "sad";
+      // 2) Multilingual emotion detection
+      if (isConfusedText(raw)) return "confused";
+      if (
+        BN_SAD_REGEX.test(raw) || TA_SAD_REGEX.test(raw) ||
+        GU_SAD_REGEX.test(raw) || KN_SAD_REGEX.test(raw) ||
+        ML_SAD_REGEX.test(raw) || PA_SAD_REGEX.test(raw) ||
+        OR_SAD_REGEX.test(raw) || MR_SAD_REGEX.test(raw)
+      ) return "sad";
+      if (
+        HI_STRESS_REGEX.test(raw) || BN_STRESS_REGEX.test(raw) ||
+        TA_STRESS_REGEX.test(raw) || GU_STRESS_REGEX.test(raw) ||
+        KN_STRESS_REGEX.test(raw) || ML_STRESS_REGEX.test(raw) ||
+        PA_STRESS_REGEX.test(raw) || MR_STRESS_REGEX.test(raw)
+      ) return "stressed";
+      if (BN_ANGER_REGEX.test(raw)) return "angry";
+      if (GRATITUDE_REGEX.test(raw)) return "hopeful";
 
-      // 3) English lightweight fallbacks (covers your failing QA lines)
+      // 3) English lightweight fallbacks
       if (/\b(lonely|down|depressed|sad)\b/.test(t)) return "sad";
       if (/\b(stressed|stress|worried|anxious|panic)\b/.test(t))
         return "stressed";
       if (/\b(frustrated|angry|mad|furious|irritated)\b/.test(t))
         return "angry";
-      if (/\b(hopeful|optimistic)\b/.test(t) || /✨/.test(raw))
+      if (/\b(hopeful|optimistic|grateful|thankful)\b/.test(t) || /✨/.test(raw))
         return "hopeful";
 
-      // 4) Confusion detection (existing)
-      if (isConfusedText(raw)) return "confused";
-
-      // ✅ Extra safety: romanized Hindi confused (common user inputs)
+      // 4) Romanized confusion (catch-all)
       if (
         /\bsamajh nahi aa raha\b/.test(t) ||
         /\bsamajh nahi aa rahi\b/.test(t) ||
