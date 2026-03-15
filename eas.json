@@ -24,7 +24,11 @@
       },
       "env": {
         "EXPO_PUBLIC_IMOTARA_API_BASE_URL": "https://imotaraapp.vercel.app",
-        "EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL": "true"
+        "EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL": "true",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://rfsbvbqtiesswnplslln.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_XJHWBbiwctBMxav0PfoM0A_kESi6hfu",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "425826097896-aou5koggrjsdj9pqlpvom6ph3mddmj5i.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "425826097896-980pi64uoif2o4jflm68chlf39lsdbre.apps.googleusercontent.com"
       }
     }
   },
