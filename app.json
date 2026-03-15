@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "imotara-mobile",
+    "name": "Imotara",
     "slug": "imotara-mobile",
     "version": "1.0.5",
     "orientation": "portrait",
@@ -30,6 +30,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "pan",
       "predictiveBackGestureEnabled": false,
       "permissions": ["android.permission.RECORD_AUDIO"]
     },

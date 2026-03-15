@@ -14,6 +14,8 @@ import {
   Linking,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 
 // Haptic helpers (Vibration API — no native deps needed)
@@ -2896,6 +2898,11 @@ export default function ChatScreen() {
     input.trim().length === 0 || isTyping || isSendingRef.current;
 
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+    >
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header */}
       <View
@@ -3718,5 +3725,6 @@ export default function ChatScreen() {
         onClose={() => setBreathingVisible(false)}
       />
     </View>
+    </KeyboardAvoidingView>
   );
 }
