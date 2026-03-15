@@ -231,11 +231,87 @@ export const MR_CONFUSED_REGEX =
     /(समजत नाही|काय करावं|डोक्यात गोंधळ|काय करू|\bsamjat nahi\b|\bkay karave\b|\bkay karu\b|\bdokyat gondhal\b|\bconfused aahe\b|\bkahi samajh nahi\b|\bgondhal laglay\b)/i;
 
 // --------------------------------------------------
-// Gratitude detection — English + all Indian languages
+// Japanese emotion regexes
+// --------------------------------------------------
+
+export const JP_SAD_REGEX =
+    /(悲しい|悲しみ|泣く|泣いて|孤独|一人|寂しい|寂しみ|落ち込む|落ち込んでいる|絶望|絶望的|うつ|憂鬱)/;
+
+export const JP_STRESS_REGEX =
+    /(ストレス|疲れた|疲労|焦る|焦り|不安|心配|緊張|プレッシャー|余裕がない|追い詰められる|しんどい|つらい)/;
+
+export const JP_ANGER_REGEX =
+    /(怒る|怒り|イライラ|むかつく|腹が立つ|頭にくる|うんざり|我慢できない|嫌い|嫌になる|苛立ち)/;
+
+export const JP_FEAR_REGEX =
+    /(怖い|恐怖|恐ろしい|不安|こわい|びっくり|パニック|心配|どうしよう|危ない)/;
+
+export const JP_CONFUSED_REGEX =
+    /(混乱|わからない|理解できない|どうしたらいい|迷う|途方に暮れる|頭が混乱|何をすればいいかわからない|困惑)/;
+
+// --------------------------------------------------
+// Hebrew emotion regexes
+// --------------------------------------------------
+
+export const HE_SAD_REGEX =
+    /(עצוב|עצובה|בוכה|בכי|לבד|בודד|מדוכא|מדוכאת|עצבות|ייאוש)/i;
+
+export const HE_STRESS_REGEX =
+    /(לחוץ|לחוצה|מתח|חרדה|דאגה|עצבני|עצבנית|לא יכול לנשום|לא מצליח)/i;
+
+export const HE_ANGER_REGEX =
+    /(כועס|כועסת|זועם|מרוגז|מרוגזת|התעצבנתי|נמאס לי|מתוסכל|מתוסכלת)/i;
+
+export const HE_FEAR_REGEX =
+    /(מפחד|מפחדת|פחד|מבוהל|מבוהלת|פוחד|נפחדתי|דואג)/i;
+
+export const HE_CONFUSED_REGEX =
+    /(מבולבל|מבולבלת|לא מבין|לא מבינה|לא יודע מה לעשות|אבוד|אבודה)/i;
+
+// --------------------------------------------------
+// Arabic emotion regexes
+// --------------------------------------------------
+
+export const AR_SAD_REGEX =
+    /(حزين|حزينة|أبكي|وحيد|وحيدة|مكتئب|مكتئبة|أشعر بالحزن|يأس)/i;
+
+export const AR_STRESS_REGEX =
+    /(قلق|قلقة|توتر|ضغط|متوتر|متوترة|مرهق|مرهقة|لا أستطيع)/i;
+
+export const AR_ANGER_REGEX =
+    /(غاضب|غاضبة|غضب|منزعج|منزعجة|محبط|محبطة|أنا زعلان|تعبت)/i;
+
+export const AR_FEAR_REGEX =
+    /(خائف|خائفة|خوف|أشعر بالخوف|مرعوب|مرعوبة|قلق جداً)/i;
+
+export const AR_CONFUSED_REGEX =
+    /(مرتبك|مرتبكة|لا أفهم|لا أعرف ماذا أفعل|ضائع|ضائعة|محتار)/i;
+
+// --------------------------------------------------
+// German emotion regexes
+// --------------------------------------------------
+
+export const DE_SAD_REGEX =
+    /\b(traurig|ich weine|allein|einsam|deprimiert|niedergeschlagen|hoffnungslos|unglücklich)\b/i;
+
+export const DE_STRESS_REGEX =
+    /\b(gestresst|Stress|überfordert|nervös|angespannt|erschöpft|ich schaffe das nicht)\b/i;
+
+export const DE_ANGER_REGEX =
+    /\b(wütend|sauer|verärgert|frustriert|genervt|ich bin so wütend|es nervt mich)\b/i;
+
+export const DE_FEAR_REGEX =
+    /\b(ich habe Angst|erschrocken|verängstigt|besorgt|ich fürchte mich)\b|(?<!\w)Angst(?!\w)/i;
+
+export const DE_CONFUSED_REGEX =
+    /\b(verwirrt|ich verstehe nicht|ich weiß nicht was ich tun soll|verloren|durcheinander)\b/i;
+
+// --------------------------------------------------
+// Gratitude detection — English + all Indian languages + Hebrew + Arabic + German
 // --------------------------------------------------
 
 export const GRATITUDE_REGEX =
-    /(grateful|gratitude|thankful|thankfulness|blessed|appreciate|appreciating|appreciation|so thank(ful|ed)|thank you so much|means a lot|\bshukar\b|shukria|shukriya|aabhar|dhanyavaad|dhanyabad|dhanyawad|dhanyavad|shukriyaa|\bkritagjna\b|nanri|nandri|vandanam|\bkritajnata\b|\bkadardani\b|\bdhanyavadagalu\b|\bnandri\b|\bvanakkam\b|\bkritajnateyanu\b|\bkritajna\b|\bdhanyosmi\b|\bdhanyawadi\b|abhaari|\bshukar\s+hai\b|shukar\s+hua|bahut\s+shukriya|bahut\s+dhanyavaad|আপনার\s+কাছে\s+কৃতজ্ঞ|কৃতজ্ঞ|ধন্যবাদ|আপনাকে\s+ধন্যবাদ|நன்றி|நன்றி\s+சொல்ல|நன்றியுள்ளவர்|ధన్యవాదాలు|కృతజ్ఞత|ధన్యవాదం|ಧನ್ಯವಾದಗಳು|ಕೃತಜ್ಞತೆ|ಧನ್ಯವಾದ|ধন্যবাদ|ਧੰਨਵਾਦ|ਸ਼ੁਕਰੀਆ|ਕ੍ਰਿਤਜ੍ਞਤਾ|ধন্যবাদ|ଧନ୍ୟବାଦ|କୃତଜ୍ଞ|ଆଭାରୀ|આભાર|ધન્યવાદ|કૃતજ્ઞ)/i;
+    /(grateful|gratitude|thankful|thankfulness|blessed|appreciate|appreciating|appreciation|so thank(ful|ed)|thank you so much|means a lot|\bshukar\b|shukria|shukriya|aabhar|dhanyavaad|dhanyabad|dhanyawad|dhanyavad|shukriyaa|\bkritagjna\b|nanri|nandri|vandanam|\bkritajnata\b|\bkadardani\b|\bdhanyavadagalu\b|\bnandri\b|\bvanakkam\b|\bkritajnateyanu\b|\bkritajna\b|\bdhanyosmi\b|\bdhanyawadi\b|abhaari|\bshukar\s+hai\b|shukar\s+hua|bahut\s+shukriya|bahut\s+dhanyavaad|আপনার\s+কাছে\s+কৃতজ্ঞ|কৃতজ্ঞ|ধন্যবাদ|আপনাকে\s+ধন্যবাদ|நன்றி|நன்றி\s+சொல்ல|நன்றியுள்ளவர்|ధన్యవాదాలు|కృతజ్ఞత|ధన్యవాదం|ಧನ್ಯವಾದಗಳు|ಕೃತಜ್ಞತೆ|ಧನ್ಯವಾದ|ধন্যবাদ|ਧੰਨਵਾਦ|ਸ਼ੁਕਰੀਆ|ਕ੍ਰਿਤਜ੍ਞਤਾ|ধন্যবাদ|ଧନ୍ୟବାଦ|କୃତଜ୍ଞ|ଆଭାରୀ|આભાར|ધન્યવાદ|કૃતજ્ઞ|תודה|אסיר תודה|شكرا|ممتنن|\bdankbar\b|\bdanke\b|\bdankeschön\b|ありがとう|感謝|感謝します)/i;
 
 // --------------------------------------------------
 // Crisis detection — kept conservative
@@ -321,6 +397,18 @@ export const CRISIS_HINT_REGEX =
             "jiv\\s+dyaava\\s+vatta\\s+aahe", "aayushya\\s+sampavaycha\\s+aahe",
             "मरायचे\\s+आहे", "जगणे\\s+नको\\s+आहे",
             "जीव\\s+द्यावा\\s+वाटते", "आयुष्य\\s+संपवायचे\\s+आहे",
+
+            // --- Hebrew ---
+            "אני\\s+רוצה\\s+למות", "לא\\s+רוצה\\s+לחיות", "התאבדות",
+
+            // --- Arabic ---
+            "أريد\\s+أن\\s+أموت", "لا\\s+أريد\\s+أن\\s+أعيش", "انتحار",
+
+            // --- German ---
+            "ich\\s+will\\s+sterben", "ich\\s+will\\s+nicht\\s+mehr\\s+leben", "Selbstmord",
+
+            // --- Japanese ---
+            "死にたい", "消えたい", "自殺",
         ].join("|"),
         "i"
     );
@@ -413,6 +501,10 @@ export function isConfusedText(text: string): boolean {
     PA_CONFUSED_REGEX.lastIndex = 0;
     OR_CONFUSED_REGEX.lastIndex = 0;
     MR_CONFUSED_REGEX.lastIndex = 0;
+    HE_CONFUSED_REGEX.lastIndex = 0;
+    AR_CONFUSED_REGEX.lastIndex = 0;
+    DE_CONFUSED_REGEX.lastIndex = 0;
+    JP_CONFUSED_REGEX.lastIndex = 0;
 
     return (
         CONFUSED_EN_REGEX.test(input) ||
@@ -424,6 +516,10 @@ export function isConfusedText(text: string): boolean {
         ML_CONFUSED_REGEX.test(input) ||
         PA_CONFUSED_REGEX.test(input) ||
         OR_CONFUSED_REGEX.test(input) ||
-        MR_CONFUSED_REGEX.test(input)
+        MR_CONFUSED_REGEX.test(input) ||
+        HE_CONFUSED_REGEX.test(input) ||
+        AR_CONFUSED_REGEX.test(input) ||
+        DE_CONFUSED_REGEX.test(input) ||
+        JP_CONFUSED_REGEX.test(input)
     );
 }
