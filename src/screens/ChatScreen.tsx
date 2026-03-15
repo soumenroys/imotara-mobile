@@ -1598,22 +1598,22 @@ export default function ChatScreen() {
           const wantsInsights = emotionInsightsEnabled;
 
           // ── Companion memory ──────────────────────────────────
-          // Detect facts from user's message and persist them
+          // Detect facts from user's message and persist them (fire-and-forget; never blocks send)
           const newFacts = detectMemories(trimmed);
           for (const fact of newFacts) {
               void addMemory({ text: fact, source: trimmed.slice(0, 80) });
           }
-          // Load stored memories and build context prefix
-          const memories = await loadMemories();
+          // Load stored memories for local engine only (non-blocking for cloud path)
+          const memories = wantsCloud ? [] : await loadMemories();
           const memoryContext = buildMemoryContext(memories);
-          // Prepend to prompt so both cloud and local AI are aware
+          // Memory prefix is only used by the local fallback engine — keep cloud message clean
           const promptWithMemory = memoryContext
               ? `${memoryContext}\nUser message: ${trimmed}`
               : trimmed;
 
           // 1) Try cloud if allowed by Analysis Mode
           const remote: any = wantsCloud
-            ? await callImotaraAI(promptWithMemory, {
+            ? await callImotaraAI(trimmed, {
                 // ✅ always send toneContext if present (server can decide what to use)
                 // ✅ parity: ensure ageTone is present (fallback to ageRange) when sending
                 toneContext: toneContext
@@ -1773,7 +1773,7 @@ export default function ChatScreen() {
             );
 
             // ✅ Local mood hint must also return a primary emotion bucket (for badge + history)
-            const localMood = getLocalMoodHintWithPrimary(trimmed);
+            const localMood = userMood ?? { primary: undefined, hint: "" };
             const localMoodHint = localMood.hint;
             const localPrimary = localMood.primary;
 
@@ -1798,7 +1798,7 @@ export default function ChatScreen() {
             };
             const local = buildLocalReply(trimmed, toneContext, localRecentCtx);
 
-            const localMoodForFallback = getLocalMoodHintWithPrimary(trimmed);
+            const localMoodForFallback = userMood ?? { primary: undefined, hint: "" };
             moodHint = wantsInsights && localMoodForFallback.primary
               ? localMoodForFallback.hint
               : undefined;
@@ -1833,7 +1833,7 @@ export default function ChatScreen() {
           }
 
           // ✅ Persist resolved emotion/intensity into history (cloud-preferred; additive only)
-          const localPrimary = getLocalMoodHintWithPrimary(trimmed).primary;
+          const localPrimary = (userMood ?? { primary: undefined }).primary;
 
           const finalEmotion =
             source === "cloud"
@@ -2005,7 +2005,7 @@ export default function ChatScreen() {
             from: "bot",
             text: replyWithNote,
             timestamp: botTimestamp,
-            moodHint: wantsInsights ? (() => { const m = getLocalMoodHintWithPrimary(trimmed); return m.primary ? m.hint : undefined; })() : undefined,
+            moodHint: wantsInsights && userMood?.primary ? userMood.hint : undefined,
             isSynced: false,
             source: "local",
 
@@ -2015,9 +2015,7 @@ export default function ChatScreen() {
           };
 
           // ✅ Additive: persist user emotion for timelines/insights (stable primary label)
-          const userPrimary = wantsInsights
-            ? getLocalMoodHintWithPrimary(trimmed).primary
-            : undefined;
+          const userPrimary = wantsInsights ? userMood?.primary : undefined;
 
           const userEmotion =
             typeof userPrimary === "string" && userPrimary.trim()
