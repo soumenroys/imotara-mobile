@@ -26,6 +26,7 @@ const haptic = {
 };
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import { useColors } from "../theme/ThemeContext";
@@ -839,6 +840,7 @@ function isFirstBotReplyOfSession(
 export default function ChatScreen() {
   console.log("[imotara] ChatScreen mounted");
   const colors = useColors();
+  const tabBarHeight = useBottomTabBarHeight();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -2900,8 +2902,8 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={tabBarHeight}
     >
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header */}
