@@ -27,9 +27,10 @@ export type FeatureGateResult =
 
 const ALL: Record<LicenseTier, Set<FeatureKey>> = {
     FREE: new Set<FeatureKey>([
-        // FREE is intentionally not “crippled” — most core functionality is ungated.
+        // FREE is intentionally not "crippled" — most core functionality is ungated.
         // Keep this list small; only add truly premium things.
         "HISTORY_DAYS_LIMIT",
+        "CLOUD_SYNC",
     ]),
     PREMIUM: new Set<FeatureKey>([
         "CLOUD_SYNC",
@@ -81,7 +82,7 @@ export function gate(
         // You could also tune per tier if you ever want (e.g., EDU 30 days).
         const days = 7;
 
-        // Enabled = true because the *feature* here is “there is a limit.”
+        // Enabled = true because the *feature* here is "there is a limit."
         return { enabled: true, params: { days } };
     }
 
