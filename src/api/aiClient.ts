@@ -138,6 +138,14 @@ type CallAIOptions = {
 
   // ISO 3166-1 alpha-2 country code for crisis resource localisation
   countryCode?: string | null;
+
+  // ✅ Web parity: emotional history summary sent as context.emotionMemory
+  // Mirrors web's buildEmotionMemorySummary() → runRespondWithConsent → /api/respond
+  emotionMemory?: string;
+
+  // ✅ Web parity: explicit language preference sent as context.preferredLanguage
+  // Mirrors web's profile.user.preferredLang → context.preferredLanguage
+  preferredLanguage?: string;
 };
 
 function normalizeToneContext(
@@ -327,6 +335,12 @@ export async function callImotaraAI(
             ...(emotionHint ? { emotionHint } : {}),
 
             ...(toneContext ? { toneContext } : {}),
+
+            // ✅ Web parity: emotional history summary (calibrates empathy depth)
+            ...(opts?.emotionMemory ? { emotionMemory: opts.emotionMemory } : {}),
+
+            // ✅ Web parity: explicit language preference for language-derivation pipeline
+            ...(opts?.preferredLanguage ? { preferredLanguage: opts.preferredLanguage } : {}),
 
             persona: opts?.settings
               ? {

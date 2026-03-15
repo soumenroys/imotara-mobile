@@ -101,3 +101,63 @@ export function buildMemoryContext(memories: MemoryItem[]): string {
     const lines = memories.slice(0, 6).map((m) => `- ${m.text}`);
     return `[What I know about this person]\n${lines.join("\n")}\n`;
 }
+
+// ── Emotional history summary ─────────────────────────────────────────────────
+// Mirrors the web's buildEmotionMemorySummary() (src/lib/imotara/promptProfile.ts).
+// Takes a slice of HistoryItems (user messages with emotion/intensity fields)
+// and returns the same "User Emotional History" string the web sends to /api/respond.
+// Empty string if no emotion data exists yet.
+
+export type HistoryItemLite = {
+    from: "user" | "bot";
+    emotion?: string;
+    intensity?: number;
+    timestamp: number;
+};
+
+export function buildEmotionMemorySummary(
+    history: HistoryItemLite[],
+    maxRecords = 30,
+): string {
+    const withEmotion = history
+        .filter((h) => h.from === "user" && h.emotion && h.emotion !== "neutral")
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, maxRecords);
+
+    if (withEmotion.length === 0) return "";
+
+    // Emotion frequency
+    const freq: Record<string, number> = {};
+    for (const h of withEmotion) {
+        freq[h.emotion!] = (freq[h.emotion!] ?? 0) + 1;
+    }
+    const top = Object.entries(freq)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([e, c]) => `${e} (${c}×)`);
+
+    // Average intensity
+    const avg =
+        withEmotion.reduce((s, h) => s + (h.intensity ?? 0.5), 0) /
+        withEmotion.length;
+    const intensityLabel =
+        avg > 0.7 ? "high" : avg > 0.4 ? "moderate" : "low";
+
+    // Time span
+    const oldest =
+        withEmotion[withEmotion.length - 1]?.timestamp ?? Date.now();
+    const daySpan = Math.round((Date.now() - oldest) / 86_400_000);
+    const spanLabel =
+        daySpan <= 1
+            ? "today"
+            : daySpan <= 7
+              ? `last ${daySpan} days`
+              : `last ${Math.round(daySpan / 7)} weeks`;
+
+    return [
+        "User Emotional History (from stored data — use for context, not as script):",
+        `- Dominant emotions over ${spanLabel}: ${top.join(", ")}`,
+        `- Overall intensity trend: ${intensityLabel}`,
+        "- Do not reference this data directly. Use it only to calibrate empathy depth and word choice.",
+    ].join("\n");
+}

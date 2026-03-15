@@ -38,6 +38,8 @@ import {
     addMemory,
     loadMemories,
     buildMemoryContext,
+    buildEmotionMemorySummary,
+    type MemoryItem,
 } from "../state/companionMemory";
 
 import { LinearGradient } from "expo-linear-gradient";
@@ -933,6 +935,11 @@ export default function ChatScreen() {
     // Re-trigger when identity scope changes (cross-device continuity)
   }, [analysisMode, cloudSyncAllowed, chatLinkKey, runSync, syncNow]);
 
+  // ✅ Web parity: load companion memories once on mount into a ref (zero per-send I/O)
+  useEffect(() => {
+    loadMemories().then((items) => { memoriesRef.current = items; }).catch(() => {});
+  }, []);
+
   const scrollViewRef = useRef<ScrollView | null>(null);
 
   // ✅ RN-safe typing (fixes TS issues in many RN setups)
@@ -954,6 +961,10 @@ export default function ChatScreen() {
   const typingStartedAtRef = useRef<number>(0);
   const sendStartedAtRef = useRef<number>(0);
   const lastLifecycleResetAtRef = useRef<number>(0);
+
+  // ✅ Web parity: cached companion memories (loaded once on mount, refreshed after new facts)
+  // Avoids per-send AsyncStorage I/O while keeping memories available for emotionMemory context.
+  const memoriesRef = useRef<MemoryItem[]>([]);
 
   const resetTypingState = (reason: string) => {
     // Avoid repeated rapid resets on noisy AppState transitions
@@ -1598,18 +1609,28 @@ export default function ChatScreen() {
           const wantsInsights = emotionInsightsEnabled;
 
           // ── Companion memory ──────────────────────────────────
-          // Detect facts from user's message and persist them (fire-and-forget; never blocks send)
+          // Detect facts and persist (fire-and-forget; refresh cached ref after save)
           const newFacts = detectMemories(trimmed);
           for (const fact of newFacts) {
-              void addMemory({ text: fact, source: trimmed.slice(0, 80) });
+              void addMemory({ text: fact, source: trimmed.slice(0, 80) }).then(() => {
+                  loadMemories().then((items) => { memoriesRef.current = items; }).catch(() => {});
+              });
           }
-          // Load stored memories for local engine only (non-blocking for cloud path)
-          const memories = wantsCloud ? [] : await loadMemories();
+          // Use cached memories (zero AsyncStorage I/O on hot path)
+          const memories = memoriesRef.current;
           const memoryContext = buildMemoryContext(memories);
-          // Memory prefix is only used by the local fallback engine — keep cloud message clean
+          // Memory prefix used by local fallback only — cloud receives clean message + emotionMemory field
           const promptWithMemory = memoryContext
               ? `${memoryContext}\nUser message: ${trimmed}`
               : trimmed;
+
+          // ── Build emotionMemory for cloud (mirrors web's runRespondWithConsent) ──
+          // Combines factual memories + emotional history pattern into one context string
+          const emotionalHistory = buildEmotionMemorySummary(history);
+          const emotionMemory = [memoryContext, emotionalHistory]
+              .map((s) => s.trim())
+              .filter(Boolean)
+              .join("\n\n") || undefined;
 
           // 1) Try cloud if allowed by Analysis Mode
           const remote: any = wantsCloud
@@ -1669,6 +1690,12 @@ export default function ChatScreen() {
                   role: m.from === "user" ? "user" : "assistant",
                   content: m.text,
                 })),
+
+                // ✅ Web parity: emotional history + factual memory calibrate AI empathy depth
+                emotionMemory: emotionMemory || undefined,
+
+                // ✅ Web parity: preferred language for server language-derivation pipeline
+                preferredLanguage: toneContext?.user?.preferredLang || undefined,
               })
             : { ok: false, replyText: "" };
 
