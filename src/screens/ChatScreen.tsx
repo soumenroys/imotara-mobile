@@ -64,6 +64,8 @@ import {
   CRISIS_HINT_REGEX,
   isConfusedText,
 } from "../lib/emotion/keywordMaps";
+import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
+import { detectCountryCode } from "../lib/safety/detectCountry";
 
 type ChatMessageSource = "cloud" | "local";
 
@@ -1225,6 +1227,8 @@ export default function ChatScreen() {
             }
           : undefined,
 
+        countryCode: detectCountryCode(),
+
         analysisMode: analysisMode,
         emotionInsightsEnabled: true,
 
@@ -1629,6 +1633,8 @@ export default function ChatScreen() {
                         : undefined,
                     }
                   : undefined,
+
+                countryCode: detectCountryCode(),
 
                 analysisMode: analysisMode,
                 emotionInsightsEnabled: wantsInsights,
@@ -2625,23 +2631,29 @@ export default function ChatScreen() {
                 </TouchableOpacity>
               </View>
               <View style={{ marginTop: 10, gap: 6 }}>
-                {[
-                  { label: "iCall (India)", number: "9152987821" },
-                  { label: "Vandrevala Foundation", number: "18602662345" },
-                  { label: "NIMHANS Helpline", number: "08046110007" },
-                  { label: "Emergency", number: "112" },
-                ].map(({ label, number }) => (
-                  <TouchableOpacity
-                    key={label}
-                    onPress={() => Linking.openURL(`tel:${number}`)}
-                    style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 }}
-                    accessibilityRole="link"
-                    accessibilityLabel={`Call ${label}: ${number}`}
-                  >
-                    <Text style={{ fontSize: 12, color: "#fde68a", opacity: 0.85 }}>{label}</Text>
-                    <Text style={{ fontSize: 12, color: "#fde68a", fontWeight: "700", textDecorationLine: "underline" }}>{number}</Text>
-                  </TouchableOpacity>
-                ))}
+                {(() => {
+                  const countryCode = detectCountryCode();
+                  const resources = getCrisisResourcesForCountry(countryCode);
+                  const lines: { label: string; number: string }[] = [];
+                  if (resources?.emergency) {
+                    lines.push({ label: resources.emergency.label, number: resources.emergency.contact });
+                  }
+                  resources?.primary?.slice(0, 2).forEach((r) => {
+                    lines.push({ label: r.label, number: r.contact });
+                  });
+                  return lines.map(({ label, number }) => (
+                    <TouchableOpacity
+                      key={label}
+                      onPress={() => Linking.openURL(`tel:${number.replace(/[^\d+]/g, "")}`)}
+                      style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 }}
+                      accessibilityRole="link"
+                      accessibilityLabel={`Call ${label}: ${number}`}
+                    >
+                      <Text style={{ fontSize: 12, color: "#fde68a", opacity: 0.85 }}>{label}</Text>
+                      <Text style={{ fontSize: 12, color: "#fde68a", fontWeight: "700", textDecorationLine: "underline" }}>{number}</Text>
+                    </TouchableOpacity>
+                  ));
+                })()}
               </View>
               <Text style={{ marginTop: 10, fontSize: 11, color: "#fde68a", opacity: 0.7 }}>
                 You don't have to face this alone.

@@ -125,6 +125,9 @@ type CallAIOptions = {
     role: "user" | "assistant";
     content: string;
   }>;
+
+  // ISO 3166-1 alpha-2 country code for crisis resource localisation
+  countryCode?: string | null;
 };
 
 function normalizeToneContext(
@@ -301,8 +304,12 @@ export async function callImotaraAI(
 
           ...(toneContext ? { toneContext } : {}),
 
+          // ✅ Country code for server-side crisis resource localisation
+          countryCode: opts?.countryCode ?? null,
+
           context: {
             source: "mobile",
+            countryCode: opts?.countryCode ?? null,
             analysisMode: opts?.analysisMode,
             emotionInsightsEnabled: opts?.emotionInsightsEnabled,
 
