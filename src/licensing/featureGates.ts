@@ -29,8 +29,8 @@ const ALL: Record<LicenseTier, Set<FeatureKey>> = {
     FREE: new Set<FeatureKey>([
         // FREE is intentionally not "crippled" — most core functionality is ungated.
         // Keep this list small; only add truly premium things.
-        "HISTORY_DAYS_LIMIT",
         "CLOUD_SYNC",
+        "HISTORY_UNLIMITED",
     ]),
     PREMIUM: new Set<FeatureKey>([
         "CLOUD_SYNC",
