@@ -58,13 +58,7 @@
       ],
       "expo-web-browser",
       "expo-secure-store",
-      "expo-apple-authentication",
-      [
-        "expo-auth-session",
-        {
-          "scheme": "imotara"
-        }
-      ]
+      "expo-apple-authentication"
     ],
     "scheme": "imotara"
   }
