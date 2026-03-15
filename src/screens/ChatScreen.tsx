@@ -2602,7 +2602,8 @@ export default function ChatScreen() {
         {!isUser && (() => {
           const prevMsg = messages[index - 1];
           if (!prevMsg || prevMsg.from !== "user") return null;
-          if (!CRISIS_HINT_REGEX.test(prevMsg.text)) return null;
+          const MOBILE_CRISIS_TIER1_RE = /\b(hopeless|helpless|worthless|nothing matters|give up|can't take it anymore|breaking down|falling apart|no one cares|all alone|empty inside|disappear|feel like a burden|trapped|no way out|no escape|thinking about death|thoughts of ending)\b/i;
+          if (!CRISIS_HINT_REGEX.test(prevMsg.text) && !MOBILE_CRISIS_TIER1_RE.test(prevMsg.text)) return null;
           if (dismissedCrisisCards.has(message.id)) return null;
           return (
             <View

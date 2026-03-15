@@ -314,104 +314,13 @@ export const GRATITUDE_REGEX =
     /(grateful|gratitude|thankful|thankfulness|blessed|appreciate|appreciating|appreciation|so thank(ful|ed)|thank you so much|means a lot|\bshukar\b|shukria|shukriya|aabhar|dhanyavaad|dhanyabad|dhanyawad|dhanyavad|shukriyaa|\bkritagjna\b|nanri|nandri|vandanam|\bkritajnata\b|\bkadardani\b|\bdhanyavadagalu\b|\bnandri\b|\bvanakkam\b|\bkritajnateyanu\b|\bkritajna\b|\bdhanyosmi\b|\bdhanyawadi\b|abhaari|\bshukar\s+hai\b|shukar\s+hua|bahut\s+shukriya|bahut\s+dhanyavaad|আপনার\s+কাছে\s+কৃতজ্ঞ|কৃতজ্ঞ|ধন্যবাদ|আপনাকে\s+ধন্যবাদ|நன்றி|நன்றி\s+சொல்ல|நன்றியுள்ளவர்|ధన్యవాదాలు|కృతజ్ఞత|ధన్యవాదం|ಧನ್ಯವಾದಗಳు|ಕೃತಜ್ಞತೆ|ಧನ್ಯವಾದ|ধন্যবাদ|ਧੰਨਵਾਦ|ਸ਼ੁਕਰੀਆ|ਕ੍ਰਿਤਜ੍ਞਤਾ|ধন্যবাদ|ଧନ୍ୟବାଦ|କୃତଜ୍ଞ|ଆଭାରୀ|આભાར|ધન્યવાદ|કૃતજ્ઞ|תודה|אסיר תודה|شكرا|ممتنن|\bdankbar\b|\bdanke\b|\bdankeschön\b|ありがとう|感謝|感謝します)/i;
 
 // --------------------------------------------------
-// Crisis detection — kept conservative
+// Crisis detection
+// Covers explicit suicidal ideation, self-harm, sexual assault/danger — across all supported languages.
+// NOTE: bare "die", "death", "kill" alone are intentionally excluded — too noisy without context.
 // --------------------------------------------------
 
 export const CRISIS_HINT_REGEX =
-    new RegExp(
-        [
-            // --- English ---
-            "i\\s+want\\s+to\\s+die", "want\\s+to\\s+die", "kill\\s+myself",
-            "end\\s+my\\s+life", "ending\\s+everything", "end\\s+everything",
-            "i\\s+feel\\s+like\\s+ending\\s+everything",
-            "don'?t\\s+want\\s+to\\s+live", "cannot\\s+go\\s+on", "can'?t\\s+go\\s+on",
-            "can'?t\\s+take\\s+it\\s+anymore", "cannot\\s+take\\s+it\\s+anymore",
-            "life\\s+has\\s+no\\s+meaning", "life\\s+feels\\s+meaningless",
-            "no\\s+reason\\s+to\\s+live", "better\\s+off\\s+dead",
-
-            // --- Bengali (Romanized + Unicode) ---
-            "ami\\s+marte\\s+chai", "marte\\s+chai", "ami\\s+morte\\s+chai", "morte\\s+chai",
-            "ami\\s+ar\\s+parchi\\s+na", "ar\\s+parchi\\s+na",
-            "amar\\s+bachte\\s+ichcha\\s+korch?e\\s+na",
-            "bachte\\s+ichhe\\s+korch?e\\s+na", "bachte\\s+icche\\s+korch?e\\s+na",
-            "more\\s+jete\\s+ichhe\\s+korch?e", "morte\\s+ichhe\\s+korch?e",
-            "bachbo\\s+na", "banchte\\s+chai\\s+na",
-            "আমি\\s+মরতে\\s+চাই", "আমার\\s+মরতে\\s+ইচ্ছে\\s+করছে",
-            "বাঁচতে\\s+ইচ্ছে\\s+করছে\\s+না", "আমি\\s+বাঁচতে\\s+চাই\\s+না",
-            "আমি\\s+আর\\s+পারছি\\s+না",
-
-            // --- Hindi (Romanized + Devanagari) ---
-            "mar\\s+jana\\s+hai", "jeene\\s+ka\\s+mann\\s+nahi",
-            "jeene\\s+ka\\s+man\\s+nahi", "jeena\\s+nahi\\s+hai",
-            "life\\s+ka\\s+koi\\s+matlab\\s+nahi",
-            "main\\s+marna\\s+chahta\\s+hu", "main\\s+marna\\s+chahti\\s+hu",
-            "marna\\s+chahta\\s+hoon", "marna\\s+chahti\\s+hoon",
-            "main\\s+jeena\\s+nahi\\s+chahta", "main\\s+jeena\\s+nahi\\s+chahti",
-            "मुझे\\s+मर\\s+जाना\\s+है", "मैं\\s+मरना\\s+चाहता\\s+हूँ",
-            "मैं\\s+मरना\\s+चाहती\\s+हूँ", "जीने\\s+का\\s+मन\\s+नहीं\\s+है",
-            "ज़िंदगी\\s+का\\s+कोई\\s+मतलब\\s+नहीं", "जिंदगी\\s+खत्म\\s+करना\\s+है",
-            "जीना\\s+नहीं\\s+चाहता", "जीना\\s+नहीं\\s+चाहती",
-
-            // --- Tamil (Romanized) ---
-            "saka\\s+venum", "saaganum", "saaga\\s+venum",
-            "vaazhakka\\s+virupam\\s+illai", "vaazhve\\s+venam",
-            "inikku\\s+mela\\s+vaazha\\s+mudiyaadu",
-            "en\\s+uyir\\s+edukkanum",
-
-            // --- Telugu (Romanized) ---
-            "chachipovaalanipistundi", "chaavaalani\\s+undi",
-            "jeevitam\\s+adi\\s+cheyaalani\\s+undi",
-            "badukonu\\s+ishtam\\s+ledu", "jeevitam\\s+ardham\\s+kaadu",
-            "chachipovaadam\\s+maname",
-
-            // --- Gujarati (Romanized + Unicode) ---
-            "mari\\s+javun\\s+che", "jevan\\s+nu\\s+man\\s+nathi",
-            "jivanu\\s+man\\s+nathi", "jivan\\s+pura\\s+karvu\\s+che",
-            "aatmahatya\\s+karvu\\s+che",
-            "મરી\\s+જવું\\s+છે", "જીવવું\\s+નથી", "આત્મહત્યા\\s+કરવી\\s+છે",
-
-            // --- Kannada (Romanized + Unicode) ---
-            "saayabeku", "saayabeku\\s+anisutte", "jeevana\\s+mugisabeku",
-            "badukalu\\s+ishtavilla", "badukina\\s+arthavilla",
-            "ಸಾಯಬೇಕು", "ಜೀವನ\\s+ಮುಗಿಸಬೇಕು", "ಬದುಕಲು\\s+ಇಷ್ಟವಿಲ್ಲ",
-
-            // --- Malayalam (Romanized + Unicode) ---
-            "marikkanam", "marikkanam\\s+pola\\s+thonum",
-            "jeevitham\\s+aakanam", "jeevitham\\s+theerkkanam",
-            "veendum\\s+vazhakka\\s+thonunnilla",
-            "മരിക്കണം", "ജീവിതം\\s+മതിയായി", "ജീവിക്കണ്ട",
-
-            // --- Punjabi (Romanized + Gurmukhi) ---
-            "mar\\s+jaana\\s+chahunda\\s+haan", "mar\\s+jaana\\s+chahundi\\s+haan",
-            "jeona\\s+nahi\\s+chahunda", "zindagi\\s+khatam\\s+karna\\s+chahunda",
-            "ਮਰ\\s+ਜਾਣਾ\\s+ਚਾਹੁੰਦਾ", "ਜ਼ਿੰਦਗੀ\\s+ਖਤਮ\\s+ਕਰਨੀ\\s+ਹੈ",
-            "ਜਿਉਣਾ\\s+ਨਹੀਂ\\s+ਚਾਹੁੰਦਾ",
-
-            // --- Odia (Romanized + Unicode) ---
-            "mariba\\s+chahuchhi", "jibana\\s+sesa\\s+karibaku\\s+uchhi",
-            "banchiba\\s+uchha\\s+nahi",
-            "ମରିବା\\s+ଚାହୁଁଛି", "ଜୀବନ\\s+ଶେଷ\\s+କରିବାକୁ\\s+ଇଚ୍ଛା",
-
-            // --- Marathi (Romanized + Devanagari) ---
-            "maraycha\\s+aahe", "jeena\\s+nako\\s+aahe",
-            "jiv\\s+dyaava\\s+vatta\\s+aahe", "aayushya\\s+sampavaycha\\s+aahe",
-            "मरायचे\\s+आहे", "जगणे\\s+नको\\s+आहे",
-            "जीव\\s+द्यावा\\s+वाटते", "आयुष्य\\s+संपवायचे\\s+आहे",
-
-            // --- Hebrew ---
-            "אני\\s+רוצה\\s+למות", "לא\\s+רוצה\\s+לחיות", "התאבדות",
-
-            // --- Arabic ---
-            "أريد\\s+أن\\s+أموت", "لا\\s+أريد\\s+أن\\s+أعيش", "انتحار",
-
-            // --- German ---
-            "ich\\s+will\\s+sterben", "ich\\s+will\\s+nicht\\s+mehr\\s+leben", "Selbstmord",
-
-            // --- Japanese ---
-            "死にたい", "消えたい", "自殺",
-        ].join("|"),
-        "i"
-    );
+  /(i\s+want\s+to\s+die|want\s+to\s+die|kill\s+myself|killing\s+myself|going\s+to\s+kill\s+myself|plan\s+(to\s+)?kill\s+myself|end\s+my\s+life|ending\s+my\s+life|plan\s+(to\s+)?end\s+my\s+life|end\s+it\s+all|ending\s+everything|end\s+everything|i\s+feel\s+like\s+ending\s+everything|don'?t\s+want\s+to\s+live|do\s+not\s+want\s+to\s+live|don'?t\s+want\s+to\s+be\s+here(\s+anymore)?|cannot\s+go\s+on|can'?t\s+go\s+on|can'?t\s+take\s+it\s+anymore|cannot\s+take\s+it\s+anymore|life\s+has\s+no\s+meaning|life\s+feels\s+meaningless|no\s+point\s+in\s+(living|life)|no\s+reason\s+to\s+(live|keep\s+going|be\s+alive)|suicidal|feeling\s+suicidal|i('?m|\s+am)\s+suicidal|thinking\s+(about|of)\s+suicide|thoughts?\s+of\s+suicide|better\s+off\s+dead|better\s+off\s+without\s+me|everyone\s+(would\s+be\s+)?better\s+off\s+without\s+me|i\s+wish\s+i\s+(was|were)\s+dead|wish\s+i\s+was\s+dead|hurt\s+myself|hurting\s+myself|harm\s+myself|harming\s+myself|self.?harm(ing)?|cut\s+myself|cutting\s+myself|want\s+to\s+(hurt|cut|harm)\s+myself|think(ing)?\s+about\s+(hurting|cutting|harming)\s+myself|overdos(e|ing|ed)|took\s+too\s+many\s+(pills|tablets)|being\s+raped?|was\s+raped?|he\s+raped?\s+me|she\s+raped?\s+me|someone\s+raped?\s+me|sexual\s+assault(ed)?|sexually\s+assault(ed)?|being\s+(physically\s+)?abused|he('?s|\s+is)\s+hurting\s+me|she('?s|\s+is)\s+hurting\s+me|domestic\s+violence|not\s+safe\s+right\s+now|i('?m|\s+am)\s+not\s+safe|in\s+immediate\s+danger|ami\s+marte\s+chai|marte\s+chai|ami\s+morte\s+chai|morte\s+chai|ami\s+ar\s+parchi\s+na|ar\s+parchi\s+na|amar\s+bachte\s+ichcha\s+korch?e\s+na|bachte\s+ichhe\s+korch?e\s+na|bachte\s+icche\s+korch?e\s+na|more\s+jete\s+ichhe\s+korch?e|morte\s+ichhe\s+korch?e|bachbo\s+na|banchte\s+chai\s+na|mar\s+jana\s+hai|mar\s+jaana\s+chahta|mar\s+jaana\s+chahti|jeene\s+ka\s+mann\s+nahi|jeene\s+ka\s+man\s+nahi|jeena\s+nahi\s+hai|life\s+ka\s+koi\s+matlab\s+nahi(\s+lag\s+raha)?|main\s+marna\s+chahta\s+hu|main\s+marna\s+chahti\s+hu|main\s+marna\s+chahta\s+hoon|main\s+marna\s+chahti\s+hoon|marna\s+chahta\s+hu|marna\s+chahti\s+hu|marna\s+chahta\s+hoon|marna\s+chahti\s+hoon|main\s+jeena\s+nahi\s+chahta|main\s+jeena\s+nahi\s+chahti|hu\s+marva\s+mangu\s+chu|jivvu\s+nathi|nanage\s+badukalu\s+ishtavilla|khud\s+ko\s+hurt\s+karna|khud\s+ko\s+nuqsan|apne\s+aap\s+ko\s+hurt|আমি\s+মরতে\s+চাই|আমার\s+মরতে\s+ইচ্ছে\s+করছে|বাঁচতে\s+ইচ্ছে\s+করছে\s+না|আমি\s+বাঁচতে\s+চাই\s+না|আমি\s+আর\s+পারছি\s+না|আমার\s+বাঁচতে\s+ইচ্ছা\s+করছে\s+না|নিজেকে\s+কষ্ট\s+দিতে\s+চাই|আত্মহত্যা|মুझे\s+मर\s+जाना\s+है|मैं\s+मरना\s+चाहता\s+हूँ|मैं\s+मरना\s+चाहती\s+हूँ|जीने\s+का\s+मन\s+नहीं\s+है|जीना\s+नहीं\s+है|ज़िंदगी\s+का\s+कोई\s+मतलब\s+नहीं|आत्महत्या|खुद\s+को\s+नुकसान|जिंदगी\s+खत्म\s+करना|मरायचंय|जगायचं\s+नाही|आत्महत्या\s+करायची|મારે\s+મરી\s+જવું\s+છે|મને\s+જીવવું\s+નથી|હું\s+મરવા\s+માગું\s+છું|ನನಗೆ\s+ಸಾಯಬೇಕು\s+ಅನಿಸುತ್ತಿದೆ|ನನಗೆ\s+ಬದುಕಲು\s+ಇಷ್ಟವಿಲ್ಲ|ನಾನು\s+ಸಾಯಬೇಕು|வாழ\s+வேண்டாம்|தற்கொலை|இறந்துவிட|சாக\s+வேண்டும்|చనిపోవాలి|ఆత్మహత్య|బతకాలని\s+లేదు|മരിക്കണം|ആത്മഹത്യ|ജീവിക്കണ്ട|ജീവിതം\s+വേണ്ട|אני\s+רוצה\s+למות|לא\s+רוצה\s+לחיות|התאבדות|רוצה\s+למות|לפגוע\s+בעצמי|أريد\s+أن\s+أموت|لا\s+أريد\s+أن\s+أعيش|انتحار|أريد\s+إيذاء\s+نفسي|أفكر\s+في\s+الانتحار|ich\s+will\s+sterben|ich\s+will\s+nicht\s+mehr\s+leben|Selbstmord|ich\s+will\s+mir\s+selbst\s+schaden|ich\s+denke\s+an\s+Suizid|死にたい|消えたい|自殺|自分を傷つけたい|死んでしまいたい)/i;
 
 // --------------------------------------------------
 // English confusion / mental overload
