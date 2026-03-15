@@ -7,6 +7,7 @@ import AppThemeProvider from "./src/theme/AppThemeProvider";
 import { ThemeProvider } from "./src/theme/ThemeContext";
 import HistoryProvider from "./src/state/HistoryContext";
 import { SettingsProvider } from "./src/state/SettingsContext";
+import { AuthProvider } from "./src/auth/AuthContext";
 
 // ✅ API base URL (fail-fast in prod; friendly screen here)
 import { IMOTARA_API_BASE_URL } from "./src/config/api";
@@ -46,6 +47,7 @@ function AppShell() {
     <AppThemeProvider>
       <ThemeProvider>
       {/* Settings MUST wrap HistoryProvider because HistoryProvider calls useSettings() */}
+      <AuthProvider>
       <SettingsProvider>
         <HistoryProvider>
           <KeyboardAvoidingView
@@ -59,6 +61,7 @@ function AppShell() {
           <StatusBar style="auto" />
         </HistoryProvider>
       </SettingsProvider>
+      </AuthProvider>
       </ThemeProvider>
     </AppThemeProvider>
   );

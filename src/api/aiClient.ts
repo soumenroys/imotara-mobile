@@ -152,6 +152,11 @@ type CallAIOptions = {
   // Server uses userId as fallback when no Supabase session exists (route.ts:936).
   threadId?: string;
   userId?: string;
+
+  // ✅ Mobile auth: Supabase JWT from AuthContext.
+  // When present, sent as "Authorization: Bearer <token>" so the server can
+  // resolve the real Supabase user and unlock pinnedRecall quality.
+  accessToken?: string;
 };
 
 function normalizeToneContext(
@@ -316,6 +321,12 @@ export async function callImotaraAI(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          // ✅ Mobile auth: include Supabase Bearer token when available.
+          // Server's /api/respond will call supabase.auth.getUser(token) to
+          // resolve the real user and enable pinnedRecall.
+          ...(opts?.accessToken
+            ? { Authorization: `Bearer ${opts.accessToken}` }
+            : {}),
         },
         body: JSON.stringify({
           requestId,

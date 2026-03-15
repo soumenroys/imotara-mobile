@@ -32,6 +32,8 @@ import { useSettings } from "../state/SettingsContext";
 import { useColors } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
 import { callImotaraAI } from "../api/aiClient";
+import { useAuth } from "../auth/AuthContext";
+import { SignInPrompt } from "../auth/SignInPrompt";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import {
     detectMemories,
@@ -910,6 +912,9 @@ export default function ChatScreen() {
     localUserScopeId,
   } = useSettings();
 
+  // ── Auth: get Supabase session token for mobile API calls ──────────────────
+  const { accessToken } = useAuth();
+
   // ---------------------------------------------------------------------------
   // Cloud sync trigger (centralized in HistoryContext)
   // ChatScreen does NOT pull cloud chat directly anymore.
@@ -1704,6 +1709,9 @@ export default function ChatScreen() {
                 // Server uses userId as fallback when no Supabase auth session exists
                 threadId: localUserScopeId || undefined,
                 userId: localUserScopeId || undefined,
+
+                // ✅ Mobile auth: Supabase JWT → server resolves real user → pinnedRecall
+                accessToken: accessToken || undefined,
               })
             : { ok: false, replyText: "" };
 
@@ -3762,6 +3770,9 @@ export default function ChatScreen() {
         visible={breathingVisible}
         onClose={() => setBreathingVisible(false)}
       />
+
+      {/* Non-intrusive sign-in prompt — appears after first message, one-time only */}
+      <SignInPrompt messageCount={messages.length} />
     </View>
     </KeyboardAvoidingView>
   );

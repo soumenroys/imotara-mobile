@@ -15,16 +15,17 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.imotara.imotara",
-      "buildNumber": "25",
+      "buildNumber": "26",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Imotara needs access to your photo library only if you choose to upload or attach an image.",
         "NSMicrophoneUsageDescription": "Imotara uses the microphone so you can share how you feel by speaking instead of typing."
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "com.imotara.imotara",
-      "versionCode": 25,
+      "versionCode": 26,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -32,7 +33,9 @@
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "pan",
       "predictiveBackGestureEnabled": false,
-      "permissions": ["android.permission.RECORD_AUDIO"]
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -52,7 +55,17 @@
           "color": "#0ea5e9",
           "sounds": []
         }
+      ],
+      "expo-web-browser",
+      "expo-secure-store",
+      "expo-apple-authentication",
+      [
+        "expo-auth-session",
+        {
+          "scheme": "imotara"
+        }
       ]
-    ]
+    ],
+    "scheme": "imotara"
   }
 }
