@@ -1385,7 +1385,6 @@ export default function SettingsScreen() {
                     <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 14 }}>
                         {(
                             [
-                                { id: "auto", label: "Auto-detect" },
                                 { id: "en", label: "English" },
                                 { id: "bn", label: "Bengali" },
                                 { id: "gu", label: "Gujarati" },
@@ -1410,7 +1409,7 @@ export default function SettingsScreen() {
                                 { id: "es", label: "Spanish" },
                             ] as const
                         ).map((opt) => {
-                            const currentLang = toneContext?.user?.preferredLang ?? "auto";
+                            const currentLang = toneContext?.user?.preferredLang ?? "en";
                             const active = currentLang === opt.id;
                             return (
                                 <TouchableOpacity
@@ -1420,7 +1419,7 @@ export default function SettingsScreen() {
                                             ...(toneContext || {}),
                                             user: {
                                                 ...(toneContext?.user || {}),
-                                                preferredLang: opt.id === "auto" ? undefined : (opt.id as any),
+                                                preferredLang: opt.id as any,
                                             },
                                         })
                                     }

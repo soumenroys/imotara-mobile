@@ -141,7 +141,7 @@ function isValidTier(v: unknown): v is LicenseTier {
 
 function normalizeToneContext(value: ToneContextPayload): ToneContextPayload {
     const base: ToneContextPayload = {
-        user: { name: "" },
+        user: { name: "", preferredLang: "en" },
         companion: {
             enabled: false,
             name: "Imotara",
@@ -203,7 +203,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     // ✅ New: tone context guidance (tone only; safe defaults)
     const [toneContext, _setToneContext] = useState<ToneContextPayload>({
-        user: { name: "" },
+        user: { name: "", preferredLang: "en" },
         companion: {
             enabled: false,
             name: "Imotara",
