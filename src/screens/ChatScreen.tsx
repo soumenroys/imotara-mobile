@@ -1778,7 +1778,7 @@ export default function ChatScreen() {
             const localPrimary = localMood.primary;
 
             moodHint = wantsInsights
-              ? (cloudMoodHint ?? localMoodHint)
+              ? (cloudMoodHint ?? (localMood.primary ? localMoodHint : undefined))
               : undefined;
 
             // ✅ DEV-only visibility: confirm which source won
@@ -1798,7 +1798,10 @@ export default function ChatScreen() {
             };
             const local = buildLocalReply(trimmed, toneContext, localRecentCtx);
 
-            moodHint = wantsInsights ? getLocalMoodHint(trimmed) : undefined;
+            const localMoodForFallback = getLocalMoodHintWithPrimary(trimmed);
+            moodHint = wantsInsights && localMoodForFallback.primary
+              ? localMoodForFallback.hint
+              : undefined;
             source = "local";
 
             reflectionSeed = local.reflectionSeed
@@ -2002,7 +2005,7 @@ export default function ChatScreen() {
             from: "bot",
             text: replyWithNote,
             timestamp: botTimestamp,
-            moodHint: wantsInsights ? getLocalMoodHint(trimmed) : undefined,
+            moodHint: wantsInsights ? (() => { const m = getLocalMoodHintWithPrimary(trimmed); return m.primary ? m.hint : undefined; })() : undefined,
             isSynced: false,
             source: "local",
 

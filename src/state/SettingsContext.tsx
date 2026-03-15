@@ -198,7 +198,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     // ✅ New: explicit analysis mode control
     const [analysisMode, _setAnalysisMode] = useState<"auto" | "cloud" | "local">(
-        "auto"
+        "cloud"
     );
 
     // ✅ New: tone context guidance (tone only; safe defaults)
