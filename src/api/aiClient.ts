@@ -79,6 +79,12 @@ export type ToneRelationship =
   | "parent_like"
   | "partner_like";
 
+export type SupportedLang =
+  | "en" | "hi" | "mr" | "bn" | "ta" | "te" | "gu" | "pa" | "kn" | "ml" | "or"
+  | "ur" | "zh" | "es" | "ar" | "fr" | "pt" | "ru" | "id" | "he" | "de" | "ja";
+
+export type ResponseStyle = "comfort" | "reflect" | "motivate" | "advise";
+
 export type ToneContextPayload = {
   user?: {
     name?: string;
@@ -89,6 +95,10 @@ export type ToneContextPayload = {
 
     gender?: ToneGender;
     relationship?: ToneRelationship;
+
+    // ✅ parity with web: preferred language + response style
+    preferredLang?: SupportedLang;
+    responseStyle?: ResponseStyle;
   };
   companion?: {
     enabled?: boolean;
