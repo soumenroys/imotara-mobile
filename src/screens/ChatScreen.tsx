@@ -905,6 +905,9 @@ export default function ChatScreen() {
 
     // ✅ Cross-device chat link key (optional)
     chatLinkKey,
+
+    // ✅ Web parity: stable user scope → sent as threadId + userId to /api/respond
+    localUserScopeId,
   } = useSettings();
 
   // ---------------------------------------------------------------------------
@@ -1696,6 +1699,11 @@ export default function ChatScreen() {
 
                 // ✅ Web parity: preferred language for server language-derivation pipeline
                 preferredLanguage: toneContext?.user?.preferredLang || undefined,
+
+                // ✅ Web parity: stable user/thread scope
+                // Server uses userId as fallback when no Supabase auth session exists
+                threadId: localUserScopeId || undefined,
+                userId: localUserScopeId || undefined,
               })
             : { ok: false, replyText: "" };
 

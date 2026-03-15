@@ -146,6 +146,12 @@ type CallAIOptions = {
   // ✅ Web parity: explicit language preference sent as context.preferredLanguage
   // Mirrors web's profile.user.preferredLang → context.preferredLanguage
   preferredLanguage?: string;
+
+  // ✅ Web parity: stable user/conversation scope for server-side seed + memory lookup
+  // Web sends context.threadId; mobile sends localUserScopeId as both threadId and userId.
+  // Server uses userId as fallback when no Supabase session exists (route.ts:936).
+  threadId?: string;
+  userId?: string;
 };
 
 function normalizeToneContext(
@@ -341,6 +347,11 @@ export async function callImotaraAI(
 
             // ✅ Web parity: explicit language preference for language-derivation pipeline
             ...(opts?.preferredLanguage ? { preferredLanguage: opts.preferredLanguage } : {}),
+
+            // ✅ Web parity: stable scope for server seed stability + memory lookup
+            // Server falls back to context.userId when no Supabase auth session exists
+            ...(opts?.threadId ? { threadId: opts.threadId } : {}),
+            ...(opts?.userId ? { userId: opts.userId, user: { id: opts.userId } } : {}),
 
             persona: opts?.settings
               ? {
