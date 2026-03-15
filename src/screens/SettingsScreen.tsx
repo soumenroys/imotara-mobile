@@ -1442,60 +1442,6 @@ export default function SettingsScreen() {
                         })}
                     </View>
 
-                    {/* Response style */}
-                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>
-                        How should Imotara respond?
-                    </Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 4 }}>
-                        {(
-                            [
-                                { id: "auto", label: "Let Imotara decide" },
-                                { id: "comfort", label: "Comfort me" },
-                                { id: "reflect", label: "Help me reflect" },
-                                { id: "motivate", label: "Motivate me" },
-                                { id: "advise", label: "Give advice" },
-                            ] as const
-                        ).map((opt) => {
-                            const currentStyle = toneContext?.user?.responseStyle ?? "auto";
-                            const active = currentStyle === opt.id;
-                            return (
-                                <TouchableOpacity
-                                    key={opt.id}
-                                    onPress={() =>
-                                        setToneContext({
-                                            ...(toneContext || {}),
-                                            user: {
-                                                ...(toneContext?.user || {}),
-                                                responseStyle: opt.id === "auto" ? undefined : (opt.id as any),
-                                            },
-                                        })
-                                    }
-                                    style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
-                                        borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : "rgba(15, 23, 42, 0.9)",
-                                        marginRight: 8,
-                                        marginBottom: 8,
-                                    }}
-                                >
-                                    <Text style={{ fontSize: 12, fontWeight: "700", color: active ? colors.textPrimary : colors.textSecondary }}>
-                                        {opt.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
-                    {toneContext?.user?.responseStyle && (
-                        <Text style={{ fontSize: 11, color: colors.textSecondary, fontStyle: "italic", marginTop: 4, marginBottom: 4 }}>
-                            {toneContext.user.responseStyle === "comfort"  && "\u201cThat sounds really hard. I\u2019m here with you \u2014 take all the time you need.\u201d"}
-                            {toneContext.user.responseStyle === "reflect"  && "\u201cWhat do you think that feeling is trying to tell you?\u201d"}
-                            {toneContext.user.responseStyle === "motivate" && "\u201cYou\u2019re doing better than you think. One small step is all it takes today.\u201d"}
-                            {toneContext.user.responseStyle === "advise"   && "\u201cHere\u2019s what might help: start with the smallest task, just to build momentum.\u201d"}
-                        </Text>
-                    )}
                 </AppSurface>
 
                 {/* ✅ Expected Companion Tone (tone only) */}
@@ -1793,6 +1739,63 @@ export default function SettingsScreen() {
                             );
                         })}
                     </View>
+
+                    {/* Companion respond */}
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 10, marginBottom: 6 }}>
+                        Companion respond
+                    </Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 4 }}>
+                        {(
+                            [
+                                { id: "auto", label: "Let Imotara decide" },
+                                { id: "comfort", label: "Comfort me" },
+                                { id: "reflect", label: "Help me reflect" },
+                                { id: "motivate", label: "Motivate me" },
+                                { id: "advise", label: "Give advice" },
+                            ] as const
+                        ).map((opt) => {
+                            const currentStyle = toneContext?.user?.responseStyle ?? "auto";
+                            const active = currentStyle === opt.id;
+                            return (
+                                <TouchableOpacity
+                                    key={opt.id}
+                                    onPress={() =>
+                                        setToneContext({
+                                            ...(toneContext || {}),
+                                            user: {
+                                                ...(toneContext?.user || {}),
+                                                responseStyle: opt.id === "auto" ? undefined : (opt.id as any),
+                                            },
+                                        })
+                                    }
+                                    disabled={!toneContext?.companion?.enabled}
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : "rgba(15, 23, 42, 0.9)",
+                                        marginRight: 8,
+                                        marginBottom: 8,
+                                        opacity: toneContext?.companion?.enabled ? 1 : 0.5,
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, fontWeight: "700", color: active ? colors.textPrimary : colors.textSecondary }}>
+                                        {opt.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                    {toneContext?.user?.responseStyle && (
+                        <Text style={{ fontSize: 11, color: colors.textSecondary, fontStyle: "italic", marginTop: 4, marginBottom: 4 }}>
+                            {toneContext.user.responseStyle === "comfort"  && "\u201cThat sounds really hard. I\u2019m here with you \u2014 take all the time you need.\u201d"}
+                            {toneContext.user.responseStyle === "reflect"  && "\u201cWhat do you think that feeling is trying to tell you?\u201d"}
+                            {toneContext.user.responseStyle === "motivate" && "\u201cYou\u2019re doing better than you think. One small step is all it takes today.\u201d"}
+                            {toneContext.user.responseStyle === "advise"   && "\u201cHere\u2019s what might help: start with the smallest task, just to build momentum.\u201d"}
+                        </Text>
+                    )}
                 </AppSurface>
 
                 {/* Local history card */}
