@@ -1825,33 +1825,56 @@ export default function SettingsScreen() {
                     </View>
                 </AppSurface>
 
-                {/* App version footer */}
-                <View
-                    style={{
-                        marginTop: 32,
-                        alignItems: "center",
-                        paddingBottom: 20,
-                        opacity: 0.5,
-                    }}
-                >
-                    <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-                        {(() => {
-                            const version =
-                                (Constants as any)?.expoConfig?.version ??
-                                (Constants as any)?.manifest2?.extra?.expoClient?.version ??
-                                "—";
-
-                            // In Expo Go / dev builds, build number may not be available reliably without native modules.
-                            // For TestFlight / EAS builds, we can still surface the configured buildNumber from expoConfig when present.
-                            const build =
-                                (Constants as any)?.expoConfig?.ios?.buildNumber ??
-                                (Constants as any)?.expoConfig?.android?.versionCode ??
-                                "—";
-
-                            return `Imotara Mobile · v${version} (${build})`;
-                        })()}
-                    </Text>
-                </View>
+                {/* App Info */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    {(() => {
+                        const version =
+                            (Constants as any)?.expoConfig?.version ??
+                            (Constants as any)?.manifest2?.extra?.expoClient?.version ??
+                            "—";
+                        const build =
+                            (Constants as any)?.expoConfig?.ios?.buildNumber ??
+                            (Constants as any)?.expoConfig?.android?.versionCode ??
+                            "—";
+                        const rows = [
+                            { label: "Version", value: `v${version}` },
+                            { label: "Build", value: `${build}` },
+                        ];
+                        return (
+                            <>
+                                <Text
+                                    style={{
+                                        fontSize: 14,
+                                        color: colors.textPrimary,
+                                        fontWeight: "500",
+                                        marginBottom: 10,
+                                    }}
+                                >
+                                    App Info
+                                </Text>
+                                {rows.map(({ label, value }) => (
+                                    <View
+                                        key={label}
+                                        style={{
+                                            flexDirection: "row",
+                                            justifyContent: "space-between",
+                                            paddingVertical: 6,
+                                            borderTopWidth: 1,
+                                            borderTopColor: "rgba(255,255,255,0.06)",
+                                        }}
+                                    >
+                                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                                            {label}
+                                        </Text>
+                                        <Text style={{ fontSize: 13, color: colors.textPrimary }}>
+                                            {value}
+                                        </Text>
+                                    </View>
+                                ))}
+                            </>
+                        );
+                    })()}
+                </AppSurface>
             </ScrollView>
         </View>
     );
