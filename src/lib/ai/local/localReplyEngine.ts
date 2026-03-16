@@ -1,4 +1,7 @@
 // src/lib/ai/local/localReplyEngine.ts
+import { buildMicroStory } from "./storyEngine";
+import { buildMythologyStory } from "./mythologyEngine";
+import { buildOfflineQuote } from "./quotesEngine";
 import type { ToneContextPayload } from "../../../api/aiClient";
 import {
     BN_SAD_REGEX, BN_STRESS_REGEX,
@@ -338,6 +341,29 @@ function applyPunjabiUserGender(text: string, gender?: string): string {
         .replace(/\bsambhal lavega\b/g, "sambhal lavegi");
 }
 
+function applyBengaliCompanionGender(text: string, gender?: string): string {
+    if (gender !== "female") return text;
+    return text
+        .replace(/\bshunchhi\b/g, "shunchhi")   // already neutral in Bengali
+        .replace(/\bbujhechhi\b/g, "bujhechi")
+        .replace(/\bthakbo\b/g, "thakbo");       // gender-neutral in Bengali
+}
+
+function applyMarathiCompanionGender(text: string, gender?: string): string {
+    if (gender !== "female") return text;
+    return text
+        .replace(/\baiktoyo\b/gi, "aikteyo")
+        .replace(/\bgheto\b/gi, "ghete")
+        .replace(/\bsamjun gheto\b/gi, "samjun ghete");
+}
+
+function applyMarathiUserGender(text: string, gender?: string): string {
+    if (gender !== "female") return text;
+    return text
+        .replace(/\bkarsheel\b/g, "karashil")
+        .replace(/\bsambhalishe\b/g, "sambhalishes");
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function buildLocalReply(
@@ -348,9 +374,12 @@ export function buildLocalReply(
     const language = detectLanguage(message, recentContext);
     const recentSignature = buildRecentSignature(recentContext);
 
-    const relationship = toneContext?.companion?.enabled
-        ? (toneContext?.companion?.relationship ?? "prefer_not")
-        : (toneContext?.user?.relationship ?? "prefer_not");
+    // Use companion.relationship as tone preference regardless of enabled flag.
+    // companion.enabled controls the named persona; tone prefs apply independently.
+    const relationship =
+        (toneContext?.companion?.relationship && toneContext.companion.relationship !== "prefer_not")
+            ? toneContext.companion.relationship
+            : (toneContext?.user?.relationship ?? "prefer_not");
 
     const companionToneFromRel = relationshipToTone(relationship as string);
     const companionName = (toneContext?.companion?.name?.trim() || "Imotara");
@@ -795,7 +824,30 @@ export function buildLocalReply(
         `Amra tomar feeling e focus korbo, na porer ki korte paro setay?`,
     ];
 
-    // ── Assemble ──────────────────────────────────────────────────────────────
+    // ── Micro-story (combinatorial, 64 combinations per signal per language) ────
+    // framing × situation × insight, each picked with independent seed offsets.
+    // Injected ~1 in 4 turns when signal is emotional. Skipped for okay/correction/vague.
+    const isEmotionalSignal = signal !== "okay";
+    const storyTurnCheck = (seed >>> 7) % 4 === 0;
+    const shouldInsertStory = isEmotionalSignal && !isCorrection && !isVagueReply && storyTurnCheck;
+    const storyLine = shouldInsertStory ? buildMicroStory(signal, language, seed) : null;
+
+    // ── Mythology story (~1 in 6 emotional turns, English only) ─────────────────
+    // Uses seed bit-window >>>9 to avoid same-turn collision with micro-story (>>>7).
+    // For non-English users, the LLM chat-reply path handles mythology via system prompt.
+    const mythTurnCheck = (seed >>> 9) % 6 === 0;
+    const isEnglishLang = language === "en";
+    const shouldInsertMyth = isEmotionalSignal && isEnglishLang && !isCorrection && !isVagueReply && mythTurnCheck;
+    const mythLine = shouldInsertMyth ? buildMythologyStory(signal, language, seed) : null;
+
+    // ── Offline quote (~1 in 5 emotional turns, English only) ───────────────────
+    // Uses seed bit-window >>>11 to avoid collision with story (>>>7) and myth (>>>9).
+    // For non-English offline users, quotes are skipped (LLM online paths handle it).
+    const quoteTurnCheck = (seed >>> 11) % 5 === 0;
+    const shouldInsertQuote = isEmotionalSignal && isEnglishLang && !isCorrection && !isVagueReply && quoteTurnCheck && !mythLine;
+    const quoteLine = shouldInsertQuote ? buildOfflineQuote(signal, seed) : null;
+
+        // ── Assemble ──────────────────────────────────────────────────────────────
 
     const openers =
         language === "hi" ? openersByToneHi[companionTone] :
@@ -913,8 +965,11 @@ export function buildLocalReply(
         : pick(extrasByTone[companionTone], seed >>> 5);
 
     const base = `${correctionPrefix}${followUpPrefix}${opener} ${validation}`.trim();
+    const storyPart = storyLine ? " " + storyLine : "";
+    const mythPart = mythLine ? " " + mythLine : "";
+    const quotePart = quoteLine ? " " + quoteLine : "";
     const extraPart = suppressExtras ? "" : (extra ? " " + extra : "");
-    const finalMsg = dedupeAdjacentSentences(`${base}${extraPart}${topicHint}`.trim());
+    const finalMsg = dedupeAdjacentSentences(`${base}${storyPart}${mythPart}${quotePart}${extraPart}${topicHint}`.trim());
 
     // Age-aware closing
     const ageClosersByLang: Record<string, Partial<Record<string, string>>> = {
@@ -938,6 +993,11 @@ export function buildLocalReply(
     } else if (language === "pa") {
         finalMessage = applyPunjabiCompanionGender(finalMessage, companionGender);
         finalMessage = applyPunjabiUserGender(finalMessage, userGender);
+    } else if (language === "bn") {
+        finalMessage = applyBengaliCompanionGender(finalMessage, companionGender);
+    } else if (language === "mr") {
+        finalMessage = applyMarathiCompanionGender(finalMessage, companionGender);
+        finalMessage = applyMarathiUserGender(finalMessage, userGender);
     }
 
     // Occasionally address user by name (~1 in 3 replies)

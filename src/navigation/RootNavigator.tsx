@@ -4,6 +4,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { View, Text, TouchableOpacity } from "react-native";
 
 import ChatScreen from "../screens/ChatScreen";
 import HistoryScreen from "../screens/HistoryScreen";
@@ -16,6 +17,75 @@ import { useSettings } from "../state/SettingsContext";
 
 import { OnboardingModal, type OnboardingResult } from "../components/imotara/OnboardingModal";
 import { useColors } from "../theme/ThemeContext";
+
+// ── Global sync status strip ───────────────────────────────────────────────────
+function SyncStatusStrip() {
+    const colors = useColors();
+    const store = useHistoryStore() as any;
+    const isSyncing: boolean = store.isSyncing ?? false;
+    const lastSyncResult = store.lastSyncResult ?? null;
+    const hasUnsyncedChanges: boolean = store.hasUnsyncedChanges ?? false;
+    const [visible, setVisible] = useState(false);
+    const [message, setMessage] = useState("");
+    const [isError, setIsError] = useState(false);
+    const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        if (isSyncing) {
+            setMessage("Syncing…");
+            setIsError(false);
+            setVisible(true);
+            if (hideTimer.current) clearTimeout(hideTimer.current);
+            return;
+        }
+        if (lastSyncResult) {
+            if (!lastSyncResult.ok) {
+                setMessage("Sync failed — will retry");
+                setIsError(true);
+                setVisible(true);
+                hideTimer.current = setTimeout(() => setVisible(false), 4000);
+            } else if (hasUnsyncedChanges) {
+                // still have unsynced items — stay quiet
+                setVisible(false);
+            } else {
+                setMessage("Synced ✓");
+                setIsError(false);
+                setVisible(true);
+                hideTimer.current = setTimeout(() => setVisible(false), 2500);
+            }
+        }
+        return () => { if (hideTimer.current) clearTimeout(hideTimer.current); };
+    }, [isSyncing, lastSyncResult, hasUnsyncedChanges]);
+
+    if (!visible) return null;
+
+    return (
+        <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setVisible(false)}
+            style={{
+                position: "absolute",
+                top: 0, left: 0, right: 0,
+                zIndex: 999,
+                backgroundColor: isError ? "rgba(239,68,68,0.92)" : "rgba(14,165,233,0.88)",
+                paddingVertical: 5,
+                paddingHorizontal: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+            }}
+        >
+            {isSyncing && (
+                <Text style={{ fontSize: 11, color: "#fff", opacity: 0.75 }}>⟳</Text>
+            )}
+            <Text style={{ fontSize: 12, color: "#fff", fontWeight: "600" }}>{message}</Text>
+            {!isSyncing && (
+                <Text style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", marginLeft: 4 }}>tap to dismiss</Text>
+            )}
+        </TouchableOpacity>
+    );
+}
 
 const Tab = createBottomTabNavigator();
 const ONBOARDING_KEY = "imotara.onboarding.done.v1";
@@ -84,7 +154,7 @@ export default function RootNavigator() {
     if (!onboardingChecked) return null;
 
     return (
-        <>
+        <View style={{ flex: 1 }}>
             <NavigationContainer>
                 <Tab.Navigator
                     screenOptions={({ route }) => ({
@@ -149,6 +219,7 @@ export default function RootNavigator() {
                 visible={onboardingVisible}
                 onComplete={(result) => { void handleOnboardingComplete(result); }}
             />
-        </>
+            <SyncStatusStrip />
+        </View>
     );
 }

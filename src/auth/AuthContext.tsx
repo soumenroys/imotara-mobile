@@ -21,8 +21,9 @@ import * as AuthSession from "expo-auth-session";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../lib/supabase/client";
 
-// Required so the auth redirect can close the browser tab on iOS
-WebBrowser.maybeCompleteAuthSession();
+// Required so the auth redirect can close the browser tab on iOS.
+// Guarded: native module may not be available in bare Expo Go dev environment.
+try { WebBrowser.maybeCompleteAuthSession(); } catch { /* no-op in Expo Go */ }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

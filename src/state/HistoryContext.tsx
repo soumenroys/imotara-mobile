@@ -18,6 +18,20 @@ import {
 
 import { fetchRemoteChatMessages } from "../api/aiClient";
 
+/** Merge two timestamp-sorted arrays in O(n+m) instead of O((n+m) log(n+m)). */
+function mergeSorted<T extends { timestamp?: number }>(a: T[], b: T[]): T[] {
+    const result: T[] = [];
+    let i = 0, j = 0;
+    while (i < a.length && j < b.length) {
+        if ((a[i].timestamp ?? 0) <= (b[j].timestamp ?? 0)) result.push(a[i++]);
+        else result.push(b[j++]);
+    }
+    while (i < a.length) result.push(a[i++]);
+    while (j < b.length) result.push(b[j++]);
+    return result;
+}
+
+
 import { useSettings } from "./SettingsContext";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
@@ -98,6 +112,13 @@ type HistoryContextValue = {
     lastSyncResult: PushRemoteHistoryResult | null;
     lastSyncAt: number | null;
     hasUnsyncedChanges: boolean;
+
+    /**
+     * Pairs of items that look like duplicates (same sender, same text fingerprint,
+     * timestamps within 60 s, different IDs). Typically arise when the same message
+     * arrives from both a local write and a remote pull.
+     */
+    potentialDuplicates: Array<[HistoryItem, HistoryItem]>;
 
     /**
      * Licensing state (foundation):
@@ -806,11 +827,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                         const toAdd = items.filter((it) => it?.id && !existingIds.has(it.id));
 
                         if (toAdd.length > 0) {
-                            setHistory((prev) =>
-                                [...prev, ...toAdd].sort(
-                                    (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
-                                )
-                            );
+                            const sortedToAdd = [...toAdd].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+                            setHistory((prev) => mergeSorted(prev, sortedToAdd));
                         }
 
                         setSettingsLastSyncStatus(
@@ -898,11 +916,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                                 const newOnes = toAdd.filter((it) => it?.id && !existingIds.has(it.id));
 
                                 if (newOnes.length > 0) {
-                                    setHistory((prev) =>
-                                        [...prev, ...newOnes].sort(
-                                            (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)
-                                        )
-                                    );
+                                    const sortedNew = [...newOnes].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+                                    setHistory((prev) => mergeSorted(prev, sortedNew));
                                 }
                             }
                         }
@@ -981,6 +996,25 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
     const hasUnsyncedChanges = history.some((h) => !h.isSynced);
 
+    // Detect potential duplicates: same sender + text fingerprint + timestamps within 60s, different IDs
+    const potentialDuplicates: Array<[HistoryItem, HistoryItem]> = (() => {
+        const dupes: Array<[HistoryItem, HistoryItem]> = [];
+        const sorted = [...history].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+        for (let i = 0; i < sorted.length - 1; i++) {
+            const a = sorted[i];
+            const b = sorted[i + 1];
+            if (
+                a.from === b.from &&
+                a.id !== b.id &&
+                Math.abs((a.timestamp ?? 0) - (b.timestamp ?? 0)) < 60_000 &&
+                a.text.trim().slice(0, 80).toLowerCase() === b.text.trim().slice(0, 80).toLowerCase()
+            ) {
+                dupes.push([a, b]);
+            }
+        }
+        return dupes;
+    })();
+
     useEffect(() => {
         clearAutoSyncTimer();
 
@@ -1027,6 +1061,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 lastSyncResult,
                 lastSyncAt,
                 hasUnsyncedChanges,
+                potentialDuplicates,
                 licenseTier,
                 setLicenseTier,
             }}

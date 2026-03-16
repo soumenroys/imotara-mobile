@@ -357,6 +357,8 @@ export async function pushRemoteHistory(
                 text: i.text,
                 from: i.from,
                 timestamp: i.timestamp,
+                ...(i.emotion ? { emotion: i.emotion } : {}),
+                ...(typeof i.intensity === "number" ? { intensity: i.intensity } : {}),
             }));
 
         const limited = payloadItems.slice(0, 50);

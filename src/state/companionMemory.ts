@@ -41,6 +41,11 @@ export async function clearMemories(): Promise<void> {
     await AsyncStorage.removeItem(KEY);
 }
 
+export async function removeMemory(id: string): Promise<void> {
+    const existing = await loadMemories();
+    await saveMemories(existing.filter((m) => m.id !== id));
+}
+
 export async function addMemory(item: Omit<MemoryItem, "id" | "createdAt">): Promise<void> {
     const existing = await loadMemories();
     // Deduplicate: skip if very similar text already stored

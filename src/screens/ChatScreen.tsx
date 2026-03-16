@@ -49,6 +49,7 @@ import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
 
 // NEW: lifecycle hook (additive)
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
+import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
 import type { ReflectionSeed } from "../lib/reflectionSeedContract";
@@ -73,6 +74,47 @@ import {
 } from "../lib/emotion/keywordMaps";
 import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { detectCountryCode } from "../lib/safety/detectCountry";
+import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
+
+// ── 3-tier crisis detection ───────────────────────────────────────────────────
+// Tier 2: direct suicidal ideation, self-harm, immediate danger
+// Tier 1: hopelessness, worthlessness, trapped — distress without explicit ideation
+// Tier 0: no crisis signal
+
+const MOBILE_CRISIS_TIER2_RE = CRISIS_HINT_REGEX; // already covers EN + 13 languages
+
+const MOBILE_CRISIS_TIER1_RE =
+  /\b(hopeless|helpless|worthless|nothing matters|give up|can'?t take (it|this) anymore|breaking down|falling apart|no one cares|all alone|empty inside|numbing|disappear|feel like a burden|i'?m a burden|everyone (would be )?better off without me|trapped|feel(ing)? trapped|no way out|no escape|can'?t see a future|thinking about (death|ending|disappearing)|thoughts of (death|ending it)|pointless|life is pointless|don'?t deserve to (live|be here)|i\s+am\s+nothing)\b/i;
+
+// Indic tier-1 distress (Unicode scripts)
+const MOBILE_CRISIS_INDIC_TIER1_RE = new RegExp(
+  ["उम्मीद नहीं","बेकार हूं","निराश हूं","थक गया","थक गई","सब बेकार है",
+   "आशा नाही","निराश आहे","थकलोय",
+   "আশা নেই","হতাশ","একা","কেউ নেই",
+   "நம்பிக்கையில்லை","தனிமை","யாரும் இல்லை",
+   "ఆశ లేదు","ఒంటరిగా","ఎవరూ లేరు",
+   "ಆಶೆ ಇಲ್ಲ","ಒಂಟಿ","ಯಾರೂ ಇಲ್ಲ",
+   "പ്രതീക്ഷ ഇല്ല","ഒറ്റയ്ക്ക്",
+   "આશા નથી","એકલા",
+   "ਉਮੀਦ ਨਹੀਂ","ਇਕੱਲਾ",
+  ].join("|"),
+);
+
+// Romanised Indian distress tier-1
+const MOBILE_CRISIS_ROMAN_INDIC_TIER1_RE =
+  /umeed\s+nahi|bekaar\s+hoon|nirash\s+hoon|thak\s+gay[ao]|asha\s+nahi|akela\s+hoon|akeli\s+hoon/i;
+
+type CrisisTier = 0 | 1 | 2;
+
+function detectMobileCrisisTier(text: string): CrisisTier {
+  if (MOBILE_CRISIS_TIER2_RE.test(text)) return 2;
+  if (
+    MOBILE_CRISIS_TIER1_RE.test(text) ||
+    MOBILE_CRISIS_INDIC_TIER1_RE.test(text) ||
+    MOBILE_CRISIS_ROMAN_INDIC_TIER1_RE.test(text)
+  ) return 1;
+  return 0;
+}
 
 type ChatMessageSource = "cloud" | "local";
 
@@ -857,6 +899,50 @@ export default function ChatScreen() {
   // ✅ Action sheet state
   const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
 
+  // ✅ Bookmarks — persisted to AsyncStorage
+  const BOOKMARKS_KEY = "imotara.chat.bookmarks.v1";
+  const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
+  const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(BOOKMARKS_KEY).then((raw) => {
+      if (raw) {
+        try { setBookmarks(new Set(JSON.parse(raw))); } catch {}
+      }
+    });
+  }, []);
+  const handleToggleBookmark = async (id: string) => {
+    setBookmarks((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      AsyncStorage.setItem(BOOKMARKS_KEY, JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+    setActionMessage(null);
+  };
+
+  // ✅ TTS state
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+
+  // ✅ Chat search
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchMatchIndex, setSearchMatchIndex] = useState(0);
+  const searchInputRef = React.useRef<any>(null);
+
+  // Pre-compute search matches once (O(n)) instead of per-bubble (O(n²))
+  const searchMatchIds = useMemo<Set<string>>(() => {
+    const q = showSearch ? searchQuery.trim().toLowerCase() : "";
+    if (!q) return new Set();
+    return new Set(messages.filter((m) => m.text?.toLowerCase().includes(q)).map((m) => m.id));
+  }, [showSearch, searchQuery, messages]);
+
+  const searchActiveMatchId = useMemo<string | null>(() => {
+    const q = showSearch ? searchQuery.trim().toLowerCase() : "";
+    if (!q || searchMatchIds.size === 0) return null;
+    const matchArr = messages.filter((m) => searchMatchIds.has(m.id));
+    return matchArr[searchMatchIndex]?.id ?? null;
+  }, [showSearch, searchQuery, searchMatchIds, searchMatchIndex, messages]);
+
   // Crisis safety card — tracks which bot message IDs have been dismissed
   const [dismissedCrisisCards, setDismissedCrisisCards] = useState<Set<string>>(new Set());
   const dismissCrisisCard = (id: string) =>
@@ -873,6 +959,21 @@ export default function ChatScreen() {
 
   // Message reactions — messageId → emoji
   const [reactions, setReactions] = useState<Map<string, string>>(new Map());
+
+  // Return greeting — shown after >24h absence
+  const [showReturnGreeting, setShowReturnGreeting] = useState(false);
+  useEffect(() => {
+    const LAST_SEEN_KEY = "imotara.chat.lastSeen.v1";
+    const now = Date.now();
+    AsyncStorage.getItem(LAST_SEEN_KEY).then((val) => {
+      const last = val ? parseInt(val, 10) : 0;
+      if (last > 0 && now - last > 24 * 60 * 60 * 1000) {
+        setShowReturnGreeting(true);
+        setTimeout(() => setShowReturnGreeting(false), 8000);
+      }
+      AsyncStorage.setItem(LAST_SEEN_KEY, String(now));
+    }).catch(() => { });
+  }, []);
   const addReaction = (messageId: string, emoji: string) => {
     setReactions((prev) => {
       const next = new Map(prev);
@@ -998,6 +1099,8 @@ export default function ChatScreen() {
     // (kept for future debugging; no UI impact)
     void reason;
   };
+
+  const isOnline = useOnlineStatus();
 
   // NEW: app lifecycle handling (prevents stuck typing on background/foreground)
   useAppLifecycle({
@@ -1256,21 +1359,22 @@ export default function ChatScreen() {
         emotionInsightsEnabled: true,
 
         settings: {
+          // Always forward companion tone preferences as persona hints.
+          // companion.enabled controls the named persona; tone prefs apply regardless.
           relationshipTone:
-            (toneContext?.companion?.enabled
+            (toneContext?.companion?.relationship !== "prefer_not"
               ? toneContext?.companion?.relationship
               : undefined) ?? toneContext?.user?.relationship,
 
           ageTone:
-            (toneContext?.companion?.enabled
-              ? (toneContext?.companion?.ageTone ??
-                toneContext?.companion?.ageRange)
+            (toneContext?.companion?.ageTone !== "prefer_not"
+              ? (toneContext?.companion?.ageTone ?? toneContext?.companion?.ageRange)
               : undefined) ??
             toneContext?.user?.ageTone ??
             toneContext?.user?.ageRange,
 
           genderTone:
-            (toneContext?.companion?.enabled
+            (toneContext?.companion?.gender !== "prefer_not"
               ? toneContext?.companion?.gender
               : undefined) ?? toneContext?.user?.gender,
         },
@@ -1559,9 +1663,15 @@ export default function ChatScreen() {
     onScroll(e);
   };
 
+  const CHAR_LIMIT = 2000;
+
   const handleSend = (overrideText?: string) => {
     const trimmed = (overrideText ?? input).trim();
     if (!trimmed) return;
+    if (trimmed.length > CHAR_LIMIT) {
+      Alert.alert("Message too long", `Please shorten your message to under ${CHAR_LIMIT} characters.`);
+      return;
+    }
 
     // ✅ 80/20: block double taps / overlapping send cycles
     if (isTyping || isSendingRef.current) return;
@@ -1672,29 +1782,29 @@ export default function ChatScreen() {
                 analysisMode: analysisMode,
                 emotionInsightsEnabled: wantsInsights,
 
-                // ✅ persona hints: prefer companion settings when enabled, else fall back to user settings
+                // Companion tone prefs always forwarded as persona hints.
+                // companion.enabled controls named persona; tone prefs apply regardless.
                 settings: {
                   relationshipTone:
-                    (toneContext?.companion?.enabled
+                    (toneContext?.companion?.relationship !== "prefer_not"
                       ? toneContext?.companion?.relationship
                       : undefined) ?? toneContext?.user?.relationship,
 
-                  // ✅ parity: ageTone preferred, ageRange legacy fallback
                   ageTone:
-                    (toneContext?.companion?.enabled
-                      ? (toneContext?.companion?.ageTone ??
-                        toneContext?.companion?.ageRange)
+                    (toneContext?.companion?.ageTone !== "prefer_not"
+                      ? (toneContext?.companion?.ageTone ?? toneContext?.companion?.ageRange)
                       : undefined) ??
                     toneContext?.user?.ageTone ??
                     toneContext?.user?.ageRange,
 
                   genderTone:
-                    (toneContext?.companion?.enabled
+                    (toneContext?.companion?.gender !== "prefer_not"
                       ? toneContext?.companion?.gender
                       : undefined) ?? toneContext?.user?.gender,
                 },
 
-                recentMessages: messages.slice(-6).map((m) => ({
+                // More history for richer long-discussion context (web sends 6, mobile sends 10)
+                recentMessages: messages.slice(-10).map((m) => ({
                   role: m.from === "user" ? "user" : "assistant",
                   content: m.text,
                 })),
@@ -2278,6 +2388,13 @@ export default function ChatScreen() {
   const renderBubble = (message: ChatMessage, index: number) => {
     const isUser = message.from === "user";
 
+    // Search highlight — O(1) lookup using pre-computed sets
+    const isSearchMatch = searchMatchIds.has(message.id);
+    const isActiveMatch = searchActiveMatchId === message.id;
+
+    // Bookmark indicator
+    const isBookmarked = bookmarks.has(message.id);
+
     // ✅ Step 7 continuity note (hook-safe)
     const showContinuityNote = isFirstBotReplyOfSession(
       message,
@@ -2566,6 +2683,34 @@ export default function ChatScreen() {
           </Text>
         </View>
 
+        {/* Retry button — shown when cloud failed and local fallback was used */}
+        {!isUser && message.cloudAttempted && message.source === "local" && (
+          <TouchableOpacity
+            onPress={() => {
+              const prevMsg = messages[index - 1];
+              if (prevMsg?.from !== "user") return;
+              setMessages((prev) => prev.filter((m) => m.id !== message.id));
+              deleteFromHistory(message.id);
+              setInput(prevMsg.text);
+            }}
+            style={{
+              alignSelf: "flex-start",
+              marginTop: 6,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: "rgba(251,191,36,0.4)",
+              backgroundColor: "rgba(251,191,36,0.08)",
+            }}
+          >
+            <Text style={{ fontSize: 10, color: "#fde68a", fontWeight: "600" }}>↺ Retry with cloud</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Reaction emoji */}
         {reactions.get(message.id) && (
           <Text style={{ fontSize: 18, marginTop: 4 }}>{reactions.get(message.id)}</Text>
@@ -2597,7 +2742,7 @@ export default function ChatScreen() {
       : () => setActionMessage(message);
 
     return (
-      <View key={message.id} style={extraTopSpace}>
+      <View key={message.id} style={[extraTopSpace, isSearchMatch ? { borderRadius: 14, backgroundColor: isActiveMatch ? "rgba(99,102,241,0.12)" : "rgba(99,102,241,0.05)" } : undefined, isBookmarked ? { borderRadius: 14, borderWidth: 1, borderColor: "rgba(251,191,36,0.35)" } : undefined]}>
         {renderSessionDivider(message, prev)}
         <Pressable
           onLongPress={onLongPress}
@@ -2646,36 +2791,67 @@ export default function ChatScreen() {
           )}
         </Pressable>
 
-        {/* Crisis safety card — shown below bot reply when preceding user message matches */}
+        {/* Crisis safety card — tiered: Tier 2 = full resources, Tier 1 = compassionate check-in */}
         {!isUser && (() => {
           const prevMsg = messages[index - 1];
           if (!prevMsg || prevMsg.from !== "user") return null;
-          const MOBILE_CRISIS_TIER1_RE = /\b(hopeless|helpless|worthless|nothing matters|give up|can't take it anymore|breaking down|falling apart|no one cares|all alone|empty inside|disappear|feel like a burden|trapped|no way out|no escape|thinking about death|thoughts of ending)\b/i;
-          if (!CRISIS_HINT_REGEX.test(prevMsg.text) && !MOBILE_CRISIS_TIER1_RE.test(prevMsg.text)) return null;
+          const tier = detectMobileCrisisTier(prevMsg.text);
+          if (tier === 0) return null;
           if (dismissedCrisisCards.has(message.id)) return null;
+
+          if (tier === 1) {
+            return (
+              <View style={{
+                marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: "88%",
+                borderRadius: 14, borderWidth: 1,
+                borderColor: "rgba(99,102,241,0.30)",
+                backgroundColor: "rgba(99,102,241,0.08)",
+                paddingHorizontal: 14, paddingVertical: 12,
+              }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: "rgba(167,139,250,1)", flex: 1 }}>
+                    💜 You don't have to carry this alone
+                  </Text>
+                  <TouchableOpacity onPress={() => dismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={{ fontSize: 14, color: "rgba(167,139,250,0.7)", marginLeft: 8 }}>x</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={{ marginTop: 8, fontSize: 12, color: "rgba(196,181,253,0.9)", lineHeight: 18 }}>
+                  It sounds like things are feeling really heavy. I'm here. If it ever feels like too much, free crisis support is just a call away.
+                </Text>
+                {(() => {
+                  const resources = getCrisisResourcesForCountry(detectCountryCode());
+                  const primary = resources?.primary?.[0];
+                  if (!primary) return null;
+                  return (
+                    <TouchableOpacity
+                      onPress={() => Linking.openURL(`tel:${primary.contact.replace(/[^\d+]/g, "")}`)}
+                      style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 }}
+                      accessibilityRole="link"
+                    >
+                      <Text style={{ fontSize: 12, color: "rgba(196,181,253,0.85)" }}>{primary.label}:</Text>
+                      <Text style={{ fontSize: 12, color: "rgba(196,181,253,1)", fontWeight: "700", textDecorationLine: "underline" }}>{primary.contact}</Text>
+                    </TouchableOpacity>
+                  );
+                })()}
+              </View>
+            );
+          }
+
+          // Tier 2 — full resource card
           return (
-            <View
-              style={{
-                marginTop: 2,
-                marginBottom: 6,
-                marginLeft: 4,
-                maxWidth: "88%",
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: "rgba(251, 191, 36, 0.35)",
-                backgroundColor: "rgba(251, 191, 36, 0.10)",
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-              }}
-            >
+            <View style={{
+              marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: "88%",
+              borderRadius: 14, borderWidth: 1,
+              borderColor: "rgba(251, 191, 36, 0.35)",
+              backgroundColor: "rgba(251, 191, 36, 0.10)",
+              paddingHorizontal: 14, paddingVertical: 12,
+            }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <Text style={{ fontSize: 13, fontWeight: "700", color: "#fde68a", flex: 1 }}>
                   {"\u{1F49B}"} If things feel urgent right now
                 </Text>
-                <TouchableOpacity
-                  onPress={() => dismissCrisisCard(message.id)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
+                <TouchableOpacity onPress={() => dismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Text style={{ fontSize: 14, color: "#fde68a", opacity: 0.7, marginLeft: 8 }}>x</Text>
                 </TouchableOpacity>
               </View>
@@ -2684,12 +2860,8 @@ export default function ChatScreen() {
                   const countryCode = detectCountryCode();
                   const resources = getCrisisResourcesForCountry(countryCode);
                   const lines: { label: string; number: string }[] = [];
-                  if (resources?.emergency) {
-                    lines.push({ label: resources.emergency.label, number: resources.emergency.contact });
-                  }
-                  resources?.primary?.slice(0, 2).forEach((r) => {
-                    lines.push({ label: r.label, number: r.contact });
-                  });
+                  if (resources?.emergency) lines.push({ label: resources.emergency.label, number: resources.emergency.contact });
+                  resources?.primary?.slice(0, 2).forEach((r) => lines.push({ label: r.label, number: r.contact }));
                   return lines.map(({ label, number }) => (
                     <TouchableOpacity
                       key={label}
@@ -2813,11 +2985,45 @@ export default function ChatScreen() {
           </View>
 
           <TouchableOpacity
+            onPress={() => {
+              const id = actionMessage.id;
+              const text = actionMessage.text;
+              const gender = toneContext?.companion?.enabled
+                ? toneContext?.companion?.gender
+                : toneContext?.user?.gender as string | undefined;
+              const lang = toneContext?.user?.preferredLang ?? "en";
+              const isCurrentlySpeaking = speakingMessageId === id;
+              if (isCurrentlySpeaking) {
+                stopSpeaking();
+                setSpeakingMessageId(null);
+              } else {
+                setSpeakingMessageId(id);
+                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null));
+              }
+              setActionMessage(null);
+            }}
+            style={{ paddingVertical: 10 }}
+          >
+            <Text style={{ fontSize: 14, color: colors.textPrimary }}>
+              {speakingMessageId === actionMessage.id ? "Stop speaking" : "Speak aloud 🔊"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             onPress={() => handleCopyMessage(actionMessage.text)}
             style={{ paddingVertical: 10 }}
           >
             <Text style={{ fontSize: 14, color: colors.textPrimary }}>
               Copy text
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => handleToggleBookmark(actionMessage.id)}
+            style={{ paddingVertical: 10 }}
+          >
+            <Text style={{ fontSize: 14, color: bookmarks.has(actionMessage.id) ? "#fde68a" : colors.textPrimary }}>
+              {bookmarks.has(actionMessage.id) ? "★ Remove bookmark" : "☆ Bookmark message"}
             </Text>
           </TouchableOpacity>
 
@@ -2950,6 +3156,12 @@ export default function ChatScreen() {
       keyboardVerticalOffset={tabBarHeight}
     >
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Offline indicator */}
+      {!isOnline && (
+        <View style={{ backgroundColor: "rgba(239,68,68,0.90)", paddingVertical: 5, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <Text style={{ fontSize: 12, color: "#fff", fontWeight: "600" }}>⚠ No internet connection — messages will be queued</Text>
+        </View>
+      )}
       {/* Header */}
       <View
         style={{
@@ -3021,6 +3233,51 @@ export default function ChatScreen() {
           </View>
 
           <View style={{ flex: 1 }} />
+
+          {/* Search toggle */}
+          {messages.length > 0 && (
+            <TouchableOpacity
+              onPress={() => {
+                setShowSearch((v) => {
+                  if (v) { setSearchQuery(""); setSearchMatchIndex(0); }
+                  return !v;
+                });
+                setTimeout(() => searchInputRef.current?.focus(), 80);
+              }}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: showSearch ? colors.primary : colors.border,
+                backgroundColor: showSearch ? `${colors.primary}22` : "rgba(255,255,255,0.06)",
+                marginRight: 8,
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Search chat"
+            >
+              <Text style={{ fontSize: 14 }}>🔍</Text>
+            </TouchableOpacity>
+          )}
+
+          {bookmarks.size > 0 && (
+            <TouchableOpacity
+              onPress={() => setShowBookmarksOnly((v) => !v)}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: showBookmarksOnly ? "#fde68a" : colors.border,
+                backgroundColor: showBookmarksOnly ? "rgba(251,191,36,0.18)" : "rgba(255,255,255,0.06)",
+                marginRight: 8,
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Show bookmarks"
+            >
+              <Text style={{ fontSize: 14 }}>{showBookmarksOnly ? "★" : "☆"}</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Breathing exercise button */}
           <TouchableOpacity
@@ -3135,6 +3392,65 @@ export default function ChatScreen() {
           </View>
         )}
       </View>
+
+      {/* Search bar */}
+      {showSearch && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            backgroundColor: "rgba(15, 23, 42, 0.7)",
+            gap: 8,
+          }}
+        >
+          <Text style={{ fontSize: 14, color: colors.textSecondary }}>🔍</Text>
+          <TextInput
+            ref={searchInputRef}
+            value={searchQuery}
+            onChangeText={(t) => { setSearchQuery(t); setSearchMatchIndex(0); }}
+            placeholder="Search messages…"
+            placeholderTextColor={colors.textSecondary}
+            style={{ flex: 1, fontSize: 13, color: colors.textPrimary }}
+            returnKeyType="search"
+            autoCorrect={false}
+          />
+          {searchQuery.trim().length > 0 && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                {searchMatchIds.size === 0 ? "No results" : `${Math.min(searchMatchIndex + 1, searchMatchIds.size)} / ${searchMatchIds.size}`}
+              </Text>
+              {searchMatchIds.size > 1 && (
+                <>
+                  <TouchableOpacity
+                    onPress={() => setSearchMatchIndex((i) => Math.max(0, i - 1))}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={{ fontSize: 14, color: colors.primary }}>↑</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setSearchMatchIndex((i) => Math.min(searchMatchIds.size - 1, i + 1))}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={{ fontSize: 14, color: colors.primary }}>↓</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          )}
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => { setSearchQuery(""); setSearchMatchIndex(0); }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={{ fontSize: 14, color: colors.textSecondary }}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Chat area */}
       <View style={{ flex: 1 }}>
@@ -3253,7 +3569,7 @@ export default function ChatScreen() {
                   { flag: "🇮🇳", lang: "ਪੰਜਾਬੀ", text: "man kharab aa" },
                   { flag: "🇮🇳", lang: "ଓଡ଼ିଆ",  text: "mana kharap laguchhi" },
                   { flag: "🇮🇳", lang: "मराठी",  text: "man kharab aahe" },
-                ].map(({ flag, lang, text }) => (
+                ].map(({ lang, text }) => (
                   <TouchableOpacity
                     key={lang}
                     onPress={() => handleSend(text)}
@@ -3273,6 +3589,18 @@ export default function ChatScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+            </View>
+          )}
+
+          {/* Return greeting — shown after >24h absence */}
+          {showReturnGreeting && (
+            <View style={{ marginBottom: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.35)", backgroundColor: "rgba(99,102,241,0.08)" }}>
+              <Text style={{ fontSize: 13, color: colors.textPrimary }}>
+                Welcome back 👋
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                Good to see you again. How are you feeling today?
+              </Text>
             </View>
           )}
 
@@ -3578,7 +3906,7 @@ export default function ChatScreen() {
               );
             })()}
 
-          {messages.map((message, index) => renderBubble(message, index))}
+          {(showBookmarksOnly ? messages.filter((m) => bookmarks.has(m.id)) : messages).map((message, index) => renderBubble(message, index))}
 
           {isTyping && (
             <Animated.View
@@ -3659,6 +3987,17 @@ export default function ChatScreen() {
           backgroundColor: "rgba(15, 23, 42, 0.98)",
         }}
       >
+        {input.length > 800 && (
+          <Text style={{
+            fontSize: 10,
+            textAlign: "right",
+            marginBottom: 4,
+            fontWeight: "600",
+            color: input.length > 1800 ? "#f87171" : "#fbbf24",
+          }}>
+            {input.length} / 2000{input.length > 1800 ? " — approaching limit" : ""}
+          </Text>
+        )}
         <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
           <View
             style={{

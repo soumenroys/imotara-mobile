@@ -1,7 +1,7 @@
 // App.tsx
 import React from "react";
 import { StatusBar } from "expo-status-bar";
-import { KeyboardAvoidingView, Platform, View, Text } from "react-native";
+import { KeyboardAvoidingView, Platform, View, Text, TouchableOpacity } from "react-native";
 import RootNavigator from "./src/navigation/RootNavigator";
 import AppThemeProvider from "./src/theme/AppThemeProvider";
 import { ThemeProvider } from "./src/theme/ThemeContext";
@@ -11,6 +11,40 @@ import { AuthProvider } from "./src/auth/AuthContext";
 
 // ✅ API base URL (fail-fast in prod; friendly screen here)
 import { IMOTARA_API_BASE_URL } from "./src/config/api";
+
+// ── Error boundary ─────────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null };
+  static getDerivedStateFromError(e: Error) { return { error: e }; }
+  componentDidCatch(e: Error, info: React.ErrorInfo) {
+    console.error("[imotara] ErrorBoundary caught:", e, info.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32, backgroundColor: "#0f172a" }}>
+          <Text style={{ fontSize: 36, marginBottom: 16 }}>💔</Text>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: "#f1f5f9", marginBottom: 8, textAlign: "center" }}>
+            Something went wrong
+          </Text>
+          <Text style={{ fontSize: 13, color: "#94a3b8", textAlign: "center", marginBottom: 28, lineHeight: 20 }}>
+            Imotara ran into an unexpected error. Your data is safe — tap below to restart.
+          </Text>
+          <TouchableOpacity
+            onPress={() => this.setState({ error: null })}
+            style={{ paddingHorizontal: 24, paddingVertical: 12, borderRadius: 999, backgroundColor: "rgba(56,189,248,0.18)", borderWidth: 1, borderColor: "rgba(56,189,248,0.4)" }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: "600", color: "#38bdf8" }}>Restart app</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function AppShell() {
   // Force evaluation early so we can show a friendly screen if misconfigured.
@@ -68,6 +102,9 @@ function AppShell() {
 }
 
 export default function App() {
-  // Stripe removed (Razorpay is used for donations on mobile)
-  return <AppShell />;
+  return (
+    <ErrorBoundary>
+      <AppShell />
+    </ErrorBoundary>
+  );
 }

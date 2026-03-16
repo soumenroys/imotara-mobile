@@ -11,6 +11,8 @@ import {
     ScrollView,
     TouchableOpacity,
     TextInput,
+    KeyboardAvoidingView,
+    Platform,
 } from "react-native";
 
 import { useHistoryStore } from "../state/HistoryContext";
@@ -25,6 +27,7 @@ import {
 import {
     loadMemories,
     clearMemories,
+    removeMemory,
     type MemoryItem,
 } from "../state/companionMemory";
 import { fetchRemoteHistory } from "../api/historyClient";
@@ -32,6 +35,7 @@ import AppSeparator from "../components/ui/AppSeparator";
 import AppSurface from "../components/ui/AppSurface";
 import AppButton from "../components/ui/AppButton";
 import { DEBUG_UI_ENABLED } from "../config/debug";
+import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
 
 // ✅ Razorpay Checkout (India-first donations)
 let RazorpayCheckout: any = null;
@@ -107,6 +111,7 @@ export default function SettingsScreen() {
     const {
         history,
         clearHistory,
+        deleteFromHistory,
         pushHistoryToRemote,
         mergeRemoteHistory,
         // Optional newer helpers (if present)
@@ -209,11 +214,44 @@ export default function SettingsScreen() {
         }
     };
 
+    // Emotional fingerprint — computed from history, memoized
+    const emotionalFingerprint = React.useMemo(() => {
+        const now = Date.now();
+        const dayMs = 86_400_000;
+        const relevant = (history as HistoryRecord[]).filter((h) => h.from === "user" && h.emotion && h.emotion !== "neutral");
+        if (relevant.length < 3) return null;
+        const last30 = relevant.filter((h) => (h.timestamp ?? 0) >= now - 30 * dayMs);
+        const freq: Record<string, number> = {};
+        for (const h of last30) freq[h.emotion!] = (freq[h.emotion!] ?? 0) + 1;
+        const total = Object.values(freq).reduce((s, n) => s + n, 0);
+        const topEmotions = Object.entries(freq)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 4)
+            .map(([e, c]) => ({ emotion: e, pct: total > 0 ? Math.round((c / total) * 100) : 0 }));
+        const last3 = relevant.filter((h) => (h.timestamp ?? 0) >= now - 3 * dayMs);
+        const prev4 = relevant.filter((h) => { const ts = h.timestamp ?? 0; return ts >= now - 7 * dayMs && ts < now - 3 * dayMs; });
+        let trend: "lighter" | "heavier" | "steady" | null = null;
+        if (last3.length >= 2 && prev4.length >= 2) {
+            const avg = (arr: HistoryRecord[]) => arr.reduce((s, h) => s + ((h as any).intensity ?? 0.5), 0) / arr.length;
+            const diff = avg(last3) - avg(prev4);
+            trend = diff < -0.08 ? "lighter" : diff > 0.08 ? "heavier" : "steady";
+        }
+        return { topEmotions, trend, totalRecords: relevant.length };
+    }, [history]);
+
     // Companion memory
     const [memories, setMemories] = React.useState<MemoryItem[]>([]);
+    const [deletingMemoryId, setDeletingMemoryId] = React.useState<string | null>(null);
     React.useEffect(() => {
         loadMemories().then(setMemories).catch(() => {});
     }, []);
+    const handleRemoveMemory = (id: string) => {
+        setDeletingMemoryId(id);
+        removeMemory(id)
+            .then(() => setMemories((prev) => prev.filter((m) => m.id !== id)))
+            .catch(() => {})
+            .finally(() => setDeletingMemoryId(null));
+    };
     const handleClearMemories = () => {
         Alert.alert(
             "Clear companion memory?",
@@ -233,6 +271,7 @@ export default function SettingsScreen() {
 
     // ✅ Link key status (UI only)
     const [chatLinkStatus, setChatLinkStatus] = React.useState<string | null>(null);
+    const [voicePreviewId, setVoicePreviewId] = React.useState<string | null>(null);
 
     const saveChatLinkKey = () => {
         const v = (chatLinkKey ?? "").trim();
@@ -708,7 +747,11 @@ export default function SettingsScreen() {
     };
 
     return (
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <KeyboardAvoidingView
+            style={{ flex: 1, backgroundColor: colors.background }}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
+        >
             <ScrollView
                 contentContainerStyle={{
                     paddingHorizontal: 16,
@@ -1036,6 +1079,38 @@ export default function SettingsScreen() {
                     </View>
                 </AppSurface>
 
+                {/* Emotional fingerprint */}
+                {emotionalFingerprint && (
+                    <AppSurface style={{ marginBottom: 16 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                            <View>
+                                <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Your emotional fingerprint</Text>
+                                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                                    {emotionalFingerprint.totalRecords} moments tracked · last 30 days
+                                </Text>
+                            </View>
+                            {emotionalFingerprint.trend && (
+                                <View style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: emotionalFingerprint.trend === "lighter" ? "rgba(52,211,153,0.4)" : emotionalFingerprint.trend === "heavier" ? "rgba(251,146,60,0.4)" : colors.border, backgroundColor: emotionalFingerprint.trend === "lighter" ? "rgba(52,211,153,0.08)" : emotionalFingerprint.trend === "heavier" ? "rgba(251,146,60,0.08)" : "transparent" }}>
+                                    <Text style={{ fontSize: 10, color: emotionalFingerprint.trend === "lighter" ? "#34d399" : emotionalFingerprint.trend === "heavier" ? "#fb923c" : colors.textSecondary }}>
+                                        {emotionalFingerprint.trend === "lighter" ? "Easing ↓" : emotionalFingerprint.trend === "heavier" ? "Intensifying ↑" : "Steady →"}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                        {emotionalFingerprint.topEmotions.map(({ emotion, pct }) => (
+                            <View key={emotion} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                <Text style={{ width: 64, fontSize: 11, color: colors.textSecondary }}>
+                                    {emotion.charAt(0).toUpperCase() + emotion.slice(1)}
+                                </Text>
+                                <View style={{ flex: 1, height: 4, borderRadius: 999, backgroundColor: colors.border }}>
+                                    <View style={{ width: `${pct}%`, height: 4, borderRadius: 999, backgroundColor: colors.primary }} />
+                                </View>
+                                <Text style={{ width: 28, fontSize: 10, color: colors.textSecondary, textAlign: "right" }}>{pct}%</Text>
+                            </View>
+                        ))}
+                    </AppSurface>
+                )}
+
                 {/* Companion memory */}
                 <AppSurface style={{ marginBottom: 16 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: memories.length > 0 ? 10 : 0 }}>
@@ -1055,13 +1130,13 @@ export default function SettingsScreen() {
                             </TouchableOpacity>
                         )}
                     </View>
-                    {memories.slice(0, 5).map((m) => (
+                    {memories.map((m) => (
                         <View
                             key={m.id}
                             style={{
                                 flexDirection: "row",
-                                alignItems: "flex-start",
-                                paddingVertical: 4,
+                                alignItems: "center",
+                                paddingVertical: 5,
                                 borderTopWidth: 1,
                                 borderTopColor: colors.border,
                                 gap: 6,
@@ -1069,13 +1144,17 @@ export default function SettingsScreen() {
                         >
                             <Text style={{ fontSize: 11, color: colors.primary, marginTop: 1 }}>●</Text>
                             <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>{m.text}</Text>
+                            <TouchableOpacity
+                                onPress={() => handleRemoveMemory(m.id)}
+                                disabled={deletingMemoryId === m.id}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                                <Text style={{ fontSize: 11, color: deletingMemoryId === m.id ? colors.textSecondary : "rgba(248,113,113,0.8)" }}>
+                                    {deletingMemoryId === m.id ? "…" : "Forget"}
+                                </Text>
+                            </TouchableOpacity>
                         </View>
                     ))}
-                    {memories.length > 5 && (
-                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 6 }}>
-                            +{memories.length - 5} more
-                        </Text>
-                    )}
                 </AppSurface>
 
                 {/* ✅ Analysis Mode (Local / Cloud / Auto) */}
@@ -1378,6 +1457,29 @@ export default function SettingsScreen() {
                         })}
                     </View>
 
+                    {/* Voice preview */}
+                    <TouchableOpacity
+                        onPress={() => {
+                            const id = "settings-user-preview";
+                            if (voicePreviewId === id) {
+                                stopSpeaking();
+                                setVoicePreviewId(null);
+                            } else {
+                                const gender = toneContext?.user?.gender;
+                                const lang = toneContext?.user?.preferredLang ?? "en";
+                                setVoicePreviewId(id);
+                                speakMessage(id, "Hi, I'm Imotara — I'm here with you.", gender, lang, () =>
+                                    setVoicePreviewId(null)
+                                );
+                            }
+                        }}
+                        style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 }}
+                    >
+                        <Text style={{ fontSize: 12, color: colors.primary }}>
+                            {voicePreviewId === "settings-user-preview" ? "⏹ Stop preview" : "🔊 Preview voice"}
+                        </Text>
+                    </TouchableOpacity>
+
                     {/* Preferred language */}
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>
                         Preferred language
@@ -1485,6 +1587,35 @@ export default function SettingsScreen() {
                         Optional. This only guides wording and warmth. Imotara will not pretend to be a
                         real person.
                     </Text>
+
+                    {/* Companion name */}
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>
+                        Companion name (optional)
+                    </Text>
+                    <TextInput
+                        value={toneContext?.companion?.name ?? ""}
+                        onChangeText={(t) =>
+                            setToneContext({
+                                ...(toneContext || {}),
+                                companion: { ...(toneContext?.companion || {}), name: t },
+                            })
+                        }
+                        placeholder="e.g. Imotara"
+                        placeholderTextColor={colors.textSecondary}
+                        editable={!!toneContext?.companion?.enabled}
+                        style={{
+                            fontSize: 13,
+                            color: colors.textPrimary,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            borderRadius: 10,
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            backgroundColor: colors.surfaceSoft,
+                            marginBottom: 12,
+                            opacity: toneContext?.companion?.enabled ? 1 : 0.5,
+                        }}
+                    />
 
                     {/* Relationship */}
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>
@@ -1839,6 +1970,49 @@ export default function SettingsScreen() {
                         variant="destructive"
                         style={{ alignSelf: "flex-start", borderRadius: 999 }}
                     />
+
+                    {/* Auto-clear old messages */}
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 14, marginBottom: 6 }}>
+                        Auto-clear synced messages older than:
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                        {([30, 60, 90] as const).map((days) => (
+                            <TouchableOpacity
+                                key={days}
+                                onPress={() => {
+                                    Alert.alert(
+                                        `Clear messages older than ${days} days?`,
+                                        "Only synced messages will be removed from this device. Unsynced messages are kept.",
+                                        [
+                                            { text: "Cancel", style: "cancel" },
+                                            {
+                                                text: "Clear",
+                                                style: "destructive",
+                                                onPress: () => {
+                                                    const cutoff = Date.now() - days * 86_400_000;
+                                                    history
+                                                        .filter((item) => item.isSynced && (item.timestamp ?? 0) < cutoff)
+                                                        .forEach((item) => deleteFromHistory(item.id));
+                                                },
+                                            },
+                                        ],
+                                    );
+                                }}
+                                style={{
+                                    paddingHorizontal: 14,
+                                    paddingVertical: 7,
+                                    borderRadius: 999,
+                                    borderWidth: 1,
+                                    borderColor: colors.border,
+                                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                }}
+                            >
+                                <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textSecondary }}>
+                                    {days} days
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
                 </AppSurface>
 
                 {/* Small visual separator */}
@@ -2129,6 +2303,6 @@ export default function SettingsScreen() {
                     })()}
                 </AppSurface>
             </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
     );
 }
