@@ -162,9 +162,21 @@ function scopedKey(base: string, chatLinkKey: unknown, localUserScopeId: unknown
 // ✅ Separate storage key for licensing
 const LICENSE_TIER_KEY = "imotara_license_tier_v1";
 
-// 🚀 Launch Phase Override (temporary: 3–6 months free cloud sync)
-const LAUNCH_CLOUD_SYNC_FREE_FOR_ALL =
-    (process.env.EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL ?? "true") === "true";
+// 🚀 Launch Phase Override (temporary: free cloud sync for all users)
+// This is tied to the same launch offer logic used by the web app.
+// Set EXPO_PUBLIC_IMOTARA_LAUNCH_DATE to an ISO date and optionally
+// EXPO_PUBLIC_IMOTARA_FREE_DAYS to the duration (default 90).
+const LAUNCH_CLOUD_SYNC_FREE_FOR_ALL = (() => {
+    const raw = process.env.EXPO_PUBLIC_IMOTARA_LAUNCH_DATE;
+    if (!raw) return true; // default to true for backwards compatibility
+
+    const launchMs = Date.parse(raw);
+    if (Number.isNaN(launchMs)) return true;
+
+    const freeDays = parseInt(process.env.EXPO_PUBLIC_IMOTARA_FREE_DAYS ?? "90", 10) || 90;
+    const endsAt = launchMs + freeDays * 24 * 60 * 60 * 1000;
+    return Date.now() < endsAt;
+})();
 
 // ✅ Validation helper (keeps stored values safe)
 function isValidTier(v: unknown): v is LicenseTier {
