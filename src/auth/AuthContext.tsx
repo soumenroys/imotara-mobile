@@ -185,8 +185,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const signOut = useCallback(async () => {
         await supabase.auth.signOut();
-        // Clear companion memories so a subsequent user on this device starts fresh
-        await AsyncStorage.removeItem("imotara.companion.memories.v1").catch(() => {});
+        // Clear all user-specific local data so a subsequent user on this device starts fresh
+        await Promise.allSettled([
+            AsyncStorage.removeItem("imotara.companion.memories.v1"),
+            AsyncStorage.removeItem("imotara_settings_v1"),
+            AsyncStorage.removeItem("imotara_license_tier_v1"),
+        ]);
     }, []);
 
     // ── Context value ─────────────────────────────────────────────────────────
