@@ -1732,7 +1732,7 @@ export default function ChatScreen() {
           for (const fact of newFacts) {
               void addMemory({ text: fact, source: trimmed.slice(0, 80) }).then(() => {
                   loadMemories().then((items) => { memoriesRef.current = items; }).catch(() => {});
-              });
+              }).catch(() => {});
           }
           // Use cached memories (zero AsyncStorage I/O on hot path)
           const memories = memoriesRef.current;
@@ -2098,6 +2098,8 @@ export default function ChatScreen() {
             ...(compatibility ? { meta: { compatibility } } : {}),
           };
 
+          if (!mountedRef.current) return;
+
           addToHistory({
             id: botMessage.id,
             text: botMessage.text,
@@ -2113,8 +2115,6 @@ export default function ChatScreen() {
             emotion: finalEmotion,
             intensity: finalIntensity,
           });
-
-          if (!mountedRef.current) return;
 
           setTypingStatus("responding");
           haptic.receive();
@@ -2180,6 +2180,8 @@ export default function ChatScreen() {
             ? getDefaultIntensityForPrimary(userEmotion)
             : undefined;
 
+          if (!mountedRef.current) return;
+
           addToHistory({
             id: userMessage.id,
             text: userMessage.text,
@@ -2192,8 +2194,6 @@ export default function ChatScreen() {
             emotion: userEmotion,
             intensity: userIntensity,
           });
-
-          if (!mountedRef.current) return;
 
           setTypingStatus("responding");
           haptic.receive();

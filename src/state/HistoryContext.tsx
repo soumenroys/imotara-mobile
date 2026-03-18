@@ -808,6 +808,16 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 debugLog("runSync triggered:", opts.reason);
             }
 
+            // Guard: don't sync before local storage has been loaded (prevents clobbering local data)
+            if (!hydrated) {
+                return {
+                    ok: false,
+                    pushed: 0,
+                    status: -4,
+                    errorMessage: "Not yet hydrated",
+                };
+            }
+
             // Throttle foreground-trigger bursts (does not affect autosync scheduling)
             if (now - lastRunSyncAtRef.current < 900) {
                 return {
@@ -844,10 +854,16 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 }
 
                 // 2) Pull incremental remote → merge into local store (additive, hardened)
+                // 🔒 scope guard: skip remote pull if no identity is set (prevents cross-user data merge)
+                const historyScope = String(chatLinkKey ?? "").trim();
+                if (!historyScope) {
+                    return pushRes;
+                }
+
                 try {
                     const since = remoteSinceRef.current || 0;
                     const pulled: FetchRemoteHistoryResult = await fetchRemoteHistorySince(since, {
-                        userScope: String(chatLinkKey ?? "").trim(),
+                        userScope: historyScope,
                     });
 
 
@@ -971,6 +987,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             pushHistoryToRemote,
             setSettingsLastSyncStatus,
             cloudSyncAllowed,
+            hydrated,
 
             // ✅ Critical: ensures remote chat pull uses latest scope + mode
             chatLinkKey,
