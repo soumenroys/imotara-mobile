@@ -347,7 +347,8 @@ export async function fetchRemoteHistory(): Promise<HistoryItem[]> {
  * Returns ok=false on any non-OK response.
  */
 export async function pushRemoteHistory(
-    items: HistoryItem[]
+    items: HistoryItem[],
+    opts?: { accessToken?: string; userScope?: string }
 ): Promise<PushRemoteHistoryResult> {
     try {
         const url = buildApiUrl("/api/history");
@@ -380,6 +381,11 @@ export async function pushRemoteHistory(
                 headers: {
                     "Content-Type": "application/json",
                     Accept: "application/json",
+                    ...(opts?.accessToken
+                        ? { Authorization: `Bearer ${opts.accessToken}` }
+                        : opts?.userScope
+                            ? { "x-imotara-user": opts.userScope.slice(0, 80) }
+                            : {}),
                 },
                 // ✅ CRITICAL FIX: use `records`, not `items`
                 body: JSON.stringify({ records: limited }),

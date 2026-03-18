@@ -733,7 +733,10 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 return result;
             }
 
-            const result = await pushRemoteHistory(unsynced);
+            const result = await pushRemoteHistory(unsynced, {
+                accessToken: accessToken ?? undefined,
+                userScope: String(chatLinkKey ?? "").trim() || String(localUserScopeId ?? "").trim(),
+            });
             const now = Date.now();
 
             if (result.ok) {
@@ -871,6 +874,11 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     });
 
 
+
+                    // 🔒 scope guard: if chatLinkKey changed while request was in-flight, discard results
+                    if (chatLinkKeyRef.current !== historyScope) {
+                        return pushRes;
+                    }
 
                     const items = Array.isArray((pulled as any)?.items) ? pulled.items : [];
 

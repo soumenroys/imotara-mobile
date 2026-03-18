@@ -18,6 +18,7 @@ import {
 import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
+import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../theme/ThemeContext";
 import {
     scheduleCheckInReminder,
@@ -105,6 +106,8 @@ type DonationIntentRazorpayResponse = {
 };
 
 export default function SettingsScreen() {
+    const { accessToken } = useAuth();
+
     // Keep compatibility with your current store shape, but allow optional newer fields
     const store = useHistoryStore() as any;
 
@@ -666,7 +669,10 @@ export default function SettingsScreen() {
                 if (base) {
                     fetch(`${base}/api/license/verify-payment`, {
                         method: "POST",
-                        headers: { "Content-Type": "application/json" },
+                        headers: {
+                            "Content-Type": "application/json",
+                            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                        },
                         body: JSON.stringify({ paymentId, chatLinkKey: chatLinkKey || "" }),
                     })
                         .then((r) => r.json())

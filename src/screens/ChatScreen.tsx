@@ -899,26 +899,9 @@ export default function ChatScreen() {
   // ✅ Action sheet state
   const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
 
-  // ✅ Bookmarks — persisted to AsyncStorage
-  const BOOKMARKS_KEY = "imotara.chat.bookmarks.v1";
+  // ✅ Bookmarks state — key computation + load/save effects defined after useSettings() below
   const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
-  useEffect(() => {
-    AsyncStorage.getItem(BOOKMARKS_KEY).then((raw) => {
-      if (raw) {
-        try { setBookmarks(new Set(JSON.parse(raw))); } catch {}
-      }
-    });
-  }, []);
-  const handleToggleBookmark = async (id: string) => {
-    setBookmarks((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      AsyncStorage.setItem(BOOKMARKS_KEY, JSON.stringify([...next])).catch(() => {});
-      return next;
-    });
-    setActionMessage(null);
-  };
 
   // ✅ TTS state
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
@@ -1015,6 +998,30 @@ export default function ChatScreen() {
 
   // ── Auth: get Supabase session token for mobile API calls ──────────────────
   const { accessToken } = useAuth();
+
+  // ✅ Scoped bookmarks key — isolates bookmarks per user/session to prevent cross-user leakage
+  const bookmarksKey = chatLinkKey
+    ? `imotara.chat.bookmarks.v1:${chatLinkKey}`
+    : localUserScopeId
+      ? `imotara.chat.bookmarks.v1:local:${localUserScopeId}`
+      : "imotara.chat.bookmarks.v1";
+
+  useEffect(() => {
+    setBookmarks(new Set());
+    AsyncStorage.getItem(bookmarksKey).then((raw) => {
+      if (raw) { try { setBookmarks(new Set(JSON.parse(raw))); } catch {} }
+    });
+  }, [bookmarksKey]);
+
+  const handleToggleBookmark = async (id: string) => {
+    setBookmarks((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      AsyncStorage.setItem(bookmarksKey, JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+    setActionMessage(null);
+  };
 
   // ---------------------------------------------------------------------------
   // Cloud sync trigger (centralized in HistoryContext)
