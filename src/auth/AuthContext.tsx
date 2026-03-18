@@ -14,6 +14,7 @@ import React, {
     useCallback,
 } from "react";
 import { Alert, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session, User } from "@supabase/supabase-js";
 import * as WebBrowser from "expo-web-browser";
 import * as AuthSession from "expo-auth-session";
@@ -184,6 +185,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const signOut = useCallback(async () => {
         await supabase.auth.signOut();
+        // Clear companion memories so a subsequent user on this device starts fresh
+        await AsyncStorage.removeItem("imotara.companion.memories.v1").catch(() => {});
     }, []);
 
     // ── Context value ─────────────────────────────────────────────────────────

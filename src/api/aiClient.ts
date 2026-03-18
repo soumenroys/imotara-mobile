@@ -681,6 +681,7 @@ export async function fetchRemoteChatMessages(args: {
   userScope: string;
   threadId?: string;
   since?: number;
+  accessToken?: string;
 }): Promise<GetChatMessagesResponse> {
   const remoteUrl = buildChatMessagesUrl({
     threadId: args.threadId,
@@ -692,7 +693,7 @@ export async function fetchRemoteChatMessages(args: {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        "x-imotara-user": args.userScope,
+        ...(args.accessToken ? { Authorization: `Bearer ${args.accessToken}` } : { "x-imotara-user": args.userScope }),
       },
     });
 
@@ -733,6 +734,7 @@ export async function fetchRemoteChatMessages(args: {
 
 export async function pushRemoteChatMessages(args: {
   userScope: string;
+  accessToken?: string;
   messages: Array<{
     id: string;
     threadId: string;
@@ -748,7 +750,7 @@ export async function pushRemoteChatMessages(args: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-imotara-user": args.userScope,
+        ...(args.accessToken ? { Authorization: `Bearer ${args.accessToken}` } : { "x-imotara-user": args.userScope }),
       },
       body: JSON.stringify({ messages: args.messages }),
     });

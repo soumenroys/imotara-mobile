@@ -33,6 +33,7 @@ function mergeSorted<T extends { timestamp?: number }>(a: T[], b: T[]): T[] {
 
 
 import { useSettings } from "./SettingsContext";
+import { useAuth } from "../auth/AuthContext";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
 // ✅ Licensing gates (foundation)
@@ -388,6 +389,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         // ✅ NEW: license-aware flag from SettingsContext
         cloudSyncAllowed,
     } = useSettings();
+
+    const { accessToken } = useAuth();
 
     // ✅ Keep latest history ref to avoid function identity churn
     const historyRef = useRef<HistoryItem[]>([]);
@@ -864,6 +867,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     const since = remoteSinceRef.current || 0;
                     const pulled: FetchRemoteHistoryResult = await fetchRemoteHistorySince(since, {
                         userScope: historyScope,
+                        accessToken: accessToken ?? undefined,
                     });
 
 
@@ -887,7 +891,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                         setSettingsLastSyncStatus("Synced. No new cloud items.");
                     }
 
-                    // Persist nextSince cursor (even when items is empty)
+                    // Persist nextSince cursor in memory (prevents re-fetching already-seen items within session)
                     const nextSince = (pulled as any)?.nextSince;
                     if (
                         typeof nextSince === "number" &&
@@ -895,10 +899,6 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                         nextSince >= 0
                     ) {
                         remoteSinceRef.current = nextSince;
-                        const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey, localUserScopeId);
-                        AsyncStorage.removeItem(historyKey).catch((err) =>
-                            debugWarn("Failed to clear history storage:", err)
-                        );
                     }
                 } catch (err) {
                     debugWarn("runSync: remote pull failed (non-fatal):", err);
@@ -915,7 +915,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                             // Capture the scope used for this request
                             const requestedScope = userScope;
 
-                            const res = await fetchRemoteChatMessages({ userScope: requestedScope });
+                            const res = await fetchRemoteChatMessages({ userScope: requestedScope, accessToken: accessToken ?? undefined });
 
                             // ✅ If scope changed while request was in-flight, ignore these results
                             if (chatLinkKeyRef.current !== requestedScope) {
@@ -988,6 +988,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             setSettingsLastSyncStatus,
             cloudSyncAllowed,
             hydrated,
+            accessToken,
 
             // ✅ Critical: ensures remote chat pull uses latest scope + mode
             chatLinkKey,

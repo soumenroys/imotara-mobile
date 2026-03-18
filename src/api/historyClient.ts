@@ -231,6 +231,8 @@ export type FetchRemoteHistoryResult = {
 export type FetchRemoteHistoryOptions = {
     // Identity scope header used by backend to partition data per user/device
     userScope?: string;
+    // Supabase JWT — when present, sent as Bearer token (preferred over userScope header)
+    accessToken?: string;
 };
 
 export async function fetchRemoteHistorySince(
@@ -254,10 +256,11 @@ export async function fetchRemoteHistorySince(
         headers["x-request-id"] = requestId; // common convention
         headers["x-imotara-request-id"] = requestId; // app-specific (optional)
 
-        const scope = (options?.userScope ?? "").trim();
-        if (scope) {
-            // Match ChatScreen behavior (cross-device continuity)
-            headers["x-imotara-user"] = scope.slice(0, 80);
+        if (options?.accessToken) {
+            headers["Authorization"] = `Bearer ${options.accessToken}`;
+        } else {
+            const scope = (options?.userScope ?? "").trim();
+            if (scope) headers["x-imotara-user"] = scope.slice(0, 80);
         }
 
         const res = await fetchWithTimeout(
