@@ -461,12 +461,22 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 );
 
                 // Legacy migration for older installs that stored local history in `${base}:local`
-                const shouldTryLegacyLocal = !String(chatLinkKey ?? "").trim();
+                const chatLinkKeyVal = String(chatLinkKey ?? "").trim();
+                const shouldTryLegacyLocal = !chatLinkKeyVal;
                 const legacyHistoryKey = shouldTryLegacyLocal
                     ? legacyLocalKey(STORAGE_KEY_BASE)
                     : null;
                 const legacyRemoteSinceKey = shouldTryLegacyLocal
                     ? legacyLocalKey(HISTORY_REMOTE_SINCE_KEY_BASE)
+                    : null;
+
+                // Account-link migration: when chatLinkKey was just set for the first time,
+                // carry over history that was written under the local-scope key (no chatLinkKey)
+                const preLinkHistoryKey = chatLinkKeyVal && localUserScopeId
+                    ? scopedKey(STORAGE_KEY_BASE, null, localUserScopeId)
+                    : null;
+                const preLinkRemoteSinceKey = chatLinkKeyVal && localUserScopeId
+                    ? scopedKey(HISTORY_REMOTE_SINCE_KEY_BASE, null, localUserScopeId)
                     : null;
 
                 const [
@@ -475,6 +485,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     rawRemoteSinceNew,
                     rawHistoryLegacy,
                     rawRemoteSinceLegacy,
+                    rawHistoryPreLink,
+                    rawRemoteSincePreLink,
                 ] = await Promise.all([
                     AsyncStorage.getItem(historyKey),
                     AsyncStorage.getItem(LICENSE_TIER_KEY),
@@ -483,10 +495,13 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     legacyRemoteSinceKey
                         ? AsyncStorage.getItem(legacyRemoteSinceKey)
                         : Promise.resolve(null),
+                    preLinkHistoryKey ? AsyncStorage.getItem(preLinkHistoryKey) : Promise.resolve(null),
+                    preLinkRemoteSinceKey ? AsyncStorage.getItem(preLinkRemoteSinceKey) : Promise.resolve(null),
                 ]);
 
-                const rawHistory = rawHistoryNew ?? rawHistoryLegacy;
-                const rawRemoteSince = rawRemoteSinceNew ?? rawRemoteSinceLegacy;
+                // Prefer primary key, fall back to pre-link local scope, then legacy local key
+                const rawHistory = rawHistoryNew ?? rawHistoryPreLink ?? rawHistoryLegacy;
+                const rawRemoteSince = rawRemoteSinceNew ?? rawRemoteSincePreLink ?? rawRemoteSinceLegacy;
 
                 // 0) Remote cursor (since)
                 if (rawRemoteSince) {
@@ -496,7 +511,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     }
                 }
 
-                if (!rawRemoteSinceNew && rawRemoteSinceLegacy && legacyRemoteSinceKey) {
+                if (!rawRemoteSinceNew && rawRemoteSincePreLink && preLinkRemoteSinceKey) {
+                    AsyncStorage.setItem(remoteSinceKey, rawRemoteSincePreLink).catch(() => { });
+                } else if (!rawRemoteSinceNew && rawRemoteSinceLegacy && legacyRemoteSinceKey) {
                     AsyncStorage.setItem(remoteSinceKey, rawRemoteSinceLegacy).catch(() => { });
                 }
 
@@ -547,8 +564,11 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                             .filter(Boolean) as HistoryItem[];
 
                         setHistory(cleaned);
-                        // If we loaded legacy local history, migrate it to the new scoped key
-                        if (!rawHistoryNew && rawHistoryLegacy && legacyHistoryKey) {
+                        // Migrate pre-link local history into the new chatLinkKey-scoped key
+                        if (!rawHistoryNew && rawHistoryPreLink && preLinkHistoryKey) {
+                            AsyncStorage.setItem(historyKey, rawHistoryPreLink).catch(() => { });
+                        } else if (!rawHistoryNew && rawHistoryLegacy && legacyHistoryKey) {
+                            // Migrate legacy local key (older installs)
                             AsyncStorage.setItem(historyKey, rawHistoryLegacy).catch(() => { });
                         }
                     }
@@ -979,11 +999,20 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         }
 
         const existingIds = new Set((historyRef.current || []).map((h) => h.id));
+        // Fingerprint: sender + first 80 chars of text + 1-minute time bucket
+        // Catches cross-device duplicates that share content but have different IDs
+        const existingFingerprints = new Set(
+            (historyRef.current || []).map((h) =>
+                `${h.from}:${h.text.trim().slice(0, 80).toLowerCase()}:${Math.floor((h.timestamp ?? 0) / 60_000)}`
+            )
+        );
         const toAdd: HistoryItem[] = [];
 
         for (const item of normalizedItems) {
-            if (!existingIds.has(item.id)) {
+            const fp = `${item.from}:${item.text.trim().slice(0, 80).toLowerCase()}:${Math.floor((item.timestamp ?? 0) / 60_000)}`;
+            if (!existingIds.has(item.id) && !existingFingerprints.has(fp)) {
                 existingIds.add(item.id);
+                existingFingerprints.add(fp);
                 toAdd.push(item);
             }
         }

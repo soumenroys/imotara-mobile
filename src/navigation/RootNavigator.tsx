@@ -90,6 +90,18 @@ function SyncStatusStrip() {
 const Tab = createBottomTabNavigator();
 const ONBOARDING_KEY = "imotara.onboarding.done.v1";
 
+const linking = {
+    prefixes: ["imotara://"],
+    config: {
+        screens: {
+            Chat: "chat",
+            History: "history",
+            Trends: "trends",
+            Settings: "settings",
+        },
+    },
+};
+
 export default function RootNavigator() {
     const colors = useColors();
     // --- Lifecycle-driven "resume" sync (deduped) ---
@@ -155,7 +167,7 @@ export default function RootNavigator() {
 
     return (
         <View style={{ flex: 1 }}>
-            <NavigationContainer>
+            <NavigationContainer linking={linking}>
                 <Tab.Navigator
                     screenOptions={({ route }) => ({
                         headerStyle: {

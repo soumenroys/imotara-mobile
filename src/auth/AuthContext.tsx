@@ -12,9 +12,8 @@ import React, {
     useEffect,
     useState,
     useCallback,
-    useRef,
 } from "react";
-import { Platform } from "react-native";
+import { Alert, Platform } from "react-native";
 import { Session, User } from "@supabase/supabase-js";
 import * as WebBrowser from "expo-web-browser";
 import * as AuthSession from "expo-auth-session";
@@ -112,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             if (error || !data.url) {
                 console.warn("[Auth] Google OAuth init failed:", error?.message);
+                Alert.alert("Sign-in failed", "Could not start Google sign-in. Please try again.");
                 return;
             }
 
@@ -138,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         } catch (err) {
             console.warn("[Auth] Google sign-in error:", err);
+            Alert.alert("Sign-in failed", "An unexpected error occurred during Google sign-in. Please try again.");
         }
     }, []);
 
@@ -162,16 +163,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const { error } = await supabase.auth.signInWithIdToken({
                 provider: "apple",
                 token: credential.identityToken,
-                nonce: credential.authorizationCode ?? undefined,
+                // nonce omitted: authorizationCode is not a cryptographic nonce.
+                // Supabase does not require a nonce for Apple Sign In unless configured server-side.
             });
 
             if (error) {
                 console.warn("[Auth] Apple sign-in Supabase error:", error.message);
+                Alert.alert("Sign-in failed", "Apple sign-in could not be completed. Please try again.");
             }
         } catch (err: any) {
             // ERR_CANCELED = user dismissed the sheet — not a real error
             if (err?.code !== "ERR_CANCELED") {
                 console.warn("[Auth] Apple sign-in error:", err);
+                Alert.alert("Sign-in failed", "An unexpected error occurred during Apple sign-in. Please try again.");
             }
         }
     }, []);

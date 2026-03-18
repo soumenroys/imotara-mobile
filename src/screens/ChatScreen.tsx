@@ -1750,8 +1750,9 @@ export default function ChatScreen() {
               .filter(Boolean)
               .join("\n\n") || undefined;
 
-          // 1) Try cloud if allowed by Analysis Mode
-          const remote: any = wantsCloud
+          // 1) Try cloud if allowed by Analysis Mode AND device is online
+          //    Skip immediately if offline — avoids a 20s fetch timeout before local fallback
+          const remote: any = wantsCloud && isOnline
             ? await callImotaraAI(trimmed, {
                 // ✅ always send toneContext if present (server can decide what to use)
                 // ✅ parity: ensure ageTone is present (fallback to ageRange) when sending

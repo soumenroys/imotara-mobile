@@ -14,9 +14,9 @@ async function checkOnline(): Promise<boolean> {
     try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-        const res = await fetch(CHECK_URL, { method: "HEAD", signal: controller.signal });
+        await fetch(CHECK_URL, { method: "HEAD", signal: controller.signal });
         clearTimeout(timer);
-        return res.status < 500;
+        return true; // any HTTP response (even 5xx) means network is up; only thrown exceptions mean offline
     } catch {
         return false;
     }
