@@ -1046,12 +1046,6 @@ function MessageBubble({
         </Text>
       ) : null}
 
-      {message.moodHint && (
-        <Text style={{ fontSize: 11, color: colors.textPrimary, marginTop: 4, opacity: 0.9 }}>
-          {message.moodHint}
-        </Text>
-      )}
-
       <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4, opacity: 0.85 }}>
         {new Date(message.timestamp).toLocaleTimeString()} · {message.text.length} chars
       </Text>
