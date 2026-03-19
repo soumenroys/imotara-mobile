@@ -253,12 +253,14 @@ function detectLangFromScript(message: string): string {
 }
 
 /** Secondary language detection for Roman-script (transliterated) Indian languages.
- *  Called only when detectLangFromScript() returns "en" to avoid overriding native-script hits. */
+ *  Called only when detectLangFromScript() returns "en" to avoid overriding native-script hits.
+ *  Uses global flag to count all matches per regex, picks the highest-scoring language. */
 function detectLangFromRomanHints(message: string): string {
   if (!message) return "en";
   const scores: Record<string, number> = {};
   const tally = (lang: string, regex: RegExp) => {
-    const m = message.match(regex);
+    const global = new RegExp(regex.source, regex.flags.includes("g") ? regex.flags : regex.flags + "g");
+    const m = message.match(global);
     if (m) scores[lang] = (scores[lang] || 0) + m.length;
   };
   tally("mr", ROMAN_MR_LANG_HINT_REGEX);
@@ -272,7 +274,7 @@ function detectLangFromRomanHints(message: string): string {
   tally("pa", ROMAN_PA_LANG_HINT_REGEX);
   tally("or", ROMAN_OR_LANG_HINT_REGEX);
   const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
-  return best && best[1] >= 2 ? best[0] : "en";
+  return best && best[1] >= 1 ? best[0] : "en";
 }
 
 function deriveEmotionHintFromMessage(message: string): string | undefined {

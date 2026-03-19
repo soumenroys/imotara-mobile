@@ -1514,9 +1514,12 @@ export default function ChatScreen() {
     if (!lastSyncAt)
       return "Some messages are stored locally until cloud sync is enabled.";
 
+    if (hasUnsynced && isSyncing)
+      return "Syncing your messages to cloud\u2026";
+
     const lower = (lastSyncStatus || "").toLowerCase();
     if (lower.includes("failed") || lower.includes("error")) {
-      return "Sync issue · your latest messages are only on this device.";
+      return "Sync issue \u00b7 your latest messages are only on this device.";
     }
 
     if (
@@ -1528,7 +1531,7 @@ export default function ChatScreen() {
     }
 
     return "Messages synced \u00b7 safely stored on cloud.";
-  }, [lastSyncAt, lastSyncStatus]);
+  }, [lastSyncAt, lastSyncStatus, hasUnsynced, isSyncing]);
 
   const syncHintAccent = useMemo(() => {
     if (!lastSyncAt) return "#9ca3af";
@@ -3149,7 +3152,7 @@ export default function ChatScreen() {
               height: 8,
               borderRadius: 999,
               marginRight: 6,
-              backgroundColor: hasUnsynced ? "#f97373" : syncHintAccent,
+              backgroundColor: hasUnsynced && isSyncing ? "#fbbf24" : hasUnsynced ? "#f97373" : syncHintAccent,
             }}
           />
           <Text style={{ fontSize: 11, color: colors.textSecondary }}>
@@ -3771,11 +3774,11 @@ export default function ChatScreen() {
           )}
         </ScrollView>
 
-        {showScrollButton && (
+        {showScrollButton && !isTyping && (
           <Animated.View
             style={{
               position: "absolute",
-              bottom: 80,
+              bottom: 8,
               right: 16,
               transform: [{ translateY: slideAnim }],
               opacity: fadeAnim,
