@@ -61,15 +61,34 @@ function pick<T>(arr: T[], seed: number): T {
     return arr[seed % arr.length];
 }
 
-// Picks from arr but skips options whose text appears in recentTexts,
+// Extract meaningful words (3+ chars, skip stopwords) for overlap detection
+function keyWords(text: string): Set<string> {
+    const stop = new Set(["the", "and", "for", "you", "are", "this", "with", "have", "that", "its", "not", "but"]);
+    return new Set(
+        text.toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/)
+            .filter((w) => w.length >= 3 && !stop.has(w))
+    );
+}
+
+// Picks from arr but skips options that are too similar to recentTexts,
 // falling back to the plain pick if all options are exhausted.
 function pickAvoidingRecent(arr: string[], seed: number, recentTexts: string[]): string {
     if (!recentTexts.length) return pick(arr, seed);
     const recentLower = recentTexts.map((t) => t.toLowerCase());
+    const recentWords = recentTexts.map(keyWords);
     const filtered = arr.filter((opt) => {
         if (!opt) return true; // keep empty strings (used as "no extra" sentinel)
         const optLower = opt.toLowerCase();
-        return !recentLower.some((r) => r.includes(optLower) || optLower.includes(r.slice(0, 30)));
+        const optWords = keyWords(opt);
+        return !recentLower.some((r, i) => {
+            // exact substring check
+            if (r.includes(optLower) || optLower.includes(r.slice(0, 30))) return true;
+            // word overlap check: if >50% of opt's key words appear in recent reply, skip it
+            if (optWords.size === 0) return false;
+            let overlap = 0;
+            for (const w of optWords) { if (recentWords[i].has(w)) overlap++; }
+            return overlap / optWords.size >= 0.5;
+        });
     });
     const pool = filtered.length > 0 ? filtered : arr;
     return pick(pool, seed);
