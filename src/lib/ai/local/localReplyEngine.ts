@@ -61,6 +61,20 @@ function pick<T>(arr: T[], seed: number): T {
     return arr[seed % arr.length];
 }
 
+// Picks from arr but skips options whose text appears in recentTexts,
+// falling back to the plain pick if all options are exhausted.
+function pickAvoidingRecent(arr: string[], seed: number, recentTexts: string[]): string {
+    if (!recentTexts.length) return pick(arr, seed);
+    const recentLower = recentTexts.map((t) => t.toLowerCase());
+    const filtered = arr.filter((opt) => {
+        if (!opt) return true; // keep empty strings (used as "no extra" sentinel)
+        const optLower = opt.toLowerCase();
+        return !recentLower.some((r) => r.includes(optLower) || optLower.includes(r.slice(0, 30)));
+    });
+    const pool = filtered.length > 0 ? filtered : arr;
+    return pick(pool, seed);
+}
+
 function dedupeAdjacentSentences(text: string): string {
     const parts = text
         .split(/(?<=[.!?।])\s+/)
@@ -388,7 +402,7 @@ export function buildLocalReply(
     const userGender = (toneContext?.user as any)?.gender;
     const userAge = (toneContext?.user as any)?.ageTone ?? (toneContext?.user as any)?.ageRange;
 
-    const sessionTurn = 0;
+    const sessionTurn = recentContext?.recentAssistantTexts?.length ?? 0;
     const seed = hash32(
         `${message}::${language}::${recentSignature}::${relationship}::${companionToneFromRel}::${sessionTurn}`
     );
@@ -942,7 +956,7 @@ export function buildLocalReply(
         ? ` ${topicHints[topic]}`
         : "";
 
-    const opener = pick(openers, seed);
+    const opener = pickAvoidingRecent(openers, seed, recentContext?.recentAssistantTexts ?? []);
     const hasCarry = signal === "okay" && hasRecentEmotionalSignal(recentContext);
 
     const carryValidationMap: Partial<Record<string, string[]>> = {
