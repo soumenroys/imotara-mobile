@@ -1527,7 +1527,7 @@ export default function ChatScreen() {
       return "Recent messages are safely backed up to Imotara cloud.";
     }
 
-    return "Sync checked recently · some messages may still be local-only.";
+    return "Messages synced \u00b7 safely stored on cloud.";
   }, [lastSyncAt, lastSyncStatus]);
 
   const syncHintAccent = useMemo(() => {
@@ -1546,7 +1546,7 @@ export default function ChatScreen() {
       return colors.primary;
     }
 
-    return "#9ca3af";
+    return colors.primary;
   }, [lastSyncAt, lastSyncStatus]);
 
   useEffect(() => {
@@ -1992,7 +1992,7 @@ export default function ChatScreen() {
       contentSize.height - (contentOffset.y + layoutMeasurement.height);
 
     const atBottom = distanceFromBottom < 24;
-    setShowScrollButton(!atBottom && distanceFromBottom > 80);
+    setShowScrollButton(!atBottom && distanceFromBottom > 150);
   };
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {

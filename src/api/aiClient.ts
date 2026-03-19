@@ -18,6 +18,16 @@ import {
   MR_SAD_REGEX, MR_STRESS_REGEX, MR_ANGER_REGEX, MR_FEAR_REGEX,
   GRATITUDE_REGEX,
   isConfusedText,
+  ROMAN_HI_LANG_HINT_REGEX,
+  ROMAN_BN_LANG_HINT_REGEX,
+  ROMAN_TA_LANG_HINT_REGEX,
+  ROMAN_TE_LANG_HINT_REGEX,
+  ROMAN_GU_LANG_HINT_REGEX,
+  ROMAN_KN_LANG_HINT_REGEX,
+  ROMAN_ML_LANG_HINT_REGEX,
+  ROMAN_PA_LANG_HINT_REGEX,
+  ROMAN_MR_LANG_HINT_REGEX,
+  ROMAN_OR_LANG_HINT_REGEX,
 } from "../lib/emotion/keywordMaps";
 import {
   fetchWithTimeout,
@@ -242,6 +252,29 @@ function detectLangFromScript(message: string): string {
   return "en";
 }
 
+/** Secondary language detection for Roman-script (transliterated) Indian languages.
+ *  Called only when detectLangFromScript() returns "en" to avoid overriding native-script hits. */
+function detectLangFromRomanHints(message: string): string {
+  if (!message) return "en";
+  const scores: Record<string, number> = {};
+  const tally = (lang: string, regex: RegExp) => {
+    const m = message.match(regex);
+    if (m) scores[lang] = (scores[lang] || 0) + m.length;
+  };
+  tally("mr", ROMAN_MR_LANG_HINT_REGEX);
+  tally("bn", ROMAN_BN_LANG_HINT_REGEX);
+  tally("hi", ROMAN_HI_LANG_HINT_REGEX);
+  tally("ta", ROMAN_TA_LANG_HINT_REGEX);
+  tally("te", ROMAN_TE_LANG_HINT_REGEX);
+  tally("gu", ROMAN_GU_LANG_HINT_REGEX);
+  tally("kn", ROMAN_KN_LANG_HINT_REGEX);
+  tally("ml", ROMAN_ML_LANG_HINT_REGEX);
+  tally("pa", ROMAN_PA_LANG_HINT_REGEX);
+  tally("or", ROMAN_OR_LANG_HINT_REGEX);
+  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+  return best && best[1] >= 2 ? best[0] : "en";
+}
+
 function deriveEmotionHintFromMessage(message: string): string | undefined {
   const raw = String(message || "").trim();
   if (!raw) return undefined;
@@ -366,11 +399,12 @@ export async function callImotaraAI(
     // which caused short robotic replies like "I'm here with you." for all questions.
     const chatReplyUrl = `${IMOTARA_API_BASE_URL}/api/chat-reply`;
     try {
-      // Resolve language: explicit preference → script auto-detection from message
+      // Resolve language: explicit preference → script detection → Roman-script hints
+      const _scriptLang = detectLangFromScript(message);
       const chatReplyLang =
         opts?.preferredLanguage ||
         (toneContext?.user?.preferredLang as string | undefined) ||
-        detectLangFromScript(message);
+        (_scriptLang !== "en" ? _scriptLang : detectLangFromRomanHints(message));
 
       // Inject user's name (from Settings) as a system message so GPT can
       // personalize naturally without waiting for Supabase memory lookup.

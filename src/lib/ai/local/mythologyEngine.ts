@@ -443,7 +443,7 @@ const LANG_PRIMARY: Record<string, CultureKey> = {
  *   - Indian/Indonesian/English users: 70% Indian, 30% world (promotes Indian mythology)
  *   - Other users: 60% own culture, 35% Indian, 5% other world culture
  *
- * Frequency: ~1 in 6 emotional turns ((seed >>> 9) % 6 === 0)
+ * Frequency: ~1 in 10 emotional turns ((seed >>> 9) % 10 === 0)
  * Seed bit-window: >>>9 (avoids collision with storyEngine >>>7)
  *
  * Callers on rule-based offline paths apply an English-language gate before calling
@@ -454,8 +454,8 @@ export function buildMythologyStory(
     lang: string,
     seed: number,
 ): string | null {
-    // ~1 in 6 turns
-    if ((seed >>> 9) % 6 !== 0) return null;
+    // ~1 in 10 turns
+    if ((seed >>> 9) % 10 !== 0) return null;
 
     const primaryCulture = LANG_PRIMARY[lang] ?? "indian";
     const isIndianPrimary = primaryCulture === "indian";
