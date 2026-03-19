@@ -1883,7 +1883,7 @@ export default function ChatScreen() {
 
           // 2) If cloud succeeded, respect it
           const remoteReply = String(remote.replyText || "").trim();
-          if (remote.ok && remoteReply.length >= 30) {
+          if (remote.ok && remoteReply.length > 0) {
             replyText = remoteReply;
             source = "cloud";
 

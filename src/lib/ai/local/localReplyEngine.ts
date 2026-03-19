@@ -221,7 +221,9 @@ function detectIntent(text: string): "venting" | "advice-seeking" | "neutral" {
 
 function detectTopic(text: string, recentTexts: string[] = []): "work" | "relationship" | "health" | "existential" | "general" {
     const combined = ([text, ...recentTexts].join(" ") || "").toLowerCase();
-    if (/\b(work|job|boss|office|deadline|project|meeting|colleague|team|interview|career|study|exam|college|school|client|manager|promotion|salary|assignment)\b/.test(combined)) return "work";
+    // Note: "work" is intentionally NOT in this list — it's too generic and matches
+    // "working offline", "not working", "working out" etc. Use job/boss/deadline instead.
+    if (/\b(job|boss|office|deadline|project|meeting|colleague|team|interview|career|study|exam|college|school|client|manager|promotion|salary|assignment)\b/.test(combined)) return "work";
     if (/\b(friend|family|mom|dad|mother|father|partner|boyfriend|girlfriend|relationship|love|marriage|divorce|breakup|fight|argument|toxic|miss (you|him|her|them)|alone|lonely)\b/.test(combined)) return "relationship";
     if (/\b(sick|pain|health|doctor|medicine|hospital|sleep|insomnia|eat|appetite|headache|migraine|tired|body|anxiety|depression|mental health|therapy|therapist|panic attack)\b/.test(combined)) return "health";
     if (/\b(life|meaning|purpose|why (am i|do i|does it)|exist|worth it|future|hope|everything|nothing matters|pointless|empty|lost|who am i|identity|direction)\b/.test(combined)) return "existential";
@@ -229,8 +231,11 @@ function detectTopic(text: string, recentTexts: string[] = []): "work" | "relati
 }
 
 function detectCorrection(text: string): boolean {
-    const t = (text || "").toLowerCase();
-    return /\b(no[,.]?\s+(that|you|i|not|it)|you misunderstood|i didn'?t mean|not what i meant|that'?s not (it|what|right)|wrong|actually|i meant|what i (said|meant) was|let me rephrase|to clarify)\b/.test(t);
+    const t = (text || "").toLowerCase().trim();
+    // Must be an explicit correction of Imotara's reply, not just a negative answer.
+    // "No not really" / "no no" / "no that's fine" are answers, not corrections.
+    // Only flag when the intent is clearly to correct a misunderstanding.
+    return /\b(you misunderstood|i didn'?t mean|not what i meant|that'?s not (it|what|right)|i meant|what i (said|meant) was|let me rephrase|to clarify|no[,.]?\s+(that'?s not|you got|you misunderstood|that is not))\b/.test(t);
 }
 
 function extractKeyTopic(recentTexts: string[]): string | null {
