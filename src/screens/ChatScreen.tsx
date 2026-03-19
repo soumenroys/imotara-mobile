@@ -53,6 +53,8 @@ import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
+import { ChatInputBar } from "../components/chat/ChatInputBar";
+import { Toast, type ToastHandle } from "../components/ui/Toast";
 import type { ReflectionSeed } from "../lib/reflectionSeedContract";
 import {
   buildLocalReply,
@@ -884,6 +886,333 @@ function isFirstBotReplyOfSession(
   return gap > SESSION_GAP_MS;
 }
 
+// ── MessageBubble component ─────────────────────────────────────────────────────
+type MessageBubbleProps = {
+  message: ChatMessage;
+  index: number;
+  messages: ChatMessage[];
+  colors: ColorPalette;
+  searchMatchIds: Set<string>;
+  searchActiveMatchId: string | null;
+  bookmarks: Set<string>;
+  lastSyncStatus: string | null;
+  dismissedCrisisCards: Set<string>;
+  reactions: Map<string, string>;
+  onLongPress: (msg: ChatMessage) => void;
+  onDismissCrisisCard: (id: string) => void;
+  onRetry: (messageId: string, prevUserText: string) => void;
+};
+
+function MessageBubble({
+  message,
+  index,
+  messages,
+  colors,
+  searchMatchIds,
+  searchActiveMatchId,
+  bookmarks,
+  lastSyncStatus,
+  dismissedCrisisCards,
+  reactions,
+  onLongPress,
+  onDismissCrisisCard,
+  onRetry,
+}: MessageBubbleProps) {
+  const isUser = message.from === "user";
+  const isSearchMatch = searchMatchIds.has(message.id);
+  const isActiveMatch = searchActiveMatchId === message.id;
+  const isBookmarked = bookmarks.has(message.id);
+  const showContinuityNote = isFirstBotReplyOfSession(message, index, messages);
+
+  let bubbleBorderColor: string;
+  let statusLabel: string;
+  let statusBg: string;
+  let statusTextColor: string;
+
+  const bubbleBackground = USER_BUBBLE_BG;
+  let gradientStart: string | null = null;
+  let gradientEnd: string | null = null;
+
+  if (!isUser) {
+    const tintSource = message.moodHint || message.text;
+    const tint = getMoodTintForHint(tintSource, colors);
+    const gradient = getMoodGradient(tint);
+    gradientStart = gradient.start;
+    gradientEnd = gradient.end;
+  }
+
+  if (message.isPending) {
+    bubbleBorderColor = "rgba(148, 163, 184, 0.55)";
+    statusLabel = "Syncing…";
+    statusBg = "rgba(148, 163, 184, 0.18)";
+    statusTextColor = colors.textSecondary;
+  } else if (message.isSynced) {
+    bubbleBorderColor = colors.primary;
+    statusLabel = "Synced to cloud";
+    statusBg = "rgba(56, 189, 248, 0.18)";
+    statusTextColor = colors.textPrimary;
+  } else {
+    const lower = (lastSyncStatus || "").toLowerCase();
+    const hasSyncError = lower.includes("failed") || lower.includes("error");
+    const isCloudGenerated = message.source === "cloud";
+
+    if (hasSyncError) {
+      bubbleBorderColor = "#f97373";
+      statusLabel = isCloudGenerated
+        ? "Sync issue · cloud reply"
+        : "Sync issue · on this device only";
+      statusBg = "rgba(248, 113, 113, 0.24)";
+      statusTextColor = "#fecaca";
+    } else {
+      if (isCloudGenerated) {
+        bubbleBorderColor = "rgba(56, 189, 248, 0.55)";
+        statusLabel = "Imotara Cloud";
+        statusBg = "rgba(56, 189, 248, 0.14)";
+        statusTextColor = colors.textPrimary;
+      } else if (!isUser && message.cloudAttempted) {
+        bubbleBorderColor = "#fbbf24";
+        statusLabel = "Cloud failed → Local";
+        statusBg = "rgba(251, 191, 36, 0.18)";
+        statusTextColor = "#fde68a";
+      } else {
+        bubbleBorderColor = "#fca5a5";
+        statusLabel = "On this device only";
+        statusBg = "rgba(248, 113, 113, 0.18)";
+        statusTextColor = "#fecaca";
+      }
+    }
+  }
+
+  const prev = messages[index - 1];
+  const extraTopSpace =
+    isUser && index > 0 && messages[index - 1].from === "user"
+      ? { marginTop: 4 }
+      : {};
+
+  // Session divider
+  const sessionDivider = (() => {
+    if (!prev) return null;
+    const gap = message.timestamp - (prev.timestamp ?? 0);
+    if (gap <= SESSION_GAP_MS) return null;
+    return (
+      <View style={{ alignSelf: "center", marginVertical: 6, flexDirection: "row", alignItems: "center" }}>
+        <View style={{ flex: 1, height: 1, backgroundColor: colors.border, opacity: 0.5, marginRight: 8 }} />
+        <Text style={{ fontSize: 11, color: colors.textSecondary }}>New session</Text>
+        <View style={{ flex: 1, height: 1, backgroundColor: colors.border, opacity: 0.5, marginLeft: 8 }} />
+      </View>
+    );
+  })();
+
+  const bubbleContent = (
+    <>
+      <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textPrimary, opacity: 0.75, marginBottom: 2 }}>
+        {isUser ? "You" : `Imotara${message.source === "local" ? " (offline)" : ""}`}
+      </Text>
+
+      {!isUser && message.source === "local"
+        ? (() => {
+            const seed = getReflectionSeedCard({
+              message: message.text,
+              reflectionSeed: message.reflectionSeed,
+            } as any);
+            if (!seed) return null;
+            return (
+              <View style={{ marginBottom: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(0,0,0,0.22)" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>{seed.title}</Text>
+                  <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(255,255,255,0.06)" }}>
+                    <Text style={{ fontSize: 10, color: colors.textSecondary }}>{seed.label}</Text>
+                  </View>
+                </View>
+                <Text style={{ marginTop: 4, fontSize: 12, color: colors.textPrimary, opacity: 0.92 }}>{seed.prompt}</Text>
+              </View>
+            );
+          })()
+        : null}
+
+      <Text style={{ fontSize: 14, color: colors.textPrimary }} selectable>
+        {(() => {
+          if (isUser) return message.text;
+          if (message.source !== "local") return message.text;
+          const seed = getReflectionSeedCard({ message: message.text, reflectionSeed: message.reflectionSeed } as any);
+          if (!seed?.prompt) return message.text;
+          return stripReflectionPromptFromMessage(message.text, seed.prompt);
+        })()}
+      </Text>
+
+      {!isUser && typeof message.followUp === "string" && message.followUp.trim() ? (
+        <Text style={{ fontSize: 13, color: colors.textPrimary, marginTop: 8, opacity: 0.92 }}>
+          {message.followUp.trim()}
+        </Text>
+      ) : null}
+
+      {message.moodHint && (
+        <Text style={{ fontSize: 11, color: colors.textPrimary, marginTop: 4, opacity: 0.9 }}>
+          {message.moodHint}
+        </Text>
+      )}
+
+      <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4, opacity: 0.85 }}>
+        {new Date(message.timestamp).toLocaleTimeString()} · {message.text.length} chars
+      </Text>
+
+      {DEBUG_UI_ENABLED && message.meta?.compatibility && (
+        <View style={{
+          alignSelf: "flex-start", marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, borderWidth: 1,
+          borderColor: message.meta.compatibility.ok === true ? "rgba(34,197,94,0.6)" : "rgba(248,113,113,0.6)",
+          backgroundColor: message.meta.compatibility.ok === true ? "rgba(34,197,94,0.15)" : "rgba(248,113,113,0.15)",
+        }}>
+          <Text style={{ fontSize: 10, fontWeight: "500", color: colors.textPrimary }}>
+            {typeof message.meta.compatibility.summary === "string"
+              ? message.meta.compatibility.summary
+              : message.meta.compatibility.ok === true ? "OK" : "Issues"}
+          </Text>
+        </View>
+      )}
+
+      <View style={{
+        alignSelf: isUser ? "flex-end" : "flex-start",
+        marginTop: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1,
+        borderColor: bubbleBorderColor === "transparent" ? "rgba(148, 163, 184, 0.4)" : bubbleBorderColor,
+        backgroundColor: statusBg,
+      }}>
+        <Text style={{ fontSize: 10, fontWeight: "500", color: statusTextColor }}>{statusLabel}</Text>
+      </View>
+
+      {!isUser && message.cloudAttempted && message.source === "local" && (
+        <TouchableOpacity
+          onPress={() => {
+            const prevMsg = messages[index - 1];
+            if (prevMsg?.from !== "user") return;
+            onRetry(message.id, prevMsg.text);
+          }}
+          style={{ alignSelf: "flex-start", marginTop: 6, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: "rgba(251,191,36,0.4)", backgroundColor: "rgba(251,191,36,0.08)" }}
+        >
+          <Text style={{ fontSize: 10, color: "#fde68a", fontWeight: "600" }}>↺ Retry with cloud</Text>
+        </TouchableOpacity>
+      )}
+
+      {reactions.get(message.id) && (
+        <Text style={{ fontSize: 18, marginTop: 4 }}>{reactions.get(message.id)}</Text>
+      )}
+
+      {!isUser && showContinuityNote && (
+        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 6, opacity: 0.9 }}>
+          This conversation is now part of your Emotion History.
+        </Text>
+      )}
+    </>
+  );
+
+  return (
+    <View
+      key={message.id}
+      style={[
+        extraTopSpace,
+        isSearchMatch ? { borderRadius: 14, backgroundColor: isActiveMatch ? "rgba(99,102,241,0.12)" : "rgba(99,102,241,0.05)" } : undefined,
+        isBookmarked ? { borderRadius: 14, borderWidth: 1, borderColor: "rgba(251,191,36,0.35)" } : undefined,
+      ]}
+    >
+      {sessionDivider}
+      <Pressable
+        onLongPress={message.isPending ? undefined : () => onLongPress(message)}
+        delayLongPress={250}
+        style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: "82%", marginBottom: 10, paddingHorizontal: 1 }}
+      >
+        {isUser ? (
+          <View style={{ backgroundColor: bubbleBackground, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: bubbleBorderColor === "transparent" ? 0 : 1, borderColor: bubbleBorderColor }}>
+            {bubbleContent}
+          </View>
+        ) : (
+          <LinearGradient
+            colors={[gradientStart || "rgba(148, 163, 184, 0.25)", gradientEnd || "rgba(148, 163, 184, 0.45)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={{ borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, borderWidth: bubbleBorderColor === "transparent" ? 0 : 1, borderColor: bubbleBorderColor === "transparent" ? "rgba(148, 163, 184, 0.4)" : bubbleBorderColor }}
+          >
+            {bubbleContent}
+          </LinearGradient>
+        )}
+      </Pressable>
+
+      {/* Crisis safety card */}
+      {!isUser && (() => {
+        const prevMsg = messages[index - 1];
+        if (!prevMsg || prevMsg.from !== "user") return null;
+        const tier = detectMobileCrisisTier(prevMsg.text);
+        if (tier === 0) return null;
+        if (dismissedCrisisCards.has(message.id)) return null;
+
+        if (tier === 1) {
+          return (
+            <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: "88%", borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.30)", backgroundColor: "rgba(99,102,241,0.08)", paddingHorizontal: 14, paddingVertical: 12 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: "rgba(167,139,250,1)", flex: 1 }}>💜 You don't have to carry this alone</Text>
+                <TouchableOpacity onPress={() => onDismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={{ fontSize: 14, color: "rgba(167,139,250,0.7)", marginLeft: 8 }}>x</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={{ marginTop: 8, fontSize: 12, color: "rgba(196,181,253,0.9)", lineHeight: 18 }}>
+                It sounds like things are feeling really heavy. I'm here. If it ever feels like too much, free crisis support is just a call away.
+              </Text>
+              {(() => {
+                const resources = getCrisisResourcesForCountry(detectCountryCode());
+                const primary = resources?.primary?.[0];
+                if (!primary) return null;
+                return (
+                  <TouchableOpacity
+                    onPress={() => Linking.openURL(`tel:${primary.contact.replace(/[^\d+]/g, "")}`)}
+                    style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 }}
+                    accessibilityRole="link"
+                  >
+                    <Text style={{ fontSize: 12, color: "rgba(196,181,253,0.85)" }}>{primary.label}:</Text>
+                    <Text style={{ fontSize: 12, color: "rgba(196,181,253,1)", fontWeight: "700", textDecorationLine: "underline" }}>{primary.contact}</Text>
+                  </TouchableOpacity>
+                );
+              })()}
+            </View>
+          );
+        }
+
+        return (
+          <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: "88%", borderRadius: 14, borderWidth: 1, borderColor: "rgba(251, 191, 36, 0.35)", backgroundColor: "rgba(251, 191, 36, 0.10)", paddingHorizontal: 14, paddingVertical: 12 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#fde68a", flex: 1 }}>{"\u{1F49B}"} If things feel urgent right now</Text>
+              <TouchableOpacity onPress={() => onDismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ fontSize: 14, color: "#fde68a", opacity: 0.7, marginLeft: 8 }}>x</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ marginTop: 10, gap: 6 }}>
+              {(() => {
+                const countryCode = detectCountryCode();
+                const resources = getCrisisResourcesForCountry(countryCode);
+                const lines: { label: string; number: string }[] = [];
+                if (resources?.emergency) lines.push({ label: resources.emergency.label, number: resources.emergency.contact });
+                resources?.primary?.slice(0, 2).forEach((r) => lines.push({ label: r.label, number: r.contact }));
+                return lines.map(({ label, number }) => (
+                  <TouchableOpacity
+                    key={label}
+                    onPress={() => Linking.openURL(`tel:${number.replace(/[^\d+]/g, "")}`)}
+                    style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 }}
+                    accessibilityRole="link"
+                    accessibilityLabel={`Call ${label}: ${number}`}
+                  >
+                    <Text style={{ fontSize: 12, color: "#fde68a", opacity: 0.85 }}>{label}</Text>
+                    <Text style={{ fontSize: 12, color: "#fde68a", fontWeight: "700", textDecorationLine: "underline" }}>{number}</Text>
+                  </TouchableOpacity>
+                ));
+              })()}
+            </View>
+            <Text style={{ marginTop: 10, fontSize: 11, color: "#fde68a", opacity: 0.7 }}>
+              You don't have to face this alone.
+            </Text>
+          </View>
+        );
+      })()}
+    </View>
+  );
+}
+
 export default function ChatScreen() {
   console.log("[imotara] ChatScreen mounted");
   const colors = useColors();
@@ -1058,6 +1387,7 @@ export default function ChatScreen() {
   }, []);
 
   const scrollViewRef = useRef<ScrollView | null>(null);
+  const toastRef = useRef<ToastHandle>(null);
 
   // ✅ RN-safe typing (fixes TS issues in many RN setups)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1852,6 +2182,10 @@ export default function ChatScreen() {
             cloudAttempted &&
             !(remote?.ok && String(remote?.replyText || "").trim().length > 0);
 
+          if (cloudFailed && isOnline) {
+            toastRef.current?.show("Cloud reply failed — using offline mode instead.", "error");
+          }
+
           const remoteUrl: string | undefined =
             typeof remote?.remoteUrl === "string"
               ? remote.remoteUrl
@@ -2351,541 +2685,6 @@ export default function ChatScreen() {
     setInputHeight(nextHeight);
   };
 
-  const renderSessionDivider = (current: ChatMessage, prev?: ChatMessage) => {
-    if (!prev) return null;
-
-    const gap = current.timestamp - (prev.timestamp ?? 0);
-    if (gap <= SESSION_GAP_MS) return null;
-
-    return (
-      <View
-        style={{
-          alignSelf: "center",
-          marginVertical: 6,
-          flexDirection: "row",
-          alignItems: "center",
-        }}
-      >
-        <View
-          style={{
-            flex: 1,
-            height: 1,
-            backgroundColor: colors.border,
-            opacity: 0.5,
-            marginRight: 8,
-          }}
-        />
-        <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-          New session
-        </Text>
-        <View
-          style={{
-            flex: 1,
-            height: 1,
-            backgroundColor: colors.border,
-            opacity: 0.5,
-            marginLeft: 8,
-          }}
-        />
-      </View>
-    );
-  };
-
-  const renderBubble = (message: ChatMessage, index: number) => {
-    const isUser = message.from === "user";
-
-    // Search highlight — O(1) lookup using pre-computed sets
-    const isSearchMatch = searchMatchIds.has(message.id);
-    const isActiveMatch = searchActiveMatchId === message.id;
-
-    // Bookmark indicator
-    const isBookmarked = bookmarks.has(message.id);
-
-    // ✅ Step 7 continuity note (hook-safe)
-    const showContinuityNote = isFirstBotReplyOfSession(
-      message,
-      index,
-      messages,
-    );
-
-    let bubbleBorderColor: string;
-    let statusLabel: string;
-    let statusBg: string;
-    let statusTextColor: string;
-
-    const bubbleBackground = USER_BUBBLE_BG;
-    let gradientStart: string | null = null;
-    let gradientEnd: string | null = null;
-
-    if (!isUser) {
-      const tintSource = message.moodHint || message.text;
-      const tint = getMoodTintForHint(tintSource, colors);
-      const gradient = getMoodGradient(tint);
-      gradientStart = gradient.start;
-      gradientEnd = gradient.end;
-    }
-
-    if (message.isPending) {
-      bubbleBorderColor = "rgba(148, 163, 184, 0.55)";
-      statusLabel = "Syncing…";
-      statusBg = "rgba(148, 163, 184, 0.18)";
-      statusTextColor = colors.textSecondary;
-    } else if (message.isSynced) {
-      bubbleBorderColor = colors.primary;
-      statusLabel = "Synced to cloud";
-      statusBg = "rgba(56, 189, 248, 0.18)";
-      statusTextColor = colors.textPrimary;
-    } else {
-      const lower = (lastSyncStatus || "").toLowerCase();
-      const hasSyncError = lower.includes("failed") || lower.includes("error");
-      const isCloudGenerated = message.source === "cloud";
-
-      // ✅ Truth rule:
-      // - "isSynced/isPending" refers to HISTORY sync
-      // - "source" refers to where the reply was GENERATED
-      // So a cloud reply should never be labeled "On this device only".
-      if (hasSyncError) {
-        bubbleBorderColor = "#f97373";
-        statusLabel = isCloudGenerated
-          ? "Sync issue · cloud reply"
-          : "Sync issue · on this device only";
-        statusBg = "rgba(248, 113, 113, 0.24)";
-        statusTextColor = "#fecaca";
-      } else {
-        if (isCloudGenerated) {
-          bubbleBorderColor = "rgba(56, 189, 248, 0.55)";
-          statusLabel = "Imotara Cloud";
-          statusBg = "rgba(56, 189, 248, 0.14)";
-          statusTextColor = colors.textPrimary;
-        } else if (!isUser && message.cloudAttempted) {
-          bubbleBorderColor = "#fbbf24";
-          statusLabel = "Cloud failed → Local";
-          statusBg = "rgba(251, 191, 36, 0.18)";
-          statusTextColor = "#fde68a";
-        } else {
-          bubbleBorderColor = "#fca5a5";
-          statusLabel = "On this device only";
-          statusBg = "rgba(248, 113, 113, 0.18)";
-          statusTextColor = "#fecaca";
-        }
-      }
-    }
-
-    const prev = messages[index - 1];
-
-    const content = (
-      <>
-        <Text
-          style={{
-            fontSize: 12,
-            fontWeight: "600",
-            color: colors.textPrimary,
-            opacity: 0.75,
-            marginBottom: 2,
-          }}
-        >
-          {isUser
-            ? "You"
-            : `Imotara${message.source === "local" ? " (offline)" : ""}`}
-        </Text>
-
-        {!isUser && message.source === "local"
-          ? (() => {
-              const seed = getReflectionSeedCard({
-                message: message.text,
-                reflectionSeed: message.reflectionSeed,
-              } as any);
-
-              if (!seed) return null;
-
-              return (
-                <View
-                  style={{
-                    marginBottom: 8,
-                    paddingHorizontal: 10,
-                    paddingVertical: 8,
-                    borderRadius: 14,
-                    borderWidth: 1,
-                    borderColor: "rgba(255,255,255,0.12)",
-                    backgroundColor: "rgba(0,0,0,0.22)",
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 8,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: "700",
-                        color: colors.textPrimary,
-                      }}
-                    >
-                      {seed.title}
-                    </Text>
-                    <View
-                      style={{
-                        paddingHorizontal: 8,
-                        paddingVertical: 2,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: "rgba(255,255,255,0.12)",
-                        backgroundColor: "rgba(255,255,255,0.06)",
-                      }}
-                    >
-                      <Text
-                        style={{ fontSize: 10, color: colors.textSecondary }}
-                      >
-                        {seed.label}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text
-                    style={{
-                      marginTop: 4,
-                      fontSize: 12,
-                      color: colors.textPrimary,
-                      opacity: 0.92,
-                    }}
-                  >
-                    {seed.prompt}
-                  </Text>
-                </View>
-              );
-            })()
-          : null}
-
-        <Text style={{ fontSize: 14, color: colors.textPrimary }} selectable>
-          {(() => {
-            // If a reflection seed prompt is being shown in the card,
-            // don't show the same prompt again inside message.text.
-            if (isUser) return message.text;
-
-            // Only strip the reflection prompt if we are actually showing the reflection card (local-only).
-            if (message.source !== "local") return message.text;
-
-            const seed = getReflectionSeedCard({
-              message: message.text,
-              reflectionSeed: message.reflectionSeed,
-            } as any);
-
-            if (!seed?.prompt) return message.text;
-
-            return stripReflectionPromptFromMessage(message.text, seed.prompt);
-          })()}
-        </Text>
-
-        {/* ✅ NEW: render follow-up question (bot only) */}
-        {!isUser &&
-        typeof message.followUp === "string" &&
-        message.followUp.trim() ? (
-          <Text
-            style={{
-              fontSize: 13,
-              color: colors.textPrimary,
-              marginTop: 8,
-              opacity: 0.92,
-            }}
-          >
-            {message.followUp.trim()}
-          </Text>
-        ) : null}
-
-        {message.moodHint && (
-          <Text
-            style={{
-              fontSize: 11,
-              color: colors.textPrimary,
-              marginTop: 4,
-              opacity: 0.9,
-            }}
-          >
-            {message.moodHint}
-          </Text>
-        )}
-
-        <Text
-          style={{
-            fontSize: 11,
-            color: colors.textSecondary,
-            marginTop: 4,
-            opacity: 0.85,
-          }}
-        >
-          {new Date(message.timestamp).toLocaleTimeString()} ·{" "}
-          {message.text.length} chars
-        </Text>
-
-        {/* Compatibility badge (DEBUG only) */}
-        {DEBUG_UI_ENABLED && message.meta?.compatibility && (
-          <View
-            style={{
-              alignSelf: "flex-start",
-              marginTop: 4,
-              paddingHorizontal: 8,
-              paddingVertical: 2,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor:
-                message.meta.compatibility.ok === true
-                  ? "rgba(34,197,94,0.6)"
-                  : "rgba(248,113,113,0.6)",
-              backgroundColor:
-                message.meta.compatibility.ok === true
-                  ? "rgba(34,197,94,0.15)"
-                  : "rgba(248,113,113,0.15)",
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 10,
-                fontWeight: "500",
-                color: colors.textPrimary,
-              }}
-            >
-              {typeof message.meta.compatibility.summary === "string"
-                ? message.meta.compatibility.summary
-                : message.meta.compatibility.ok === true
-                  ? "OK"
-                  : "Issues"}
-            </Text>
-          </View>
-        )}
-
-        <View
-          style={{
-            alignSelf: isUser ? "flex-end" : "flex-start",
-            marginTop: 4,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 999,
-            borderWidth: 1,
-            borderColor:
-              bubbleBorderColor === "transparent"
-                ? "rgba(148, 163, 184, 0.4)"
-                : bubbleBorderColor,
-            backgroundColor: statusBg,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 10,
-              fontWeight: "500",
-              color: statusTextColor,
-            }}
-          >
-            {statusLabel}
-          </Text>
-        </View>
-
-        {/* Retry button — shown when cloud failed and local fallback was used */}
-        {!isUser && message.cloudAttempted && message.source === "local" && (
-          <TouchableOpacity
-            onPress={() => {
-              const prevMsg = messages[index - 1];
-              if (prevMsg?.from !== "user") return;
-              setMessages((prev) => prev.filter((m) => m.id !== message.id));
-              deleteFromHistory(message.id);
-              setInput(prevMsg.text);
-            }}
-            style={{
-              alignSelf: "flex-start",
-              marginTop: 6,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 4,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: "rgba(251,191,36,0.4)",
-              backgroundColor: "rgba(251,191,36,0.08)",
-            }}
-          >
-            <Text style={{ fontSize: 10, color: "#fde68a", fontWeight: "600" }}>↺ Retry with cloud</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Reaction emoji */}
-        {reactions.get(message.id) && (
-          <Text style={{ fontSize: 18, marginTop: 4 }}>{reactions.get(message.id)}</Text>
-        )}
-
-        {/* ✅ continuity note */}
-        {!isUser && showContinuityNote && (
-          <Text
-            style={{
-              fontSize: 11,
-              color: colors.textSecondary,
-              marginTop: 6,
-              opacity: 0.9,
-            }}
-          >
-            This conversation is now part of your Emotion History.
-          </Text>
-        )}
-      </>
-    );
-
-    const extraTopSpace =
-      isUser && index > 0 && messages[index - 1].from === "user"
-        ? { marginTop: 4 }
-        : {};
-
-    const onLongPress = message.isPending
-      ? undefined
-      : () => setActionMessage(message);
-
-    return (
-      <View key={message.id} style={[extraTopSpace, isSearchMatch ? { borderRadius: 14, backgroundColor: isActiveMatch ? "rgba(99,102,241,0.12)" : "rgba(99,102,241,0.05)" } : undefined, isBookmarked ? { borderRadius: 14, borderWidth: 1, borderColor: "rgba(251,191,36,0.35)" } : undefined]}>
-        {renderSessionDivider(message, prev)}
-        <Pressable
-          onLongPress={onLongPress}
-          delayLongPress={250}
-          style={{
-            alignSelf: isUser ? "flex-end" : "flex-start",
-            maxWidth: "82%",
-            marginBottom: 10,
-            paddingHorizontal: 1,
-          }}
-        >
-          {isUser ? (
-            <View
-              style={{
-                backgroundColor: bubbleBackground,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderRadius: 16,
-                borderWidth: bubbleBorderColor === "transparent" ? 0 : 1,
-                borderColor: bubbleBorderColor,
-              }}
-            >
-              {content}
-            </View>
-          ) : (
-            <LinearGradient
-              colors={[
-                gradientStart || "rgba(148, 163, 184, 0.25)",
-                gradientEnd || "rgba(148, 163, 184, 0.45)",
-              ]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={{
-                borderRadius: 16,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderWidth: bubbleBorderColor === "transparent" ? 0 : 1,
-                borderColor:
-                  bubbleBorderColor === "transparent"
-                    ? "rgba(148, 163, 184, 0.4)"
-                    : bubbleBorderColor,
-              }}
-            >
-              {content}
-            </LinearGradient>
-          )}
-        </Pressable>
-
-        {/* Crisis safety card — tiered: Tier 2 = full resources, Tier 1 = compassionate check-in */}
-        {!isUser && (() => {
-          const prevMsg = messages[index - 1];
-          if (!prevMsg || prevMsg.from !== "user") return null;
-          const tier = detectMobileCrisisTier(prevMsg.text);
-          if (tier === 0) return null;
-          if (dismissedCrisisCards.has(message.id)) return null;
-
-          if (tier === 1) {
-            return (
-              <View style={{
-                marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: "88%",
-                borderRadius: 14, borderWidth: 1,
-                borderColor: "rgba(99,102,241,0.30)",
-                backgroundColor: "rgba(99,102,241,0.08)",
-                paddingHorizontal: 14, paddingVertical: 12,
-              }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <Text style={{ fontSize: 13, fontWeight: "700", color: "rgba(167,139,250,1)", flex: 1 }}>
-                    💜 You don't have to carry this alone
-                  </Text>
-                  <TouchableOpacity onPress={() => dismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Text style={{ fontSize: 14, color: "rgba(167,139,250,0.7)", marginLeft: 8 }}>x</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={{ marginTop: 8, fontSize: 12, color: "rgba(196,181,253,0.9)", lineHeight: 18 }}>
-                  It sounds like things are feeling really heavy. I'm here. If it ever feels like too much, free crisis support is just a call away.
-                </Text>
-                {(() => {
-                  const resources = getCrisisResourcesForCountry(detectCountryCode());
-                  const primary = resources?.primary?.[0];
-                  if (!primary) return null;
-                  return (
-                    <TouchableOpacity
-                      onPress={() => Linking.openURL(`tel:${primary.contact.replace(/[^\d+]/g, "")}`)}
-                      style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 }}
-                      accessibilityRole="link"
-                    >
-                      <Text style={{ fontSize: 12, color: "rgba(196,181,253,0.85)" }}>{primary.label}:</Text>
-                      <Text style={{ fontSize: 12, color: "rgba(196,181,253,1)", fontWeight: "700", textDecorationLine: "underline" }}>{primary.contact}</Text>
-                    </TouchableOpacity>
-                  );
-                })()}
-              </View>
-            );
-          }
-
-          // Tier 2 — full resource card
-          return (
-            <View style={{
-              marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: "88%",
-              borderRadius: 14, borderWidth: 1,
-              borderColor: "rgba(251, 191, 36, 0.35)",
-              backgroundColor: "rgba(251, 191, 36, 0.10)",
-              paddingHorizontal: 14, paddingVertical: 12,
-            }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <Text style={{ fontSize: 13, fontWeight: "700", color: "#fde68a", flex: 1 }}>
-                  {"\u{1F49B}"} If things feel urgent right now
-                </Text>
-                <TouchableOpacity onPress={() => dismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={{ fontSize: 14, color: "#fde68a", opacity: 0.7, marginLeft: 8 }}>x</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={{ marginTop: 10, gap: 6 }}>
-                {(() => {
-                  const countryCode = detectCountryCode();
-                  const resources = getCrisisResourcesForCountry(countryCode);
-                  const lines: { label: string; number: string }[] = [];
-                  if (resources?.emergency) lines.push({ label: resources.emergency.label, number: resources.emergency.contact });
-                  resources?.primary?.slice(0, 2).forEach((r) => lines.push({ label: r.label, number: r.contact }));
-                  return lines.map(({ label, number }) => (
-                    <TouchableOpacity
-                      key={label}
-                      onPress={() => Linking.openURL(`tel:${number.replace(/[^\d+]/g, "")}`)}
-                      style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 }}
-                      accessibilityRole="link"
-                      accessibilityLabel={`Call ${label}: ${number}`}
-                    >
-                      <Text style={{ fontSize: 12, color: "#fde68a", opacity: 0.85 }}>{label}</Text>
-                      <Text style={{ fontSize: 12, color: "#fde68a", fontWeight: "700", textDecorationLine: "underline" }}>{number}</Text>
-                    </TouchableOpacity>
-                  ));
-                })()}
-              </View>
-              <Text style={{ marginTop: 10, fontSize: 11, color: "#fde68a", opacity: 0.7 }}>
-                You don't have to face this alone.
-              </Text>
-            </View>
-          );
-        })()}
-      </View>
-    );
-  };
-
   const renderActionSheet = () => {
     if (!actionMessage) return null;
 
@@ -3156,12 +2955,18 @@ export default function ChatScreen() {
       keyboardVerticalOffset={tabBarHeight}
     >
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Offline indicator */}
-      {!isOnline && (
+      {/* Offline / unsynced indicator */}
+      {!isOnline ? (
         <View style={{ backgroundColor: "rgba(239,68,68,0.90)", paddingVertical: 5, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
-          <Text style={{ fontSize: 12, color: "#fff", fontWeight: "600" }}>⚠ No internet connection — messages will be queued</Text>
+          <Text style={{ fontSize: 12, color: "#fff", fontWeight: "600" }}>
+            📡 Offline{hasUnsynced ? ` — ${history.filter((h: any) => !h.isSynced).length} message${history.filter((h: any) => !h.isSynced).length !== 1 ? "s" : ""} queued` : " — replies from device"}
+          </Text>
         </View>
-      )}
+      ) : hasUnsynced && isSyncing ? (
+        <View style={{ backgroundColor: "rgba(56,189,248,0.12)", paddingVertical: 4, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderBottomWidth: 1, borderBottomColor: "rgba(56,189,248,0.2)" }}>
+          <Text style={{ fontSize: 11, color: "#7dd3fc" }}>⟳ Syncing {history.filter((h: any) => !h.isSynced).length} message{history.filter((h: any) => !h.isSynced).length !== 1 ? "s" : ""}…</Text>
+        </View>
+      ) : null}
       {/* Header */}
       <View
         style={{
@@ -3906,7 +3711,28 @@ export default function ChatScreen() {
               );
             })()}
 
-          {(showBookmarksOnly ? messages.filter((m) => bookmarks.has(m.id)) : messages).map((message, index) => renderBubble(message, index))}
+          {(showBookmarksOnly ? messages.filter((m) => bookmarks.has(m.id)) : messages).map((message, index) => (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                index={index}
+                messages={messages}
+                colors={colors}
+                searchMatchIds={searchMatchIds}
+                searchActiveMatchId={searchActiveMatchId}
+                bookmarks={bookmarks}
+                lastSyncStatus={lastSyncStatus}
+                dismissedCrisisCards={dismissedCrisisCards}
+                reactions={reactions}
+                onLongPress={setActionMessage}
+                onDismissCrisisCard={dismissCrisisCard}
+                onRetry={(messageId, prevUserText) => {
+                  setMessages((prev) => prev.filter((m) => m.id !== messageId));
+                  deleteFromHistory(messageId);
+                  setInput(prevUserText);
+                }}
+              />
+            ))}
 
           {isTyping && (
             <Animated.View
@@ -3978,134 +3804,21 @@ export default function ChatScreen() {
       </View>
 
       {/* Input */}
-      <View
-        style={{
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          backgroundColor: "rgba(15, 23, 42, 0.98)",
+      <ChatInputBar
+        input={input}
+        inputHeight={inputHeight}
+        isSendDisabled={isSendDisabled}
+        voiceState={voiceInput.state as any}
+        voiceDurationMs={voiceInput.durationMs}
+        colors={colors}
+        onChangeText={setInput}
+        onContentSizeChange={handleContentSizeChange}
+        onSend={() => handleSend()}
+        onMicPress={async () => {
+          if (voiceInput.state === "idle") await voiceInput.startRecording();
+          else if (voiceInput.state === "recording") await voiceInput.stopRecording();
         }}
-      >
-        {input.length > 800 && (
-          <Text style={{
-            fontSize: 10,
-            textAlign: "right",
-            marginBottom: 4,
-            fontWeight: "600",
-            color: input.length > 1800 ? "#f87171" : "#fbbf24",
-          }}>
-            {input.length} / 2000{input.length > 1800 ? " — approaching limit" : ""}
-          </Text>
-        )}
-        <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
-          <View
-            style={{
-              flex: 1,
-              marginRight: 8,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: "rgba(15, 23, 42, 1)",
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              minHeight: 40,
-              justifyContent: "center",
-            }}
-          >
-            <TextInput
-              value={input}
-              onChangeText={setInput}
-              multiline
-              onContentSizeChange={(e) => {
-                const height = e?.nativeEvent?.contentSize?.height ?? 40;
-                const minHeight = 40;
-                const maxHeight = 120;
-                const nextHeight = Math.min(
-                  Math.max(height + 14, minHeight),
-                  maxHeight,
-                );
-                setInputHeight(nextHeight);
-              }}
-              placeholder={
-                voiceInput.state === "recording"
-                  ? `Recording… ${Math.round(voiceInput.durationMs / 1000)}s`
-                  : voiceInput.state === "transcribing"
-                  ? "Transcribing voice…"
-                  : "Type something you feel…"
-              }
-              editable={voiceInput.state === "idle"}
-              placeholderTextColor={
-                voiceInput.state === "recording"
-                  ? "rgba(239,68,68,0.9)"
-                  : "rgba(148, 163, 184, 0.9)"
-              }
-              style={{
-                color: colors.textPrimary,
-                fontSize: 14,
-                maxHeight: 120,
-                minHeight: inputHeight,
-              }}
-            />
-          </View>
-
-          {/* Mic button — hold to record, tap again to stop */}
-          <TouchableOpacity
-            onPress={async () => {
-              if (voiceInput.state === "idle") {
-                await voiceInput.startRecording();
-              } else if (voiceInput.state === "recording") {
-                await voiceInput.stopRecording();
-              }
-            }}
-            disabled={voiceInput.state === "transcribing"}
-            style={{
-              paddingHorizontal: 12,
-              paddingVertical: 10,
-              borderRadius: 999,
-              backgroundColor:
-                voiceInput.state === "recording"
-                  ? "rgba(239,68,68,0.2)"
-                  : colors.surfaceSoft,
-              borderWidth: 1,
-              borderColor:
-                voiceInput.state === "recording"
-                  ? "rgba(239,68,68,0.6)"
-                  : colors.border,
-              marginRight: 6,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-            accessibilityLabel={voiceInput.state === "recording" ? "Stop recording" : "Start voice input"}
-          >
-            <Ionicons
-              name={
-                voiceInput.state === "transcribing"
-                  ? "time-outline"
-                  : voiceInput.state === "recording"
-                  ? "stop-circle-outline"
-                  : "mic-outline"
-              }
-              size={18}
-              color={voiceInput.state === "recording" ? "rgba(239,68,68,0.9)" : colors.textPrimary}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => handleSend()}
-            disabled={isSendDisabled}
-            style={{
-              opacity: isSendDisabled ? 0.4 : 1,
-              paddingHorizontal: 14,
-              paddingVertical: 10,
-              borderRadius: 999,
-              backgroundColor: colors.primary,
-            }}
-          >
-            <Text style={{ color: "#fff", fontWeight: "700" }}>Send</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      />
 
       {renderActionSheet()}
 
@@ -4116,6 +3829,9 @@ export default function ChatScreen() {
 
       {/* Non-intrusive sign-in prompt — appears after first message, one-time only */}
       <SignInPrompt messageCount={messages.length} />
+
+      {/* Error / info toast — non-intrusive, auto-dismisses */}
+      <Toast ref={toastRef} />
     </View>
     </KeyboardAvoidingView>
   );

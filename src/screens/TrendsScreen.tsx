@@ -3,7 +3,7 @@
 // Shows: streak, weekly emotion frequency bars, dominant emotion per day, summary.
 
 import React, { useMemo, useState, useEffect } from "react";
-import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, Dimensions } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useColors } from "../theme/ThemeContext";
@@ -171,13 +171,62 @@ async function saveJournal(entries: JournalEntry[]): Promise<void> {
   await AsyncStorage.setItem(JOURNAL_KEY, JSON.stringify(entries));
 }
 
-function JournalSection({ colors }: { colors: ReturnType<typeof useColors> }) {
+const JOURNAL_EMOTION_PROMPTS: Partial<Record<EmotionBucket, string[]>> = {
+  sadness: [
+    "What's weighing on your heart most right now?",
+    "Is there something you need to grieve or let go of today?",
+    "What would a small act of kindness toward yourself look like right now?",
+    "When did this feeling start — and what was happening around then?",
+    "What would you say to a close friend feeling exactly this way?",
+  ],
+  stressed: [
+    "What's taking the most energy from you today — and could anything be set down?",
+    "Which of your worries are truly within your control right now?",
+    "If you could pause one obligation today, which would it be?",
+    "What does 'just enough' look like for you instead of 'everything at once'?",
+    "What small thing helped you get through a stressful moment recently?",
+  ],
+  anger: [
+    "What's underneath the frustration you're carrying?",
+    "What boundary feels like it was crossed — and how do you want to respond?",
+    "Where does this anger live in your body, and what does it need?",
+    "What would you want the person or situation to understand about your experience?",
+    "What would it feel like to express this without it controlling you?",
+  ],
+  confused: [
+    "What feels most unclear right now — and what one thing might bring a little clarity?",
+    "What do you already know, even if the bigger picture isn't clear yet?",
+    "If you trusted your instincts right now, what would they be pointing toward?",
+    "What decision feels most tangled, and what would untangling it look like?",
+    "What do you need most: information, space, or someone to talk to?",
+  ],
+  hopeful: [
+    "What possibility are you most looking forward to right now?",
+    "What has changed recently that makes this hope feel real?",
+    "What would you want your future self to remember about how you feel today?",
+    "What are you quietly looking forward to that you haven't told anyone?",
+    "How does this hope feel different from your usual day?",
+  ],
+  joy: [
+    "What created this feeling of lightness — and how can you keep more of it?",
+    "Who or what contributed most to how good you've been feeling?",
+    "What would you want to bottle up from right now to open on a harder day?",
+    "What does thriving look like for you — are you closer to it than you realise?",
+    "How has this positive feeling changed how you see things around you?",
+  ],
+};
+
+function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useColors>; topEmotion?: EmotionBucket }) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [body, setBody] = useState("");
 
-  const todayPrompt = JOURNAL_PROMPTS[Math.floor(Date.now() / 86400000) % JOURNAL_PROMPTS.length];
+  const dayIndex = Math.floor(Date.now() / 86400000);
+  const emotionBank = topEmotion && topEmotion !== "neutral" ? JOURNAL_EMOTION_PROMPTS[topEmotion] : undefined;
+  const todayPrompt = emotionBank
+    ? emotionBank[dayIndex % emotionBank.length]
+    : JOURNAL_PROMPTS[dayIndex % JOURNAL_PROMPTS.length];
   const todayKey = new Date().toISOString().slice(0, 10);
   const hasEntryToday = entries.some((e) => new Date(e.createdAt).toISOString().slice(0, 10) === todayKey);
 
@@ -243,9 +292,18 @@ function JournalSection({ colors }: { colors: ReturnType<typeof useColors> }) {
   return (
     <View style={{ marginTop: 28 }}>
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
-        <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 1 }}>
-          Daily Journal
-        </Text>
+        <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 1 }}>
+            Daily Journal
+          </Text>
+          {emotionBank && topEmotion && (
+            <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, backgroundColor: EMOTION_META[topEmotion].color.replace(/[\d.]+\)$/, "0.18)"), borderWidth: 1, borderColor: EMOTION_META[topEmotion].color }}>
+              <Text style={{ fontSize: 9, color: colors.textPrimary, fontWeight: "600" }}>
+                {EMOTION_META[topEmotion].emoji} mood-matched
+              </Text>
+            </View>
+          )}
+        </View>
         {entries.length > 0 && (
           <TouchableOpacity onPress={handleExport} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
             <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>Export</Text>
@@ -664,6 +722,128 @@ function EmotionRadarChart({
   );
 }
 
+// ── 30-day mood line chart ──────────────────────────────────────────────────────
+const EMOTION_VALENCE: Record<EmotionBucket, number> = {
+  joy:      1.00,
+  hopeful:  0.80,
+  neutral:  0.50,
+  confused: 0.40,
+  stressed: 0.28,
+  anger:    0.20,
+  sadness:  0.10,
+};
+
+function MoodLineChart({
+  data,
+  colors,
+}: {
+  data: { key: string; dominant: EmotionBucket; count: number }[];
+  colors: ReturnType<typeof useColors>;
+}) {
+  const screenW = Dimensions.get("window").width;
+  const W = screenW - 56; // 16px scroll padding each side + 12px card padding each side
+  const H = 120;
+  const PAD_X = 20;
+  const PAD_Y = 12;
+  const LABEL_H = 16;
+  const plotW = W - PAD_X * 2;
+  const plotH = H - PAD_Y * 2 - LABEL_H;
+
+  const hasData = data.some((d) => d.count > 0);
+  if (!hasData) {
+    return (
+      <View style={{ height: H, alignItems: "center", justifyContent: "center" }}>
+        <Text style={{ fontSize: 11, color: colors.textSecondary, fontStyle: "italic" }}>
+          Chat on more days to see your mood trend
+        </Text>
+      </View>
+    );
+  }
+
+  const n = data.length;
+  const pts = data.map((d, i) => {
+    const val = d.count === 0 ? null : EMOTION_VALENCE[d.dominant];
+    const x = PAD_X + (i / (n - 1)) * plotW;
+    const y = val == null ? null : PAD_Y + (1 - val) * plotH;
+    return { x, y, count: d.count, dominant: d.dominant };
+  });
+
+  const segments: { x1: number; y1: number; x2: number; y2: number; dominant: EmotionBucket }[] = [];
+  let prev: { x: number; y: number; dominant: EmotionBucket } | null = null;
+  for (const pt of pts) {
+    if (pt.y != null) {
+      if (prev) {
+        segments.push({ x1: prev.x, y1: prev.y, x2: pt.x, y2: pt.y, dominant: pt.dominant });
+      }
+      prev = { x: pt.x, y: pt.y, dominant: pt.dominant };
+    }
+  }
+
+  // Date labels at day 0, ~10, ~20, 29
+  const labelIdxs = [0, 9, 19, 29].filter((i) => i < n);
+
+  return (
+    <View style={{ width: W, alignSelf: "center" }}>
+      <View style={{ width: W, height: H, position: "relative" }}>
+        {/* Y-axis emoji anchors */}
+        {([["😄", 0.95], ["😐", 0.5], ["💙", 0.05]] as [string, number][]).map(([emoji, v], i) => {
+          const y = PAD_Y + (1 - v) * plotH;
+          return (
+            <View key={i}>
+              <View style={{ position: "absolute", left: PAD_X, right: PAD_X, top: y, height: 1, backgroundColor: "rgba(148,163,184,0.10)" }} />
+              <Text style={{ position: "absolute", fontSize: 9, left: 0, top: y - 6, color: "rgba(148,163,184,0.55)" }}>{emoji}</Text>
+            </View>
+          );
+        })}
+
+        {/* Line segments */}
+        {segments.map((seg, i) => (
+          <LineSegment
+            key={i}
+            x1={seg.x1} y1={seg.y1}
+            x2={seg.x2} y2={seg.y2}
+            color={EMOTION_META[seg.dominant].color}
+            thickness={2}
+          />
+        ))}
+
+        {/* Data dots */}
+        {pts.filter((pt) => pt.y != null).map((pt, i) => (
+          <View
+            key={i}
+            style={{
+              position: "absolute",
+              width: 6, height: 6, borderRadius: 3,
+              backgroundColor: EMOTION_META[pt.dominant].color,
+              left: pt.x - 3,
+              top: pt.y! - 3,
+              borderWidth: 1,
+              borderColor: colors.surface,
+            }}
+          />
+        ))}
+
+        {/* X-axis date labels */}
+        {labelIdxs.map((idx) => {
+          const d = new Date();
+          d.setHours(0, 0, 0, 0);
+          d.setDate(d.getDate() - (n - 1 - idx));
+          const label = d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+          const x = PAD_X + (idx / (n - 1)) * plotW;
+          return (
+            <Text
+              key={idx}
+              style={{ position: "absolute", fontSize: 8, color: colors.textSecondary, left: x - 14, top: H - LABEL_H, width: 30, textAlign: "center" }}
+            >
+              {label}
+            </Text>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function mapEmotionToKey(raw?: string): EmotionBucket {
   if (!raw) return "neutral";
   const s = raw.toLowerCase();
@@ -823,6 +1003,29 @@ export default function TrendsScreen() {
     for (let w = 0; w < NUM_WEEKS; w++) weeks.push(cells.slice(w * 7, w * 7 + 7));
     return weeks;
   }, [byDay]);
+
+  // 30-day mood trend data
+  const moodTrend30 = useMemo(() => {
+    const allByDay: Record<string, EmotionBucket[]> = {};
+    for (const m of userMsgs) {
+      const key = toDateKey(m.timestamp);
+      if (!allByDay[key]) allByDay[key] = [];
+      allByDay[key].push(mapEmotionToKey(m.emotion ?? m.moodHint));
+    }
+    const result: { key: string; dominant: EmotionBucket; count: number }[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const key = toDateKey(d.getTime());
+      const emotions = allByDay[key] ?? [];
+      const freq: Partial<Record<EmotionBucket, number>> = {};
+      for (const e of emotions) freq[e] = (freq[e] ?? 0) + 1;
+      const dominant = (Object.entries(freq).sort((a, b) => (b[1] as number) - (a[1] as number))[0]?.[0] ?? "neutral") as EmotionBucket;
+      result.push({ key, dominant, count: emotions.length });
+    }
+    return result;
+  }, [userMsgs]);
 
   // ---- Journal export ----
   const handleExportJournal = async () => {
@@ -1153,6 +1356,19 @@ export default function TrendsScreen() {
         );
       })()}
 
+      {/* 30-day mood line chart */}
+      <View style={{ marginTop: 28 }}>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textSecondary, marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>
+          30-Day Mood Trend
+        </Text>
+        <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 12 }}>
+          How your emotional tone has shifted this month
+        </Text>
+        <View style={{ borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 12 }}>
+          <MoodLineChart data={moodTrend30} colors={colors} />
+        </View>
+      </View>
+
       {/* 12-week mood heatmap */}
       <View style={{ marginTop: 28 }}>
         <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textSecondary, marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
@@ -1321,7 +1537,7 @@ export default function TrendsScreen() {
       })()}
 
       {/* Daily Journal */}
-      <JournalSection colors={colors} />
+      <JournalSection colors={colors} topEmotion={topEmotion as EmotionBucket | undefined} />
 
       {/* Future Letters */}
       <FutureLetterSection colors={colors} />

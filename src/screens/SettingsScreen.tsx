@@ -24,11 +24,15 @@ import {
     scheduleCheckInReminder,
     cancelCheckInReminder,
     isCheckInReminderEnabled,
+    getSavedReminderTime,
+    DEFAULT_HOUR,
+    DEFAULT_MINUTE,
 } from "../notifications/checkInReminder";
 import {
     loadMemories,
     clearMemories,
     removeMemory,
+    updateMemory,
     type MemoryItem,
 } from "../state/companionMemory";
 import { fetchRemoteHistory } from "../api/historyClient";
@@ -186,8 +190,14 @@ export default function SettingsScreen() {
     // ✅ Daily check-in reminder
     const [reminderEnabled, setReminderEnabled] = React.useState(false);
     const [reminderLoading, setReminderLoading] = React.useState(false);
+    const [reminderHour, setReminderHour] = React.useState(DEFAULT_HOUR);
+    const [reminderMinute, setReminderMinute] = React.useState(DEFAULT_MINUTE);
     React.useEffect(() => {
         isCheckInReminderEnabled().then(setReminderEnabled).catch(() => {});
+        getSavedReminderTime().then(({ hour, minute }) => {
+            setReminderHour(hour);
+            setReminderMinute(minute);
+        }).catch(() => {});
     }, []);
 
     const handleReminderToggle = async (value: boolean) => {
@@ -195,7 +205,7 @@ export default function SettingsScreen() {
         setReminderLoading(true);
         try {
             if (value) {
-                const ok = await scheduleCheckInReminder();
+                const ok = await scheduleCheckInReminder(reminderHour, reminderMinute);
                 if (!mountedRef.current) return;
                 if (ok) {
                     setReminderEnabled(true);
@@ -214,6 +224,14 @@ export default function SettingsScreen() {
             // non-fatal
         } finally {
             if (mountedRef.current) setReminderLoading(false);
+        }
+    };
+
+    const handleReminderTimeChange = async (hour: number, minute: number) => {
+        setReminderHour(hour);
+        setReminderMinute(minute);
+        if (reminderEnabled) {
+            await scheduleCheckInReminder(hour, minute).catch(() => {});
         }
     };
 
@@ -245,6 +263,8 @@ export default function SettingsScreen() {
     // Companion memory
     const [memories, setMemories] = React.useState<MemoryItem[]>([]);
     const [deletingMemoryId, setDeletingMemoryId] = React.useState<string | null>(null);
+    const [editingMemoryId, setEditingMemoryId] = React.useState<string | null>(null);
+    const [editingMemoryText, setEditingMemoryText] = React.useState("");
     React.useEffect(() => {
         loadMemories().then(setMemories).catch(() => {});
     }, []);
@@ -254,6 +274,19 @@ export default function SettingsScreen() {
             .then(() => setMemories((prev) => prev.filter((m) => m.id !== id)))
             .catch(() => {})
             .finally(() => setDeletingMemoryId(null));
+    };
+    const handleStartEditMemory = (m: MemoryItem) => {
+        setEditingMemoryId(m.id);
+        setEditingMemoryText(m.text);
+    };
+    const handleSaveEditMemory = (id: string) => {
+        const trimmed = editingMemoryText.trim();
+        if (!trimmed) { setEditingMemoryId(null); return; }
+        updateMemory(id, trimmed)
+            .then(() => setMemories((prev) => prev.map((m) => m.id === id ? { ...m, text: trimmed } : m)))
+            .catch(() => {});
+        setEditingMemoryId(null);
+        setEditingMemoryText("");
     };
     const handleClearMemories = () => {
         Alert.alert(
@@ -1066,13 +1099,15 @@ export default function SettingsScreen() {
 
                 {/* Daily check-in reminder */}
                 <AppSurface style={{ marginBottom: 16 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: reminderEnabled ? 12 : 0 }}>
                         <View style={{ flex: 1, marginRight: 12 }}>
                             <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
                                 Daily check-in reminder
                             </Text>
                             <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                                A gentle nudge at 8 PM every day
+                                {reminderEnabled
+                                    ? `Reminds you at ${String(reminderHour).padStart(2, "0")}:${String(reminderMinute).padStart(2, "0")} every day`
+                                    : "Get a gentle nudge to reflect daily"}
                             </Text>
                         </View>
                         <Switch
@@ -1083,6 +1118,64 @@ export default function SettingsScreen() {
                             thumbColor="#ffffff"
                         />
                     </View>
+
+                    {reminderEnabled && (
+                        <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 8 }}>
+                                Reminder time
+                            </Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                                {/* Hour stepper */}
+                                <View style={{ alignItems: "center", gap: 4 }}>
+                                    <Text style={{ fontSize: 10, color: colors.textSecondary }}>Hour</Text>
+                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                        <TouchableOpacity
+                                            onPress={() => handleReminderTimeChange((reminderHour + 23) % 24, reminderMinute)}
+                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
+                                        >
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>−</Text>
+                                        </TouchableOpacity>
+                                        <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, minWidth: 24, textAlign: "center" }}>
+                                            {String(reminderHour).padStart(2, "0")}
+                                        </Text>
+                                        <TouchableOpacity
+                                            onPress={() => handleReminderTimeChange((reminderHour + 1) % 24, reminderMinute)}
+                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
+                                        >
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>+</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                                <Text style={{ fontSize: 20, fontWeight: "700", color: colors.textSecondary, marginTop: 14 }}>:</Text>
+                                {/* Minute stepper */}
+                                <View style={{ alignItems: "center", gap: 4 }}>
+                                    <Text style={{ fontSize: 10, color: colors.textSecondary }}>Minute</Text>
+                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                        <TouchableOpacity
+                                            onPress={() => handleReminderTimeChange(reminderHour, (reminderMinute + 45) % 60)}
+                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
+                                        >
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>−</Text>
+                                        </TouchableOpacity>
+                                        <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, minWidth: 24, textAlign: "center" }}>
+                                            {String(reminderMinute).padStart(2, "0")}
+                                        </Text>
+                                        <TouchableOpacity
+                                            onPress={() => handleReminderTimeChange(reminderHour, (reminderMinute + 15) % 60)}
+                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
+                                        >
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>+</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                                <View style={{ flex: 1, alignItems: "flex-end", marginTop: 14 }}>
+                                    <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: "right", lineHeight: 14 }}>
+                                        Minutes step{"\n"}by 15
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    )}
                 </AppSurface>
 
                 {/* Emotional fingerprint */}
@@ -1140,25 +1233,51 @@ export default function SettingsScreen() {
                         <View
                             key={m.id}
                             style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                paddingVertical: 5,
+                                paddingVertical: 6,
                                 borderTopWidth: 1,
                                 borderTopColor: colors.border,
-                                gap: 6,
                             }}
                         >
-                            <Text style={{ fontSize: 11, color: colors.primary, marginTop: 1 }}>●</Text>
-                            <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>{m.text}</Text>
-                            <TouchableOpacity
-                                onPress={() => handleRemoveMemory(m.id)}
-                                disabled={deletingMemoryId === m.id}
-                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                                <Text style={{ fontSize: 11, color: deletingMemoryId === m.id ? colors.textSecondary : "rgba(248,113,113,0.8)" }}>
-                                    {deletingMemoryId === m.id ? "…" : "Forget"}
-                                </Text>
-                            </TouchableOpacity>
+                            {editingMemoryId === m.id ? (
+                                <View style={{ gap: 6 }}>
+                                    <TextInput
+                                        value={editingMemoryText}
+                                        onChangeText={setEditingMemoryText}
+                                        autoFocus
+                                        multiline
+                                        style={{ fontSize: 12, color: colors.textPrimary, borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, minHeight: 40 }}
+                                    />
+                                    <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
+                                        <TouchableOpacity onPress={() => setEditingMemoryId(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                            <Text style={{ fontSize: 11, color: colors.textSecondary }}>Cancel</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => handleSaveEditMemory(m.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Save</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            ) : (
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                    <Text style={{ fontSize: 11, color: colors.primary, marginTop: 1 }}>●</Text>
+                                    <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>{m.text}</Text>
+                                    <TouchableOpacity
+                                        onPress={() => handleStartEditMemory(m)}
+                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                        style={{ marginRight: 8 }}
+                                    >
+                                        <Text style={{ fontSize: 11, color: colors.primary }}>Edit</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => handleRemoveMemory(m.id)}
+                                        disabled={deletingMemoryId === m.id}
+                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                    >
+                                        <Text style={{ fontSize: 11, color: deletingMemoryId === m.id ? colors.textSecondary : "rgba(248,113,113,0.8)" }}>
+                                            {deletingMemoryId === m.id ? "…" : "Forget"}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
                         </View>
                     ))}
                 </AppSurface>

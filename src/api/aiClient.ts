@@ -195,6 +195,53 @@ function normalizeToneContext(
   return next;
 }
 
+// Maps mobile toneContext to /api/chat-reply's tone parameter.
+// Mirrors the server's deriveFormatterTone() in route.ts.
+function deriveToneForChatReply(
+  toneContext?: ToneContextPayload,
+  settings?: { relationshipTone?: string },
+): "close_friend" | "calm_companion" | "coach" | "mentor" {
+  const companionEnabled = toneContext?.companion?.enabled === true;
+
+  if (!companionEnabled) {
+    const rs = String(toneContext?.user?.responseStyle ?? "").toLowerCase();
+    if (rs === "comfort") return "close_friend";
+    if (rs === "reflect") return "calm_companion";
+    if (rs === "motivate") return "coach";
+    if (rs === "advise") return "mentor";
+    return "close_friend";
+  }
+
+  const rel = String(
+    toneContext?.companion?.relationship ?? settings?.relationshipTone ?? "",
+  ).toLowerCase();
+  if (rel === "coach") return "coach";
+  if (rel === "mentor" || rel === "elder" || rel === "parent_like") return "mentor";
+  // friend / sibling / junior_buddy / partner_like / prefer_not → close_friend
+  return "close_friend";
+}
+
+// Detects the script/language from the message so /api/chat-reply can:
+// (a) use the right language in formatImotaraReply (server-side post-processing)
+// (b) include the right mythology/quote cultural instructions in the system prompt
+function detectLangFromScript(message: string): string {
+  if (!message) return "en";
+  if (/[\u0980-\u09FF]/.test(message)) return "bn";        // Bengali
+  if (/[\u0904-\u0939\u0958-\u0963\u0971-\u097F]/.test(message)) return "hi"; // Hindi/Devanagari
+  if (/[\u0B80-\u0BFF]/.test(message)) return "ta";        // Tamil
+  if (/[\u0C00-\u0C7F]/.test(message)) return "te";        // Telugu
+  if (/[\u0A80-\u0AFF]/.test(message)) return "gu";        // Gujarati
+  if (/[\u0C80-\u0CFF]/.test(message)) return "kn";        // Kannada
+  if (/[\u0D00-\u0D7F]/.test(message)) return "ml";        // Malayalam
+  if (/[\u0A00-\u0A7F]/.test(message)) return "pa";        // Punjabi/Gurmukhi
+  if (/[\u0B00-\u0B7F]/.test(message)) return "or";        // Odia
+  if (/[\u0600-\u06FF]/.test(message)) return "ar";        // Arabic/Urdu
+  if (/[\u0400-\u04FF]/.test(message)) return "ru";        // Russian/Cyrillic
+  if (/[\u4E00-\u9FFF]/.test(message)) return "zh";        // Chinese
+  if (/[\u3040-\u30FF]/.test(message)) return "ja";        // Japanese
+  return "en";
+}
+
 function deriveEmotionHintFromMessage(message: string): string | undefined {
   const raw = String(message || "").trim();
   if (!raw) return undefined;
@@ -311,9 +358,87 @@ export async function callImotaraAI(
       },
     });
 
-    const remoteUrl = `${IMOTARA_API_BASE_URL}/api/respond`;
-
     const emotionHint = deriveEmotionHintFromMessage(message);
+
+    // ── Try /api/chat-reply first (OpenAI-powered, same path as web app) ────────
+    // The web app calls /api/chat-reply (GPT) and only falls back to /api/respond
+    // (rule-based templates) when GPT fails. Mobile was only calling /api/respond,
+    // which caused short robotic replies like "I'm here with you." for all questions.
+    const chatReplyUrl = `${IMOTARA_API_BASE_URL}/api/chat-reply`;
+    try {
+      // Resolve language: explicit preference → script auto-detection from message
+      const chatReplyLang =
+        opts?.preferredLanguage ||
+        (toneContext?.user?.preferredLang as string | undefined) ||
+        detectLangFromScript(message);
+
+      // Inject user's name (from Settings) as a system message so GPT can
+      // personalize naturally without waiting for Supabase memory lookup.
+      // /api/chat-reply accepts system messages in the messages array.
+      const userName = typeof toneContext?.user?.name === "string"
+        ? toneContext.user.name.trim()
+        : "";
+      const nameSystemMsg = userName
+        ? [{ role: "system" as const, content: `The user's preferred name is: ${userName}. Use it naturally — not every line.` }]
+        : [];
+
+      const chatReplyMessages = [
+        ...nameSystemMsg,
+        ...(opts?.recentMessages ?? []),
+        { role: "user" as const, content: message },
+      ];
+      const chatReplyTone = deriveToneForChatReply(toneContext, opts?.settings);
+      const chatReplyPayload: Record<string, unknown> = {
+        messages: chatReplyMessages,
+        tone: chatReplyTone,
+        lang: chatReplyLang,
+        ...(emotionHint ? { emotion: emotionHint } : {}),
+        ...(opts?.emotionMemory ? { emotionMemory: opts.emotionMemory } : {}),
+        // age context for vocabulary/register calibration
+        ...(toneContext?.user?.ageTone && toneContext.user.ageTone !== "prefer_not" ? { userAge: toneContext.user.ageTone } : opts?.settings?.ageTone && opts.settings.ageTone !== "prefer_not" ? { userAge: opts.settings.ageTone } : {}),
+        ...(toneContext?.companion?.ageTone && toneContext.companion.ageTone !== "prefer_not" ? { companionAge: toneContext.companion.ageTone } : {}),
+      };
+
+      const chatRes = await fetchWithTimeout(
+        chatReplyUrl,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(chatReplyPayload),
+        },
+        Math.min(opts?.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS, 18_000),
+      );
+
+      if (chatRes.ok) {
+        const chatRawText = await chatRes.text().catch(() => "");
+        let chatData: any = null;
+        try { chatData = chatRawText ? JSON.parse(chatRawText) : {}; } catch { /* fall through */ }
+
+        const chatReplyText = String(chatData?.text ?? "").trim();
+
+        // Accept the response only if GPT actually produced it (not a fallback/error)
+        if (chatReplyText && chatData?.meta?.from === "openai") {
+          const safeReplyText = chatReplyText.length > MAX_REMOTE_REPLY_CHARS
+            ? chatReplyText.slice(0, MAX_REMOTE_REPLY_CHARS).trimEnd() + "…"
+            : chatReplyText;
+
+          debugLog("[imotara] chat-reply succeeded", { len: safeReplyText.length });
+
+          return {
+            ok: true,
+            replyText: safeReplyText,
+            analysisSource: "cloud",
+            remoteUrl: chatReplyUrl,
+            emotion: emotionHint,
+          };
+        }
+      }
+    } catch (chatErr: any) {
+      debugWarn("[imotara] chat-reply failed, falling back to /api/respond", chatErr?.message);
+    }
+    // ── /api/chat-reply failed or returned non-GPT response — fall through to /api/respond ──
+
+    const remoteUrl = `${IMOTARA_API_BASE_URL}/api/respond`;
 
     const res = await fetchWithTimeout(
       remoteUrl,
