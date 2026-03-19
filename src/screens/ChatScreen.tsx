@@ -45,6 +45,7 @@ import {
 } from "../state/companionMemory";
 
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
 
 // NEW: lifecycle hook (additive)
@@ -1882,8 +1883,9 @@ export default function ChatScreen() {
           let compatibility: any | undefined;
 
           // 2) If cloud succeeded, respect it
-          if (remote.ok && String(remote.replyText || "").trim().length > 0) {
-            replyText = String(remote.replyText);
+          const remoteReply = String(remote.replyText || "").trim();
+          if (remote.ok && remoteReply.length >= 30) {
+            replyText = remoteReply;
             source = "cloud";
 
             reflectionSeed =
@@ -2475,12 +2477,6 @@ export default function ChatScreen() {
 
     const prev = messages[index - 1];
 
-    let sourceIcon = "";
-    if (!isUser) {
-      if (message.source === "local") sourceIcon = " 🌙";
-      else if (message.source === "cloud") sourceIcon = " ☁️";
-    }
-
     const content = (
       <>
         <Text
@@ -2494,7 +2490,7 @@ export default function ChatScreen() {
         >
           {isUser
             ? "You"
-            : `Imotara${sourceIcon}${getMoodEmojiForHint(message.moodHint)}`}
+            : `Imotara${message.source === "local" ? " (offline)" : ""}`}
         </Text>
 
         {!isUser && message.source === "local"
@@ -3264,7 +3260,7 @@ export default function ChatScreen() {
               accessibilityRole="button"
               accessibilityLabel="Search chat"
             >
-              <Text style={{ fontSize: 14 }}>🔍</Text>
+              <Ionicons name={showSearch ? "search" : "search-outline"} size={14} color={showSearch ? colors.primary : colors.textSecondary} />
             </TouchableOpacity>
           )}
 
@@ -3302,7 +3298,7 @@ export default function ChatScreen() {
             accessibilityRole="button"
             accessibilityLabel="Breathing exercise"
           >
-            <Text style={{ fontSize: 16 }}>{"🫁"}</Text>
+            <Ionicons name="pulse-outline" size={16} color={colors.textPrimary} />
           </TouchableOpacity>
 
           {messages.length > 0 && (
@@ -4086,13 +4082,17 @@ export default function ChatScreen() {
             }}
             accessibilityLabel={voiceInput.state === "recording" ? "Stop recording" : "Start voice input"}
           >
-            <Text style={{ fontSize: 16 }}>
-              {voiceInput.state === "transcribing"
-                ? "⏳"
-                : voiceInput.state === "recording"
-                ? "⏹️"
-                : "🎙️"}
-            </Text>
+            <Ionicons
+              name={
+                voiceInput.state === "transcribing"
+                  ? "time-outline"
+                  : voiceInput.state === "recording"
+                  ? "stop-circle-outline"
+                  : "mic-outline"
+              }
+              size={18}
+              color={voiceInput.state === "recording" ? "rgba(239,68,68,0.9)" : colors.textPrimary}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity

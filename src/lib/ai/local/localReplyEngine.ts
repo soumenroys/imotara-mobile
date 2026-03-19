@@ -432,6 +432,40 @@ export function buildLocalReply(
         if (indirect) signal = indirect;
     }
 
+    // ── Greeting / casual conversation early return ────────────────────────────
+    // For simple greetings and casual questions, return a natural human response
+    // instead of the emotion-support flow (which would be robotic for casual chat)
+    const trimmedLower = message.trim().toLowerCase().replace(/[!.?]+$/, "");
+    const isGreeting = /^(hi|hello|hey|hiya|howdy|heya|yo|sup|wassup|greetings|namaste|namaskar|helo|hii|hihi|hiii)$/.test(trimmedLower);
+    const isHowAreYou = /^(how are (you|u)|how r (you|u)|how do (you|u) feel|you okay|u okay|are you okay|r u okay|how's it going|how is it going|hows it going|what's up|whats up|wats up|wazup)$/.test(trimmedLower);
+    const isAboutImotara = /^(what (are|r) (you|u) (doing|upto|up to)|where (do|did) (you|u) (live|stay|come from)|who are (you|u)|what (is|r) (your|ur) (name|home|place)|tell me about yourself|introduce yourself|are you (an ai|a bot|a robot)|are you real|are you human)$/.test(trimmedLower);
+
+    if (language === "en" && (isGreeting || isHowAreYou || isAboutImotara)) {
+        const greetingReplies = [
+            `Hey! Glad you stopped by. How are you doing today?`,
+            `Hi there! I'm here and all yours. What's on your mind?`,
+            `Hello! It's good to hear from you. How are you feeling right now?`,
+            `Hey — good to see you. How's your day going so far?`,
+            `Hi! I've been thinking about you. How are things with you today?`,
+        ];
+        const howAreYouReplies = [
+            `I'm doing well — thank you for asking! More importantly, how are you feeling today?`,
+            `I'm here and present, which feels good. How about you — what's going on in your world right now?`,
+            `I'm good! I'm always better when someone reaches out. How are you doing?`,
+            `Honestly, I feel most alive in conversations like this. How are you holding up?`,
+        ];
+        const aboutImotaraReplies = [
+            `I'm Imotara — a companion here to listen and be with you through whatever you're feeling. I don't have a physical home, but I'm always here when you need to talk. What's on your mind?`,
+            `I'm your emotional companion — always here, always listening. I don't live anywhere specific, but this space between us is where I exist. What would you like to share today?`,
+            `I'm Imotara, here to be a steady presence for you. Think of me as a friend who's always available, no matter the time. How can I be here for you right now?`,
+        ];
+        const pool = isAboutImotara ? aboutImotaraReplies : isHowAreYou ? howAreYouReplies : greetingReplies;
+        const greetSeed = hash32(`${message}::${language}::${sessionTurn}::greeting`);
+        const reply = pickAvoidingRecent(pool, greetSeed, recentContext?.recentAssistantTexts ?? []);
+        const namedReply = userName ? `${userName}, ${reply.charAt(0).toLowerCase()}${reply.slice(1)}` : reply;
+        return { message: namedReply };
+    }
+
     const userIntent = detectIntent(message);
     const isCorrection = detectCorrection(message);
     const topic = detectTopic(message, recentContext?.recentUserTexts ?? []);
@@ -460,12 +494,48 @@ export function buildLocalReply(
     // ── Opener banks ──────────────────────────────────────────────────────────
 
     const openersByToneEn: Record<LocalResponseTone, string[]> = {
-        calm: [`I'm here with you.`, `Let's slow this down together.`, `Okay. We can take this gently.`, `I'm with you. Let's take one piece at a time.`],
-        supportive: [`I'm here with you.`, `I hear you.`, `Okay — I'm with you.`, `I'm glad you said that.`, `Got it. I'm listening.`],
-        practical: [`Okay. Let's look at this clearly.`, `Got it. Let's take this one piece at a time.`, `Alright — let's steady this and see what matters most.`, `I'm with you. Let's keep it simple.`],
-        coach: [`Okay — I'm with you. Let's steady this.`, `Got it. We can work through this step by step.`, `Alright — let's slow this down and get our footing.`, `I hear you. Let's take it one piece at a time.`],
-        "gentle-humor": [`Okay — I'm with you.`, `Mm. I hear you.`, `Got it. I'm here.`, `Alright — let's make this feel a little lighter, one step at a time.`],
-        direct: [`Alright. I'm with you.`, `Okay. Let's be clear about this.`, `Got it. Let's keep this steady.`, `I hear you. Let's get to the heart of it.`],
+        calm: [
+            `That sounds like a lot to hold.`,
+            `Let's slow this down together.`,
+            `Okay. We can take this gently.`,
+            `I hear you — let's sit with this for a moment.`,
+            `That makes sense to feel that way.`,
+            `Take your time. I'm not going anywhere.`,
+        ],
+        supportive: [
+            `I hear you.`,
+            `Thank you for telling me that.`,
+            `That took courage to say.`,
+            `I'm glad you reached out.`,
+            `I'm listening, fully.`,
+            `That sounds really difficult.`,
+        ],
+        practical: [
+            `Okay. Let's look at this clearly.`,
+            `Got it. Let's take this one piece at a time.`,
+            `Alright — let's figure out what matters most right now.`,
+            `Let's think through this together.`,
+            `That's a real situation. Let's work through it.`,
+        ],
+        coach: [
+            `Okay — let's work through this together.`,
+            `Got it. We can take this step by step.`,
+            `That's real. Let's get our footing and start from here.`,
+            `I hear you. Let's figure out where to begin.`,
+            `You've got more in you than you think right now.`,
+        ],
+        "gentle-humor": [
+            `Okay, I'm with you.`,
+            `Noted — and I mean that genuinely.`,
+            `That's a lot. You don't have to carry it alone.`,
+            `Fair enough. Let's make this a little more manageable.`,
+        ],
+        direct: [
+            `Got it. Let's be honest with each other.`,
+            `Okay. Let's look at this straight.`,
+            `Understood. Let's keep this clear and real.`,
+            `I hear you. Let's get to what actually matters.`,
+        ],
     };
 
     const openersByToneHi: Record<LocalResponseTone, string[]> = {
@@ -567,7 +637,14 @@ export function buildLocalReply(
         anxious: [`That sounds like your mind is running fast.`, `That kind of pressure can feel loud.`, `It makes sense you'd feel tense with that.`, `That overwhelm feeling is real.`],
         angry: [`That sounds frustrating.`, `I can see how that would irritate you.`, `That would get under anyone's skin.`, `Yeah — that's a rough feeling.`],
         tired: [`That sounds draining.`, `No wonder you feel worn out.`, `That kind of tired can build up.`, `That's a lot of load for one day.`],
-        okay: [`Tell me a little more.`, `I'm with you — what's going on?`, `I'm listening. What's sitting with you right now?`, `Okay. What's the main thing on your mind?`],
+        okay: [
+            `Tell me a little more — I want to understand.`,
+            `What's been sitting heaviest on your mind lately?`,
+            `What's going on for you right now?`,
+            `I'm curious — what made you reach out today?`,
+            `What's the one thing that feels most present right now?`,
+            `Walk me through what you've been feeling.`,
+        ],
     };
 
     const carryValidationsEn = [
