@@ -1725,8 +1725,7 @@ export default function ChatScreen() {
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
-    const networkNote =
-      "\n\n(I'm replying from your device because the network is a little slow.)";
+    // networkNote removed — was intrusive in every offline bubble
 
     typingTimeoutRef.current = setTimeout(() => {
       (async () => {
@@ -1981,8 +1980,7 @@ export default function ChatScreen() {
               prompt,
             );
 
-            replyText =
-              (baseMessage || local.message) + (wantsCloud ? networkNote : "");
+            replyText = baseMessage || local.message;
 
             // ✅ Phase 2.2.2 — local followUp parity + de-dupe (enhancement only)
             followUp =
@@ -2155,9 +2153,7 @@ export default function ChatScreen() {
             prompt,
           );
 
-          const replyWithNote = wantsCloud
-            ? (baseMessage || local.message) + networkNote
-            : baseMessage || local.message;
+          const replyWithNote = baseMessage || local.message;
 
           const botTimestamp = Date.now();
 

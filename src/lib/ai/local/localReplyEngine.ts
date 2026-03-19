@@ -466,6 +466,25 @@ export function buildLocalReply(
         return { message: namedReply };
     }
 
+    // ── Positive / happy message early return ─────────────────────────────────
+    // Detects clearly positive messages so we don't give distress-framed replies.
+    if (language === "en" && signal === "okay") {
+        const isPositive = /\b(going (well|great|nicely|good|fine|okay)|doing (well|great|good|fine|okay|nicely)|feeling (good|great|fine|wonderful|happy|better|well)|all good|pretty good|not bad|things are good|good (day|morning|evening|afternoon)|had a good|went well|so good|very good|quite good|doing okay|i'?m (good|great|fine|okay|well|happy|excited|glad|grateful)|life is good|things are (good|going well)|thank (you|u|ya)|thanks( so much)?|grateful|blessed)\b/i.test(message);
+        if (isPositive) {
+            const positiveReplies = [
+                `That's genuinely good to hear. What's been making things feel good lately?`,
+                `Really glad things are going well for you. What's been the highlight?`,
+                `That's lovely. I'm here if you want to share more, or just keep that good feeling company.`,
+                `Good to know. Is there something specific you're feeling good about?`,
+                `Sounds like things are in a decent place. How long has it felt this way?`,
+            ];
+            const posSeed = hash32(`${message}::${language}::${sessionTurn}::positive`);
+            const reply = pickAvoidingRecent(positiveReplies, posSeed, recentContext?.recentAssistantTexts ?? []);
+            const namedReply = userName ? `${userName}, ${reply.charAt(0).toLowerCase()}${reply.slice(1)}` : reply;
+            return { message: namedReply };
+        }
+    }
+
     const userIntent = detectIntent(message);
     const isCorrection = detectCorrection(message);
     const topic = detectTopic(message, recentContext?.recentUserTexts ?? []);
@@ -934,21 +953,18 @@ export function buildLocalReply(
         `Amra tomar feeling e focus korbo, na porer ki korte paro setay?`,
     ];
 
-    // ── Micro-story (combinatorial, 64 combinations per signal per language) ────
-    // framing × situation × insight, each picked with independent seed offsets.
-    // Injected ~1 in 4 turns when signal is emotional. Skipped for okay/correction/vague.
+    // ── Micro-story — disabled for local offline fallback ────────────────────────
+    // Micro-stories can feel disconnected without the full AI context.
+    // Keeping local fallback clean: opener + validation + extra only.
     const isEmotionalSignal = signal !== "okay";
-    const storyTurnCheck = (seed >>> 7) % 4 === 0;
-    const shouldInsertStory = isEmotionalSignal && !isCorrection && !isVagueReply && storyTurnCheck;
-    const storyLine = shouldInsertStory ? buildMicroStory(signal, language, seed) : null;
+    const storyLine = null;
 
-    // ── Mythology story (~1 in 6 emotional turns, English only) ─────────────────
-    // Uses seed bit-window >>>9 to avoid same-turn collision with micro-story (>>>7).
-    // For non-English users, the LLM chat-reply path handles mythology via system prompt.
-    const mythTurnCheck = (seed >>> 9) % 6 === 0;
+    // ── Mythology story — disabled for local offline fallback ───────────────────
+    // Mythology stories are long, cultural, and context-dependent. When the cloud
+    // is unavailable (offline fallback path), they feel jarring and out-of-place.
+    // The cloud path (AI-generated) handles story/mythology when appropriate.
     const isEnglishLang = language === "en";
-    const shouldInsertMyth = isEmotionalSignal && isEnglishLang && !isCorrection && !isVagueReply && mythTurnCheck;
-    const mythLine = shouldInsertMyth ? buildMythologyStory(signal, language, seed) : null;
+    const mythLine = null;
 
     // ── Offline quote (~1 in 5 emotional turns, English only) ───────────────────
     // Uses seed bit-window >>>11 to avoid collision with story (>>>7) and myth (>>>9).
