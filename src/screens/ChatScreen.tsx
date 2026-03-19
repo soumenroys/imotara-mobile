@@ -3774,37 +3774,39 @@ export default function ChatScreen() {
           )}
         </ScrollView>
 
-        {showScrollButton && !isTyping && (
-          <Animated.View
+      </View>
+
+      {/* New messages button — rendered outside scroll container to avoid overlapping messages */}
+      {showScrollButton && !isTyping && (
+        <Animated.View
+          style={{
+            alignItems: "flex-end",
+            paddingHorizontal: 16,
+            paddingVertical: 4,
+            transform: [{ translateY: slideAnim }],
+            opacity: fadeAnim,
+          }}
+        >
+          <TouchableOpacity
+            onPress={scrollToBottom}
             style={{
-              position: "absolute",
-              bottom: 8,
-              right: 16,
-              transform: [{ translateY: slideAnim }],
-              opacity: fadeAnim,
+              backgroundColor: colors.primary,
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              borderRadius: 999,
+              shadowColor: "#000",
+              shadowOpacity: 0.25,
+              shadowOffset: { width: 0, height: 2 },
+              shadowRadius: 4,
+              elevation: 4,
             }}
           >
-            <TouchableOpacity
-              onPress={scrollToBottom}
-              style={{
-                backgroundColor: colors.primary,
-                paddingHorizontal: 14,
-                paddingVertical: 8,
-                borderRadius: 999,
-                shadowColor: "#000",
-                shadowOpacity: 0.25,
-                shadowOffset: { width: 0, height: 2 },
-                shadowRadius: 4,
-                elevation: 4,
-              }}
-            >
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
-                New messages ↓
-              </Text>
-            </TouchableOpacity>
-          </Animated.View>
-        )}
-      </View>
+            <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
+              New messages ↓
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       {/* Input */}
       <ChatInputBar
