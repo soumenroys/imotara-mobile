@@ -166,7 +166,7 @@ export default function RootNavigator() {
     if (!onboardingChecked) return null;
 
     return (
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, backgroundColor: "#0f172a" }}>
             <NavigationContainer linking={linking}>
                 <Tab.Navigator
                     screenOptions={({ route }) => ({

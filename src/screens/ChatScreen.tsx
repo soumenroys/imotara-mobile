@@ -14,8 +14,6 @@ import {
   Linking,
   NativeSyntheticEvent,
   NativeScrollEvent,
-  KeyboardAvoidingView,
-  Platform,
   Keyboard,
 } from "react-native";
 
@@ -80,7 +78,7 @@ import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { detectCountryCode } from "../lib/safety/detectCountry";
 import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+
 
 // ── 3-tier crisis detection ───────────────────────────────────────────────────
 // Tier 2: direct suicidal ideation, self-harm, immediate danger
@@ -1216,7 +1214,6 @@ export default function ChatScreen() {
   }, []);
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -2963,11 +2960,6 @@ export default function ChatScreen() {
     input.trim().length === 0 || isTyping || isSendingRef.current;
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={tabBarHeight}
-    >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
       {/* Offline / unsynced indicator */}
       {!isOnline ? (
@@ -3853,6 +3845,5 @@ export default function ChatScreen() {
       {/* Error / info toast — non-intrusive, auto-dismisses */}
       <Toast ref={toastRef} />
     </View>
-    </KeyboardAvoidingView>
   );
 }
