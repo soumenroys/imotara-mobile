@@ -1035,6 +1035,66 @@ export function buildLocalReply(
         `There's no right way to process this — just keep going.`,
         `You don't have to wrap this up neatly.`,
     ];
+    const listeningOnlyExtrasHi = [
+        `Abhi ise figure out karne ki zaroorat nahi.`,
+        `Main yahin hoon. Jitna chahte ho, utna bolo — zyada ya kam.`,
+        `Tum yeh sab feel kar sakte ho — koi baat nahi.`,
+        `Ise neatly wrap up karne ki koi zaroorat nahi.`,
+    ];
+    const listeningOnlyExtrasBn = [
+        `Ekhon eta figure out korte hobe na.`,
+        `Ami ekhane achi. Jotota ichha hoy bolo — beshi na kama.`,
+        `Tumi shob kichu feel korte paro — kono problem nei.`,
+        `Eta neat kore wrap up korte hobe na.`,
+    ];
+    const listeningOnlyExtrasTa = [
+        `Ippovum idha figure out panna vendam.`,
+        `Naan engum poga matten. Venum pothu bol — zyada illai kammiya.`,
+        `Nee feel panra yellam feel pannalam — paravaillai.`,
+        `Idha neatly wrap up panna vendam illai.`,
+    ];
+    const listeningOnlyExtrasTe = [
+        `Ippudu dhinni figure out cheyaalsina avasaram ledu.`,
+        `Nenu ikkade unnaanu. Yekkuva alleda kammu alleda cheppukundu.`,
+        `Nuvvu anni feel avvadam okay — tappu ledu.`,
+        `Idi neat ga wrap up cheyyaalsina avasaram ledu.`,
+    ];
+    const listeningOnlyExtrasGu = [
+        `Aa figure out karvani abhi koi jaldhi nathi.`,
+        `Hu ithey chhu. Je joiye te bol — vadhu ke ochhun.`,
+        `Tu badhu j feel kari shake chhe — koi vaa nathi.`,
+        `Tene neatly wrap up karvani zaroor nathi.`,
+    ];
+    const listeningOnlyExtrasPa = [
+        `Hune ise figure out karne di koi zaroorat nahi.`,
+        `Main ithey haan. Je marzi bol — zyada ya thoda.`,
+        `Tu sab kuch feel kar sakda aa — koi galat nahi.`,
+        `Ise neatly wrap up karne di koi gall nahi.`,
+    ];
+    const listeningOnlyExtrasKn = [
+        `Idu ippudu figure out maadabekaagilla.`,
+        `Naanu illi iddene. Yaarenu heli — koodu illa kammi.`,
+        `Neevu ellavaanu feel aagabahudu — adhu sari.`,
+        `Idannu neat aagi wrap up maadabekaagilla.`,
+    ];
+    const listeningOnlyExtrasMl = [
+        `Ippol idi figure out cheyyaanulla avasaram illa.`,
+        `Njaan ippol unda. Parayaan thoannunnath para — koodu illa kammi.`,
+        `Nee ellaam feel aakaam — adhu kashtamilla.`,
+        `Idi neat aakki wrap up cheyyaanulla avasaram illa.`,
+    ];
+    const listeningOnlyExtrasOr = [
+        `Ebe eitaaku figure out karibaa dorkaar nei.`,
+        `Mu eithire achi. Je ichha hue bol — beshi naa kama.`,
+        `Tume sab kichhi feel karipaaribaa — seta thik.`,
+        `Eitaaku neat kari wrap up karibaa dorkaar nei.`,
+    ];
+    const listeningOnlyExtrasMr = [
+        `Ata he figure out karayla ghai nahi.`,
+        `Mi itheche aahe. Kaay vaatel te sang — zyada ki kami.`,
+        `Tu he sab feel karayla harakhat nahi — bilkul theek aahe.`,
+        `Yala neatly wrap up karayla nako.`,
+    ];
 
     const nextStepLinesHi = [
         `Tumhe abhi comfort chahiye, clarity, ya next step?`,
@@ -1182,10 +1242,16 @@ export function buildLocalReply(
         ? pick(carryValidationMap[language] ?? carryValidationsEn, seed >>> 1)
         : pick(validations[signal], seed >>> 1);
 
+    const listeningOnlyMap: Partial<Record<string, string[]>> = {
+        en: listeningOnlyExtrasEn, hi: listeningOnlyExtrasHi, bn: listeningOnlyExtrasBn,
+        ta: listeningOnlyExtrasTa, te: listeningOnlyExtrasTe, gu: listeningOnlyExtrasGu,
+        pa: listeningOnlyExtrasPa, kn: listeningOnlyExtrasKn, ml: listeningOnlyExtrasMl,
+        or: listeningOnlyExtrasOr, mr: listeningOnlyExtrasMr,
+    };
     const extra = hasCarry
         ? pick((carryExtrasMap[language] ?? carryExtrasEn)[companionTone], seed >>> 5)
-        : userIntent === "venting" && language === "en"
-            ? pick(listeningOnlyExtrasEn, seed >>> 5)
+        : userIntent === "venting"
+            ? pick(listeningOnlyMap[language] ?? listeningOnlyExtrasEn, seed >>> 5)
             : pick(extrasByTone[companionTone], seed >>> 5);
 
     const base = `${correctionPrefix}${followUpPrefix}${opener} ${validation}`.trim();
