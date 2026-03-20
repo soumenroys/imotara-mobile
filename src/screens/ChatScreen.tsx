@@ -16,6 +16,7 @@ import {
   NativeScrollEvent,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from "react-native";
 
 // Haptic helpers (Vibration API — no native deps needed)
@@ -1467,6 +1468,13 @@ export default function ChatScreen() {
   });
 
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardWillShow", () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener("keyboardWillHide", () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const [typingStatus, setTypingStatus] = useState<TypingStatus>("idle");
   const [typingGlow] = useState(new Animated.Value(0));
@@ -3132,35 +3140,39 @@ export default function ChatScreen() {
           )}
         </View>
 
-        <Text
-          style={{
-            fontSize: 12,
-            color: colors.textSecondary,
-            marginTop: 2,
-            marginBottom: 4,
-          }}
-        >
-          A calm space to talk about your feelings.
-        </Text>
-
-        <View
-          style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}
-        >
-          <View
+        {!keyboardVisible && (
+          <Text
             style={{
-              width: 8,
-              height: 8,
-              borderRadius: 999,
-              marginRight: 6,
-              backgroundColor: hasUnsynced && isSyncing ? "#fbbf24" : hasUnsynced ? "#f97373" : syncHintAccent,
+              fontSize: 12,
+              color: colors.textSecondary,
+              marginTop: 2,
+              marginBottom: 4,
             }}
-          />
-          <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-            {syncHint}
+          >
+            A calm space to talk about your feelings.
           </Text>
-        </View>
+        )}
 
-        {isSyncing && (
+        {!keyboardVisible && (
+          <View
+            style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}
+          >
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 999,
+                marginRight: 6,
+                backgroundColor: hasUnsynced && isSyncing ? "#fbbf24" : hasUnsynced ? "#f97373" : syncHintAccent,
+              }}
+            />
+            <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+              {syncHint}
+            </Text>
+          </View>
+        )}
+
+        {!keyboardVisible && isSyncing && (
           <Text
             style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}
           >
@@ -3168,7 +3180,7 @@ export default function ChatScreen() {
           </Text>
         )}
 
-        {showRecentlySyncedPulse && (
+        {showRecentlySyncedPulse && !keyboardVisible && (
           <Text
             style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}
           >
@@ -3177,7 +3189,7 @@ export default function ChatScreen() {
         )}
 
         {/* Privacy mode badge */}
-        {(analysisMode === "local" || !cloudSyncAllowed) && (
+        {!keyboardVisible && (analysisMode === "local" || !cloudSyncAllowed) && (
           <View
             style={{
               alignSelf: "flex-start",
