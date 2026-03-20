@@ -245,7 +245,10 @@ function detectLangFromScript(message: string): string {
   if (/[\u0D00-\u0D7F]/.test(message)) return "ml";        // Malayalam
   if (/[\u0A00-\u0A7F]/.test(message)) return "pa";        // Punjabi/Gurmukhi
   if (/[\u0B00-\u0B7F]/.test(message)) return "or";        // Odia
-  if (/[\u0600-\u06FF]/.test(message)) return "ar";        // Arabic/Urdu
+  if (/[\u0590-\u05FF]/.test(message)) return "he";        // Hebrew
+  // Check Urdu-specific chars (ں پ چ ڈ ٹ گ ک ے ۓ) before generic Arabic block
+  if (/[\u067E\u0686\u0688\u0691\u0679\u06AF\u06A9\u06BA\u06D2\u06D3]/.test(message)) return "ur";
+  if (/[\u0600-\u06FF]/.test(message)) return "ar";        // Arabic
   if (/[\u0400-\u04FF]/.test(message)) return "ru";        // Russian/Cyrillic
   if (/[\u4E00-\u9FFF]/.test(message)) return "zh";        // Chinese
   if (/[\u3040-\u30FF]/.test(message)) return "ja";        // Japanese
