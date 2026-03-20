@@ -402,6 +402,55 @@ function applyMarathiUserGender(text: string, gender?: string): string {
         .replace(/\bsambhalishe\b/g, "sambhalishes");
 }
 
+// Tamil, Telugu, Kannada, Malayalam, Odia: 1st/2nd-person verbs are largely
+// gender-neutral in these templates. Functions are wired in for consistency
+// and can be extended if future templates introduce gendered forms.
+
+function applyTamilCompanionGender(text: string, gender?: string): string {
+    if (gender !== "female") return text;
+    // Tamil first-person verbs (irukken, ketkirein, purinjidhu) are gender-neutral.
+    // Self-referential adjectives may differ in some dialects; guard here for extension.
+    return text
+        .replace(/\bpurinjutten\b/gi, "purinjutten")   // neutral in standard Tamil
+        .replace(/\bkettirukken\b/gi, "kettirukken");   // neutral
+}
+
+function applyTeluguCompanionGender(text: string, gender?: string): string {
+    if (gender !== "female") return text;
+    // Telugu 1st-person (unnaanu, vintunnaanu) is gender-neutral.
+    // 3rd-person past tense varies (-aadu m / -indi f); extend here if templates grow.
+    return text
+        .replace(/\bayyaadu\b/g, "ayyindi")    // if companion self-describes a past action
+        .replace(/\bcesaadu\b/g, "cesindi");
+}
+
+function applyKannadaCompanionGender(text: string, gender?: string): string {
+    if (gender !== "female") return text;
+    // Kannada 1st-person (iddene, kelutiddene) is gender-neutral.
+    // Past participle predicate can vary (-anu m / -alu f); guard here.
+    return text
+        .replace(/\bbandhanu\b/gi, "bandhalu")
+        .replace(/\bidhanu\b/gi, "idhalu");
+}
+
+function applyMalayalamCompanionGender(text: string, gender?: string): string {
+    if (gender !== "female") return text;
+    // Malayalam 1st-person (undu, kekkunnundu) is gender-neutral.
+    // Participle forms for self-reference: extend here if needed.
+    return text
+        .replace(/\bvannirunnu\b/gi, "vannirunnu")  // neutral in Malayalam
+        .replace(/\bsahaayichchu\b/gi, "sahaayichchu");
+}
+
+function applyOdiaCompanionGender(text: string, gender?: string): string {
+    if (gender !== "female") return text;
+    // Odia 1st-person (achi, shunuchi) is gender-neutral.
+    // Past tense can vary; guard here for future template extension.
+    return text
+        .replace(/\bkaricha\b/gi, "karichi")
+        .replace(/\bashichi\b/gi, "ashichi");
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function buildLocalReply(
@@ -1129,6 +1178,16 @@ export function buildLocalReply(
     } else if (language === "mr") {
         finalMessage = applyMarathiCompanionGender(finalMessage, companionGender);
         finalMessage = applyMarathiUserGender(finalMessage, userGender);
+    } else if (language === "ta") {
+        finalMessage = applyTamilCompanionGender(finalMessage, companionGender);
+    } else if (language === "te") {
+        finalMessage = applyTeluguCompanionGender(finalMessage, companionGender);
+    } else if (language === "kn") {
+        finalMessage = applyKannadaCompanionGender(finalMessage, companionGender);
+    } else if (language === "ml") {
+        finalMessage = applyMalayalamCompanionGender(finalMessage, companionGender);
+    } else if (language === "or") {
+        finalMessage = applyOdiaCompanionGender(finalMessage, companionGender);
     }
 
     // Occasionally address user by name (~1 in 3 replies)
