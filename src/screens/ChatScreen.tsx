@@ -2962,9 +2962,9 @@ export default function ChatScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: colors.background }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={insets.bottom}
+      keyboardVerticalOffset={insets.top}
     >
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Offline / unsynced indicator */}
