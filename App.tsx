@@ -86,7 +86,7 @@ function AppShell() {
       <SettingsProvider>
         <HistoryProvider>
           <KeyboardAvoidingView
-            style={{ flex: 1 }}
+            style={{ flex: 1, backgroundColor: "#0f172a" }}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
           >
