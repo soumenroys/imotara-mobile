@@ -2215,7 +2215,11 @@ export default function ChatScreen() {
           let compatibility: any | undefined;
 
           // 2) If cloud succeeded, respect it
-          const remoteReply = String(remote.replyText || "").trim();
+          const remoteReply = String(remote.replyText || "").trim()
+              .replace(/\u2018|\u2019/g, "'")
+              .replace(/\u201C|\u201D/g, '"')
+              .replace(/\u2014/g, ' - ')
+              .replace(/\u2013/g, '-');
           if (remote.ok && remoteReply.length > 0) {
             replyText = remoteReply;
             source = "cloud";
