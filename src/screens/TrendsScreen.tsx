@@ -5,6 +5,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, Dimensions } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useColors } from "../theme/ThemeContext";
 
@@ -21,15 +22,15 @@ const FEEL_EMOTIONS: { key: EmotionBucket; emoji: string; label: string }[] = [
 ];
 
 // Deduplicated for rendering (Grateful uses hopeful bucket internally)
-const FEEL_BUTTONS: { bucket: EmotionBucket; emoji: string; label: string }[] = [
-  { bucket: "joy",      emoji: "😄", label: "Joy" },
-  { bucket: "hopeful",  emoji: "💚", label: "Hopeful" },
-  { bucket: "hopeful",  emoji: "🙏", label: "Grateful" },
-  { bucket: "sadness",  emoji: "💙", label: "Sad" },
-  { bucket: "stressed", emoji: "💛", label: "Stressed" },
-  { bucket: "anger",    emoji: "❤️", label: "Angry" },
-  { bucket: "confused", emoji: "🟣", label: "Confused" },
-  { bucket: "neutral",  emoji: "⚪️", label: "Neutral" },
+const FEEL_BUTTONS: { bucket: EmotionBucket; icon: string; label: string }[] = [
+  { bucket: "joy",      icon: "happy-outline",         label: "Joy" },
+  { bucket: "hopeful",  icon: "leaf-outline",          label: "Hopeful" },
+  { bucket: "hopeful",  icon: "heart-outline",         label: "Grateful" },
+  { bucket: "sadness",  icon: "sad-outline",           label: "Sad" },
+  { bucket: "stressed", icon: "flash-outline",         label: "Stressed" },
+  { bucket: "anger",    icon: "flame-outline",         label: "Angry" },
+  { bucket: "confused", icon: "help-circle-outline",   label: "Confused" },
+  { bucket: "neutral",  icon: "remove-circle-outline", label: "Neutral" },
 ];
 
 function FeelSection({
@@ -78,7 +79,7 @@ function FeelSection({
                   : colors.surface,
               }}
             >
-              <Text style={{ fontSize: 16 }}>{btn.emoji}</Text>
+              <Ionicons name={btn.icon as any} size={16} color={isActive ? "#fff" : EMOTION_META[btn.bucket].iconColor} />
               <Text style={{ fontSize: 13, color: isActive ? colors.textPrimary : colors.textSecondary, fontWeight: isActive ? "600" : "400" }}>
                 {btn.label}
               </Text>
@@ -298,9 +299,10 @@ function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useC
           </Text>
           {emotionBank && topEmotion && (
             <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, backgroundColor: EMOTION_META[topEmotion].color.replace(/[\d.]+\)$/, "0.18)"), borderWidth: 1, borderColor: EMOTION_META[topEmotion].color }}>
-              <Text style={{ fontSize: 9, color: colors.textPrimary, fontWeight: "600" }}>
-                {EMOTION_META[topEmotion].emoji} mood-matched
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                <Ionicons name={EMOTION_META[topEmotion].icon as any} size={9} color={colors.textPrimary} />
+                <Text style={{ fontSize: 9, color: colors.textPrimary, fontWeight: "600" }}>mood-matched</Text>
+              </View>
             </View>
           )}
         </View>
@@ -607,14 +609,14 @@ type EmotionBucket =
   | "joy"
   | "neutral";
 
-const EMOTION_META: Record<EmotionBucket, { emoji: string; color: string; label: string }> = {
-  sadness:  { emoji: "💙", color: "rgba(37,99,235,0.70)",   label: "Sad" },
-  stressed: { emoji: "💛", color: "rgba(202,138,4,0.70)",   label: "Stressed" },
-  anger:    { emoji: "❤️", color: "rgba(220,38,38,0.70)",   label: "Angry" },
-  confused: { emoji: "🟣", color: "rgba(124,58,237,0.70)",  label: "Confused" },
-  hopeful:  { emoji: "💚", color: "rgba(5,150,105,0.70)",   label: "Hopeful" },
-  joy:      { emoji: "😄", color: "rgba(250,204,21,0.80)",  label: "Joy" },
-  neutral:  { emoji: "⚪️", color: "rgba(100,116,139,0.55)", label: "Neutral" },
+const EMOTION_META: Record<EmotionBucket, { emoji: string; icon: string; iconColor: string; color: string; label: string }> = {
+  sadness:  { emoji: "💙", icon: "sad-outline",          iconColor: "#60a5fa", color: "rgba(37,99,235,0.70)",   label: "Sad" },
+  stressed: { emoji: "💛", icon: "flash-outline",         iconColor: "#facc15", color: "rgba(202,138,4,0.70)",   label: "Stressed" },
+  anger:    { emoji: "❤️", icon: "flame-outline",         iconColor: "#f87171", color: "rgba(220,38,38,0.70)",   label: "Angry" },
+  confused: { emoji: "🟣", icon: "help-circle-outline",   iconColor: "#c084fc", color: "rgba(124,58,237,0.70)",  label: "Confused" },
+  hopeful:  { emoji: "💚", icon: "leaf-outline",          iconColor: "#4ade80", color: "rgba(5,150,105,0.70)",   label: "Hopeful" },
+  joy:      { emoji: "😄", icon: "happy-outline",         iconColor: "#facc15", color: "rgba(250,204,21,0.80)",  label: "Joy" },
+  neutral:  { emoji: "⚪️", icon: "remove-circle-outline", iconColor: "#94a3b8", color: "rgba(100,116,139,0.55)", label: "Neutral" },
 };
 
 // 6-axis radar — joy(top), hopeful(top-right), sadness(bottom-right),
@@ -712,9 +714,8 @@ function EmotionRadarChart({
         const meta = EMOTION_META[key];
         return (
           <View key={i} style={{ position: "absolute", left: pos.x - 26, top: pos.y - 10, width: 52, alignItems: "center" }}>
-            <Text style={{ fontSize: 9, color: colors.textSecondary, textAlign: "center" }}>
-              {meta.emoji} {label}
-            </Text>
+            <Ionicons name={meta.icon as any} size={10} color={meta.iconColor} />
+            <Text style={{ fontSize: 9, color: colors.textSecondary, textAlign: "center" }}>{label}</Text>
           </View>
         );
       })}
@@ -785,13 +786,13 @@ function MoodLineChart({
   return (
     <View style={{ width: W, alignSelf: "center" }}>
       <View style={{ width: W, height: H, position: "relative" }}>
-        {/* Y-axis emoji anchors */}
-        {([["😄", 0.95], ["😐", 0.5], ["💙", 0.05]] as [string, number][]).map(([emoji, v], i) => {
+        {/* Y-axis labels */}
+        {([["hi", 0.95], ["mid", 0.5], ["lo", 0.05]] as [string, number][]).map(([label, v], i) => {
           const y = PAD_Y + (1 - v) * plotH;
           return (
             <View key={i}>
               <View style={{ position: "absolute", left: PAD_X, right: PAD_X, top: y, height: 1, backgroundColor: "rgba(148,163,184,0.10)" }} />
-              <Text style={{ position: "absolute", fontSize: 9, left: 0, top: y - 6, color: "rgba(148,163,184,0.55)" }}>{emoji}</Text>
+              <Text style={{ position: "absolute", fontSize: 8, left: 0, top: y - 5, color: "rgba(148,163,184,0.55)" }}>{label}</Text>
             </View>
           );
         })}
@@ -1081,7 +1082,7 @@ export default function TrendsScreen() {
       >
         <FeelSection colors={colors} onCheckin={handleCheckin} />
         <View style={{ alignItems: "center", paddingTop: 24 }}>
-          <Text style={{ fontSize: 32, marginBottom: 16 }}>📊</Text>
+          <Ionicons name="stats-chart-outline" size={32} color={colors.textSecondary} style={{ marginBottom: 16 }} />
           <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, textAlign: "center", marginBottom: 8 }}>
             No data yet
           </Text>
@@ -1116,7 +1117,7 @@ export default function TrendsScreen() {
           gap: 14,
         }}
       >
-        <Text style={{ fontSize: 36 }}>{streak >= 7 ? "🔥" : streak >= 3 ? "⚡" : "💬"}</Text>
+        <Ionicons name={(streak >= 7 ? "flame" : streak >= 3 ? "flash" : "chatbubble") as any} size={36} color={streak >= 7 ? "#f97316" : streak >= 3 ? "#facc15" : "#60a5fa"} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 22, fontWeight: "800", color: streak >= 3 ? "#fbbf24" : colors.textPrimary }}>
             {streak} day{streak !== 1 ? "s" : ""} in a row
@@ -1161,9 +1162,7 @@ export default function TrendsScreen() {
           <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>
             This week
           </Text>
-          <Text style={{ fontSize: 24, marginBottom: 4 }}>
-            {EMOTION_META[topEmotion].emoji}
-          </Text>
+          <Ionicons name={EMOTION_META[topEmotion].icon as any} size={24} color={EMOTION_META[topEmotion].iconColor} style={{ marginBottom: 4 }} />
           <Text style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>
             Your most common feeling: {EMOTION_META[topEmotion].label}
           </Text>
@@ -1183,7 +1182,7 @@ export default function TrendsScreen() {
         return (
           <View key={emotion} style={{ marginBottom: 10 }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
-              <Text style={{ fontSize: 16, marginRight: 8 }}>{meta.emoji}</Text>
+              <Ionicons name={meta.icon as any} size={16} color={meta.iconColor} style={{ marginRight: 8 }} />
               <Text style={{ fontSize: 13, color: colors.textPrimary, flex: 1 }}>{meta.label}</Text>
               <Text style={{ fontSize: 12, color: colors.textSecondary }}>{count}x</Text>
             </View>
@@ -1239,9 +1238,9 @@ export default function TrendsScreen() {
                   borderColor: isEmpty ? colors.border : "transparent",
                 }}
               >
-                <Text style={{ fontSize: isEmpty ? 14 : 18 }}>
-                  {isEmpty ? "·" : meta.emoji}
-                </Text>
+                {isEmpty
+                  ? <Text style={{ fontSize: 14, color: colors.textSecondary }}>·</Text>
+                  : <Ionicons name={meta.icon as any} size={14} color="#fff" />}
               </View>
               <Text style={{ fontSize: 9, color: colors.textSecondary, textAlign: "center" }}>
                 {day.label.split(" ")[0]}
@@ -1310,7 +1309,7 @@ export default function TrendsScreen() {
               {/* Dominant emotion */}
               {topEmotion && (
                 <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
-                  <Text style={{ fontSize: 28, marginRight: 10 }}>{EMOTION_META[topEmotion].emoji}</Text>
+                  <Ionicons name={EMOTION_META[topEmotion].icon as any} size={28} color={EMOTION_META[topEmotion].iconColor} style={{ marginRight: 10 }} />
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 13, color: colors.textSecondary }}>Most felt</Text>
                     <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary }}>{EMOTION_META[topEmotion].label}</Text>
@@ -1339,7 +1338,7 @@ export default function TrendsScreen() {
                       gap: 4,
                     }}
                   >
-                    <Text style={{ fontSize: 12 }}>{EMOTION_META[emotion as EmotionBucket].emoji}</Text>
+                    <Ionicons name={EMOTION_META[emotion as EmotionBucket].icon as any} size={12} color="#fff" />
                     <Text style={{ fontSize: 11, color: "#fff", fontWeight: "600" }}>{count}x</Text>
                   </View>
                 ))}
@@ -1524,7 +1523,7 @@ export default function TrendsScreen() {
               backgroundColor: colors.surface,
               padding: 16,
             }}>
-              {meta && <Text style={{ fontSize: 18, marginBottom: 8 }}>{meta.emoji}</Text>}
+              {meta && <Ionicons name={meta.icon as any} size={18} color={meta.iconColor} style={{ marginBottom: 8 }} />}
               <Text style={{ fontSize: 14, color: colors.textPrimary, lineHeight: 22, fontStyle: "italic" }}>
                 "{prompt}"
               </Text>

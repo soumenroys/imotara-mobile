@@ -1,6 +1,7 @@
 // src/screens/HistoryScreen.tsx
 import React from "react";
 import { View, Text, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, RefreshControl, Animated, PanResponder, Share } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
@@ -80,6 +81,18 @@ function getMoodEmojiForText(text: string): string {
     return "⚪️";
 }
 
+
+function getMoodIconName(emoji: string): string {
+    switch (emoji) {
+        case "💙": return "sad-outline";
+        case "💛": return "flash-outline";
+        case "❤️": return "flame-outline";
+        case "🟣": return "help-circle-outline";
+        case "💚": return "leaf-outline";
+        case "💜": return "happy-outline";
+        default:   return "remove-circle-outline";
+    }
+}
 
 function getEmotionSectionLabel(emoji: string): string {
     switch (emoji) {
@@ -434,6 +447,7 @@ export default function HistoryScreen() {
 
         return {
             emoji: dominantEmoji,
+            iconName: getMoodIconName(dominantEmoji),
             label: getEmotionSectionLabel(dominantEmoji),
             note,
             total,
@@ -474,7 +488,7 @@ export default function HistoryScreen() {
             return {
                 label: "Device-only · cloud sync is off",
                 variant: "neutral" as const,
-                icon: "📱",
+                iconName: "phone-portrait-outline",
             };
         }
 
@@ -482,7 +496,7 @@ export default function HistoryScreen() {
             return {
                 label: "Sync status: never synced",
                 variant: "neutral" as const,
-                icon: "☁",
+                iconName: "cloud-outline",
             };
         }
 
@@ -492,7 +506,7 @@ export default function HistoryScreen() {
             return {
                 label: "Sync issue · history is only on this device",
                 variant: "danger" as const,
-                icon: "⚠",
+                iconName: "warning-outline",
             };
         }
 
@@ -511,7 +525,7 @@ export default function HistoryScreen() {
         return {
             label: "Sync checked recently",
             variant: "neutral" as const,
-            icon: "☁",
+            iconName: "cloud-outline",
         };
     }, [effectiveLastSyncAt, lastSyncStatus, hasSyncError, canCloudSync]);
 
@@ -786,7 +800,7 @@ export default function HistoryScreen() {
                 }
                 ListEmptyComponent={isEmpty ? (
                     <View style={{ alignItems: "center", paddingTop: 40 }}>
-                        <Text style={{ fontSize: 32, marginBottom: 16 }}>💭</Text>
+                        <Ionicons name="chatbubble-ellipses-outline" size={32} color={colors.textSecondary} style={{ marginBottom: 16 }} />
                         <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, textAlign: "center", marginBottom: 8 }}>
                             Nothing here yet
                         </Text>
@@ -806,24 +820,30 @@ export default function HistoryScreen() {
                                     Your recent conversations with Imotara on this device.
                                 </Text>
                                 <View style={{ marginTop: 4, marginBottom: 6 }}>
-                                    <AppChip label={topChip.label} variant={topChip.variant} icon={topChip.icon} animate />
+                                    <AppChip label={topChip.label} variant={topChip.variant} icon={(topChip as any).icon} iconName={(topChip as any).iconName} animate />
                                 </View>
                                 {moodSummary ? (
                                     <View style={{ marginBottom: 10, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 12 }}>
                                         <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Quick mood summary</Text>
-                                        <Text style={{ fontSize: 14, fontWeight: "700", color: colors.textPrimary, marginBottom: 3 }}>{moodSummary.emoji} {moodSummary.label}</Text>
+                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                                            <Ionicons name={moodSummary.iconName as any} size={14} color={colors.textPrimary} />
+                                            <Text style={{ fontSize: 14, fontWeight: "700", color: colors.textPrimary }}>{moodSummary.label}</Text>
+                                        </View>
                                         <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 16 }}>{moodSummary.note} (Based on your last {moodSummary.total} messages.)</Text>
                                     </View>
                                 ) : (
                                     <View style={{ marginBottom: 10, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 12 }}>
                                         <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Quick mood summary</Text>
-                                        <Text style={{ fontSize: 14, fontWeight: "700", color: colors.textPrimary, marginBottom: 3 }}>⚪️ Not enough recent mood data yet</Text>
+                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                                            <Ionicons name="remove-circle-outline" size={14} color={colors.textSecondary} />
+                                            <Text style={{ fontSize: 14, fontWeight: "700", color: colors.textPrimary }}>Not enough recent mood data yet</Text>
+                                        </View>
                                         <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 16 }}>This appears after a few messages are captured with mood hints.</Text>
                                     </View>
                                 )}
                                 {onThisDay.length > 0 && (
                                     <View style={{ marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 12 }}>
-                                        <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textSecondary, marginBottom: 6 }}>📅 On This Day</Text>
+                                        <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textSecondary, marginBottom: 6 }}>On This Day</Text>
                                         {onThisDay.map((item) => {
                                             const d = new Date(item.timestamp ?? 0);
                                             const year = d.getFullYear();
@@ -976,7 +996,7 @@ export default function HistoryScreen() {
                     const isUser = item.from === "user";
                     const moodBaseText = getBaseTextForMood(siblings, index);
 
-                    let emotionHeader: string | null = null;
+                    let emotionHeader: { iconName: string; label: string } | null = null;
                     if (!isUser) {
                         const emoji =
                             getMoodEmojiForHistoryItem(item) ??
@@ -991,7 +1011,7 @@ export default function HistoryScreen() {
                                     getMoodEmojiForText(getBaseTextForMood(siblings, prevIdx));
                                 return prevEmoji === emoji;
                             });
-                        if (!hasPrevious) emotionHeader = `${emoji} ${label}`;
+                        if (!hasPrevious) emotionHeader = { iconName: getMoodIconName(emoji), label };
                     }
 
                     let showSessionDivider = false;
@@ -1018,7 +1038,8 @@ export default function HistoryScreen() {
                         : itemHasSyncError
                             ? "Sync issue · device only"
                             : "On this device only";
-                    const chipIcon = item.isSynced ? "✓" : itemHasSyncError ? "⚠" : "📱";
+                    const chipIconName = item.isSynced ? undefined : itemHasSyncError ? "warning-outline" : "phone-portrait-outline";
+                    const chipIcon = item.isSynced ? "✓" : undefined;
 
                     return (
                         <SwipeableRow
@@ -1039,9 +1060,10 @@ export default function HistoryScreen() {
                                 </View>
                             )}
                             {emotionHeader && (
-                                <Text style={{ marginTop: 4, marginBottom: 2, fontSize: 11, color: colors.textSecondary, alignSelf: "flex-start" }}>
-                                    {emotionHeader}
-                                </Text>
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4, marginBottom: 2, alignSelf: "flex-start" }}>
+                                    <Ionicons name={emotionHeader.iconName as any} size={11} color={colors.textSecondary} />
+                                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>{emotionHeader.label}</Text>
+                                </View>
                             )}
                             <View style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: "80%", padding: isUser ? 0 : 4, borderRadius: isUser ? 0 : 20, backgroundColor: moodHaloColor }}>
                                 <TouchableOpacity
@@ -1051,13 +1073,13 @@ export default function HistoryScreen() {
                                     style={{ alignSelf: "flex-start", maxWidth: "100%", backgroundColor: bubbleBackground, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: colors.border }}
                                 >
                                     <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textSecondary, marginBottom: 2 }}>
-                                        {isUser ? "You" : `Imotara ${getMoodEmojiForText(moodBaseText)}`}
+                                        {isUser ? "You" : "Imotara"}
                                     </Text>
                                     <Text style={{ fontSize: 14, color: colors.textPrimary }}>{item.text}</Text>
                                     <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4 }}>
                                         {formatTimeLabelSafe(item.timestamp)}
                                     </Text>
-                                    <AppChip label={chipLabel} variant={chipVariant} icon={chipIcon} animate style={{ alignSelf: isUser ? "flex-end" : "flex-start", marginTop: 6 }} />
+                                    <AppChip label={chipLabel} variant={chipVariant} icon={chipIcon} iconName={chipIconName} animate style={{ alignSelf: isUser ? "flex-end" : "flex-start", marginTop: 6 }} />
                                     {!isUser && typeof item.intensity === "number" && item.intensity > 0 && (
                                         <View style={{ marginTop: 6, flexDirection: "row", alignItems: "center", gap: 6 }}>
                                             <View style={{ flex: 1, height: 3, borderRadius: 2, backgroundColor: "rgba(148,163,184,0.2)" }}>

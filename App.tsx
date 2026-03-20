@@ -2,7 +2,6 @@
 import React from "react";
 import { StatusBar } from "expo-status-bar";
 import { KeyboardAvoidingView, Platform, View, Text, TouchableOpacity } from "react-native";
-import { useFonts } from "expo-font";
 import RootNavigator from "./src/navigation/RootNavigator";
 import AppThemeProvider from "./src/theme/AppThemeProvider";
 import { ThemeProvider } from "./src/theme/ThemeContext";
@@ -87,7 +86,7 @@ function AppShell() {
         <HistoryProvider>
           <KeyboardAvoidingView
             style={{ flex: 1, backgroundColor: "#0f172a" }}
-            behavior={Platform.OS === "ios" ? "height" : undefined}
+            behavior={Platform.OS === "ios" ? "height" : "padding"}
             keyboardVerticalOffset={0}
           >
             <RootNavigator />
@@ -103,13 +102,6 @@ function AppShell() {
 }
 
 export default function App() {
-  const [fontsLoaded] = useFonts({
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    ionicons: require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf"),
-  });
-
-  if (!fontsLoaded) return null;
-
   return (
     <ErrorBoundary>
       <AppShell />

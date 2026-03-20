@@ -9,6 +9,7 @@ import {
     TextStyle,
     Animated,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 export type AppChipVariant =
     | "neutral"
@@ -24,10 +25,16 @@ export type AppChipProps = {
     textStyle?: StyleProp<TextStyle>;
 
     /**
-     * Optional icon (e.g., "✓", "⚠", "☁")
+     * Optional icon (e.g., "✓", "!")
      * Non-breaking: if omitted, renders label only.
      */
     icon?: string;
+
+    /**
+     * Optional Ionicons icon name — renders an Ionicons glyph instead of text icon.
+     * Takes precedence over `icon` when provided.
+     */
+    iconName?: string;
 
     /**
      * Non-breaking enhancement:
@@ -54,6 +61,7 @@ const AppChip: React.FC<AppChipProps> = ({
     style,
     textStyle,
     icon,
+    iconName,
     animate = false,
 }) => {
     const scale = React.useRef(new Animated.Value(1)).current;
@@ -105,7 +113,9 @@ const AppChip: React.FC<AppChipProps> = ({
             ]}
         >
             <View style={styles.row}>
-                {icon ? (
+                {iconName ? (
+                    <Ionicons name={iconName as any} size={10} color={variantStyles.text[variant].color} style={{ marginRight: 6, opacity: 0.95 }} />
+                ) : icon ? (
                     <Text style={[styles.icon, variantStyles.text[variant]]}>
                         {icon}
                     </Text>
