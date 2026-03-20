@@ -436,6 +436,9 @@ export async function callImotaraAI(
         // age context for vocabulary/register calibration
         ...(toneContext?.user?.ageTone && toneContext.user.ageTone !== "prefer_not" ? { userAge: toneContext.user.ageTone } : opts?.settings?.ageTone && opts.settings.ageTone !== "prefer_not" ? { userAge: opts.settings.ageTone } : {}),
         ...(toneContext?.companion?.ageTone && toneContext.companion.ageTone !== "prefer_not" ? { companionAge: toneContext.companion.ageTone } : {}),
+        // gender context for verb conjugation and grammatical agreement
+        ...(toneContext?.user?.gender && toneContext.user.gender !== "prefer_not" ? { userGender: toneContext.user.gender } : {}),
+        ...(toneContext?.companion?.gender && toneContext.companion.gender !== "prefer_not" ? { companionGender: toneContext.companion.gender } : {}),
       };
 
       const chatRes = await fetchWithTimeout(
