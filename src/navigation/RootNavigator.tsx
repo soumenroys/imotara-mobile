@@ -4,7 +4,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, Keyboard } from "react-native";
 
 import ChatScreen from "../screens/ChatScreen";
 import HistoryScreen from "../screens/HistoryScreen";
@@ -132,6 +132,13 @@ export default function RootNavigator() {
     // --- Onboarding ---
     const [onboardingVisible, setOnboardingVisible] = useState(false);
     const [onboardingChecked, setOnboardingChecked] = useState(false);
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+    useEffect(() => {
+        const show = Keyboard.addListener("keyboardWillShow", () => setKeyboardVisible(true));
+        const hide = Keyboard.addListener("keyboardWillHide", () => setKeyboardVisible(false));
+        return () => { show.remove(); hide.remove(); };
+    }, []);
 
     useEffect(() => {
         AsyncStorage.getItem(ONBOARDING_KEY).then((val) => {
@@ -177,7 +184,7 @@ export default function RootNavigator() {
                         headerTitleStyle: {
                             fontWeight: "600",
                         },
-                        tabBarStyle: {
+                        tabBarStyle: keyboardVisible ? { display: "none" } : {
                             backgroundColor: colors.surfaceSoft,
                             borderTopColor: colors.border,
                         },
@@ -207,7 +214,7 @@ export default function RootNavigator() {
                     <Tab.Screen
                         name="Chat"
                         component={ChatScreen}
-                        options={{ title: "Chat" }}
+                        options={{ headerShown: false, title: "Chat" }}
                     />
                     <Tab.Screen
                         name="History"
