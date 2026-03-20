@@ -1208,7 +1208,9 @@ function MessageBubble({
 }
 
 export default function ChatScreen() {
-  console.log("[imotara] ChatScreen mounted");
+  useEffect(() => {
+    console.log("[imotara] ChatScreen mounted");
+  }, []);
   const colors = useColors();
   const tabBarHeight = useBottomTabBarHeight();
 

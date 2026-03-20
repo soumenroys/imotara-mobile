@@ -6,6 +6,7 @@ import React, {
     useEffect,
     useRef,
     useCallback,
+    useMemo,
     type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -371,7 +372,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         useState<PushRemoteHistoryResult | null>(null);
     const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
 
-    // Auto-sync delay (seconds) AND global “last sync” setters from Settings
+    // Auto-sync delay (seconds) AND global "last sync" setters from Settings
     const {
         autoSyncDelaySeconds,
         setLastSyncAt: setSettingsLastSyncAt,
@@ -643,7 +644,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         save();
     }, [history, hydrated]);
 
-    const addToHistory = (item: HistoryItem) => {
+    const addToHistory = useCallback((item: HistoryItem) => {
         // Preserve existing behavior, but make it consistent:
         // any new local item should be unsynced unless explicitly marked.
         const normalized: HistoryItem = {
@@ -651,11 +652,11 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             isSynced: typeof item.isSynced === "boolean" ? item.isSynced : false,
         };
         setHistory((prev) => [...prev, normalized]);
-    };
+    }, []);
 
-    const clearHistory = () => {
+    const clearHistory = useCallback(() => {
         setHistory([]);
-        // Reset sync UI state too (avoids stale “synced just now” after clearing)
+        // Reset sync UI state too (avoids stale "synced just now" after clearing)
         setIsSyncing(false);
         setLastSyncResult(null);
         setLastSyncAt(null);
@@ -664,11 +665,11 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         AsyncStorage.removeItem(historyKey).catch((err) =>
             debugWarn("Failed to clear history storage:", err)
         );
-    };
+    }, [chatLinkKey, localUserScopeId]);
 
-    const deleteFromHistory = (id: string) => {
+    const deleteFromHistory = useCallback((id: string) => {
         setHistory((prev) => prev.filter((item) => item.id !== id));
-    };
+    }, []);
 
     const pushHistoryToRemote = useCallback(async (): Promise<PushRemoteHistoryResult> => {
         // Avoid overlap (especially with background auto-sync / foreground resume)
@@ -1007,7 +1008,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
     const syncNow = runSync;
 
-    const mergeRemoteHistory = (rawItems: unknown[]): MergeRemoteResult => {
+    const mergeRemoteHistory = useCallback((rawItems: unknown[]): MergeRemoteResult => {
         const totalRemote = Array.isArray(rawItems) ? rawItems.length : 0;
         if (!Array.isArray(rawItems) || rawItems.length === 0) {
             return { totalRemote, normalized: 0, added: 0 };
@@ -1059,7 +1060,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             normalized: normalizedCount,
             added: addedCount,
         };
-    };
+    }, []);
 
     const hasUnsyncedChanges = history.some((h) => !h.isSynced);
 
@@ -1113,25 +1114,43 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         cloudSyncAllowed,
     ]);
 
+    const contextValue = useMemo(() => ({
+        history,
+        addToHistory,
+        clearHistory,
+        deleteFromHistory,
+        pushHistoryToRemote,
+        runSync,
+        syncNow,
+        mergeRemoteHistory,
+        isSyncing,
+        lastSyncResult,
+        lastSyncAt,
+        hasUnsyncedChanges,
+        potentialDuplicates,
+        licenseTier,
+        setLicenseTier,
+    }), [
+        history,
+        addToHistory,
+        clearHistory,
+        deleteFromHistory,
+        pushHistoryToRemote,
+        runSync,
+        syncNow,
+        mergeRemoteHistory,
+        isSyncing,
+        lastSyncResult,
+        lastSyncAt,
+        hasUnsyncedChanges,
+        potentialDuplicates,
+        licenseTier,
+        setLicenseTier,
+    ]);
+
     return (
         <HistoryContext.Provider
-            value={{
-                history,
-                addToHistory,
-                clearHistory,
-                deleteFromHistory,
-                pushHistoryToRemote,
-                runSync,
-                syncNow,
-                mergeRemoteHistory,
-                isSyncing,
-                lastSyncResult,
-                lastSyncAt,
-                hasUnsyncedChanges,
-                potentialDuplicates,
-                licenseTier,
-                setLicenseTier,
-            }}
+            value={contextValue}
         >
             {children}
         </HistoryContext.Provider>
