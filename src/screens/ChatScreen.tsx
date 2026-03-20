@@ -14,6 +14,8 @@ import {
   Linking,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  KeyboardAvoidingView,
+  Platform,
   Keyboard,
 } from "react-native";
 
@@ -1468,17 +1470,10 @@ export default function ChatScreen() {
 
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
-    const show = Keyboard.addListener("keyboardWillShow", (e) => {
-      setKeyboardVisible(true);
-      setKeyboardHeight(e.endCoordinates.height);
-    });
-    const hide = Keyboard.addListener("keyboardWillHide", () => {
-      setKeyboardVisible(false);
-      setKeyboardHeight(0);
-    });
+    const show = Keyboard.addListener("keyboardWillShow", () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener("keyboardWillHide", () => setKeyboardVisible(false));
     return () => { show.remove(); hide.remove(); };
   }, []);
 
@@ -2966,7 +2961,12 @@ export default function ChatScreen() {
     input.trim().length === 0 || isTyping || isSendingRef.current;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: keyboardHeight }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
+    >
+    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
       {/* Offline / unsynced indicator */}
       {!isOnline ? (
         <View style={{ backgroundColor: "rgba(239,68,68,0.90)", paddingVertical: 5, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
@@ -3851,5 +3851,6 @@ export default function ChatScreen() {
       {/* Error / info toast — non-intrusive, auto-dismisses */}
       <Toast ref={toastRef} />
     </View>
+    </KeyboardAvoidingView>
   );
 }
