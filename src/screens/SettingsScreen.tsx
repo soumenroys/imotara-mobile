@@ -1,6 +1,7 @@
 // src/screens/SettingsScreen.tsx
 import React from "react";
 import Constants from "expo-constants";
+import { Ionicons } from "@expo/vector-icons";
 
 
 import {
@@ -1089,7 +1090,7 @@ export default function SettingsScreen() {
                                 gap: 6,
                             }}
                         >
-                            <Text style={{ fontSize: 16 }}>{isDark ? "\uD83C\uDF19" : "\u2600\uFE0F"}</Text>
+                            <Ionicons name={isDark ? "moon-outline" : "sunny-outline"} size={16} color={colors.textPrimary} />
                             <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600" }}>
                                 Switch to {isDark ? "Light" : "Dark"}
                             </Text>
