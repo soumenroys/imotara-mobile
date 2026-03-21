@@ -15,6 +15,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   Keyboard,
+  KeyboardAvoidingView,
   Platform,
 } from "react-native";
 
@@ -1406,6 +1407,8 @@ export default function ChatScreen() {
     pushHistoryToRemote,
     runSync,
     syncNow,
+    pauseAutoSync,
+    resumeAutoSync,
   } = store;
 
   const {
@@ -1485,6 +1488,11 @@ export default function ChatScreen() {
 
   const scrollViewRef = useRef<ScrollView | null>(null);
   const toastRef = useRef<ToastHandle>(null);
+
+  // Dynamic top spacer — pushes messages toward bottom when content is short
+  const [scrollViewHeight, setScrollViewHeight] = useState(0);
+  const [messagesContentHeight, setMessagesContentHeight] = useState(0);
+  const topSpacerHeight = Math.max(0, scrollViewHeight - messagesContentHeight - 16);
 
   // ✅ RN-safe typing (fixes TS issues in many RN setups)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2121,6 +2129,7 @@ export default function ChatScreen() {
     // ✅ 80/20: block double taps / overlapping send cycles
     if (isTyping || isSendingRef.current) return;
     isSendingRef.current = true;
+    pauseAutoSync();
     haptic.tap();
     sendStartedAtRef.current = Date.now();
 
@@ -2657,6 +2666,7 @@ export default function ChatScreen() {
 
           // ✅ release send-lock after full cycle ends
           isSendingRef.current = false;
+          resumeAutoSync();
         }
       })();
     }, 800);
@@ -3060,6 +3070,10 @@ export default function ChatScreen() {
     input.trim().length === 0 || isTyping || isSendingRef.current;
 
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
       {/* Offline / unsynced indicator */}
       {!isOnline ? (
@@ -3410,6 +3424,7 @@ export default function ChatScreen() {
             paddingTop: 4,
             paddingBottom: 80,
           }}
+          onLayout={(e) => setScrollViewHeight(e.nativeEvent.layout.height)}
           onScroll={handleScroll}
           scrollEventThrottle={50}
           onScrollEndDrag={() => {
@@ -3417,6 +3432,9 @@ export default function ChatScreen() {
             if (pullOffset < -60) handleRefresh();
           }}
         >
+          {/* Dynamic spacer pushes messages to bottom when content is short */}
+          {topSpacerHeight > 0 && <View style={{ height: topSpacerHeight }} />}
+          <View onLayout={(e) => setMessagesContentHeight(e.nativeEvent.layout.height)}>
           {messages.length === 0 && (
             <View style={{ paddingTop: 24, paddingBottom: 16 }}>
               <Text
@@ -3892,6 +3910,7 @@ export default function ChatScreen() {
               </View>
             </Animated.View>
           )}
+          </View>{/* end messages measuring View */}
         </ScrollView>
 
       </View>
@@ -3958,5 +3977,6 @@ export default function ChatScreen() {
       {/* Error / info toast — non-intrusive, auto-dismisses */}
       <Toast ref={toastRef} />
     </View>
+    </KeyboardAvoidingView>
   );
 }

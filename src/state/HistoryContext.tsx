@@ -368,6 +368,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
     // Lite sync status state for Mobile Sync Phase 2
     const [isSyncing, setIsSyncing] = useState(false);
+    const [syncPaused, setSyncPaused] = useState(false);
+    const pauseAutoSync  = useCallback(() => setSyncPaused(true),  []);
+    const resumeAutoSync = useCallback(() => setSyncPaused(false), []);
     const [lastSyncResult, setLastSyncResult] =
         useState<PushRemoteHistoryResult | null>(null);
     const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
@@ -1089,6 +1092,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         if (!hydrated) return;
         if (!hasUnsyncedChanges) return;
         if (isSyncing) return;
+        if (syncPaused) return;
 
         // ✅ NEW: Respect plan. FREE should not schedule background cloud pushes.
         if (!cloudSyncAllowed && !LAUNCH_CLOUD_SYNC_FREE_FOR_ALL) return;
@@ -1108,6 +1112,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         hydrated,
         hasUnsyncedChanges,
         isSyncing,
+        syncPaused,
         autoSyncDelaySeconds,
         pushHistoryToRemote,
         clearAutoSyncTimer,
@@ -1130,6 +1135,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         potentialDuplicates,
         licenseTier,
         setLicenseTier,
+        pauseAutoSync,
+        resumeAutoSync,
     }), [
         history,
         addToHistory,
@@ -1146,6 +1153,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         potentialDuplicates,
         licenseTier,
         setLicenseTier,
+        pauseAutoSync,
+        resumeAutoSync,
     ]);
 
     return (

@@ -7,8 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 
 const CHECK_URL = "https://connectivitycheck.gstatic.com/generate_204";
-const TIMEOUT_MS = 3000;
-const POLL_INTERVAL_MS = 15_000;
+const TIMEOUT_MS = 6000;       // increased from 3s — Indian networks can be briefly slow without being offline
+const POLL_INTERVAL_MS = 20_000; // increased from 15s — reduces false-positive offline flashes
 
 async function checkOnline(): Promise<boolean> {
     try {
