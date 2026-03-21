@@ -13,7 +13,106 @@ import {
 } from "react-native";
 import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useColors } from "../../theme/ThemeContext";
+
+// ── Lotus mandala header ─────────────────────────────────────────────────────
+function LotusHeader() {
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Slow breathe-glow (4s cycle)
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 1, duration: 4000, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 4000, useNativeDriver: true }),
+      ])
+    ).start();
+    // Very slow outer-ring rotation (30s full turn)
+    Animated.loop(
+      Animated.timing(rotateAnim, { toValue: 1, duration: 30000, useNativeDriver: true })
+    ).start();
+  }, []);
+
+  const outerRotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+  const innerRotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ["360deg", "0deg"] });
+  const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.75] });
+  const glowScale   = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] });
+
+  const OUTER_PETALS = 8;
+  const INNER_PETALS = 8;
+  const cx = 110; // center offset from left (half of 220 width)
+
+  return (
+    <LinearGradient
+      colors={["rgba(30,14,60,1)", "rgba(15,23,42,1)"]}
+      style={{ width: "100%", height: 170, overflow: "hidden", borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
+    >
+      {/* Starfield */}
+      {[
+        [20,18],[50,40],[80,15],[140,30],[175,20],[195,45],[30,60],[160,55],
+        [90,50],[120,10],[60,70],[200,70],[10,80],[170,80],[100,65],
+      ].map(([x,y], i) => (
+        <View key={i} style={{ position:"absolute", left:x, top:y,
+          width: i%3===0?2:1.5, height: i%3===0?2:1.5, borderRadius:2,
+          backgroundColor:`rgba(255,255,255,${0.3+0.4*(i%3)/3})` }} />
+      ))}
+
+      {/* Outer glow ring */}
+      <Animated.View style={{
+        position:"absolute", left:cx-60, top:85-60,
+        width:120, height:120, borderRadius:60,
+        backgroundColor:"rgba(167,139,250,0.08)",
+        opacity: glowOpacity, transform:[{scale: glowScale}],
+      }} />
+
+      {/* Outer petals (rotating) */}
+      <Animated.View style={{ position:"absolute", left:cx-45, top:85-45, width:90, height:90,
+        alignItems:"center", justifyContent:"center", transform:[{rotate: outerRotate}] }}>
+        {Array.from({length: OUTER_PETALS}, (_,i) => (
+          <View key={i} style={{
+            position:"absolute",
+            width:18, height:40, borderRadius:9,
+            backgroundColor:"rgba(167,139,250,0.18)",
+            borderWidth:1, borderColor:"rgba(167,139,250,0.45)",
+            transform:[{rotate:`${i*(360/OUTER_PETALS)}deg`},{translateY:-30}],
+          }} />
+        ))}
+      </Animated.View>
+
+      {/* Inner petals (counter-rotating) */}
+      <Animated.View style={{ position:"absolute", left:cx-28, top:85-28, width:56, height:56,
+        alignItems:"center", justifyContent:"center", transform:[{rotate: innerRotate}] }}>
+        {Array.from({length: INNER_PETALS}, (_,i) => (
+          <View key={i} style={{
+            position:"absolute",
+            width:10, height:22, borderRadius:5,
+            backgroundColor:"rgba(56,189,248,0.20)",
+            borderWidth:1, borderColor:"rgba(56,189,248,0.50)",
+            transform:[{rotate:`${i*(360/INNER_PETALS)+22.5}deg`},{translateY:-17}],
+          }} />
+        ))}
+      </Animated.View>
+
+      {/* Centre jewel */}
+      <Animated.View style={{
+        position:"absolute", left:cx-10, top:85-10, width:20, height:20, borderRadius:10,
+        backgroundColor:"rgba(251,191,36,0.30)", borderWidth:1.5,
+        borderColor:"rgba(251,191,36,0.80)",
+        opacity: glowOpacity,
+        transform:[{scale: glowScale}],
+      }} />
+
+      {/* Label */}
+      <View style={{ position:"absolute", bottom:14, width:"100%", alignItems:"center" }}>
+        <Text style={{ fontSize:11, fontWeight:"600", color:"rgba(196,181,253,0.75)", letterSpacing:2 }}>
+          BREATHE  &amp;  BE
+        </Text>
+      </View>
+    </LinearGradient>
+  );
+}
 
 type Pattern = {
   name: string;
@@ -224,24 +323,26 @@ export function BreathingModal({ visible, onClose }: Props) {
             borderTopRightRadius: 24,
             borderWidth: 1,
             borderColor: colors.border,
-            paddingHorizontal: 20,
-            paddingTop: 20,
             paddingBottom: 36,
+            overflow: "hidden",
           }}
           onPress={(e) => e.stopPropagation()}
         >
-          {/* Header */}
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary }}>
-              Breathing Exercise
-            </Text>
-            <TouchableOpacity
-              onPress={() => { stopExercise(); onClose(); }}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="close" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
+          {/* Lotus mandala header image */}
+          <LotusHeader />
+
+          {/* Close button overlaid on header */}
+          <TouchableOpacity
+            onPress={() => { stopExercise(); onClose(); }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{ position: "absolute", top: 16, right: 16, zIndex: 10,
+              backgroundColor: "rgba(0,0,0,0.35)", borderRadius: 20, padding: 6 }}
+          >
+            <Ionicons name="close" size={18} color="rgba(255,255,255,0.8)" />
+          </TouchableOpacity>
+
+          {/* Rest of content */}
+          <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
 
           {/* Pattern selector */}
           <View style={{ flexDirection: "row", gap: 8, marginBottom: 20 }}>
@@ -380,6 +481,7 @@ export function BreathingModal({ visible, onClose }: Props) {
               {running ? "Stop" : "Start Breathing"}
             </Text>
           </TouchableOpacity>
+          </View>{/* end paddingHorizontal wrapper */}
         </Pressable>
       </Pressable>
     </Modal>
