@@ -1,5 +1,5 @@
 // src/components/imotara/BreathingModal.tsx
-// Animated breathing exercise modal — 3 patterns, no external dependencies.
+// Animated breathing exercise modal — 3 patterns, background music toggle.
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -11,6 +11,8 @@ import {
   Vibration,
   Pressable,
 } from "react-native";
+import { Audio } from "expo-av";
+import { Ionicons } from "@expo/vector-icons";
 import { useColors } from "../../theme/ThemeContext";
 
 type Pattern = {
@@ -49,6 +51,21 @@ const PATTERNS: Pattern[] = [
   },
 ];
 
+type MusicTrack = "none" | "bowl" | "rain" | "ocean";
+
+const MUSIC_OPTIONS: { id: MusicTrack; label: string; icon: React.ComponentProps<typeof Ionicons>["name"] }[] = [
+  { id: "none",  label: "Silent",     icon: "volume-mute-outline" },
+  { id: "bowl",  label: "Bowl",       icon: "radio-button-on-outline" },
+  { id: "rain",  label: "Rain",       icon: "rainy-outline" },
+  { id: "ocean", label: "Ocean",      icon: "water-outline" },
+];
+
+const MUSIC_SOURCES: Record<Exclude<MusicTrack, "none">, any> = {
+  bowl:  require("../../../assets/sounds/bowl.wav"),
+  rain:  require("../../../assets/sounds/rain.wav"),
+  ocean: require("../../../assets/sounds/ocean.wav"),
+};
+
 type Props = {
   visible: boolean;
   onClose: () => void;
@@ -62,6 +79,10 @@ export function BreathingModal({ visible, onClose }: Props) {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [cycles, setCycles] = useState(0);
 
+  // Music state
+  const [musicTrack, setMusicTrack] = useState<MusicTrack>("bowl");
+  const soundRef = useRef<Audio.Sound | null>(null);
+
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(0.6)).current;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -69,6 +90,36 @@ export function BreathingModal({ visible, onClose }: Props) {
 
   const pattern = PATTERNS[selectedPattern];
 
+  // ── Music helpers ────────────────────────────────────────────────────────────
+  const stopMusic = useCallback(async () => {
+    if (soundRef.current) {
+      try {
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+      } catch {}
+      soundRef.current = null;
+    }
+  }, []);
+
+  const startMusic = useCallback(async (track: MusicTrack) => {
+    await stopMusic();
+    if (track === "none") return;
+    try {
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+      const { sound } = await Audio.Sound.createAsync(
+        MUSIC_SOURCES[track],
+        { isLooping: true, volume: 0.35, shouldPlay: true },
+      );
+      soundRef.current = sound;
+    } catch (e) {
+      console.warn("[BreathingModal] music load failed:", e);
+    }
+  }, [stopMusic]);
+
+  // ── Breathing logic ──────────────────────────────────────────────────────────
   const stopExercise = useCallback(() => {
     setRunning(false);
     setPhaseIndex(0);
@@ -77,7 +128,8 @@ export function BreathingModal({ visible, onClose }: Props) {
     if (animRef.current) animRef.current.stop();
     scaleAnim.setValue(1);
     opacityAnim.setValue(0.6);
-  }, [scaleAnim, opacityAnim]);
+    void stopMusic();
+  }, [scaleAnim, opacityAnim, stopMusic]);
 
   const startPhase = useCallback(
     (pIdx: number) => {
@@ -85,7 +137,6 @@ export function BreathingModal({ visible, onClose }: Props) {
       setPhaseIndex(pIdx);
       setSecondsLeft(phase.seconds);
 
-      // Breathing animation
       if (animRef.current) animRef.current.stop();
       const isInhale = phase.label === "Inhale";
       const isExhale = phase.label === "Exhale";
@@ -115,7 +166,8 @@ export function BreathingModal({ visible, onClose }: Props) {
     setRunning(true);
     setCycles(0);
     startPhase(0);
-  }, [startPhase]);
+    void startMusic(musicTrack);
+  }, [startPhase, startMusic, musicTrack]);
 
   // Countdown timer
   useEffect(() => {
@@ -125,11 +177,9 @@ export function BreathingModal({ visible, onClose }: Props) {
     intervalRef.current = setInterval(() => {
       setSecondsLeft((prev) => {
         if (prev <= 1) {
-          // Advance phase
           setPhaseIndex((curPhase) => {
             const nextPhase = (curPhase + 1) % pattern.phases.length;
             if (nextPhase === 0) setCycles((c) => c + 1);
-            // Start next phase on next tick to avoid stale closure
             setTimeout(() => startPhase(nextPhase), 0);
             return nextPhase;
           });
@@ -148,6 +198,11 @@ export function BreathingModal({ visible, onClose }: Props) {
   useEffect(() => {
     if (!visible) stopExercise();
   }, [visible, stopExercise]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { void stopMusic(); };
+  }, [stopMusic]);
 
   const currentPhase = pattern.phases[phaseIndex];
 
@@ -184,12 +239,12 @@ export function BreathingModal({ visible, onClose }: Props) {
               onPress={() => { stopExercise(); onClose(); }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Text style={{ fontSize: 18, color: colors.textSecondary }}>x</Text>
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           {/* Pattern selector */}
-          <View style={{ flexDirection: "row", gap: 8, marginBottom: 24 }}>
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 20 }}>
             {PATTERNS.map((p, i) => (
               <TouchableOpacity
                 key={p.name}
@@ -217,8 +272,49 @@ export function BreathingModal({ visible, onClose }: Props) {
             ))}
           </View>
 
+          {/* Music selector */}
+          <View style={{ marginBottom: 20 }}>
+            <Text style={{ fontSize: 11, fontWeight: "600", color: colors.textSecondary, marginBottom: 8, letterSpacing: 0.5 }}>
+              BACKGROUND SOUND
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {MUSIC_OPTIONS.map((opt) => {
+                const isSelected = musicTrack === opt.id;
+                return (
+                  <TouchableOpacity
+                    key={opt.id}
+                    onPress={() => {
+                      setMusicTrack(opt.id);
+                      // If already running, swap music immediately
+                      if (running) void startMusic(opt.id);
+                    }}
+                    style={{
+                      flex: 1,
+                      alignItems: "center",
+                      paddingVertical: 8,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: isSelected ? "rgba(167,139,250,0.6)" : colors.border,
+                      backgroundColor: isSelected ? "rgba(167,139,250,0.12)" : "rgba(30,41,59,0.5)",
+                      gap: 4,
+                    }}
+                  >
+                    <Ionicons
+                      name={opt.icon}
+                      size={16}
+                      color={isSelected ? "#c4b5fd" : colors.textSecondary}
+                    />
+                    <Text style={{ fontSize: 10, fontWeight: "600", color: isSelected ? "#c4b5fd" : colors.textSecondary }}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
           {/* Breathing circle */}
-          <View style={{ alignItems: "center", marginVertical: 20 }}>
+          <View style={{ alignItems: "center", marginVertical: 16 }}>
             <Animated.View
               style={{
                 width: 140,
@@ -249,7 +345,7 @@ export function BreathingModal({ visible, onClose }: Props) {
           </View>
 
           {/* Phase guide */}
-          <View style={{ flexDirection: "row", justifyContent: "center", gap: 12, marginBottom: 24 }}>
+          <View style={{ flexDirection: "row", justifyContent: "center", gap: 12, marginBottom: 20 }}>
             {pattern.phases.map((ph, i) => (
               <View key={`${ph.label}-${i}`} style={{ alignItems: "center" }}>
                 <View
