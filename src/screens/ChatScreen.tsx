@@ -1145,7 +1145,15 @@ function MessageBubble({
         const activeReaction = reactions.get(message.id);
         const isSpeaking = speakingMessageId === message.id;
         const isBookmarked = bookmarks.has(message.id);
-        const REACTION_EMOJIS = ["❤️", "😢", "😮", "😂", "👍", "🙏"];
+        const REACTION_OPTIONS: { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string }[] = [
+          { icon: "heart", color: "#ef4444" },
+          { icon: "sad-outline", color: "#60a5fa" },
+          { icon: "happy-outline", color: "#fbbf24" },
+          { icon: "thumbs-up", color: "#4ade80" },
+          { icon: "hand-left", color: "#a78bfa" },
+          { icon: "flame", color: "#fb923c" },
+        ];
+        const activeOption = REACTION_OPTIONS.find((r) => r.icon === activeReaction);
         return (
           <View style={{ marginLeft: 4, marginBottom: 6, gap: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1165,11 +1173,11 @@ function MessageBubble({
                 onPress={() => setReactionPickerOpen((v) => !v)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                {activeReaction ? (
-                  <Text style={{ fontSize: 16 }}>{activeReaction}</Text>
-                ) : (
-                  <Ionicons name="happy-outline" size={18} color={colors.textSecondary} />
-                )}
+                <Ionicons
+                  name={activeOption ? activeOption.icon : "happy-outline"}
+                  size={18}
+                  color={activeOption ? activeOption.color : (reactionPickerOpen ? colors.textPrimary : colors.textSecondary)}
+                />
               </TouchableOpacity>
 
               {/* Copy */}
@@ -1201,14 +1209,19 @@ function MessageBubble({
 
             {/* Expandable reaction picker */}
             {reactionPickerOpen && (
-              <View style={{ flexDirection: "row", gap: 8, paddingVertical: 4 }}>
-                {REACTION_EMOJIS.map((emoji) => (
+              <View style={{ flexDirection: "row", gap: 12, paddingVertical: 4, paddingLeft: 2 }}>
+                {REACTION_OPTIONS.map((opt) => (
                   <TouchableOpacity
-                    key={emoji}
-                    onPress={() => { onReact(message.id, emoji); setReactionPickerOpen(false); }}
+                    key={opt.icon}
+                    onPress={() => { onReact(message.id, opt.icon); setReactionPickerOpen(false); }}
                     hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
-                    <Text style={{ fontSize: 20, opacity: activeReaction === emoji ? 1 : 0.6 }}>{emoji}</Text>
+                    <Ionicons
+                      name={opt.icon}
+                      size={22}
+                      color={opt.color}
+                      style={{ opacity: activeReaction === opt.icon ? 1 : 0.55 }}
+                    />
                   </TouchableOpacity>
                 ))}
               </View>
