@@ -900,9 +900,15 @@ type MessageBubbleProps = {
   lastSyncStatus: string | null;
   dismissedCrisisCards: Set<string>;
   reactions: Map<string, string>;
+  speakingMessageId: string | null;
   onLongPress: (msg: ChatMessage) => void;
   onDismissCrisisCard: (id: string) => void;
   onRetry: (messageId: string, prevUserText: string) => void;
+  onCopy: (text: string) => void;
+  onSpeak: (id: string, text: string) => void;
+  onStopSpeak: () => void;
+  onBookmark: (id: string) => void;
+  onReact: (id: string, emoji: string) => void;
 };
 
 function MessageBubble({
@@ -916,10 +922,17 @@ function MessageBubble({
   lastSyncStatus,
   dismissedCrisisCards,
   reactions,
+  speakingMessageId,
   onLongPress,
   onDismissCrisisCard,
   onRetry,
+  onCopy,
+  onSpeak,
+  onStopSpeak,
+  onBookmark,
+  onReact,
 }: MessageBubbleProps) {
+  const [reactionPickerOpen, setReactionPickerOpen] = React.useState(false);
   const isUser = message.from === "user";
   const isSearchMatch = searchMatchIds.has(message.id);
   const isActiveMatch = searchActiveMatchId === message.id;
@@ -1088,10 +1101,6 @@ function MessageBubble({
         </TouchableOpacity>
       )}
 
-      {reactions.get(message.id) && (
-        <Text style={{ fontSize: 18, marginTop: 4 }}>{reactions.get(message.id)}</Text>
-      )}
-
       {!isUser && showContinuityNote && (
         <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 6, opacity: 0.9 }}>
           This conversation is now part of your Emotion History.
@@ -1130,6 +1139,83 @@ function MessageBubble({
           </LinearGradient>
         )}
       </Pressable>
+
+      {/* Inline action row — bot messages only */}
+      {!isUser && !message.isPending && (() => {
+        const activeReaction = reactions.get(message.id);
+        const isSpeaking = speakingMessageId === message.id;
+        const isBookmarked = bookmarks.has(message.id);
+        const REACTION_EMOJIS = ["❤️", "😢", "😮", "😂", "👍", "🙏"];
+        return (
+          <View style={{ marginLeft: 4, marginBottom: 6, gap: 4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              {/* Source badge */}
+              <View style={{
+                paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1,
+                borderColor: message.source === "cloud" ? "rgba(56,189,248,0.45)" : "rgba(148,163,184,0.35)",
+                backgroundColor: message.source === "cloud" ? "rgba(56,189,248,0.10)" : "rgba(148,163,184,0.10)",
+              }}>
+                <Text style={{ fontSize: 10, fontWeight: "600", color: message.source === "cloud" ? "#7dd3fc" : colors.textSecondary }}>
+                  {message.source === "cloud" ? "Cloud AI" : "Local"}
+                </Text>
+              </View>
+
+              {/* Reaction toggle */}
+              <TouchableOpacity
+                onPress={() => setReactionPickerOpen((v) => !v)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                {activeReaction ? (
+                  <Text style={{ fontSize: 16 }}>{activeReaction}</Text>
+                ) : (
+                  <Ionicons name="happy-outline" size={18} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
+
+              {/* Copy */}
+              <TouchableOpacity onPress={() => onCopy(message.text)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              {/* TTS */}
+              <TouchableOpacity
+                onPress={() => isSpeaking ? onStopSpeak() : onSpeak(message.id, message.text)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons
+                  name={isSpeaking ? "stop-circle-outline" : "volume-high-outline"}
+                  size={18}
+                  color={isSpeaking ? "#7dd3fc" : colors.textSecondary}
+                />
+              </TouchableOpacity>
+
+              {/* Bookmark */}
+              <TouchableOpacity onPress={() => onBookmark(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons
+                  name={isBookmarked ? "star" : "star-outline"}
+                  size={18}
+                  color={isBookmarked ? "#fbbf24" : colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Expandable reaction picker */}
+            {reactionPickerOpen && (
+              <View style={{ flexDirection: "row", gap: 8, paddingVertical: 4 }}>
+                {REACTION_EMOJIS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    onPress={() => { onReact(message.id, emoji); setReactionPickerOpen(false); }}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Text style={{ fontSize: 20, opacity: activeReaction === emoji ? 1 : 0.6 }}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        );
+      })()}
 
       {/* Crisis safety card */}
       {!isUser && (() => {
@@ -3735,6 +3821,7 @@ export default function ChatScreen() {
                 lastSyncStatus={lastSyncStatus}
                 dismissedCrisisCards={dismissedCrisisCards}
                 reactions={reactions}
+                speakingMessageId={speakingMessageId}
                 onLongPress={setActionMessage}
                 onDismissCrisisCard={dismissCrisisCard}
                 onRetry={(messageId, prevUserText) => {
@@ -3742,6 +3829,18 @@ export default function ChatScreen() {
                   deleteFromHistory(messageId);
                   setInput(prevUserText);
                 }}
+                onCopy={handleCopyMessage}
+                onSpeak={(id, text) => {
+                  const gender = toneContext?.companion?.enabled
+                    ? toneContext?.companion?.gender
+                    : toneContext?.user?.gender as string | undefined;
+                  const lang = toneContext?.user?.preferredLang ?? "en";
+                  setSpeakingMessageId(id);
+                  speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null));
+                }}
+                onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); }}
+                onBookmark={handleToggleBookmark}
+                onReact={addReaction}
               />
             ))}
 
