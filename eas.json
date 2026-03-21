@@ -45,6 +45,10 @@
         "appleId": "roysoumen@icloud.com",
         "ascAppId": "6756697569",
         "appleTeamId": "MY64TKZ69W"
+      },
+      "android": {
+        "serviceAccountKeyPath": "/Users/soumenroy/Downloads/imotara-651b778a7dbb.json",
+        "track": "internal"
       }
     }
   }
