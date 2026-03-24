@@ -2,6 +2,7 @@
 import React from "react";
 import Constants from "expo-constants";
 import { Ionicons } from "@expo/vector-icons";
+import * as WebBrowser from "expo-web-browser";
 
 
 import {
@@ -824,6 +825,26 @@ export default function SettingsScreen() {
                     {"\n\n"}Your messages are never shared publicly — sync only stores a
                     private cloud copy for you.
                 </Text>
+
+                {/* Privacy Policy & Terms links — required by App Store guideline 5.1.1 */}
+                <View style={{ flexDirection: "row", marginBottom: 24, gap: 20 }}>
+                    <TouchableOpacity
+                        onPress={() => WebBrowser.openBrowserAsync("https://imotaraapp.vercel.app/privacy")}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                        <Text style={{ fontSize: 13, color: colors.primary, textDecorationLine: "underline" }}>
+                            Privacy Policy
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => WebBrowser.openBrowserAsync("https://imotaraapp.vercel.app/terms")}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                        <Text style={{ fontSize: 13, color: colors.primary, textDecorationLine: "underline" }}>
+                            Terms of Use
+                        </Text>
+                    </TouchableOpacity>
+                </View>
 
                 {/* ✅ Support / Donation card */}
                 <AppSurface style={{ marginBottom: 16 }}>
