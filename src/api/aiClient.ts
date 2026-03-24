@@ -448,7 +448,7 @@ export async function callImotaraAI(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(chatReplyPayload),
         },
-        Math.min(opts?.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS, 18_000),
+        opts?.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS,
       );
 
       if (chatRes.ok) {
@@ -458,8 +458,10 @@ export async function callImotaraAI(
 
         const chatReplyText = String(chatData?.text ?? "").trim();
 
-        // Accept the response only if GPT actually produced it (not a fallback/error)
-        if (chatReplyText && chatData?.meta?.from === "openai") {
+        // Accept any non-empty reply from the server — including server-side fallbacks.
+        // Previously required meta.from === "openai" which discarded valid cached/fallback
+        // replies and caused a redundant second call to /api/respond.
+        if (chatReplyText) {
           const safeReplyText = chatReplyText.length > MAX_REMOTE_REPLY_CHARS
             ? chatReplyText.slice(0, MAX_REMOTE_REPLY_CHARS).trimEnd() + "…"
             : chatReplyText;

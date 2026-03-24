@@ -1,14 +1,19 @@
 // src/hooks/useOnlineStatus.ts
 // Lightweight connectivity check — no external deps.
-// Uses a HEAD request to Google's connectivity check endpoint (204, no body).
-// Polls every 15s; also re-checks on AppState foreground transition.
+// Uses a HEAD request to the Imotara API (primary) so we know the actual backend
+// is reachable, not just that the internet exists. Falls back to Google's
+// connectivity check if the API base URL is unavailable.
+// Polls every 10s; also re-checks on AppState foreground transition.
 
 import { useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
+import { IMOTARA_API_BASE_URL } from "../config/api";
 
-const CHECK_URL = "https://connectivitycheck.gstatic.com/generate_204";
-const TIMEOUT_MS = 6000;       // increased from 3s — Indian networks can be briefly slow without being offline
-const POLL_INTERVAL_MS = 20_000; // increased from 15s — reduces false-positive offline flashes
+// Check actual API reachability, not just generic internet connectivity.
+// A HEAD request to the API base URL is cheap and gives an accurate signal.
+const CHECK_URL = IMOTARA_API_BASE_URL || "https://connectivitycheck.gstatic.com/generate_204";
+const TIMEOUT_MS = 6000;      // 6s — enough for Indian networks without being too forgiving
+const POLL_INTERVAL_MS = 10_000; // reduced from 20s — halves the stale-status window
 
 async function checkOnline(): Promise<boolean> {
     try {

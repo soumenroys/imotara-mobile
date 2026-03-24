@@ -29,37 +29,52 @@ function localFallback(
     };
 }
 
+async function tryRemote(
+    userText: string,
+    toneContext?: ToneContextPayload,
+): Promise<MobileAIResult | null> {
+    const remote = await callImotaraAI(userText, toneContext ? { toneContext } : undefined);
+
+    const message =
+        typeof (remote as any)?.message === "string"
+            ? String((remote as any).message)
+            : typeof (remote as any)?.replyText === "string"
+                ? String((remote as any).replyText)
+                : "";
+
+    if (remote.ok && message.trim().length > 0) {
+        return {
+            replyText: message,
+            moodHint: undefined,
+            source: "remote",
+            followUp:
+                typeof (remote as any)?.followUp === "string"
+                    ? (remote as any).followUp
+                    : undefined,
+            reflectionSeed: (remote as any)?.reflectionSeed ?? undefined,
+        };
+    }
+    return null;
+}
+
 export async function runMobileAI(
     userText: string,
     insightsEnabled: boolean,
     toneContext?: ToneContextPayload,
     recentContext?: LocalRecentContext
 ): Promise<MobileAIResult> {
+    // First attempt
     try {
-        const remote = await callImotaraAI(userText, toneContext ? { toneContext } : undefined);
+        const result = await tryRemote(userText, toneContext);
+        if (result) return result;
+    } catch { /* fall through to retry */ }
 
-        const message =
-            typeof (remote as any)?.message === "string"
-                ? String((remote as any).message)
-                : typeof (remote as any)?.replyText === "string"
-                    ? String((remote as any).replyText)
-                    : "";
+    // One retry after 2s — handles transient network spikes without going straight to local
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+        const result = await tryRemote(userText, toneContext);
+        if (result) return result;
+    } catch { /* fall through to local */ }
 
-        if (remote.ok && message.trim().length > 0) {
-            return {
-                replyText: message,
-                moodHint: undefined,
-                source: "remote",
-                followUp:
-                    typeof (remote as any)?.followUp === "string"
-                        ? (remote as any).followUp
-                        : undefined,
-                reflectionSeed: (remote as any)?.reflectionSeed ?? undefined,
-            };
-        }
-
-        return localFallback(userText, toneContext, recentContext);
-    } catch {
-        return localFallback(userText, toneContext, recentContext);
-    }
+    return localFallback(userText, toneContext, recentContext);
 }
