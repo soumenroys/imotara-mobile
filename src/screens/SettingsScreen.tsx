@@ -189,6 +189,51 @@ export default function SettingsScreen() {
         donate: boolean;
     }>({ testRemote: false, pushOnly: false, syncNow: false, donate: false });
 
+    // ─── Profile sync (Supabase cross-device) ────────────────────────────────
+    // Capture initial toneContext to decide whether to pull from server on mount
+    const initialToneRef = React.useRef(toneContext);
+
+    // Pull: on mount, if local profile is empty/default, fetch from server
+    React.useEffect(() => {
+        if (!accessToken) return;
+        const base = getApiBaseUrl();
+        if (!base) return;
+        const hasLocal = initialToneRef.current?.user?.name || initialToneRef.current?.companion?.name;
+        if (hasLocal) return; // local profile exists — don't overwrite
+        fetch(`${base}/api/profile/sync`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+                if (!mountedRef.current) return;
+                const tc = data?.toneContext;
+                const hasServer = tc?.user?.name || tc?.companion?.name || tc?.user?.preferredLang;
+                if (hasServer) setToneContext(tc);
+            })
+            .catch(() => {}); // silent — sync is best-effort
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [accessToken]);
+
+    // Push: when toneContext changes and user is logged in, sync to server (debounced 2s)
+    React.useEffect(() => {
+        if (!accessToken) return;
+        const base = getApiBaseUrl();
+        if (!base) return;
+        const timer = setTimeout(() => {
+            if (!mountedRef.current) return;
+            fetch(`${base}/api/profile/sync`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify(toneContext ?? {}),
+            }).catch(() => {}); // silent — sync is best-effort
+        }, 2000);
+        return () => clearTimeout(timer);
+    }, [toneContext, accessToken]);
+    // ─────────────────────────────────────────────────────────────────────────
+
     // ✅ Daily check-in reminder
     const [reminderEnabled, setReminderEnabled] = React.useState(false);
     const [reminderLoading, setReminderLoading] = React.useState(false);
