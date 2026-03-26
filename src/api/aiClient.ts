@@ -280,6 +280,52 @@ function detectLangFromRomanHints(message: string): string {
   return best && best[1] >= 1 ? best[0] : "en";
 }
 
+/** Detects explicit language-switch intent in a message.
+ *  Only fires when a clear switch verb is present alongside a language name —
+ *  bare language mentions ("I love Arabic poetry") will NOT match.
+ *  Returns ISO code if found, otherwise null. Identical logic to web respondRemote.ts. */
+function detectExplicitLangRequest(text: string): string | null {
+  if (!text) return null;
+  const t = text.toLowerCase().trim();
+
+  // Intent verbs that signal the user wants to switch language
+  const intentVerb = /\b(speak|talk|reply|write|respond|use|switch|change|try|chat|communicate|answer|converse)\b/;
+  // Preposition patterns: "in X", "to X", "using X", "with X"
+  const prep = /\b(in|to|using|with|into)\b/;
+  const hasIntent = intentVerb.test(t) || prep.test(t);
+
+  // Language name → ISO code. Word boundaries prevent partial matches.
+  const langPatterns: [RegExp, string][] = [
+    [/\benglish\b/,    "en"],
+    [/\bhindi\b/,      "hi"],
+    [/\bbengali\b|\bbangla\b/, "bn"],
+    [/\bmarathi\b/,    "mr"],
+    [/\btamil\b/,      "ta"],
+    [/\btelugu\b/,     "te"],
+    [/\bgujarati\b/,   "gu"],
+    [/\bkannada\b/,    "kn"],
+    [/\bmalayalam\b/,  "ml"],
+    [/\bpunjabi\b/,    "pa"],
+    [/\bodia\b|\boriya\b/, "or"],
+    [/\barabic\b/,     "ar"],
+    [/\burdu\b/,       "ur"],
+    [/\brussian\b/,    "ru"],
+    [/\bchinese\b|\bmandarin\b/, "zh"],
+    [/\bjapanese\b/,   "ja"],
+    [/\bspanish\b/,    "es"],
+    [/\bfrench\b/,     "fr"],
+    [/\bgerman\b/,     "de"],
+    [/\bportuguese\b/, "pt"],
+  ];
+
+  if (!hasIntent) return null;
+
+  for (const [pattern, code] of langPatterns) {
+    if (pattern.test(t)) return code;
+  }
+  return null;
+}
+
 function deriveEmotionHintFromMessage(message: string): string | undefined {
   const raw = String(message || "").trim();
   if (!raw) return undefined;
@@ -404,12 +450,16 @@ export async function callImotaraAI(
     // which caused short robotic replies like "I'm here with you." for all questions.
     const chatReplyUrl = `${IMOTARA_API_BASE_URL}/api/chat-reply`;
     try {
-      // Resolve language: explicit preference → script detection → Roman-script hints
+      // Resolve language: explicit switch request > script/Roman detection > profile preference > "en"
+      // Explicit wins so user can override a locked profile language mid-conversation.
+      const _explicitLang = detectExplicitLangRequest(message);
       const _scriptLang = detectLangFromScript(message);
-      const chatReplyLang =
+      const _detectedLang = _scriptLang !== "en" ? _scriptLang : detectLangFromRomanHints(message);
+      const _profileLang =
         opts?.preferredLanguage ||
-        (toneContext?.user?.preferredLang as string | undefined) ||
-        (_scriptLang !== "en" ? _scriptLang : detectLangFromRomanHints(message));
+        (toneContext?.user?.preferredLang as string | undefined);
+      const chatReplyLang =
+        _explicitLang || (_detectedLang !== "en" ? _detectedLang : (_profileLang || "en"));
 
       // Inject user's name (from Settings) as a system message so GPT can
       // personalize naturally without waiting for Supabase memory lookup.
