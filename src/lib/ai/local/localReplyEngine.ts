@@ -641,7 +641,7 @@ export function buildLocalReply(
     const userGender = (toneContext?.user as any)?.gender;
     const userAge = (toneContext?.user as any)?.ageTone ?? (toneContext?.user as any)?.ageRange;
 
-    const sessionTurn = recentContext?.recentAssistantTexts?.length ?? 0;
+    const sessionTurn = toneContext?.sessionTurn ?? recentContext?.recentAssistantTexts?.length ?? 0;
     const seed = hash32(
         `${message}::${language}::${recentSignature}::${relationship}::${companionToneFromRel}::${sessionTurn}`
     );
@@ -947,7 +947,6 @@ export function buildLocalReply(
     }
 
     // ── Long-conversation context bridge (English) ───────────────────────────
-    const sessionTurn = toneContext?.sessionTurn ?? 0;
     const recentTexts = recentContext?.recentUserTexts ?? [];
     const prevSignal = detectDominantSignalInHistory(recentTexts);
     const topicRecurrence = keyTopic ? countTopicRecurrence(keyTopic, recentTexts) : 0;
