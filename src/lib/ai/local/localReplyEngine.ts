@@ -933,6 +933,13 @@ export function buildLocalReply(
             `I hear you  -  let's sit with this for a moment.`,
             `That makes sense to feel that way.`,
             `Take your time. I'm not going anywhere.`,
+            `Yeah. I hear that.`,
+            `Okay  -  I'm right here.`,
+            `That's a lot to sit with.`,
+            `I'm not going anywhere. Let's just breathe for a moment.`,
+            `Of course. Take it at your own pace.`,
+            `That much is already clear  -  and it's okay.`,
+            `Mm. I'm with you in this.`,
         ],
         supportive: [
             `I hear you.`,
@@ -941,6 +948,13 @@ export function buildLocalReply(
             `I'm glad you reached out.`,
             `I'm listening, fully.`,
             `That sounds really difficult.`,
+            `Oh. That's a heavy thing to carry.`,
+            `Yeah. I'm here  -  say whatever you need to.`,
+            `I'm so glad you said something.`,
+            `That must have been hard to even put into words.`,
+            `Hmm. Tell me more  -  I want to understand.`,
+            `I'm not just listening. I'm really here with you.`,
+            `That landed. I felt that.`,
         ],
         practical: [
             `Okay. Let's look at this clearly.`,
@@ -948,6 +962,9 @@ export function buildLocalReply(
             `Alright  -  let's figure out what matters most right now.`,
             `Let's think through this together.`,
             `That's a real situation. Let's work through it.`,
+            `Right. Let's not make this bigger than it needs to be.`,
+            `Okay, I'm with you  -  let's see what we're actually dealing with.`,
+            `Got it. What's the first thing that feels most stuck?`,
         ],
         coach: [
             `Okay  -  let's work through this together.`,
@@ -955,18 +972,27 @@ export function buildLocalReply(
             `That's real. Let's get our footing and start from here.`,
             `I hear you. Let's figure out where to begin.`,
             `You've got more in you than you think right now.`,
+            `Yeah. Let's not get ahead of ourselves  -  one thing at a time.`,
+            `I hear you. And I think you can move through this.`,
+            `Okay. Let's find the part that we can actually touch first.`,
         ],
         "gentle-humor": [
             `Okay, I'm with you.`,
             `Noted  -  and I mean that genuinely.`,
             `That's a lot. You don't have to carry it alone.`,
             `Fair enough. Let's make this a little more manageable.`,
+            `Alright, I got you.`,
+            `Yeah, that sounds like a lot  -  let's take it down a notch.`,
+            `Okay. Heavy situation, lighter approach  -  ready?`,
         ],
         direct: [
             `Got it. Let's be honest with each other.`,
             `Okay. Let's look at this straight.`,
             `Understood. Let's keep this clear and real.`,
             `I hear you. Let's get to what actually matters.`,
+            `Alright  -  no fluff. What's actually going on?`,
+            `Yeah. Let's just say the real thing here.`,
+            `Okay. I'm listening. What's the core of it?`,
         ],
     };
 
@@ -1072,6 +1098,12 @@ export function buildLocalReply(
             `That's genuinely hard  -  not just a little hard.`,
             `What you're feeling makes complete sense.`,
             `That kind of pain stays with you  -  I can hear it.`,
+            `That's not a small thing  -  that's real weight.`,
+            `I can hear how much this is sitting on you.`,
+            `Pain like this doesn't stay neat  -  it spills into everything.`,
+            `Something this heavy deserves to be taken seriously, not pushed aside.`,
+            `Of course that hurts. That would hurt anyone.`,
+            `It makes sense that this is still with you.`,
         ],
         anxious: [
             `That sounds like your mind is running at full speed.`,
@@ -1080,6 +1112,11 @@ export function buildLocalReply(
             `That's a lot of uncertainty to hold at once.`,
             `Anxiety about this is a very human response.`,
             `Your body is picking up on something that actually matters.`,
+            `When everything feels uncertain, the mind doesn't know where to land  -  and that's exhausting.`,
+            `That low-grade hum of dread takes more out of you than people realize.`,
+            `Of course your mind keeps circling it. That's what anxiety does  -  it won't let things rest.`,
+            `That kind of pressure lives in the body too, not just the mind.`,
+            `You're not overthinking  -  something real is happening and your system knows it.`,
         ],
         angry: [
             `That anger makes a lot of sense.`,
@@ -1088,6 +1125,11 @@ export function buildLocalReply(
             `Yeah  -  that's genuinely unfair.`,
             `That kind of thing gets under anyone's skin.`,
             `It's okay to be angry about this.`,
+            `That anger is pointing at something real  -  it's not just noise.`,
+            `Of course you're frustrated. Anyone would be.`,
+            `Sometimes anger is the clearest signal that something mattered and got broken.`,
+            `You're not overreacting. This was worth being upset about.`,
+            `Yeah. That crossed a line  -  it makes sense you're feeling this way.`,
         ],
         tired: [
             `That kind of exhaustion goes deeper than sleep can fix.`,
@@ -1096,6 +1138,11 @@ export function buildLocalReply(
             `That kind of tired builds up quietly and then hits all at once.`,
             `You're allowed to be worn out by this.`,
             `That's a real kind of depletion, not just tiredness.`,
+            `That bone-level tired  -  when even rest doesn't feel like enough.`,
+            `It sounds like you've been running on empty for a while.`,
+            `Sometimes the body just says "I've been carrying this too long."`,
+            `That kind of tiredness isn't weakness  -  it's what happens when you give too much for too long.`,
+            `It makes sense your system is slowing down. It's asking you to listen.`,
         ],
         okay: [
             `Tell me a little more  -  I want to understand.`,
@@ -1104,6 +1151,10 @@ export function buildLocalReply(
             `I'm curious  -  what made you reach out today?`,
             `What's the one thing that feels most present right now?`,
             `Walk me through what you've been feeling.`,
+            `Something brought you here. What is it?`,
+            `What's the thing you've been carrying around today?`,
+            `I'm in no rush. What's sitting with you?`,
+            `What's weighing on you most right now?`,
         ],
     };
 
@@ -1779,6 +1830,20 @@ export function buildLocalReply(
         `What's the part of this that's been hardest to say out loud?`,
         `What does carrying all this feel like in your body right now?`,
         `If things were a little lighter  -  what's the first thing that would change?`,
+        signal === "sad"
+            ? `What's hurting the most right now  -  is it the situation itself, or something underneath it?`
+            : signal === "anxious"
+                ? `What's the one thing that feels most out of your control right now?`
+                : signal === "angry"
+                    ? `What would need to change for this to feel even a little more bearable?`
+                    : signal === "tired"
+                        ? `When did you last feel like you could genuinely rest  -  even for a moment?`
+                        : `What's the thing you haven't quite been able to say yet?`,
+        keyTopic
+            ? `The ${keyTopic} piece  -  is that the part that's been with you the longest?`
+            : `Has this been building up for a while, or did something specific trigger it?`,
+        `If you could change just one thing about this right now, what would it be?`,
+        `What's the part of this you're least sure how to handle?`,
     ];
     const reflectLinesHi = [
         keyTopic ? `Tumne ${keyTopic} ki baat ki  -  abhi us mein sabse zyada kya daba raha hai?` : `Is mein abhi sabse zyada kya mehsoos ho raha hai?`,
@@ -1803,6 +1868,10 @@ export function buildLocalReply(
         `I'm with you on this  -  whether that's talking it through or finding something concrete to do next.`,
         `Is it more useful to keep talking this through, or to find one small thing to move?`,
         `What would feel more real right now  -  just being heard, or doing something about it?`,
+        `Do you want to keep going deeper into this, or would it help to think about what's next?`,
+        `What would feel like relief right now  -  talking more, or finding one small thing to do?`,
+        `We don't have to solve it all. What's the one thing that would make today a little lighter?`,
+        `Is there something specific you need from me right now  -  just to listen, or to think through options?`,
     ];
     // Listening-only extras  -  used when the user is venting.
     // Statements only, no questions, no binary choices.
@@ -2294,6 +2363,14 @@ export function buildLocalReply(
         : "";
 
     const opener = pickAvoidingRecent(openers, seed, recentContext?.recentAssistantTexts ?? []);
+
+    // Natural humanizing marker — applied ~25% of turns for English only.
+    // Uses a separate seed window (>>>13) so it varies independently of opener/validation.
+    const naturalMarkersEn = ["", "", "", "", "Hmm. ", "Oh. ", "Yeah. ", "Ah. "];
+    const naturalMarker = (language === "en" && !correctionPrefix && !followUpPrefix)
+        ? naturalMarkersEn[(seed >>> 13) % naturalMarkersEn.length]
+        : "";
+
     const hasCarry = signal === "okay" && hasRecentEmotionalSignal(recentContext);
 
     const carryValidationMap: Partial<Record<string, string[]>> = {
@@ -2335,7 +2412,7 @@ export function buildLocalReply(
             ? pick(listeningOnlyMap[language] ?? listeningOnlyExtrasEn, seed >>> 5)
             : pick(extrasByTone[companionTone], seed >>> 5);
 
-    const base = `${correctionPrefix}${followUpPrefix}${opener} ${validation}`.trim();
+    const base = `${naturalMarker}${correctionPrefix}${followUpPrefix}${opener} ${validation}`.trim();
     const storyPart = storyLine ? " " + storyLine : "";
     const mythPart = mythLine ? " " + mythLine : "";
     const quotePart = quoteLine ? " " + quoteLine : "";
