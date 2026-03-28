@@ -1318,6 +1318,11 @@ export default function ChatScreen() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  // ✅ Ref always holds the latest input value synchronously.
+  // Fixes iOS autocorrect race condition: tapping an autocomplete suggestion fires
+  // onChangeText → setState (async), but if the user immediately taps Send, handleSend
+  // reads stale state. The ref is updated first (sync) so handleSend always gets the full text.
+  const latestInputRef = useRef("");
   const [inputHeight, setInputHeight] = useState(40);
   const [isTyping, setIsTyping] = useState(false);
   const [typingDots, setTypingDots] = useState(1);
@@ -1973,6 +1978,7 @@ export default function ChatScreen() {
 
             // Clear in-memory UI immediately (extra-safe UX)
             setMessages([]);
+            latestInputRef.current = "";
             setInput("");
             setInputHeight(40);
             setActionMessage(null);
@@ -2119,7 +2125,8 @@ export default function ChatScreen() {
   const CHAR_LIMIT = 2000;
 
   const handleSend = (overrideText?: string) => {
-    const trimmed = (overrideText ?? input).trim();
+    // Use ref value (always current) instead of state (may be stale due to async setState)
+    const trimmed = (overrideText ?? latestInputRef.current).trim();
     if (!trimmed) return;
     if (trimmed.length > CHAR_LIMIT) {
       Alert.alert("Message too long", `Please shorten your message to under ${CHAR_LIMIT} characters.`);
@@ -2162,6 +2169,7 @@ export default function ChatScreen() {
     });
 
     setMessages((prev) => [...prev, userMessage]);
+    latestInputRef.current = "";
     setInput("");
     setInputHeight(40);
 
@@ -2794,6 +2802,7 @@ export default function ChatScreen() {
   }, [history.length]);
 
   const handleInputChange = (text: string) => {
+    latestInputRef.current = text;
     setInput(text);
   };
 
@@ -3955,7 +3964,7 @@ export default function ChatScreen() {
         voiceState={voiceInput.state as any}
         voiceDurationMs={voiceInput.durationMs}
         colors={colors}
-        onChangeText={setInput}
+        onChangeText={handleInputChange}
         onContentSizeChange={handleContentSizeChange}
         onSend={() => handleSend()}
         onMicPress={async () => {
