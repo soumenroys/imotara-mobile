@@ -10,16 +10,19 @@ import { AppState, type AppStateStatus } from "react-native";
 import { IMOTARA_API_BASE_URL } from "../config/api";
 
 // Check actual API reachability, not just generic internet connectivity.
-// A HEAD request to the API base URL is cheap and gives an accurate signal.
-const CHECK_URL = IMOTARA_API_BASE_URL || "https://connectivitycheck.gstatic.com/generate_204";
-const TIMEOUT_MS = 6000;      // 6s — enough for Indian networks without being too forgiving
+// Uses GET /api/health (lightweight JSON endpoint) instead of HEAD on the root —
+// React Native's fetch can silently fail HEAD requests on some networks/CDNs.
+const API_HEALTH_URL = IMOTARA_API_BASE_URL
+    ? `${IMOTARA_API_BASE_URL}/api/health`
+    : "https://connectivitycheck.gstatic.com/generate_204";
+const TIMEOUT_MS = 8000;      // 8s — enough for Indian networks without being too forgiving
 const POLL_INTERVAL_MS = 10_000; // reduced from 20s — halves the stale-status window
 
 async function checkOnline(): Promise<boolean> {
     try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-        await fetch(CHECK_URL, { method: "HEAD", signal: controller.signal });
+        await fetch(API_HEALTH_URL, { method: "GET", signal: controller.signal });
         clearTimeout(timer);
         return true; // any HTTP response (even 5xx) means network is up; only thrown exceptions mean offline
     } catch {
