@@ -15,6 +15,7 @@ import {
     TextInput,
     KeyboardAvoidingView,
     Platform,
+    Linking,
 } from "react-native";
 
 import { useHistoryStore } from "../state/HistoryContext";
@@ -44,16 +45,6 @@ import AppButton from "../components/ui/AppButton";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
 
-// ✅ Razorpay Checkout (India-first donations)
-let RazorpayCheckout: any = null;
-try {
-    // In dev builds, the module is usually under `.default`
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require("react-native-razorpay");
-    RazorpayCheckout = mod?.default ?? mod;
-} catch {
-    RazorpayCheckout = null;
-}
 
 // ✅ Licensing types (foundation only)
 import type { LicenseTier } from "../licensing/featureGates";
@@ -99,17 +90,6 @@ function getApiBaseUrl(): string {
     // Normalize trailing slash
     return v.endsWith("/") ? v.slice(0, -1) : v;
 }
-
-type DonationIntentRazorpayResponse = {
-    ok: boolean;
-    razorpay?: {
-        orderId: string;
-        keyId: string; // rzp_test_...
-        amount: number; // paise
-        currency: string; // "INR"
-    };
-    error?: string;
-};
 
 export default function SettingsScreen() {
     const { accessToken } = useAuth();
@@ -601,197 +581,16 @@ export default function SettingsScreen() {
         }
     };
 
-    async function createDonationOrder(
-        presetId: string
-    ): Promise<NonNullable<DonationIntentRazorpayResponse["razorpay"]>> {
-        const base = getApiBaseUrl();
-        if (!base) {
-            throw new Error(
-                "Missing API base URL. Set EXPO_PUBLIC_IMOTARA_API_BASE_URL in .env."
-            );
-        }
-
-        const res = await fetch(`${base}/api/payments/donation-intent`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                presetId,
-                purpose: "imotara_donation",
-                platform: "mobile",
-            }),
-        });
-
-        const json = (await res.json().catch(() => null)) as
-            | DonationIntentRazorpayResponse
-            | null;
-
-        if (!res.ok || !json?.ok) {
-            const msg =
-                json?.error ||
-                (typeof json === "string" ? json : "") ||
-                `Donation order failed (${res.status}).`;
-            throw new Error(msg);
-        }
-
-        if (!json.razorpay?.orderId || !json.razorpay?.keyId) {
-            throw new Error("Donation order response missing Razorpay details.");
-        }
-
-        return json.razorpay;
-    }
-
-    // Prevent overlapping polling loops
-    const donationPollRef = React.useRef(false);
-
-    async function pollDonationConfirmation(paymentId?: string) {
-        if (!paymentId) return;
-
-        const base = getApiBaseUrl();
-        if (!base) return;
-
-        if (donationPollRef.current) return;
-        donationPollRef.current = true;
-
-        try {
-            for (let i = 0; i < 5; i++) {
-                try {
-                    const res = await fetch(`${base}/api/donations/recent?limit=10`, {
-                        method: "GET",
-                    });
-                    const json = (await res.json().catch(() => null)) as any;
-
-                    const donations =
-                        json?.donations || json?.items || json?.data || [];
-
-                    const found =
-                        Array.isArray(donations) &&
-                        donations.some(
-                            (d: any) =>
-                                d?.razorpay_payment_id === paymentId ||
-                                d?.razorpayPaymentId === paymentId
-                        );
-
-                    if (found && mountedRef.current) {
-                        setLastSyncStatus(
-                            "Donation confirmed. Thank you for supporting Imotara 🙏"
-                        );
-                        return;
-                    }
-                } catch {
-                    // ignore (chat/settings must never break)
-                }
-
-                await new Promise((r) => setTimeout(r, 1200));
-            }
-        } finally {
-            donationPollRef.current = false;
-        }
-    }
-
     const handleDonate = async (preset: { label: string; amount: number }) => {
-
-        if (!RazorpayCheckout?.open) {
-            Alert.alert(
-                "Donate (Dev Build required)",
-                "Razorpay needs a Development Build. It does not work inside Expo Go.",
-                [{ text: "OK" }]
-            );
-            return;
-        }
-
         if (busyRef.current.donate) return;
         busyRef.current.donate = true;
 
         try {
-            // 1) Create Razorpay order via backend (server holds secret)
-            const rz = await createDonationOrder(String((preset as any)?.id || ""));
-
-            // 2) Open Razorpay checkout
-            const options: any = {
-                key: rz.keyId,
-                amount: rz.amount,
-                currency: rz.currency || "INR",
-                name: "Imotara",
-                description:
-                    "Support Imotara (UPI preferred) — privacy-first, non-commercial Indian initiative",
-                order_id: rz.orderId,
-                method: {
-                    upi: true,
-                    card: false,
-                    netbanking: false,
-                    wallet: false,
-                },
-                theme: { color: "#38bdf8" },
-            };
-
-            const result = await RazorpayCheckout.open(options);
-
-            // Checkout completed on device; final confirmation is via server webhook.
-            if (mountedRef.current) {
-                setLastSyncStatus(
-                    `Checkout completed for ${preset.label}. Receipt will appear after confirmation.`
-                );
-            }
-
-            Alert.alert(
-                "Thanks 🙏",
-                `Checkout completed for ${preset.label}.\n\nPayment Id: ${result?.razorpay_payment_id || "—"}\n\nNote: Receipt is confirmed by the server webhook and may take a moment to appear.`,
-                [{ text: "OK" }]
-            );
-
-            // 🔁 Auto-confirm once webhook records the receipt
-            void pollDonationConfirmation(result?.razorpay_payment_id);
-
-            // 🔓 Verify payment and unlock license tier
-            const paymentId = result?.razorpay_payment_id;
-            if (paymentId) {
-                const base = getApiBaseUrl();
-                if (base) {
-                    fetch(`${base}/api/license/verify-payment`, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-                        },
-                        body: JSON.stringify({ paymentId, chatLinkKey: chatLinkKey || "" }),
-                    })
-                        .then((r) => r.json())
-                        .then((data: any) => {
-                            if (data?.ok && data?.tier && mountedRef.current) {
-                                const newTier = String(data.tier).toUpperCase();
-                                if (typeof setLicenseTier === "function") {
-                                    setLicenseTier(newTier as any);
-                                }
-                                if (mountedRef.current) {
-                                    setLastSyncStatus(
-                                        `${newTier} plan unlocked. Thank you for supporting Imotara 🙏`
-                                    );
-                                }
-                            }
-                        })
-                        .catch(() => {});
-                }
-            }
-        } catch (e: any) {
-            // Razorpay cancellation often returns a structured error
-            const desc =
-                e?.description ||
-                e?.error?.description ||
-                e?.message ||
-                "Could not start donation checkout. Please try again.";
-
-            // If user cancelled, Razorpay commonly returns code 2 / "cancelled"
-            const isCancel =
-                String(e?.code || "")
-                    .toLowerCase()
-                    .includes("cancel") ||
-                String(desc).toLowerCase().includes("cancel");
-
-            Alert.alert(
-                isCancel ? "Donation cancelled" : "Donation error",
-                isCancel ? "No payment was made." : desc,
-                [{ text: "OK" }]
-            );
+            const base = getApiBaseUrl();
+            const donateUrl = `${base}/donate`;
+            await Linking.openURL(donateUrl);
+        } catch {
+            Alert.alert("Error", "Could not open donation page. Please try again.", [{ text: "OK" }]);
         } finally {
             busyRef.current.donate = false;
         }
