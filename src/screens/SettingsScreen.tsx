@@ -663,6 +663,7 @@ export default function SettingsScreen() {
             keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
         >
             <ScrollView
+                keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{
                     paddingHorizontal: 16,
                     paddingVertical: 12,
@@ -2312,6 +2313,7 @@ export default function SettingsScreen() {
                         placeholder={feedbackType === "bug" ? "Describe the bug — what happened, what you expected, steps to reproduce…" : "What's on your mind? Suggestions, thoughts, anything…"}
                         placeholderTextColor={colors.textSecondary}
                         multiline
+                        scrollEnabled={false}
                         numberOfLines={5}
                         style={{
                             backgroundColor: "rgba(255,255,255,0.06)",
