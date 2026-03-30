@@ -277,7 +277,9 @@ function detectLangFromRomanHints(message: string): string {
   tally("pa", ROMAN_PA_LANG_HINT_REGEX);
   tally("or", ROMAN_OR_LANG_HINT_REGEX);
   const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
-  return best && best[1] >= 1 ? best[0] : "en";
+  // Require at least 2 hits to avoid single-word English false positives triggering
+  // a non-English language (e.g. one coincidental Gujarati/Hindi word match in an English message).
+  return best && best[1] >= 2 ? best[0] : "en";
 }
 
 /** Detects explicit language-switch intent in a message.
