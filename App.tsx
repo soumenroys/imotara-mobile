@@ -1,7 +1,7 @@
 // App.tsx
 import React from "react";
 import { StatusBar } from "expo-status-bar";
-import { KeyboardAvoidingView, Platform, View, Text, TouchableOpacity } from "react-native";
+import { KeyboardAvoidingView, Platform, View, Text, TouchableOpacity, Linking } from "react-native";
 import RootNavigator from "./src/navigation/RootNavigator";
 import AppThemeProvider from "./src/theme/AppThemeProvider";
 import { ThemeProvider } from "./src/theme/ThemeContext";
@@ -13,44 +13,32 @@ import Constants from "expo-constants";
 // ✅ API base URL (fail-fast in prod; friendly screen here)
 import { IMOTARA_API_BASE_URL } from "./src/config/api";
 
-function sendCrashReport(error: Error, componentStack: string) {
-  try {
-    const base = (process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL || "").replace(/\/+$/, "");
-    if (!base) return;
-    const version =
-      (Constants as any)?.expoConfig?.version ??
-      (Constants as any)?.manifest2?.extra?.expoClient?.version ??
-      "unknown";
-    fetch(`${base}/api/feedback`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "crash",
-        message: `${error.name}: ${error.message}`,
-        stackTrace: `${error.stack ?? ""}\n\nComponent stack:${componentStack}`,
-        platform: Platform.OS,
-        osVersion: String(Platform.Version),
-        appVersion: version,
-      }),
-    }).catch(() => {});
-  } catch {
-    // never let crash reporting itself crash the app
-  }
+function buildCrashMailto(error: Error, componentStack: string): string {
+  const version =
+    (Constants as any)?.expoConfig?.version ??
+    (Constants as any)?.manifest2?.extra?.expoClient?.version ??
+    "unknown";
+  const subject = encodeURIComponent("[Imotara] Crash Report");
+  const body = encodeURIComponent(
+    `App version: ${version}\nPlatform: ${Platform.OS} ${Platform.Version}\n\nError: ${error.name}: ${error.message}\n\nStack:\n${error.stack ?? ""}\n\nComponent stack:${componentStack}`
+  );
+  return `mailto:info@imotara.com?subject=${subject}&body=${body}`;
 }
 
 // ── Error boundary ─────────────────────────────────────────────────────────────
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
-  { error: Error | null }
+  { error: Error | null; componentStack: string }
 > {
-  state = { error: null };
+  state = { error: null, componentStack: "" };
   static getDerivedStateFromError(e: Error) { return { error: e }; }
   componentDidCatch(e: Error, info: React.ErrorInfo) {
     console.error("[imotara] ErrorBoundary caught:", e, info.componentStack);
-    sendCrashReport(e, info.componentStack ?? "");
+    this.setState({ componentStack: info.componentStack ?? "" });
   }
   render() {
     if (this.state.error) {
+      const mailtoUrl = buildCrashMailto(this.state.error, this.state.componentStack);
       return (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32, backgroundColor: "#0f172a" }}>
           <Text style={{ fontSize: 36, marginBottom: 16 }}>💔</Text>
@@ -61,10 +49,16 @@ class ErrorBoundary extends React.Component<
             Imotara ran into an unexpected error. Your data is safe — tap below to restart.
           </Text>
           <TouchableOpacity
-            onPress={() => this.setState({ error: null })}
-            style={{ paddingHorizontal: 24, paddingVertical: 12, borderRadius: 999, backgroundColor: "rgba(56,189,248,0.18)", borderWidth: 1, borderColor: "rgba(56,189,248,0.4)" }}
+            onPress={() => this.setState({ error: null, componentStack: "" })}
+            style={{ paddingHorizontal: 24, paddingVertical: 12, borderRadius: 999, backgroundColor: "rgba(56,189,248,0.18)", borderWidth: 1, borderColor: "rgba(56,189,248,0.4)", marginBottom: 14 }}
           >
             <Text style={{ fontSize: 14, fontWeight: "600", color: "#38bdf8" }}>Restart app</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => Linking.openURL(mailtoUrl).catch(() => {})}
+            style={{ paddingHorizontal: 24, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" }}
+          >
+            <Text style={{ fontSize: 13, color: "#94a3b8" }}>Send crash report</Text>
           </TouchableOpacity>
         </View>
       );

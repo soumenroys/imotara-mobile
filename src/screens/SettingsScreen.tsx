@@ -299,7 +299,6 @@ export default function SettingsScreen() {
     // Feedback / bug report
     const [feedbackType, setFeedbackType] = React.useState<"feedback" | "bug">("feedback");
     const [feedbackText, setFeedbackText] = React.useState("");
-    const [feedbackSending, setFeedbackSending] = React.useState(false);
     const [feedbackStatus, setFeedbackStatus] = React.useState<string | null>(null);
     const handleRemoveMemory = (id: string) => {
         setDeletingMemoryId(id);
@@ -608,32 +607,17 @@ export default function SettingsScreen() {
             setFeedbackStatus("Please describe your feedback or issue before submitting.");
             return;
         }
-        if (feedbackSending) return;
-        setFeedbackSending(true);
-        setFeedbackStatus(null);
+        const subject = encodeURIComponent(
+            feedbackType === "bug" ? "[Imotara] Bug Report" : "[Imotara] Feedback"
+        );
+        const body = encodeURIComponent(trimmed);
+        const url = `mailto:info@imotara.com?subject=${subject}&body=${body}`;
         try {
-            const base = getApiBaseUrl();
-            const res = await fetch(`${base}/api/feedback`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    type: feedbackType,
-                    message: trimmed,
-                    platform: Platform.OS,
-                    osVersion: String(Platform.Version),
-                    userId: chatLinkKey || undefined,
-                }),
-            });
-            if (res.ok) {
-                setFeedbackText("");
-                setFeedbackStatus("Thank you! Your feedback has been sent.");
-            } else {
-                setFeedbackStatus("Could not send feedback. Please try again.");
-            }
+            await Linking.openURL(url);
+            setFeedbackText("");
+            setFeedbackStatus("Email app opened. Just tap Send to submit your feedback.");
         } catch {
-            setFeedbackStatus("Network error. Please check your connection and try again.");
-        } finally {
-            setFeedbackSending(false);
+            setFeedbackStatus("Could not open email app. Please email info@imotara.com directly.");
         }
     };
 
@@ -2345,7 +2329,7 @@ export default function SettingsScreen() {
 
                     <TouchableOpacity
                         onPress={handleFeedbackSubmit}
-                        disabled={feedbackSending || !feedbackText.trim()}
+                        disabled={!feedbackText.trim()}
                         style={{
                             alignSelf: "flex-start",
                             paddingHorizontal: 20,
@@ -2354,11 +2338,11 @@ export default function SettingsScreen() {
                             backgroundColor: "rgba(56,189,248,0.18)",
                             borderWidth: 1,
                             borderColor: "rgba(56,189,248,0.4)",
-                            opacity: feedbackSending || !feedbackText.trim() ? 0.5 : 1,
+                            opacity: !feedbackText.trim() ? 0.5 : 1,
                         }}
                     >
                         <Text style={{ fontSize: 13, fontWeight: "600", color: colors.primary }}>
-                            {feedbackSending ? "Sending…" : "Send"}
+                            Open Email
                         </Text>
                     </TouchableOpacity>
 
