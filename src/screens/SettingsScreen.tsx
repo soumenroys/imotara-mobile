@@ -295,6 +295,12 @@ export default function SettingsScreen() {
     React.useEffect(() => {
         loadMemories().then(setMemories).catch(() => {});
     }, []);
+
+    // Feedback / bug report
+    const [feedbackType, setFeedbackType] = React.useState<"feedback" | "bug">("feedback");
+    const [feedbackText, setFeedbackText] = React.useState("");
+    const [feedbackSending, setFeedbackSending] = React.useState(false);
+    const [feedbackStatus, setFeedbackStatus] = React.useState<string | null>(null);
     const handleRemoveMemory = (id: string) => {
         setDeletingMemoryId(id);
         removeMemory(id)
@@ -593,6 +599,41 @@ export default function SettingsScreen() {
             Alert.alert("Error", "Could not open donation page. Please try again.", [{ text: "OK" }]);
         } finally {
             busyRef.current.donate = false;
+        }
+    };
+
+    const handleFeedbackSubmit = async () => {
+        const trimmed = feedbackText.trim();
+        if (!trimmed) {
+            setFeedbackStatus("Please describe your feedback or issue before submitting.");
+            return;
+        }
+        if (feedbackSending) return;
+        setFeedbackSending(true);
+        setFeedbackStatus(null);
+        try {
+            const base = getApiBaseUrl();
+            const res = await fetch(`${base}/api/feedback`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    type: feedbackType,
+                    message: trimmed,
+                    platform: Platform.OS,
+                    osVersion: String(Platform.Version),
+                    userId: chatLinkKey || undefined,
+                }),
+            });
+            if (res.ok) {
+                setFeedbackText("");
+                setFeedbackStatus("Thank you! Your feedback has been sent.");
+            } else {
+                setFeedbackStatus("Could not send feedback. Please try again.");
+            }
+        } catch {
+            setFeedbackStatus("Network error. Please check your connection and try again.");
+        } finally {
+            setFeedbackSending(false);
         }
     };
 
@@ -2241,6 +2282,91 @@ export default function SettingsScreen() {
                             </Text>
                         )}
                     </View>
+                </AppSurface>
+
+                {/* Feedback / Report Issue */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Feedback / Report Issue
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
+                        Share feedback or report a bug — your message goes directly to the developer.
+                    </Text>
+
+                    {/* Type selector */}
+                    <View style={{ flexDirection: "row", marginBottom: 12, gap: 8 }}>
+                        {(["feedback", "bug"] as const).map((t) => (
+                            <TouchableOpacity
+                                key={t}
+                                onPress={() => setFeedbackType(t)}
+                                style={{
+                                    paddingHorizontal: 14,
+                                    paddingVertical: 6,
+                                    borderRadius: 999,
+                                    borderWidth: 1,
+                                    borderColor: feedbackType === t ? colors.primary : "rgba(255,255,255,0.15)",
+                                    backgroundColor: feedbackType === t ? "rgba(56,189,248,0.15)" : "transparent",
+                                }}
+                            >
+                                <Text style={{ fontSize: 13, color: feedbackType === t ? colors.primary : colors.textSecondary, fontWeight: feedbackType === t ? "600" : "400" }}>
+                                    {t === "feedback" ? "Feedback" : "Bug Report"}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <TextInput
+                        value={feedbackText}
+                        onChangeText={(v) => { setFeedbackText(v); setFeedbackStatus(null); }}
+                        placeholder={feedbackType === "bug" ? "Describe the bug — what happened, what you expected, steps to reproduce…" : "What's on your mind? Suggestions, thoughts, anything…"}
+                        placeholderTextColor={colors.textSecondary}
+                        multiline
+                        numberOfLines={5}
+                        style={{
+                            backgroundColor: "rgba(255,255,255,0.06)",
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: "rgba(255,255,255,0.12)",
+                            padding: 12,
+                            fontSize: 13,
+                            color: colors.textPrimary,
+                            textAlignVertical: "top",
+                            minHeight: 100,
+                            marginBottom: 12,
+                        }}
+                    />
+
+                    <TouchableOpacity
+                        onPress={handleFeedbackSubmit}
+                        disabled={feedbackSending || !feedbackText.trim()}
+                        style={{
+                            alignSelf: "flex-start",
+                            paddingHorizontal: 20,
+                            paddingVertical: 9,
+                            borderRadius: 999,
+                            backgroundColor: "rgba(56,189,248,0.18)",
+                            borderWidth: 1,
+                            borderColor: "rgba(56,189,248,0.4)",
+                            opacity: feedbackSending || !feedbackText.trim() ? 0.5 : 1,
+                        }}
+                    >
+                        <Text style={{ fontSize: 13, fontWeight: "600", color: colors.primary }}>
+                            {feedbackSending ? "Sending…" : "Send"}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {feedbackStatus ? (
+                        <Text style={{ fontSize: 12, color: feedbackStatus.startsWith("Thank") ? "#4ade80" : "#f87171", marginTop: 10 }}>
+                            {feedbackStatus}
+                        </Text>
+                    ) : null}
                 </AppSurface>
 
                 {/* App Info */}

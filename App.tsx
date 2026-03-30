@@ -8,9 +8,35 @@ import { ThemeProvider } from "./src/theme/ThemeContext";
 import HistoryProvider from "./src/state/HistoryContext";
 import { SettingsProvider } from "./src/state/SettingsContext";
 import { AuthProvider } from "./src/auth/AuthContext";
+import Constants from "expo-constants";
 
 // ✅ API base URL (fail-fast in prod; friendly screen here)
 import { IMOTARA_API_BASE_URL } from "./src/config/api";
+
+function sendCrashReport(error: Error, componentStack: string) {
+  try {
+    const base = (process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL || "").replace(/\/+$/, "");
+    if (!base) return;
+    const version =
+      (Constants as any)?.expoConfig?.version ??
+      (Constants as any)?.manifest2?.extra?.expoClient?.version ??
+      "unknown";
+    fetch(`${base}/api/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "crash",
+        message: `${error.name}: ${error.message}`,
+        stackTrace: `${error.stack ?? ""}\n\nComponent stack:${componentStack}`,
+        platform: Platform.OS,
+        osVersion: String(Platform.Version),
+        appVersion: version,
+      }),
+    }).catch(() => {});
+  } catch {
+    // never let crash reporting itself crash the app
+  }
+}
 
 // ── Error boundary ─────────────────────────────────────────────────────────────
 class ErrorBoundary extends React.Component<
@@ -21,6 +47,7 @@ class ErrorBoundary extends React.Component<
   static getDerivedStateFromError(e: Error) { return { error: e }; }
   componentDidCatch(e: Error, info: React.ErrorInfo) {
     console.error("[imotara] ErrorBoundary caught:", e, info.componentStack);
+    sendCrashReport(e, info.componentStack ?? "");
   }
   render() {
     if (this.state.error) {
