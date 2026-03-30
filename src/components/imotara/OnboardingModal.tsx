@@ -49,19 +49,19 @@ const MODES: { value: AnalysisMode; label: string; description: string; icon: st
   {
     value: "local",
     label: "Device only",
-    description: "All replies happen on your phone. Nothing is sent anywhere.",
+    description: "All replies happen on your phone. Nothing is sent to any server.",
     icon: "\uD83D\uDD12",
   },
   {
     value: "auto",
     label: "Smart (recommended)",
-    description: "Tries cloud AI first, falls back to local if unavailable.",
+    description: "Tries cloud AI first for deeper responses, falls back to device if unavailable. When cloud is used, your message is sent to OpenAI\u2019s API to generate a reply.",
     icon: "\u26A1",
   },
   {
     value: "cloud",
     label: "Cloud",
-    description: "Always uses the Imotara cloud AI for deeper responses.",
+    description: "Always uses cloud AI for the deepest responses. Your message is sent to OpenAI\u2019s API (api.openai.com) to generate a reply.",
     icon: "\u2601\uFE0F",
   },
 ];
@@ -168,6 +168,9 @@ export function OnboardingModal({ visible, onComplete }: Props) {
           )}
         </TouchableOpacity>
       ))}
+      <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 12, lineHeight: 16, opacity: 0.7 }}>
+        When cloud AI is used, only your chat message is sent to OpenAI to generate a reply. No account info, name, or device data is attached. You can change this anytime in Settings.
+      </Text>
     </View>,
   ];
 
