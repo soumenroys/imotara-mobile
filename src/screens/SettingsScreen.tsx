@@ -1246,8 +1246,9 @@ export default function SettingsScreen() {
                     </View>
 
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
-                        Auto: tries cloud, falls back to local. Cloud: always attempts Imotara server.
-                        Local: device-only replies.
+                        Auto: tries cloud, falls back to local. Cloud: always uses cloud.
+                        Local: device-only, nothing is sent externally.{"\n"}
+                        When cloud is used, your message is sent to a third-party AI service to generate a reply. No account info or device data is attached.
                     </Text>
 
                     {!canCloudSync ? (
