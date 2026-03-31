@@ -2314,7 +2314,6 @@ export default function SettingsScreen() {
                         placeholder={feedbackType === "bug" ? "Describe the bug — what happened, what you expected, steps to reproduce…" : "What's on your mind? Suggestions, thoughts, anything…"}
                         placeholderTextColor={colors.textSecondary}
                         multiline
-                        scrollEnabled={false}
                         numberOfLines={5}
                         style={{
                             backgroundColor: "rgba(255,255,255,0.06)",
@@ -2325,7 +2324,7 @@ export default function SettingsScreen() {
                             fontSize: 13,
                             color: colors.textPrimary,
                             textAlignVertical: "top",
-                            minHeight: 100,
+                            height: 110,
                             marginBottom: 12,
                         }}
                     />
