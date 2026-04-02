@@ -2688,18 +2688,9 @@ export default function ChatScreen() {
 
           if (!mountedRef.current) return;
 
-          addToHistory({
-            id: userMessage.id,
-            text: userMessage.text,
-            from: "user",
-            timestamp: userMessage.timestamp,
-            isSynced: false,
-            source: userMessage.source,
-
-            // ✅ NEW
-            emotion: userEmotion,
-            intensity: userIntensity,
-          });
+          // User message already added to history at send time (line ~2182).
+          // Do NOT call addToHistory again here — addToHistory always appends
+          // and would create a duplicate entry in history on every cloud failure.
 
           setTypingStatus("responding");
           haptic.receive();
