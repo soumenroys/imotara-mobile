@@ -1,10 +1,9 @@
 // src/hooks/useVoiceInput.ts
 // Records audio via expo-av and returns the URI for STT transcription.
-// Uses lazy require so the app doesn't crash in Expo Go / Simulator
-// builds where the native module isn't linked yet.
 
-import { useState, useRef, useCallback } from "react";
-import { Alert, Platform } from "react-native";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Alert, Linking, Platform } from "react-native";
+import { Audio } from "expo-av";
 
 export type VoiceInputState = "idle" | "recording" | "transcribing" | "error";
 
@@ -18,18 +17,11 @@ export type UseVoiceInputResult = {
 
 const MAX_DURATION_MS = 60_000;
 
-/** Returns expo-av Audio or null if not available (Expo Go / unlinked builds). */
-function getAudio(): any {
-    try {
-        // requireOptionalNativeModule returns null instead of throwing when the
-        // native module isn't linked — safe to call in Expo Go / simulator.
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { requireOptionalNativeModule } = require("expo-modules-core");
-        if (!requireOptionalNativeModule("ExponentAV")) return null;
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        return require("expo-av").Audio;
-    } catch {
-        return null;
+function openAppSettings() {
+    if (Platform.OS === "ios") {
+        Linking.openURL("app-settings:").catch(() => {});
+    } else {
+        Linking.openSettings().catch(() => {});
     }
 }
 
@@ -39,7 +31,7 @@ export function useVoiceInput(
 ): UseVoiceInputResult {
     const [state, setState] = useState<VoiceInputState>("idle");
     const [durationMs, setDurationMs] = useState(0);
-    const recordingRef = useRef<any>(null);
+    const recordingRef = useRef<Audio.Recording | null>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const startTsRef = useRef<number>(0);
 
@@ -50,71 +42,15 @@ export function useVoiceInput(
         }
     };
 
-    const startRecording = useCallback(async (): Promise<boolean> => {
-        if (Platform.OS === "web") {
-            Alert.alert("Voice input", "Voice input is not supported in the web browser.");
-            return false;
-        }
-        const Audio = getAudio();
-        if (!Audio) {
-            Alert.alert(
-                "Voice input unavailable",
-                "Voice input requires a full native build. It is not available in Expo Go.",
-            );
-            return false;
-        }
-        try {
-            const { granted } = await Audio.requestPermissionsAsync();
-            if (!granted) {
-                Alert.alert(
-                    "Microphone access needed",
-                    "Please allow microphone access in Settings to use voice input.",
-                );
-                return false;
-            }
-
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true,
-            });
-
-            const { recording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY,
-            );
-            recordingRef.current = recording;
-            startTsRef.current = Date.now();
-            setDurationMs(0);
-            setState("recording");
-
-            timerRef.current = setInterval(() => {
-                const elapsed = Date.now() - startTsRef.current;
-                setDurationMs(elapsed);
-                if (elapsed >= MAX_DURATION_MS) {
-                    void stopRecording();
-                }
-            }, 500);
-
-            return true;
-        } catch {
-            setState("error");
-            Alert.alert("Voice input error", "Could not start recording. Please try again.");
-            return false;
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     const stopRecording = useCallback(async (): Promise<void> => {
         clearTimer();
         const recording = recordingRef.current;
         if (!recording) { setState("idle"); return; }
 
         setState("transcribing");
-        const Audio = getAudio();
         try {
             await recording.stopAndUnloadAsync();
-            if (Audio) {
-                await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-            }
+            await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
             const uri = recording.getURI();
             recordingRef.current = null;
 
@@ -157,19 +93,87 @@ export function useVoiceInput(
         }
     }, [apiBaseUrl, onTranscript]);
 
+    const startRecording = useCallback(async (): Promise<boolean> => {
+        if (Platform.OS === "web") {
+            Alert.alert("Voice input", "Voice input is not supported in the web browser.");
+            return false;
+        }
+        try {
+            const { granted, canAskAgain } = await Audio.requestPermissionsAsync();
+            if (!granted) {
+                if (canAskAgain === false) {
+                    Alert.alert(
+                        "Microphone access blocked",
+                        "Imotara needs microphone access to use voice input. Please enable it in your device Settings.",
+                        [
+                            { text: "Cancel", style: "cancel" },
+                            { text: "Open Settings", onPress: openAppSettings },
+                        ],
+                    );
+                } else {
+                    Alert.alert(
+                        "Microphone access needed",
+                        "Please allow microphone access to use voice input.",
+                    );
+                }
+                return false;
+            }
+
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+            });
+
+            const { recording } = await Audio.Recording.createAsync(
+                Audio.RecordingOptionsPresets.HIGH_QUALITY,
+            );
+            recordingRef.current = recording;
+            startTsRef.current = Date.now();
+            setDurationMs(0);
+            setState("recording");
+
+            timerRef.current = setInterval(() => {
+                const elapsed = Date.now() - startTsRef.current;
+                setDurationMs(elapsed);
+                if (elapsed >= MAX_DURATION_MS) {
+                    void stopRecording();
+                }
+            }, 500);
+
+            return true;
+        } catch {
+            setState("error");
+            Alert.alert("Voice input error", "Could not start recording. Please try again.");
+            return false;
+        }
+    }, [stopRecording]);
+
     const cancelRecording = useCallback(async (): Promise<void> => {
         clearTimer();
         const recording = recordingRef.current;
         recordingRef.current = null;
-        const Audio = getAudio();
         if (recording) {
             try {
                 await recording.stopAndUnloadAsync();
-                if (Audio) await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+                await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
             } catch { /* ignore */ }
         }
         setState("idle");
         setDurationMs(0);
+    }, []);
+
+    // Cleanup on unmount — release audio session if recording was in progress
+    useEffect(() => {
+        return () => {
+            clearTimer();
+            const recording = recordingRef.current;
+            if (recording) {
+                recordingRef.current = null;
+                recording.stopAndUnloadAsync().catch(() => {});
+                Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+            }
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     return { state, startRecording, stopRecording, cancelRecording, durationMs };

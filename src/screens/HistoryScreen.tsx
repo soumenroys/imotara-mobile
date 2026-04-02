@@ -292,7 +292,11 @@ function SwipeableRow({
                     <Text style={{ fontSize: 10, color: "#ef4444", fontWeight: "600", marginTop: 2 }}>Delete</Text>
                 </TouchableOpacity>
             </View>
-            <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
+            <Animated.View
+                style={{ transform: [{ translateX }] }}
+                accessibilityHint="Swipe left to reveal delete"
+                {...panResponder.panHandlers}
+            >
                 {children}
             </Animated.View>
         </View>

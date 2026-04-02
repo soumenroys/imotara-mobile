@@ -4,6 +4,7 @@
 import React from "react";
 import { View, Text, TextInput, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ColorPalette } from "../../theme/colors";
 
 export type VoiceInputState = "idle" | "recording" | "transcribing";
@@ -33,13 +34,15 @@ export function ChatInputBar({
   onSend,
   onMicPress,
 }: Props) {
+  const insets = useSafeAreaInsets();
   return (
     <View
       style={{
         borderTopWidth: 1,
         borderTopColor: colors.border,
         paddingHorizontal: 12,
-        paddingVertical: 8,
+        paddingTop: 8,
+        paddingBottom: Math.max(insets.bottom, 8),
         backgroundColor: "rgba(15, 23, 42, 0.98)",
       }}
     >

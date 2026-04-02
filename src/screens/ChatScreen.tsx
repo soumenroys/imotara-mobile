@@ -1993,6 +1993,7 @@ export default function ChatScreen() {
             if (typeof clearHistory === "function") clearHistory();
 
             // Clear in-memory UI immediately (extra-safe UX)
+            greetingInjectedRef.current = false;
             setMessages([]);
             latestInputRef.current = "";
             setInput("");
@@ -3114,8 +3115,8 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "android" ? 80 : 0}
+      behavior="padding"
+      keyboardVerticalOffset={0}
     >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
       {/* Offline / unsynced indicator */}

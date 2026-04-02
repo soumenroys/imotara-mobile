@@ -3,6 +3,8 @@ import React from "react";
 import Constants from "expo-constants";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 
 
 import {
@@ -355,15 +357,52 @@ export default function SettingsScreen() {
     const [chatLinkStatus, setChatLinkStatus] = React.useState<string | null>(null);
     const [voicePreviewId, setVoicePreviewId] = React.useState<string | null>(null);
 
+    const linkStatusTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const showLinkStatus = (msg: string) => {
+        if (linkStatusTimerRef.current) clearTimeout(linkStatusTimerRef.current);
+        setChatLinkStatus(msg);
+        linkStatusTimerRef.current = setTimeout(() => setChatLinkStatus(null), 3000);
+    };
+
     const saveChatLinkKey = () => {
         const v = (chatLinkKey ?? "").trim();
         setChatLinkKey(v);
-        setChatLinkStatus(v ? "Link Key saved on this device." : "Link Key cleared.");
+        showLinkStatus(v ? "Link Key saved on this device." : "Link Key cleared.");
     };
 
     const clearChatLinkKey = () => {
         setChatLinkKey("");
-        setChatLinkStatus("Link Key cleared.");
+        showLinkStatus("Link Key cleared.");
+    };
+
+    const handleExportData = async () => {
+        try {
+            const exportPayload = {
+                exportedAt: new Date().toISOString(),
+                appVersion: Constants.expoConfig?.version ?? "unknown",
+                messages: history.map((item) => ({
+                    id: item.id,
+                    emotion: item.emotion,
+                    message: item.message,
+                    source: item.source,
+                    entryKind: item.entryKind,
+                    timestamp: item.timestamp,
+                    isSynced: item.isSynced,
+                })),
+            };
+            const json = JSON.stringify(exportPayload, null, 2);
+            const fileName = `imotara-export-${new Date().toISOString().slice(0, 10)}.json`;
+            const fileUri = FileSystem.cacheDirectory + fileName;
+            await FileSystem.writeAsStringAsync(fileUri, json, { encoding: FileSystem.EncodingType.UTF8 });
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(fileUri, { mimeType: "application/json", dialogTitle: "Export Imotara data" });
+            } else {
+                Alert.alert("Export unavailable", "Sharing is not available on this device.");
+            }
+        } catch (e) {
+            Alert.alert("Export failed", "Could not export your data. Please try again.");
+        }
     };
 
     const handleClearHistory = () => {
@@ -2021,6 +2060,12 @@ export default function SettingsScreen() {
                         Messages on this device: {messageCount}
                         {unsyncedCount > 0 ? ` · Unsynced: ${unsyncedCount}` : ""}
                     </Text>
+
+                    <AppButton
+                        title="Export Data (JSON)"
+                        onPress={handleExportData}
+                        style={{ alignSelf: "flex-start", borderRadius: 999, marginBottom: 8 }}
+                    />
 
                     <AppButton
                         title="Clear Local History"
