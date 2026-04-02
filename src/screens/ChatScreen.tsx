@@ -1729,6 +1729,11 @@ export default function ChatScreen() {
     };
   }, []);
 
+  // Stop TTS on unmount — prevents audio continuing after navigating away
+  useEffect(() => {
+    return () => { stopSpeaking(); };
+  }, []);
+
   useEffect(() => {
     if (recentlySyncedAt == null) return;
     const t = setTimeout(() => setRecentlySyncedAt(null), 900);
