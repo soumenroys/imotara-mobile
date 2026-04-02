@@ -364,6 +364,14 @@ export default function SettingsScreen() {
         linkStatusTimerRef.current = setTimeout(() => setChatLinkStatus(null), 3000);
     };
 
+    // Stop TTS and clear timers on unmount
+    React.useEffect(() => {
+        return () => {
+            stopSpeaking();
+            if (linkStatusTimerRef.current) clearTimeout(linkStatusTimerRef.current);
+        };
+    }, []);
+
     const saveChatLinkKey = () => {
         const v = (chatLinkKey ?? "").trim();
         setChatLinkKey(v);

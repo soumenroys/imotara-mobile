@@ -31,6 +31,7 @@ export function SignInPrompt({ messageCount }: Props) {
         useAuth();
     const [visible, setVisible] = useState(false);
     const [dismissed, setDismissed] = useState(true); // start hidden until loaded
+    const [signingIn, setSigningIn] = useState(false);
     const slideAnim = React.useRef(new Animated.Value(300)).current;
 
     // Load dismissed flag
@@ -68,13 +69,15 @@ export function SignInPrompt({ messageCount }: Props) {
     };
 
     const handleGoogle = async () => {
-        await signInWithGoogle();
-        await handleDismiss();
+        if (signingIn) return;
+        setSigningIn(true);
+        try { await signInWithGoogle(); await handleDismiss(); } finally { setSigningIn(false); }
     };
 
     const handleApple = async () => {
-        await signInWithApple();
-        await handleDismiss();
+        if (signingIn) return;
+        setSigningIn(true);
+        try { await signInWithApple(); await handleDismiss(); } finally { setSigningIn(false); }
     };
 
     if (!visible) return null;
@@ -105,21 +108,23 @@ export function SignInPrompt({ messageCount }: Props) {
 
                         {/* Google button */}
                         <TouchableOpacity
-                            style={styles.googleBtn}
+                            style={[styles.googleBtn, signingIn && { opacity: 0.5 }]}
                             onPress={handleGoogle}
+                            disabled={signingIn}
                             activeOpacity={0.8}
                         >
-                            <Text style={styles.googleBtnText}>Continue with Google</Text>
+                            <Text style={styles.googleBtnText}>{signingIn ? "Signing in…" : "Continue with Google"}</Text>
                         </TouchableOpacity>
 
                         {/* Apple button — iOS only */}
                         {Platform.OS === "ios" && appleSignInAvailable && (
                             <TouchableOpacity
-                                style={styles.appleBtn}
+                                style={[styles.appleBtn, signingIn && { opacity: 0.5 }]}
                                 onPress={handleApple}
+                                disabled={signingIn}
                                 activeOpacity={0.8}
                             >
-                                <Text style={styles.appleBtnText}> Continue with Apple</Text>
+                                <Text style={styles.appleBtnText}>{signingIn ? "Signing in…" : " Continue with Apple"}</Text>
                             </TouchableOpacity>
                         )}
 

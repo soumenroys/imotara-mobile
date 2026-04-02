@@ -667,7 +667,13 @@ export default function HistoryScreen() {
 
     const [showSearch, setShowSearch] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState("");
+    const [debouncedSearch, setDebouncedSearch] = React.useState("");
     const searchInputRef = React.useRef<TextInput>(null);
+
+    React.useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+        return () => clearTimeout(t);
+    }, [searchQuery]);
 
     // Conflict resolution state
     const [showConflictModal, setShowConflictModal] = React.useState(false);
@@ -698,10 +704,10 @@ export default function HistoryScreen() {
     }, [sortedHistory, showAssistantReplies]);
 
     const searchFilteredHistory = React.useMemo(() => {
-        const q = showSearch ? searchQuery.trim().toLowerCase() : "";
+        const q = showSearch ? debouncedSearch.trim().toLowerCase() : "";
         if (!q) return visibleHistory;
         return visibleHistory.filter((h) => h.text?.toLowerCase().includes(q));
-    }, [visibleHistory, showSearch, searchQuery]);
+    }, [visibleHistory, showSearch, debouncedSearch]);
 
     const groupedHistory = React.useMemo(() => {
         const groups: { label: string; items: HistoryRecord[] }[] = [];
