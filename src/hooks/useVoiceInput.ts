@@ -69,6 +69,7 @@ export function useVoiceInput(
                         method: "POST",
                         body: form,
                     });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     const json = await res.json().catch(() => null);
                     transcript = json?.text ?? "";
                 } catch {

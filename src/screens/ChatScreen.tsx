@@ -2755,7 +2755,7 @@ export default function ChatScreen() {
 
     setMessages(hydrated);
     smoothScrollToBottom(scrollViewRef);
-  }, [history, messages.length]);
+  }, [history]);
 
   // ✅ NEW: when history updates (e.g., after Sync Now), reflect isSynced/source changes in chat bubbles
   useEffect(() => {
