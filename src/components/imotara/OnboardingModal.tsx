@@ -175,7 +175,12 @@ export function OnboardingModal({ visible, onComplete }: Props) {
   ];
 
   return (
-    <Modal visible={visible} animationType="slide" statusBarTranslucent>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={() => {/* onboarding is required — back button does nothing */}}
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1, backgroundColor: colors.background }}

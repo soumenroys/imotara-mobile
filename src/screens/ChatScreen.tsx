@@ -1258,11 +1258,13 @@ function MessageBubble({
                 return (
                   <TouchableOpacity
                     onPress={() => Linking.openURL(`tel:${primary.contact.replace(/[^\d+]/g, "")}`)}
-                    style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 }}
+                    style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 10, paddingHorizontal: 4 }}
                     accessibilityRole="link"
+                    accessibilityLabel={`Call ${primary.label}: ${primary.contact}`}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text style={{ fontSize: 12, color: "rgba(196,181,253,0.85)" }}>{primary.label}:</Text>
-                    <Text style={{ fontSize: 12, color: "rgba(196,181,253,1)", fontWeight: "700", textDecorationLine: "underline" }}>{primary.contact}</Text>
+                    <Text style={{ fontSize: 13, color: "rgba(196,181,253,0.85)" }}>{primary.label}:</Text>
+                    <Text style={{ fontSize: 13, color: "rgba(196,181,253,1)", fontWeight: "700", textDecorationLine: "underline" }}>{primary.contact}</Text>
                   </TouchableOpacity>
                 );
               })()}
@@ -1289,12 +1291,13 @@ function MessageBubble({
                   <TouchableOpacity
                     key={label}
                     onPress={() => Linking.openURL(`tel:${number.replace(/[^\d+]/g, "")}`)}
-                    style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 }}
+                    style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, paddingHorizontal: 4 }}
                     accessibilityRole="link"
                     accessibilityLabel={`Call ${label}: ${number}`}
+                    hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
                   >
-                    <Text style={{ fontSize: 12, color: "#fde68a", opacity: 0.85 }}>{label}</Text>
-                    <Text style={{ fontSize: 12, color: "#fde68a", fontWeight: "700", textDecorationLine: "underline" }}>{number}</Text>
+                    <Text style={{ fontSize: 13, color: "#fde68a", opacity: 0.85 }}>{label}</Text>
+                    <Text style={{ fontSize: 13, color: "#fde68a", fontWeight: "700", textDecorationLine: "underline" }}>{number}</Text>
                   </TouchableOpacity>
                 ));
               })()}
@@ -1577,6 +1580,8 @@ export default function ChatScreen() {
       if (isSendingRef.current && sendAge > 25_000) {
         resetTypingState("foreground-stale-sendlock");
       }
+      // Scroll to latest message when user returns to the app
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 100);
     },
   });
 
@@ -3081,7 +3086,8 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "android" ? 80 : 0}
     >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
       {/* Offline / unsynced indicator */}

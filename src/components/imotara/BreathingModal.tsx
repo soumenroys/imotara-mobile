@@ -10,6 +10,7 @@ import {
   Animated,
   Vibration,
   Pressable,
+  AppState,
 } from "react-native";
 import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
@@ -297,6 +298,14 @@ export function BreathingModal({ visible, onClose }: Props) {
   useEffect(() => {
     if (!visible) stopExercise();
   }, [visible, stopExercise]);
+
+  // Pause when app goes to background — prevents audio drain and battery waste
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") stopExercise();
+    });
+    return () => sub.remove();
+  }, [stopExercise]);
 
   // Cleanup on unmount
   useEffect(() => {

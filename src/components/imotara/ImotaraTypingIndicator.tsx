@@ -1,18 +1,46 @@
 // src/components/imotara/ImotaraTypingIndicator.tsx
-import React from "react";
-import { View, StyleSheet } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { View, StyleSheet, Animated } from "react-native";
 import AppSurface from "../ui/AppSurface";
 
 export type ImotaraTypingIndicatorProps = {
     isUser?: boolean;
 };
 
-/**
- * ImotaraTypingIndicator
- * ----------------------
- * Simple three-dot typing indicator bubble.
- * For now, this is a static skeleton. We'll add animations later.
- */
+const DOT_SIZE = 6;
+const DELAYS = [0, 150, 300];
+
+function AnimatedDot({ delay }: { delay: number }) {
+    const anim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        const loop = Animated.loop(
+            Animated.sequence([
+                Animated.delay(delay),
+                Animated.timing(anim, {
+                    toValue: -5,
+                    duration: 300,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(anim, {
+                    toValue: 0,
+                    duration: 300,
+                    useNativeDriver: true,
+                }),
+                Animated.delay(600 - delay),
+            ]),
+        );
+        loop.start();
+        return () => loop.stop();
+    }, [anim, delay]);
+
+    return (
+        <Animated.View
+            style={[styles.dot, { transform: [{ translateY: anim }] }]}
+        />
+    );
+}
+
 export const ImotaraTypingIndicator: React.FC<ImotaraTypingIndicatorProps> = ({
     isUser = false,
 }) => {
@@ -22,16 +50,14 @@ export const ImotaraTypingIndicator: React.FC<ImotaraTypingIndicatorProps> = ({
         <View style={[styles.row, containerAlignment]}>
             <AppSurface style={[styles.bubble, isUser ? styles.userBubble : styles.botBubble]}>
                 <View style={styles.dotsRow}>
-                    <View style={styles.dot} />
-                    <View style={styles.dot} />
-                    <View style={styles.dot} />
+                    {DELAYS.map((delay, i) => (
+                        <AnimatedDot key={i} delay={delay} />
+                    ))}
                 </View>
             </AppSurface>
         </View>
     );
 };
-
-const DOT_SIZE = 6;
 
 const styles = StyleSheet.create({
     row: {
@@ -46,8 +72,8 @@ const styles = StyleSheet.create({
     },
     bubble: {
         maxWidth: "40%",
-        paddingVertical: 8,
-        paddingHorizontal: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
     },
     userBubble: {
         opacity: 0.9,

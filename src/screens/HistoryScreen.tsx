@@ -244,7 +244,7 @@ function formatTimeLabelSafe(timestamp: number): string {
 }
 
 // ── Swipeable row (swipe left to reveal delete) ────────────────────────────────
-const SWIPE_THRESHOLD = 80;
+const SWIPE_THRESHOLD = 110;
 
 function SwipeableRow({
     children,
