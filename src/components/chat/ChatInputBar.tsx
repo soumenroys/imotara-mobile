@@ -127,6 +127,8 @@ export function ChatInputBar({
           accessibilityLabel={
             voiceState === "recording" ? "Stop recording" : "Start voice input"
           }
+          accessibilityRole="button"
+          accessibilityHint={voiceState === "recording" ? "Tap to stop and transcribe" : "Tap to record your message"}
         >
           <Ionicons
             name={
@@ -149,6 +151,8 @@ export function ChatInputBar({
         <TouchableOpacity
           onPress={onSend}
           disabled={isSendDisabled}
+          accessibilityLabel="Send message"
+          accessibilityRole="button"
           style={{
             opacity: isSendDisabled ? 0.4 : 1,
             paddingHorizontal: 14,

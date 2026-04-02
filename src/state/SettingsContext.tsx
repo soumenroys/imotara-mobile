@@ -344,14 +344,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             }
                         }
 
-                        // Restore local user scope id (optional; added later)
-                        if ("localUserScopeId" in parsed) {
-                            const v = (parsed as any).localUserScopeId;
-                            if (typeof v === "string" && v.trim()) {
-                                _setLocalUserScopeId(v.trim().slice(0, 80));
-                            }
-                        }
-
                         if ("lastSyncAt" in parsed) {
                             const v = parsed.lastSyncAt;
                             _setLastSyncAt(typeof v === "number" ? v : null);
