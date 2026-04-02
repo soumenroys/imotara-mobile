@@ -80,6 +80,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         supabase.auth.getSession().then(({ data }) => {
             setSession(data.session);
             setStatus(data.session ? "authenticated" : "unauthenticated");
+        }).catch(() => {
+            // Network error or Supabase outage — treat as unauthenticated so
+            // the app is usable rather than stuck on "loading" forever.
+            setStatus("unauthenticated");
         });
 
         const { data: listener } = supabase.auth.onAuthStateChange(
