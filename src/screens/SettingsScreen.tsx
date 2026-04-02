@@ -382,10 +382,10 @@ export default function SettingsScreen() {
                 appVersion: Constants.expoConfig?.version ?? "unknown",
                 messages: history.map((item) => ({
                     id: item.id,
+                    text: item.text,
+                    from: item.from,
                     emotion: item.emotion,
-                    message: item.message,
-                    source: item.source,
-                    entryKind: item.entryKind,
+                    intensity: item.intensity,
                     timestamp: item.timestamp,
                     isSynced: item.isSynced,
                 })),
