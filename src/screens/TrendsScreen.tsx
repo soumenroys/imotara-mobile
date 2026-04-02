@@ -4,6 +4,7 @@
 
 import React, { useMemo, useState, useEffect } from "react";
 import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, Dimensions } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useHistoryStore } from "../state/HistoryContext";
@@ -896,6 +897,7 @@ function computeStreak(activeDays: Set<string>): number {
 
 export default function TrendsScreen() {
   const colors = useColors();
+  const navigation = useNavigation<any>();
   const store = useHistoryStore() as any;
   const history: any[] = store.history ?? [];
   const addToHistory: ((item: any) => void) | undefined = store.addToHistory;
@@ -1086,9 +1088,15 @@ export default function TrendsScreen() {
           <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, textAlign: "center", marginBottom: 8 }}>
             No data yet
           </Text>
-          <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center" }}>
+          <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", marginBottom: 20 }}>
             Log a check-in above or start a few conversations and your trends will appear here.
           </Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Chat")}
+            style={{ paddingHorizontal: 20, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: "rgba(99,102,241,0.5)", backgroundColor: "rgba(99,102,241,0.12)" }}
+          >
+            <Text style={{ fontSize: 13, color: "#a5b4fc", fontWeight: "600" }}>Start a conversation →</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     );

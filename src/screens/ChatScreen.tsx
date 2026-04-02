@@ -2188,6 +2188,7 @@ export default function ChatScreen() {
     latestInputRef.current = "";
     setInput("");
     setInputHeight(40);
+    Keyboard.dismiss();
 
     setIsTyping(true);
     typingStartedAtRef.current = Date.now();
@@ -2607,6 +2608,22 @@ export default function ChatScreen() {
           smoothScrollToBottom(scrollViewRef);
         } catch (error) {
           debugWarn("Imotara mobile AI error:", error);
+
+          // Surface a brief, actionable toast based on error type
+          const errMsg = error instanceof Error ? error.message : String(error);
+          const isNetwork =
+            errMsg.includes("Network") ||
+            errMsg.includes("fetch") ||
+            errMsg.includes("connect") ||
+            (typeof navigator !== "undefined" && !navigator.onLine);
+          const isTimeout = errMsg.includes("timeout") || errMsg.includes("Timeout");
+          if (isNetwork) {
+            toastRef.current?.show("No internet — replied offline", "info");
+          } else if (isTimeout) {
+            toastRef.current?.show("Server took too long — replied offline", "info");
+          } else {
+            toastRef.current?.show("Cloud unavailable — replied offline", "info");
+          }
 
           const wantsCloud = analysisMode !== "local" && cloudSyncAllowed;
           const wantsInsights = emotionInsightsEnabled;
