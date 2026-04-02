@@ -36,6 +36,7 @@ import {
     clearMemories,
     removeMemory,
     updateMemory,
+    addMemory,
     type MemoryItem,
 } from "../state/companionMemory";
 import { fetchRemoteHistory } from "../api/historyClient";
@@ -292,6 +293,8 @@ export default function SettingsScreen() {
     const [deletingMemoryId, setDeletingMemoryId] = React.useState<string | null>(null);
     const [editingMemoryId, setEditingMemoryId] = React.useState<string | null>(null);
     const [editingMemoryText, setEditingMemoryText] = React.useState("");
+    const [addingMemory, setAddingMemory] = React.useState(false);
+    const [newMemoryText, setNewMemoryText] = React.useState("");
     React.useEffect(() => {
         loadMemories().then(setMemories).catch(() => {});
     }, []);
@@ -335,6 +338,17 @@ export default function SettingsScreen() {
                 },
             ]
         );
+    };
+
+    const handleAddMemory = () => {
+        const trimmed = newMemoryText.trim();
+        if (!trimmed) { setAddingMemory(false); return; }
+        addMemory({ text: trimmed, source: "manual" })
+            .then(() => loadMemories())
+            .then(setMemories)
+            .catch(() => {});
+        setNewMemoryText("");
+        setAddingMemory(false);
     };
 
     // ✅ Link key status (UI only)
@@ -1115,12 +1129,38 @@ export default function SettingsScreen() {
                                     : `${memories.length} thing${memories.length !== 1 ? "s" : ""} remembered`}
                             </Text>
                         </View>
-                        {memories.length > 0 && (
-                            <TouchableOpacity onPress={handleClearMemories} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                <Text style={{ fontSize: 12, color: "rgba(248,113,113,0.9)", fontWeight: "600" }}>Clear</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                            <TouchableOpacity onPress={() => { setAddingMemory(true); setNewMemoryText(""); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>+ Add</Text>
                             </TouchableOpacity>
-                        )}
+                            {memories.length > 0 && (
+                                <TouchableOpacity onPress={handleClearMemories} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                    <Text style={{ fontSize: 12, color: "rgba(248,113,113,0.9)", fontWeight: "600" }}>Clear</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     </View>
+                    {addingMemory && (
+                        <View style={{ paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border, gap: 6 }}>
+                            <TextInput
+                                value={newMemoryText}
+                                onChangeText={setNewMemoryText}
+                                autoFocus
+                                placeholder="E.g. I have anxiety around social situations"
+                                placeholderTextColor={colors.textSecondary}
+                                multiline
+                                style={{ fontSize: 12, color: colors.textPrimary, borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, minHeight: 40 }}
+                            />
+                            <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
+                                <TouchableOpacity onPress={() => setAddingMemory(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={handleAddMemory} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                    <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Save</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
                     {memories.map((m) => (
                         <View
                             key={m.id}

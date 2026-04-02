@@ -5,7 +5,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
+  FlatList,
   Alert,
   Pressable,
   Animated,
@@ -860,7 +860,7 @@ function stripReflectionPromptFromMessage(
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
 const SESSION_GAP_MS = 45 * 60 * 1000;
 
-function smoothScrollToBottom(ref: React.RefObject<ScrollView | null>) {
+function smoothScrollToBottom(ref: React.RefObject<FlatList | null>) {
   setTimeout(() => {
     ref.current?.scrollToEnd({ animated: true });
   }, 30);
@@ -1123,6 +1123,8 @@ function MessageBubble({
       <Pressable
         onLongPress={message.isPending ? undefined : () => onLongPress(message)}
         delayLongPress={250}
+        accessibilityLabel={`${isUser ? "You" : "Imotara"}: ${message.text}`}
+        accessibilityRole="text"
         style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: "82%", marginBottom: 10, paddingHorizontal: 1 }}
       >
         {isUser ? (
@@ -1173,6 +1175,7 @@ function MessageBubble({
               <TouchableOpacity
                 onPress={() => setReactionPickerOpen((v) => !v)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="React to message"
               >
                 <Ionicons
                   name={activeOption ? activeOption.icon : "happy-outline"}
@@ -1182,7 +1185,7 @@ function MessageBubble({
               </TouchableOpacity>
 
               {/* Copy */}
-              <TouchableOpacity onPress={() => onCopy(message.text)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <TouchableOpacity onPress={() => onCopy(message.text)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Copy message">
                 <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
 
@@ -1190,6 +1193,7 @@ function MessageBubble({
               <TouchableOpacity
                 onPress={() => isSpeaking ? onStopSpeak() : onSpeak(message.id, message.text)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel={isSpeaking ? "Stop speaking" : "Read message aloud"}
               >
                 <Ionicons
                   name={isSpeaking ? "stop-circle-outline" : "volume-high-outline"}
@@ -1199,7 +1203,7 @@ function MessageBubble({
               </TouchableOpacity>
 
               {/* Bookmark */}
-              <TouchableOpacity onPress={() => onBookmark(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <TouchableOpacity onPress={() => onBookmark(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={isBookmarked ? "Remove bookmark" : "Bookmark message"}>
                 <Ionicons
                   name={isBookmarked ? "star" : "star-outline"}
                   size={18}
@@ -1372,7 +1376,19 @@ export default function ChatScreen() {
 
   // Voice input
   const voiceInput = useVoiceInput(
-    (text) => setInput((prev) => prev ? `${prev} ${text}` : text),
+    (text) => {
+      Alert.alert(
+        "Use this transcription?",
+        text,
+        [
+          { text: "Discard", style: "destructive" },
+          {
+            text: "Use",
+            onPress: () => setInput((prev) => prev ? `${prev} ${text}` : text),
+          },
+        ],
+      );
+    },
     process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL,
   );
 
@@ -1494,13 +1510,8 @@ export default function ChatScreen() {
     loadMemories().then((items) => { memoriesRef.current = items; }).catch(() => {});
   }, []);
 
-  const scrollViewRef = useRef<ScrollView | null>(null);
+  const scrollViewRef = useRef<FlatList | null>(null);
   const toastRef = useRef<ToastHandle>(null);
-
-  // Dynamic top spacer — pushes messages toward bottom when content is short
-  const [scrollViewHeight, setScrollViewHeight] = useState(0);
-  const [messagesContentHeight, setMessagesContentHeight] = useState(0);
-  const topSpacerHeight = Math.max(0, scrollViewHeight - messagesContentHeight - 16);
 
   // ✅ RN-safe typing (fixes TS issues in many RN setups)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3432,24 +3443,59 @@ export default function ChatScreen() {
           </Animated.View>
         )}
 
-        <ScrollView
+        <FlatList
           ref={scrollViewRef}
+          data={showBookmarksOnly ? messages.filter((m) => bookmarks.has(m.id)) : messages}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item: message, index }) => (
+            <MessageBubble
+              message={message}
+              index={index}
+              messages={messages}
+              colors={colors}
+              searchMatchIds={searchMatchIds}
+              searchActiveMatchId={searchActiveMatchId}
+              bookmarks={bookmarks}
+              lastSyncStatus={lastSyncStatus}
+              dismissedCrisisCards={dismissedCrisisCards}
+              reactions={reactions}
+              speakingMessageId={speakingMessageId}
+              onLongPress={setActionMessage}
+              onDismissCrisisCard={dismissCrisisCard}
+              onRetry={(messageId, prevUserText) => {
+                setMessages((prev) => prev.filter((m) => m.id !== messageId));
+                deleteFromHistory(messageId);
+                setInput(prevUserText);
+              }}
+              onCopy={handleCopyMessage}
+              onSpeak={(id, text) => {
+                const gender = toneContext?.companion?.enabled
+                  ? toneContext?.companion?.gender
+                  : toneContext?.user?.gender as string | undefined;
+                const lang = toneContext?.user?.preferredLang ?? "en";
+                setSpeakingMessageId(id);
+                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null));
+              }}
+              onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); }}
+              onBookmark={handleToggleBookmark}
+              onReact={addReaction}
+            />
+          )}
           contentContainerStyle={{
             paddingHorizontal: 14,
             paddingTop: 4,
             paddingBottom: 80,
+            flexGrow: 1,
+            justifyContent: "flex-end",
           }}
-          onLayout={(e) => setScrollViewHeight(e.nativeEvent.layout.height)}
           onScroll={handleScroll}
           scrollEventThrottle={50}
           onScrollEndDrag={() => {
             if (!DEBUG_UI_ENABLED) return;
             if (pullOffset < -60) handleRefresh();
           }}
-        >
-          {/* Dynamic spacer pushes messages to bottom when content is short */}
-          {topSpacerHeight > 0 && <View style={{ height: topSpacerHeight }} />}
-          <View onLayout={(e) => setMessagesContentHeight(e.nativeEvent.layout.height)}>
+          removeClippedSubviews
+          ListHeaderComponent={<View>
           {messages.length === 0 && (
             <View style={{ paddingTop: 24, paddingBottom: 16 }}>
               <Text
@@ -3854,43 +3900,8 @@ export default function ChatScreen() {
               );
             })()}
 
-          {(showBookmarksOnly ? messages.filter((m) => bookmarks.has(m.id)) : messages).map((message, index) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                index={index}
-                messages={messages}
-                colors={colors}
-                searchMatchIds={searchMatchIds}
-                searchActiveMatchId={searchActiveMatchId}
-                bookmarks={bookmarks}
-                lastSyncStatus={lastSyncStatus}
-                dismissedCrisisCards={dismissedCrisisCards}
-                reactions={reactions}
-                speakingMessageId={speakingMessageId}
-                onLongPress={setActionMessage}
-                onDismissCrisisCard={dismissCrisisCard}
-                onRetry={(messageId, prevUserText) => {
-                  setMessages((prev) => prev.filter((m) => m.id !== messageId));
-                  deleteFromHistory(messageId);
-                  setInput(prevUserText);
-                }}
-                onCopy={handleCopyMessage}
-                onSpeak={(id, text) => {
-                  const gender = toneContext?.companion?.enabled
-                    ? toneContext?.companion?.gender
-                    : toneContext?.user?.gender as string | undefined;
-                  const lang = toneContext?.user?.preferredLang ?? "en";
-                  setSpeakingMessageId(id);
-                  speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null));
-                }}
-                onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); }}
-                onBookmark={handleToggleBookmark}
-                onReact={addReaction}
-              />
-            ))}
-
-          {isTyping && (
+          </View>}
+          ListFooterComponent={isTyping ? (
             <Animated.View
               style={{
                 opacity: typingGlow.interpolate({
@@ -3911,6 +3922,7 @@ export default function ChatScreen() {
                 style={{
                   alignSelf: "flex-start",
                   marginTop: 4,
+                  marginHorizontal: 14,
                   paddingHorizontal: 10,
                   paddingVertical: 6,
                   borderRadius: 999,
@@ -3924,9 +3936,8 @@ export default function ChatScreen() {
                 </Text>
               </View>
             </Animated.View>
-          )}
-          </View>{/* end messages measuring View */}
-        </ScrollView>
+          ) : null}
+        />
 
       </View>
 
