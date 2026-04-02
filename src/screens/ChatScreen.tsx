@@ -3511,7 +3511,6 @@ export default function ChatScreen() {
             if (!DEBUG_UI_ENABLED) return;
             if (pullOffset < -60) handleRefresh();
           }}
-          removeClippedSubviews
           ListHeaderComponent={<View>
           {messages.length === 0 && (
             <View style={{ paddingTop: 24, paddingBottom: 16 }}>
