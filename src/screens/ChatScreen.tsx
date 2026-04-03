@@ -1395,6 +1395,17 @@ export default function ChatScreen() {
   // Message reactions — messageId → emoji
   const [reactions, setReactions] = useState<Map<string, string>>(new Map());
 
+  // AI consent — shown once before first cloud message
+  const AI_CONSENT_KEY = "imotara_ai_consent_v1";
+  const [aiConsentGiven, setAiConsentGiven] = useState<boolean | null>(null);
+  const [showAiConsentModal, setShowAiConsentModal] = useState(false);
+  const pendingConsentSendRef = useRef<string | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(AI_CONSENT_KEY).then((val) => {
+      setAiConsentGiven(val === "1");
+    }).catch(() => setAiConsentGiven(true));
+  }, []);
+
   // Return greeting — shown after >24h absence
   const [showReturnGreeting, setShowReturnGreeting] = useState(false);
   useEffect(() => {
@@ -2152,6 +2163,13 @@ export default function ChatScreen() {
     if (!trimmed) return;
     if (trimmed.length > CHAR_LIMIT) {
       Alert.alert("Message too long", `Please shorten your message to under ${CHAR_LIMIT} characters.`);
+      return;
+    }
+
+    // AI consent gate — show once before first cloud message
+    if (isOnline && aiConsentGiven === false) {
+      pendingConsentSendRef.current = trimmed;
+      setShowAiConsentModal(true);
       return;
     }
 
@@ -3111,10 +3129,57 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior="padding"
-      keyboardVerticalOffset={0}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
+      {/* AI data consent modal — shown once before first cloud message */}
+      {showAiConsentModal && (
+        <View style={{
+          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.75)", zIndex: 999,
+          alignItems: "center", justifyContent: "center", padding: 24,
+        }}>
+          <View style={{
+            backgroundColor: "#0f172a", borderRadius: 16, padding: 24,
+            borderWidth: 1, borderColor: "rgba(56,189,248,0.3)", maxWidth: 360,
+          }}>
+            <Text style={{ color: "#fff", fontSize: 17, fontWeight: "700", marginBottom: 12 }}>
+              About Cloud AI Replies
+            </Text>
+            <Text style={{ color: "#cbd5e1", fontSize: 14, lineHeight: 22, marginBottom: 16 }}>
+              When you send a message, your message text is processed by a third-party AI service (OpenAI or Google Gemini) to generate a reply.{"\n\n"}
+              No account information, your name, or device data is attached to the request. Only the text you type is sent.{"\n\n"}
+              You can switch to offline (local) mode at any time from Settings to keep everything on-device.
+            </Text>
+            <TouchableOpacity
+              onPress={async () => {
+                await AsyncStorage.setItem(AI_CONSENT_KEY, "1");
+                setAiConsentGiven(true);
+                setShowAiConsentModal(false);
+                const pending = pendingConsentSendRef.current;
+                pendingConsentSendRef.current = null;
+                if (pending) setTimeout(() => handleSend(pending), 0);
+              }}
+              style={{
+                backgroundColor: "#0ea5e9", borderRadius: 10, paddingVertical: 12,
+                alignItems: "center", marginBottom: 10,
+              }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>I Understand &amp; Agree</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setShowAiConsentModal(false);
+                pendingConsentSendRef.current = null;
+              }}
+              style={{ alignItems: "center", paddingVertical: 8 }}
+            >
+              <Text style={{ color: "#94a3b8", fontSize: 14 }}>Use offline mode instead</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {/* Offline / unsynced indicator */}
       {!isOnline ? (
         <View style={{ backgroundColor: "rgba(239,68,68,0.90)", paddingVertical: 5, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>

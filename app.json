@@ -13,9 +13,9 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.imotara.imotara",
-      "buildNumber": "63",
+      "buildNumber": "64",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Imotara needs access to your photo library only if you choose to upload or attach an image.",
@@ -72,7 +72,7 @@
     },
     "android": {
       "package": "com.imotara.imotara",
-      "versionCode": 63,
+      "versionCode": 64,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
