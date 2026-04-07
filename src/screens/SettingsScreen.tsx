@@ -95,7 +95,7 @@ function getApiBaseUrl(): string {
 }
 
 export default function SettingsScreen() {
-    const { accessToken } = useAuth();
+    const { accessToken, signOut } = useAuth();
 
     // Keep compatibility with your current store shape, but allow optional newer fields
     const store = useHistoryStore() as any;
@@ -305,6 +305,9 @@ export default function SettingsScreen() {
     const [feedbackType, setFeedbackType] = React.useState<"feedback" | "bug">("feedback");
     const [feedbackText, setFeedbackText] = React.useState("");
     const [feedbackStatus, setFeedbackStatus] = React.useState<string | null>(null);
+
+    // Account deletion
+    const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
     const handleRemoveMemory = (id: string) => {
         setDeletingMemoryId(id);
         removeMemory(id)
@@ -682,6 +685,51 @@ export default function SettingsScreen() {
         }
     };
 
+    const handleDeleteAccount = () => {
+        Alert.alert(
+            "Delete Account",
+            "This will permanently delete all your data — conversations, memories, and settings. This cannot be undone.\n\nAre you sure?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete My Account",
+                    style: "destructive",
+                    onPress: async () => {
+                        if (!mountedRef.current) return;
+                        setIsDeletingAccount(true);
+                        try {
+                            // 1. Wipe local data
+                            await clearHistory();
+                            await clearMemories();
+
+                            // 2. Request server-side deletion if authenticated
+                            if (accessToken) {
+                                const base = getApiBaseUrl();
+                                if (base) {
+                                    await fetch(`${base}/api/account/delete`, {
+                                        method: "DELETE",
+                                        headers: { Authorization: `Bearer ${accessToken}` },
+                                    }).catch(() => {}); // best-effort
+                                }
+                            }
+
+                            // 3. Sign out (also clears AsyncStorage keys)
+                            await signOut();
+                        } catch {
+                            if (mountedRef.current) {
+                                setIsDeletingAccount(false);
+                                Alert.alert(
+                                    "Error",
+                                    "Something went wrong. Please try again or contact support@imotara.com."
+                                );
+                            }
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     const formattedLastSync = lastSyncAt
         ? new Date(lastSyncAt).toLocaleString()
         : "Not synced yet";
@@ -777,8 +825,8 @@ export default function SettingsScreen() {
                     </TouchableOpacity>
                 </View>
 
-                {/* ✅ Support / Donation card */}
-                <AppSurface style={{ marginBottom: 16 }}>
+                {/* ✅ Support / Donation card — hidden on iOS (Apple IAP policy 3.1.1) */}
+                {Platform.OS !== "ios" && <AppSurface style={{ marginBottom: 16 }}>
                     <Text
                         style={{
                             fontSize: 14,
@@ -849,7 +897,7 @@ export default function SettingsScreen() {
                         Your chat data is never publicly exposed. Donations help cover
                         hosting and development.
                     </Text>
-                </AppSurface>
+                </AppSurface>}
 
                 {/* ✅ Plan / Licensing card (foundation) */}
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -1335,7 +1383,7 @@ export default function SettingsScreen() {
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
                         Auto: tries cloud, falls back to local. Cloud: always uses cloud.
                         Local: device-only, nothing is sent externally.{"\n"}
-                        When cloud is used, your message is sent to a third-party AI service to generate a reply. No account info or device data is attached.
+                        When cloud is used, your message text is sent to Anthropic (Claude API) to generate a reply. No account info, device ID, or personal data is attached. Anthropic's privacy policy applies to data processed by their API.
                     </Text>
 
                     {!canCloudSync ? (
@@ -2446,6 +2494,41 @@ export default function SettingsScreen() {
                             {feedbackStatus}
                         </Text>
                     ) : null}
+                </AppSurface>
+
+                {/* Delete Account */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Delete Account
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 14, lineHeight: 19 }}>
+                        Permanently deletes all your conversations, memories, and settings from this device and our servers. This action cannot be undone.
+                    </Text>
+                    <TouchableOpacity
+                        onPress={handleDeleteAccount}
+                        disabled={isDeletingAccount}
+                        style={{
+                            alignSelf: "flex-start",
+                            paddingHorizontal: 20,
+                            paddingVertical: 9,
+                            borderRadius: 999,
+                            backgroundColor: "rgba(248,113,113,0.12)",
+                            borderWidth: 1,
+                            borderColor: "rgba(248,113,113,0.4)",
+                            opacity: isDeletingAccount ? 0.5 : 1,
+                        }}
+                    >
+                        <Text style={{ fontSize: 13, fontWeight: "600", color: "#f87171" }}>
+                            {isDeletingAccount ? "Deleting…" : "Delete My Account"}
+                        </Text>
+                    </TouchableOpacity>
                 </AppSurface>
 
                 {/* App Info */}

@@ -3131,6 +3131,7 @@ export default function ChatScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      enabled={!(Platform.OS === "ios" && Platform.isPad)}
     >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
       {/* AI data consent modal — shown once before first cloud message */}
@@ -3148,8 +3149,8 @@ export default function ChatScreen() {
               About Cloud AI Replies
             </Text>
             <Text style={{ color: "#cbd5e1", fontSize: 14, lineHeight: 22, marginBottom: 16 }}>
-              When you send a message, your message text is processed by a third-party AI service (OpenAI or Google Gemini) to generate a reply.{"\n\n"}
-              No account information, your name, or device data is attached to the request. Only the text you type is sent.{"\n\n"}
+              When you send a message, your message text is sent to Anthropic (Claude API) to generate a reply.{"\n\n"}
+              No account information, your name, or device data is attached to the request. Only the text you type is sent. Anthropic's privacy policy applies to data processed by their API.{"\n\n"}
               You can switch to offline (local) mode at any time from Settings to keep everything on-device.
             </Text>
             <TouchableOpacity
