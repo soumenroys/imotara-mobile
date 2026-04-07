@@ -11,6 +11,7 @@ import { useColors } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
 import AppButton from "../components/ui/AppButton";
 import AppChip from "../components/ui/AppChip";
+import { Toast, type ToastHandle } from "../components/ui/Toast";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
 // ✅ Licensing gates
@@ -359,12 +360,19 @@ export default function HistoryScreen() {
     // ✅ QA hardening: avoid repeated remote-load taps
     const [isLoadingRemote, setIsLoadingRemote] = React.useState(false);
 
+    const toastRef = React.useRef<ToastHandle>(null);
     const [isRefreshing, setIsRefreshing] = React.useState(false);
     const handleRefresh = React.useCallback(async () => {
         if (isRefreshing) return;
         setIsRefreshing(true);
-        try { await pushHistoryToRemote?.(); } catch { /* ignore */ }
-        finally { if (mountedRef.current) setIsRefreshing(false); }
+        try {
+            await pushHistoryToRemote?.();
+            if (mountedRef.current) toastRef.current?.show("Synced ✓", "success");
+        } catch {
+            if (mountedRef.current) toastRef.current?.show("Sync failed — data saved locally", "error");
+        } finally {
+            if (mountedRef.current) setIsRefreshing(false);
+        }
     }, [isRefreshing, pushHistoryToRemote]);
 
     const handleExportJSON = React.useCallback(async () => {
@@ -1256,6 +1264,7 @@ export default function HistoryScreen() {
                     </View>
                 </View>
             </Modal>
+            <Toast ref={toastRef} />
         </View>
     );
 }

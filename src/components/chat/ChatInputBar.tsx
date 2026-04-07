@@ -2,7 +2,7 @@
 // Bottom input area for ChatScreen — text field, mic button, send button.
 
 import React from "react";
-import { View, Text, TextInput, TouchableOpacity } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ColorPalette } from "../../theme/colors";
@@ -130,21 +130,15 @@ export function ChatInputBar({
           accessibilityRole="button"
           accessibilityHint={voiceState === "recording" ? "Tap to stop and transcribe" : "Tap to record your message"}
         >
-          <Ionicons
-            name={
-              voiceState === "transcribing"
-                ? "time-outline"
-                : voiceState === "recording"
-                ? "stop-circle-outline"
-                : "mic-outline"
-            }
-            size={18}
-            color={
-              voiceState === "recording"
-                ? "rgba(239,68,68,0.9)"
-                : colors.textPrimary
-            }
-          />
+          {voiceState === "transcribing" ? (
+            <ActivityIndicator size="small" color={colors.textSecondary} />
+          ) : (
+            <Ionicons
+              name={voiceState === "recording" ? "stop-circle-outline" : "mic-outline"}
+              size={18}
+              color={voiceState === "recording" ? "rgba(239,68,68,0.9)" : colors.textPrimary}
+            />
+          )}
         </TouchableOpacity>
 
         {/* Send button */}

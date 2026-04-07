@@ -3,7 +3,7 @@
 // Shows: streak, weekly emotion frequency bars, dominant emotion per day, summary.
 
 import React, { useMemo, useState, useEffect } from "react";
-import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, Dimensions } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, Dimensions, Modal } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -223,6 +223,7 @@ function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useC
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [body, setBody] = useState("");
+  const [expandedEntry, setExpandedEntry] = useState<JournalEntry | null>(null);
 
   const dayIndex = Math.floor(Date.now() / 86400000);
   const emotionBank = topEmotion && topEmotion !== "neutral" ? JOURNAL_EMOTION_PROMPTS[topEmotion] : undefined;
@@ -374,15 +375,21 @@ function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useC
       {/* Past entries */}
       {recent.map((entry) => {
         const dateStr = new Date(entry.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+        const isLong = entry.body.length > 200;
         return (
-          <View key={entry.id} style={{ borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, padding: 12, marginBottom: 8 }}>
+          <TouchableOpacity
+            key={entry.id}
+            activeOpacity={isLong ? 0.7 : 1}
+            onPress={isLong ? () => setExpandedEntry(entry) : undefined}
+            style={{ borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, padding: 12, marginBottom: 8 }}
+          >
             <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
               <Text style={{ fontSize: 11, color: colors.textSecondary }}>{dateStr}</Text>
               <View style={{ flexDirection: "row", gap: 12 }}>
-                <TouchableOpacity onPress={() => handleEdit(entry)}>
+                <TouchableOpacity onPress={() => handleEdit(entry)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Text style={{ fontSize: 11, color: colors.primary }}>Edit</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDelete(entry.id)}>
+                <TouchableOpacity onPress={() => handleDelete(entry.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Text style={{ fontSize: 11, color: "#fca5a5" }}>Delete</Text>
                 </TouchableOpacity>
               </View>
@@ -393,9 +400,52 @@ function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useC
             <Text style={{ fontSize: 13, color: colors.textPrimary, lineHeight: 18 }} numberOfLines={4}>
               {entry.body}
             </Text>
-          </View>
+            {isLong && (
+              <Text style={{ fontSize: 11, color: colors.primary, marginTop: 4 }}>Read more →</Text>
+            )}
+          </TouchableOpacity>
         );
       })}
+
+      {/* Full-entry modal */}
+      <Modal
+        visible={expandedEntry !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setExpandedEntry(null)}
+      >
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", padding: 24 }}
+          activeOpacity={1}
+          onPress={() => setExpandedEntry(null)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <View style={{ backgroundColor: colors.surface, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: colors.border }}>
+              {expandedEntry && (
+                <>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6 }}>
+                    {new Date(expandedEntry.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary, fontStyle: "italic", marginBottom: 12 }}>
+                    {expandedEntry.prompt}
+                  </Text>
+                  <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, lineHeight: 22 }}>
+                      {expandedEntry.body}
+                    </Text>
+                  </ScrollView>
+                  <TouchableOpacity
+                    onPress={() => setExpandedEntry(null)}
+                    style={{ alignSelf: "flex-end", marginTop: 16, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}
+                  >
+                    <Text style={{ fontSize: 13, color: colors.textPrimary }}>Close</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }

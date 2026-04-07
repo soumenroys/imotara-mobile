@@ -1260,6 +1260,7 @@ export default function SettingsScreen() {
                                 placeholder="E.g. I have anxiety around social situations"
                                 placeholderTextColor={colors.textSecondary}
                                 multiline
+                                maxLength={200}
                                 style={{ fontSize: 12, color: colors.textPrimary, borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, minHeight: 40 }}
                             />
                             <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
@@ -1288,6 +1289,7 @@ export default function SettingsScreen() {
                                         onChangeText={setEditingMemoryText}
                                         autoFocus
                                         multiline
+                                        maxLength={200}
                                         style={{ fontSize: 12, color: colors.textPrimary, borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, minHeight: 40 }}
                                     />
                                     <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
