@@ -3149,9 +3149,9 @@ export default function ChatScreen() {
               About Cloud AI Replies
             </Text>
             <Text style={{ color: "#cbd5e1", fontSize: 14, lineHeight: 22, marginBottom: 16 }}>
-              When you send a message, your message text is sent to Anthropic (Claude API) to generate a reply.{"\n\n"}
-              No account information, your name, or device data is attached to the request. Only the text you type is sent. Anthropic's privacy policy applies to data processed by their API.{"\n\n"}
-              You can switch to offline (local) mode at any time from Settings to keep everything on-device.
+              When you send a message in cloud mode, your message text is sent to OpenAI (ChatGPT) to generate a reply, with Google (Gemini) as a fallback.{"\n\n"}
+              No account information, your name, or device data is attached. Only the text you type is sent. OpenAI's and Google's privacy policies apply to data processed by their APIs.{"\n\n"}
+              You can switch to Local mode at any time from Settings → Analysis Mode to keep everything on-device with no external calls.
             </Text>
             <TouchableOpacity
               onPress={async () => {

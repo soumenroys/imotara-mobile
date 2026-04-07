@@ -825,8 +825,8 @@ export default function SettingsScreen() {
                     </TouchableOpacity>
                 </View>
 
-                {/* ✅ Support / Donation card — hidden on iOS (Apple IAP policy 3.1.1) */}
-                {Platform.OS !== "ios" && <AppSurface style={{ marginBottom: 16 }}>
+                {/* Support / Donation card */}
+                <AppSurface style={{ marginBottom: 16 }}>
                     <Text
                         style={{
                             fontSize: 14,
@@ -835,7 +835,7 @@ export default function SettingsScreen() {
                             fontWeight: "500",
                         }}
                     >
-                        Support Imotara 🇮🇳 (Donate)
+                        Support Imotara
                     </Text>
 
                     <Text
@@ -845,59 +845,75 @@ export default function SettingsScreen() {
                             marginBottom: 10,
                         }}
                     >
-                        Imotara is being built as a privacy-first, non-commercial chat
-                        companion. If you want to support this Indian initiative, you
-                        can donate to help keep the app reliable and safe.
+                        Imotara is a privacy-first, non-commercial companion built in India.
+                        {Platform.OS === "ios"
+                            ? " If you'd like to support its development, you can donate via our website."
+                            : " If you want to support this initiative, you can donate to help keep the app reliable and safe."}
                     </Text>
 
-                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                        {DONATION_UI_PRESETS.map((p) => (
-                            <TouchableOpacity
-                                key={p.id}
-                                onPress={() =>
-                                    handleDonate({
-                                        id: p.id,
-                                        label: p.label || formatINRFromPaise(p.amount),
-                                        amount: p.amount,
-                                    } as any)
-                                }
-                                disabled={busyRef.current.donate}
-                                style={{
-                                    paddingHorizontal: 12,
-                                    paddingVertical: 6,
-                                    borderRadius: 999,
-                                    borderWidth: 1,
-                                    borderColor: colors.primary,
-                                    backgroundColor: "rgba(56, 189, 248, 0.12)",
-                                    marginRight: 8,
-                                    marginBottom: 8,
-                                    opacity: busyRef.current.donate ? 0.6 : 1,
-                                }}
-                            >
-                                <Text
+                    {Platform.OS === "ios" ? (
+                        /* iOS: open website in browser — no in-app price labels (Apple IAP guideline 3.1.1) */
+                        <TouchableOpacity
+                            onPress={() => Linking.openURL("https://www.imotara.com/donate").catch(() => {})}
+                            style={{
+                                alignSelf: "flex-start",
+                                paddingHorizontal: 16,
+                                paddingVertical: 8,
+                                borderRadius: 999,
+                                borderWidth: 1,
+                                borderColor: colors.primary,
+                                backgroundColor: "rgba(56, 189, 248, 0.12)",
+                            }}
+                        >
+                            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.primary }}>
+                                Support via Website
+                            </Text>
+                        </TouchableOpacity>
+                    ) : (
+                        /* Android: show preset price buttons */
+                        <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                            {DONATION_UI_PRESETS.map((p) => (
+                                <TouchableOpacity
+                                    key={p.id}
+                                    onPress={() =>
+                                        handleDonate({
+                                            id: p.id,
+                                            label: p.label || formatINRFromPaise(p.amount),
+                                            amount: p.amount,
+                                        } as any)
+                                    }
+                                    disabled={busyRef.current.donate}
                                     style={{
-                                        fontSize: 12,
-                                        fontWeight: "700",
-                                        color: colors.textPrimary,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: colors.primary,
+                                        backgroundColor: "rgba(56, 189, 248, 0.12)",
+                                        marginRight: 8,
+                                        marginBottom: 8,
+                                        opacity: busyRef.current.donate ? 0.6 : 1,
                                     }}
                                 >
-                                    {p.label}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                                    <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>
+                                        {p.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
 
                     <Text
                         style={{
                             fontSize: 11,
                             color: colors.textSecondary,
-                            marginTop: 6,
+                            marginTop: 8,
                         }}
                     >
                         Your chat data is never publicly exposed. Donations help cover
                         hosting and development.
                     </Text>
-                </AppSurface>}
+                </AppSurface>
 
                 {/* ✅ Plan / Licensing card (foundation) */}
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -1383,7 +1399,7 @@ export default function SettingsScreen() {
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
                         Auto: tries cloud, falls back to local. Cloud: always uses cloud.
                         Local: device-only, nothing is sent externally.{"\n"}
-                        When cloud is used, your message text is sent to Anthropic (Claude API) to generate a reply. No account info, device ID, or personal data is attached. Anthropic's privacy policy applies to data processed by their API.
+                        When cloud is used, your message text is sent to OpenAI (ChatGPT) to generate a reply, with Google (Gemini) as a fallback. No account info, device ID, or personal data is attached. OpenAI's and Google's privacy policies apply to data processed by their APIs. Local mode keeps everything on-device — nothing is sent externally.
                     </Text>
 
                     {!canCloudSync ? (
