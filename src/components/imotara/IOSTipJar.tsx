@@ -16,11 +16,11 @@ import type { Purchase, Product } from "expo-iap";
 import { useColors } from "../../theme/ThemeContext";
 
 export const IOS_TIP_SKUS = [
-    "com.imotara.imotara.tip1",
-    "com.imotara.imotara.tip2",
-    "com.imotara.imotara.tip3",
-    "com.imotara.imotara.tip4",
-    "com.imotara.imotara.tip5",
+    "donation_49",
+    "donation_99",
+    "donation_199",
+    "donation_499",
+    "donation_999",
 ];
 
 export default function IOSTipJar() {
