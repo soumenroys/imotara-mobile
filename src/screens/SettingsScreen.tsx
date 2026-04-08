@@ -1,6 +1,7 @@
 // src/screens/SettingsScreen.tsx
 import React from "react";
 import Constants from "expo-constants";
+import IOSTipJar from "../components/imotara/IOSTipJar";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import * as FileSystem from "expo-file-system/legacy";
@@ -825,10 +826,9 @@ export default function SettingsScreen() {
                     </TouchableOpacity>
                 </View>
 
-                {/* Support / Donation card — hidden on iOS per Apple guideline 3.1.1
-                    (any in-app donation mechanism, even external browser links, is
-                     flagged as a non-IAP transaction associated with digital services) */}
-                {Platform.OS !== "ios" && (
+                {/* Support / Donation card
+                    - iOS: Apple IAP "tip jar" via StoreKit 2 (guideline 3.1.1 compliant)
+                    - Android: existing Razorpay preset buttons */}
                 <AppSurface style={{ marginBottom: 16 }}>
                     <Text
                         style={{
@@ -852,50 +852,53 @@ export default function SettingsScreen() {
                         {" If you want to support this initiative, you can donate to help keep the app reliable and safe."}
                     </Text>
 
-                    {/* Android: show preset price buttons */}
-                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                        {DONATION_UI_PRESETS.map((p) => (
-                            <TouchableOpacity
-                                key={p.id}
-                                onPress={() =>
-                                    handleDonate({
-                                        id: p.id,
-                                        label: p.label || formatINRFromPaise(p.amount),
-                                        amount: p.amount,
-                                    } as any)
-                                }
-                                disabled={busyRef.current.donate}
+                    {Platform.OS === "ios" ? (
+                        /* iOS: Apple IAP tip jar — StoreKit 2, processed by Apple */
+                        <IOSTipJar />
+                    ) : (
+                        /* Android: show Razorpay preset price buttons */
+                        <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                            {DONATION_UI_PRESETS.map((p) => (
+                                <TouchableOpacity
+                                    key={p.id}
+                                    onPress={() =>
+                                        handleDonate({
+                                            id: p.id,
+                                            label: p.label || formatINRFromPaise(p.amount),
+                                            amount: p.amount,
+                                        } as any)
+                                    }
+                                    disabled={busyRef.current.donate}
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: colors.primary,
+                                        backgroundColor: "rgba(56, 189, 248, 0.12)",
+                                        marginRight: 8,
+                                        marginBottom: 8,
+                                        opacity: busyRef.current.donate ? 0.6 : 1,
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>
+                                        {p.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                            <Text
                                 style={{
-                                    paddingHorizontal: 12,
-                                    paddingVertical: 6,
-                                    borderRadius: 999,
-                                    borderWidth: 1,
-                                    borderColor: colors.primary,
-                                    backgroundColor: "rgba(56, 189, 248, 0.12)",
-                                    marginRight: 8,
-                                    marginBottom: 8,
-                                    opacity: busyRef.current.donate ? 0.6 : 1,
+                                    fontSize: 11,
+                                    color: colors.textSecondary,
+                                    marginTop: 8,
+                                    width: "100%",
                                 }}
                             >
-                                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>
-                                    {p.label}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    <Text
-                        style={{
-                            fontSize: 11,
-                            color: colors.textSecondary,
-                            marginTop: 8,
-                        }}
-                    >
-                        Your chat data is never publicly exposed. Donations help cover
-                        hosting and development.
-                    </Text>
+                                Your chat data is never publicly exposed. Donations help cover hosting and development.
+                            </Text>
+                        </View>
+                    )}
                 </AppSurface>
-                )}
 
                 {/* ✅ Plan / Licensing card (foundation) */}
                 <AppSurface style={{ marginBottom: 16 }}>

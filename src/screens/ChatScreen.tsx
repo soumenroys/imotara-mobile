@@ -934,6 +934,7 @@ function MessageBubble({
   onBookmark,
   onReact,
 }: MessageBubbleProps) {
+  const { width: screenWidth } = useWindowDimensions();
   const [reactionPickerOpen, setReactionPickerOpen] = React.useState(false);
   const isUser = message.from === "user";
   const isSearchMatch = searchMatchIds.has(message.id);
@@ -1318,7 +1319,6 @@ function MessageBubble({
 }
 
 export default function ChatScreen() {
-  const { width: screenWidth } = useWindowDimensions();
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
