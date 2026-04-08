@@ -700,7 +700,7 @@ export default function SettingsScreen() {
                         setIsDeletingAccount(true);
                         try {
                             // 1. Wipe local data
-                            await clearHistory();
+                            clearHistory();
                             await clearMemories();
 
                             // 2. Request server-side deletion if authenticated
@@ -716,13 +716,24 @@ export default function SettingsScreen() {
 
                             // 3. Sign out (also clears AsyncStorage keys)
                             await signOut();
+
+                            // 4. For local-mode users signOut doesn't navigate away — show confirmation
+                            if (mountedRef.current) {
+                                Alert.alert(
+                                    "Data Deleted",
+                                    "All your conversations, memories, and settings have been permanently deleted."
+                                );
+                            }
                         } catch {
                             if (mountedRef.current) {
-                                setIsDeletingAccount(false);
                                 Alert.alert(
                                     "Error",
                                     "Something went wrong. Please try again or contact support@imotara.com."
                                 );
+                            }
+                        } finally {
+                            if (mountedRef.current) {
+                                setIsDeletingAccount(false);
                             }
                         }
                     },
