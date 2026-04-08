@@ -171,6 +171,54 @@ export const SAUDI_ARABIA_CRISIS_RESOURCES: CountryCrisisResources = {
     ],
 };
 
+export const JORDAN_CRISIS_RESOURCES: CountryCrisisResources = {
+    countryCode: "JO",
+    emergency: { id: "jo-emergency-911", label: "Emergency", contact: "911", note: "Police and ambulance." },
+    primary: [
+        { id: "jo-moh-mental-health-110", label: "Ministry of Health Mental Health Line", contact: "110", note: "National mental health support line." },
+    ],
+};
+
+export const LEBANON_CRISIS_RESOURCES: CountryCrisisResources = {
+    countryCode: "LB",
+    emergency: { id: "lb-emergency-140", label: "Emergency", contact: "140 / 112", note: "Ambulance (140) or Emergency (112)." },
+    primary: [
+        { id: "lb-embrace-1564", label: "Embrace Lebanon", contact: "1564", note: "24/7 free mental health and crisis support." },
+    ],
+};
+
+export const MOROCCO_CRISIS_RESOURCES: CountryCrisisResources = {
+    countryCode: "MA",
+    emergency: { id: "ma-emergency-15", label: "Emergency", contact: "15 / 19", note: "Ambulance (15) or Police (19)." },
+    primary: [
+        { id: "ma-sos-detresse-0800-008-008", label: "SOS Détresse", contact: "0800 008 008", note: "Free emotional support helpline." },
+    ],
+};
+
+export const ALGERIA_CRISIS_RESOURCES: CountryCrisisResources = {
+    countryCode: "DZ",
+    emergency: { id: "dz-emergency-14", label: "Emergency", contact: "14 / 17", note: "Ambulance (14) or Police (17)." },
+    primary: [
+        { id: "dz-green-line-3033", label: "Green Line (Ligne Verte)", contact: "3033", note: "Free psychological support helpline." },
+    ],
+};
+
+export const TUNISIA_CRISIS_RESOURCES: CountryCrisisResources = {
+    countryCode: "TN",
+    emergency: { id: "tn-emergency-190", label: "Emergency", contact: "190 / 197", note: "Ambulance (190) or Police (197)." },
+    primary: [
+        { id: "tn-mental-health-71-562-130", label: "Razi Hospital Mental Health", contact: "71 562 130", note: "Mental health crisis support." },
+    ],
+};
+
+export const IRAQ_CRISIS_RESOURCES: CountryCrisisResources = {
+    countryCode: "IQ",
+    emergency: { id: "iq-emergency-122", label: "Emergency", contact: "122 / 115", note: "Police (122) or Ambulance (115)." },
+    primary: [
+        { id: "iq-moh-mental-health", label: "Ministry of Health Mental Health", contact: "1800-888-1000", note: "National mental health support." },
+    ],
+};
+
 // ─── Europe ───────────────────────────────────────────────────────────────────
 
 export const UK_CRISIS_RESOURCES: CountryCrisisResources = {
@@ -490,11 +538,17 @@ const COUNTRY_RESOURCES_MAP: Record<string, CountryCrisisResources> = {
     LK: SRI_LANKA_CRISIS_RESOURCES,
     PK: PAKISTAN_CRISIS_RESOURCES,
     BD: BANGLADESH_CRISIS_RESOURCES,
-    // Middle East
+    // Middle East & North Africa
     IL: ISRAEL_CRISIS_RESOURCES,
     TR: TURKEY_CRISIS_RESOURCES,
     AE: UAE_CRISIS_RESOURCES,
     SA: SAUDI_ARABIA_CRISIS_RESOURCES,
+    JO: JORDAN_CRISIS_RESOURCES,
+    LB: LEBANON_CRISIS_RESOURCES,
+    MA: MOROCCO_CRISIS_RESOURCES,
+    DZ: ALGERIA_CRISIS_RESOURCES,
+    TN: TUNISIA_CRISIS_RESOURCES,
+    IQ: IRAQ_CRISIS_RESOURCES,
     // Europe
     GB: UK_CRISIS_RESOURCES,
     DE: GERMANY_CRISIS_RESOURCES,
