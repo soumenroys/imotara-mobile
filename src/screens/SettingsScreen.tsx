@@ -808,7 +808,7 @@ export default function SettingsScreen() {
                 {/* Privacy Policy & Terms links — required by App Store guideline 5.1.1 */}
                 <View style={{ flexDirection: "row", marginBottom: 24, gap: 20 }}>
                     <TouchableOpacity
-                        onPress={() => WebBrowser.openBrowserAsync("https://imotaraapp.vercel.app/privacy")}
+                        onPress={() => WebBrowser.openBrowserAsync("https://imotara.com/privacy")}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                         <Text style={{ fontSize: 13, color: colors.primary, textDecorationLine: "underline" }}>
@@ -816,7 +816,7 @@ export default function SettingsScreen() {
                         </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                        onPress={() => WebBrowser.openBrowserAsync("https://imotaraapp.vercel.app/terms")}
+                        onPress={() => WebBrowser.openBrowserAsync("https://imotara.com/terms")}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                         <Text style={{ fontSize: 13, color: colors.primary, textDecorationLine: "underline" }}>

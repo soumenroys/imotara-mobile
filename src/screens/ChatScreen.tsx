@@ -1317,9 +1317,6 @@ function MessageBubble({
 }
 
 export default function ChatScreen() {
-  useEffect(() => {
-    console.log("[imotara] ChatScreen mounted");
-  }, []);
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
