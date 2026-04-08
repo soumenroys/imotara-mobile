@@ -714,16 +714,19 @@ export default function SettingsScreen() {
                                 }
                             }
 
-                            // 3. Sign out (also clears AsyncStorage keys)
-                            await signOut();
-
-                            // 4. For local-mode users signOut doesn't navigate away — show confirmation
-                            if (mountedRef.current) {
+                            // 3. Show confirmation before signOut — signOut unmounts the screen
+                            //    for authenticated users, so the alert must fire first.
+                            await new Promise<void>((resolve) => {
+                                if (!mountedRef.current) { resolve(); return; }
                                 Alert.alert(
                                     "Data Deleted",
-                                    "All your conversations, memories, and settings have been permanently deleted."
+                                    "All your conversations, memories, and settings have been permanently deleted.",
+                                    [{ text: "OK", onPress: () => resolve() }]
                                 );
-                            }
+                            });
+
+                            // 4. Sign out (also clears AsyncStorage keys, may navigate away)
+                            await signOut();
                         } catch {
                             if (mountedRef.current) {
                                 Alert.alert(
