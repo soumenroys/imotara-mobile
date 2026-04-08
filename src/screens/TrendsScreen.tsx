@@ -173,7 +173,7 @@ async function saveJournal(entries: JournalEntry[]): Promise<void> {
   await AsyncStorage.setItem(JOURNAL_KEY, JSON.stringify(entries));
 }
 
-const JOURNAL_EMOTION_PROMPTS: Partial<Record<EmotionBucket, string[]>> = {
+const JOURNAL_EMOTION_PROMPTS: Record<string, string[]> = {
   sadness: [
     "What's weighing on your heart most right now?",
     "Is there something you need to grieve or let go of today?",
@@ -1492,7 +1492,7 @@ export default function TrendsScreen() {
           "What is your inner voice saying most loudly right now?",
         ];
 
-        const EMOTION_PROMPT_BANKS: Partial<Record<EmotionBucket, string[]>> = {
+        const EMOTION_PROMPT_BANKS: Record<string, string[]> = {
           sadness: [
             "Is there something you need to grieve or let go of right now?",
             "What do you need most when you're feeling this low — and are you giving that to yourself?",

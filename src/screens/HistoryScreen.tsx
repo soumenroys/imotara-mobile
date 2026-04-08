@@ -485,7 +485,7 @@ export default function HistoryScreen() {
                     d.getFullYear() < thisYear
                 );
             })
-            .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
+            .sort((a: HistoryRecord, b: HistoryRecord) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
             .slice(0, 3);
     }, [history]);
 
@@ -862,7 +862,7 @@ export default function HistoryScreen() {
                                 {onThisDay.length > 0 && (
                                     <View style={{ marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 12 }}>
                                         <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textSecondary, marginBottom: 6 }}>On This Day</Text>
-                                        {onThisDay.map((item) => {
+                                        {onThisDay.map((item: HistoryRecord) => {
                                             const d = new Date(item.timestamp ?? 0);
                                             const year = d.getFullYear();
                                             const preview = (item.text ?? "").slice(0, 100);

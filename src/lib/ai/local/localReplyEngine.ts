@@ -641,7 +641,7 @@ export function buildLocalReply(
     const userGender = (toneContext?.user as any)?.gender;
     const userAge = (toneContext?.user as any)?.ageTone ?? (toneContext?.user as any)?.ageRange;
 
-    const sessionTurn = toneContext?.sessionTurn ?? recentContext?.recentAssistantTexts?.length ?? 0;
+    const sessionTurn = (toneContext as any)?.sessionTurn ?? recentContext?.recentAssistantTexts?.length ?? 0;
     const seed = hash32(
         `${message}::${language}::${recentSignature}::${relationship}::${companionToneFromRel}::${sessionTurn}`
     );

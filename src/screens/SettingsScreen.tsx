@@ -392,7 +392,7 @@ export default function SettingsScreen() {
             const exportPayload = {
                 exportedAt: new Date().toISOString(),
                 appVersion: Constants.expoConfig?.version ?? "unknown",
-                messages: history.map((item) => ({
+                messages: history.map((item: HistoryRecord) => ({
                     id: item.id,
                     text: item.text,
                     from: item.from,
@@ -2153,8 +2153,8 @@ export default function SettingsScreen() {
                                                 onPress: () => {
                                                     const cutoff = Date.now() - days * 86_400_000;
                                                     history
-                                                        .filter((item) => item.isSynced && (item.timestamp ?? 0) < cutoff)
-                                                        .forEach((item) => deleteFromHistory(item.id));
+                                                        .filter((item: HistoryRecord) => item.isSynced && (item.timestamp ?? 0) < cutoff)
+                                                        .forEach((item: HistoryRecord) => deleteFromHistory(item.id));
                                                 },
                                             },
                                         ],
