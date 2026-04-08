@@ -17,6 +17,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from "react-native";
 
 // Haptic helpers (Vibration API — no native deps needed)
@@ -1125,7 +1126,7 @@ function MessageBubble({
         delayLongPress={250}
         accessibilityLabel={`${isUser ? "You" : "Imotara"}: ${message.text}`}
         accessibilityRole="text"
-        style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: "82%", marginBottom: 10, paddingHorizontal: 1 }}
+        style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: Math.min(screenWidth * 0.82, 520), marginBottom: 10, paddingHorizontal: 1 }}
       >
         {isUser ? (
           <View style={{ backgroundColor: bubbleBackground, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: bubbleBorderColor === "transparent" ? 0 : 1, borderColor: bubbleBorderColor }}>
@@ -1245,7 +1246,7 @@ function MessageBubble({
 
         if (tier === 1) {
           return (
-            <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: "88%", borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.30)", backgroundColor: "rgba(99,102,241,0.08)", paddingHorizontal: 14, paddingVertical: 12 }}>
+            <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: Math.min(screenWidth * 0.88, 560), borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.30)", backgroundColor: "rgba(99,102,241,0.08)", paddingHorizontal: 14, paddingVertical: 12 }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <Text style={{ fontSize: 13, fontWeight: "700", color: "rgba(167,139,250,1)", flex: 1 }}>💜 You don't have to carry this alone</Text>
                 <TouchableOpacity onPress={() => onDismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -1277,7 +1278,7 @@ function MessageBubble({
         }
 
         return (
-          <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: "88%", borderRadius: 14, borderWidth: 1, borderColor: "rgba(251, 191, 36, 0.35)", backgroundColor: "rgba(251, 191, 36, 0.10)", paddingHorizontal: 14, paddingVertical: 12 }}>
+          <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: Math.min(screenWidth * 0.88, 560), borderRadius: 14, borderWidth: 1, borderColor: "rgba(251, 191, 36, 0.35)", backgroundColor: "rgba(251, 191, 36, 0.10)", paddingHorizontal: 14, paddingVertical: 12 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
               <Text style={{ fontSize: 13, fontWeight: "700", color: "#fde68a", flex: 1 }}>{"\u{1F49B}"} If things feel urgent right now</Text>
               <TouchableOpacity onPress={() => onDismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -1317,6 +1318,7 @@ function MessageBubble({
 }
 
 export default function ChatScreen() {
+  const { width: screenWidth } = useWindowDimensions();
   const colors = useColors();
   const insets = useSafeAreaInsets();
 

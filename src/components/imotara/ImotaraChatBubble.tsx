@@ -1,6 +1,6 @@
 // src/components/imotara/ImotaraChatBubble.tsx
 import React, { useEffect, useRef } from "react";
-import { View, StyleSheet, Pressable, Animated } from "react-native";
+import { View, StyleSheet, Pressable, Animated, useWindowDimensions } from "react-native";
 import AppSurface from "../ui/AppSurface";
 import AppText from "../ui/AppText";
 import { useColors } from "../../theme/ThemeContext";
@@ -65,6 +65,7 @@ export const ImotaraChatBubble: React.FC<ImotaraChatBubbleProps> = ({
     onLongPress,
     onRetrySync,
 }) => {
+    const { width: screenWidth } = useWindowDimensions();
     const colors = useColors();
     const moodEmoji = !isUser ? getMoodEmoji(emotion) : "";
     const tint = !isUser ? getMoodTint(emotion, colors) : null;
@@ -154,7 +155,7 @@ export const ImotaraChatBubble: React.FC<ImotaraChatBubbleProps> = ({
                 <Wrapper onLongPress={onLongPress} delayLongPress={280}>
                     {/* USER -------------------------------------- */}
                     {isUser ? (
-                        <AppSurface style={[styles.bubble, styles.userBubble]}>
+                        <AppSurface style={[styles.bubble, styles.userBubble, { maxWidth: Math.min(screenWidth * 0.84, 520) }]}>
                             <AppText
                                 size={12}
                                 weight="semibold"
@@ -256,7 +257,7 @@ export const ImotaraChatBubble: React.FC<ImotaraChatBubbleProps> = ({
                             ]}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 0, y: 1 }}
-                            style={[styles.bubble, styles.botBubble]}
+                            style={[styles.bubble, styles.botBubble, { maxWidth: Math.min(screenWidth * 0.84, 520) }]}
                         >
                             <AppText
                                 size={12}
@@ -363,7 +364,7 @@ const styles = StyleSheet.create({
         alignItems: "flex-start",
     },
     bubble: {
-        maxWidth: "84%",
+        maxWidth: "84%", // overridden inline for tablet responsiveness
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 16,

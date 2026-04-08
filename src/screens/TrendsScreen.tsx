@@ -3,7 +3,7 @@
 // Shows: streak, weekly emotion frequency bars, dominant emotion per day, summary.
 
 import React, { useMemo, useState, useEffect } from "react";
-import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, Dimensions, Modal } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -792,7 +792,7 @@ function MoodLineChart({
   data: { key: string; dominant: EmotionBucket; count: number }[];
   colors: ReturnType<typeof useColors>;
 }) {
-  const screenW = Dimensions.get("window").width;
+  const { width: screenW } = useWindowDimensions();
   const W = screenW - 56; // 16px scroll padding each side + 12px card padding each side
   const H = 120;
   const PAD_X = 20;

@@ -15,6 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "requireFullScreen": false,
       "bundleIdentifier": "com.imotara.imotara",
       "buildNumber": "65",
       "deploymentTarget": "16.0",
