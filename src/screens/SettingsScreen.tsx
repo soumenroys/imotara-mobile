@@ -825,7 +825,10 @@ export default function SettingsScreen() {
                     </TouchableOpacity>
                 </View>
 
-                {/* Support / Donation card */}
+                {/* Support / Donation card — hidden on iOS per Apple guideline 3.1.1
+                    (any in-app donation mechanism, even external browser links, is
+                     flagged as a non-IAP transaction associated with digital services) */}
+                {Platform.OS !== "ios" && (
                 <AppSurface style={{ marginBottom: 16 }}>
                     <Text
                         style={{
@@ -835,7 +838,7 @@ export default function SettingsScreen() {
                             fontWeight: "500",
                         }}
                     >
-                        Support Imotara
+                        Support Imotara 🇮🇳 (Donate)
                     </Text>
 
                     <Text
@@ -846,62 +849,40 @@ export default function SettingsScreen() {
                         }}
                     >
                         Imotara is a privacy-first, non-commercial companion built in India.
-                        {Platform.OS === "ios"
-                            ? " If you'd like to support its development, you can donate via our website."
-                            : " If you want to support this initiative, you can donate to help keep the app reliable and safe."}
+                        {" If you want to support this initiative, you can donate to help keep the app reliable and safe."}
                     </Text>
 
-                    {Platform.OS === "ios" ? (
-                        /* iOS: open website in browser — no in-app price labels (Apple IAP guideline 3.1.1) */
-                        <TouchableOpacity
-                            onPress={() => Linking.openURL("https://www.imotara.com/donate").catch(() => {})}
-                            style={{
-                                alignSelf: "flex-start",
-                                paddingHorizontal: 16,
-                                paddingVertical: 8,
-                                borderRadius: 999,
-                                borderWidth: 1,
-                                borderColor: colors.primary,
-                                backgroundColor: "rgba(56, 189, 248, 0.12)",
-                            }}
-                        >
-                            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.primary }}>
-                                Support via Website
-                            </Text>
-                        </TouchableOpacity>
-                    ) : (
-                        /* Android: show preset price buttons */
-                        <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                            {DONATION_UI_PRESETS.map((p) => (
-                                <TouchableOpacity
-                                    key={p.id}
-                                    onPress={() =>
-                                        handleDonate({
-                                            id: p.id,
-                                            label: p.label || formatINRFromPaise(p.amount),
-                                            amount: p.amount,
-                                        } as any)
-                                    }
-                                    disabled={busyRef.current.donate}
-                                    style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
-                                        borderColor: colors.primary,
-                                        backgroundColor: "rgba(56, 189, 248, 0.12)",
-                                        marginRight: 8,
-                                        marginBottom: 8,
-                                        opacity: busyRef.current.donate ? 0.6 : 1,
-                                    }}
-                                >
-                                    <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>
-                                        {p.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
+                    {/* Android: show preset price buttons */}
+                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                        {DONATION_UI_PRESETS.map((p) => (
+                            <TouchableOpacity
+                                key={p.id}
+                                onPress={() =>
+                                    handleDonate({
+                                        id: p.id,
+                                        label: p.label || formatINRFromPaise(p.amount),
+                                        amount: p.amount,
+                                    } as any)
+                                }
+                                disabled={busyRef.current.donate}
+                                style={{
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 6,
+                                    borderRadius: 999,
+                                    borderWidth: 1,
+                                    borderColor: colors.primary,
+                                    backgroundColor: "rgba(56, 189, 248, 0.12)",
+                                    marginRight: 8,
+                                    marginBottom: 8,
+                                    opacity: busyRef.current.donate ? 0.6 : 1,
+                                }}
+                            >
+                                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>
+                                    {p.label}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
 
                     <Text
                         style={{
@@ -914,6 +895,7 @@ export default function SettingsScreen() {
                         hosting and development.
                     </Text>
                 </AppSurface>
+                )}
 
                 {/* ✅ Plan / Licensing card (foundation) */}
                 <AppSurface style={{ marginBottom: 16 }}>
