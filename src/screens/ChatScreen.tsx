@@ -3153,6 +3153,9 @@ export default function ChatScreen() {
               No account information, your name, or device data is attached. Only the text you type is sent. OpenAI's and Google's privacy policies apply to data processed by their APIs.{"\n\n"}
               You can switch to Local mode at any time from Settings → Analysis Mode to keep everything on-device with no external calls.
             </Text>
+            <Text style={{ color: "#64748b", fontSize: 12, lineHeight: 18, marginBottom: 16, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 12 }}>
+              Imotara is not a medical service and is not a substitute for professional mental health treatment. If you are in crisis or need immediate help, please contact emergency services or a crisis helpline.
+            </Text>
             <TouchableOpacity
               onPress={async () => {
                 await AsyncStorage.setItem(AI_CONSENT_KEY, "1");

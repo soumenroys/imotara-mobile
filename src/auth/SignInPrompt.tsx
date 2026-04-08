@@ -13,6 +13,7 @@ import {
     Animated,
     Platform,
     Pressable,
+    Linking,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "./AuthContext";
@@ -136,6 +137,17 @@ export function SignInPrompt({ messageCount }: Props) {
                         >
                             <Text style={styles.skipText}>Not now</Text>
                         </TouchableOpacity>
+
+                        {/* Privacy & Terms links — required by Apple & Google */}
+                        <View style={styles.legalRow}>
+                            <TouchableOpacity onPress={() => Linking.openURL("https://imotara.com/privacy").catch(() => {})}>
+                                <Text style={styles.legalLink}>Privacy Policy</Text>
+                            </TouchableOpacity>
+                            <Text style={styles.legalSep}>·</Text>
+                            <TouchableOpacity onPress={() => Linking.openURL("https://imotara.com/terms").catch(() => {})}>
+                                <Text style={styles.legalLink}>Terms of Use</Text>
+                            </TouchableOpacity>
+                        </View>
                     </Pressable>
                 </Animated.View>
             </Pressable>
@@ -210,5 +222,21 @@ const styles = StyleSheet.create({
     skipText: {
         color: "rgba(255,255,255,0.4)",
         fontSize: 14,
+    },
+    legalRow: {
+        flexDirection: "row",
+        justifyContent: "center",
+        alignItems: "center",
+        marginTop: 12,
+        gap: 6,
+    },
+    legalLink: {
+        color: "rgba(255,255,255,0.35)",
+        fontSize: 12,
+        textDecorationLine: "underline",
+    },
+    legalSep: {
+        color: "rgba(255,255,255,0.2)",
+        fontSize: 12,
     },
 });
