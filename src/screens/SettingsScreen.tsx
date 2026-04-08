@@ -838,7 +838,7 @@ export default function SettingsScreen() {
                             fontWeight: "500",
                         }}
                     >
-                        Support Imotara 🇮🇳 (Donate)
+                        Support Imotara 🇮🇳
                     </Text>
 
                     <Text
@@ -848,8 +848,7 @@ export default function SettingsScreen() {
                             marginBottom: 10,
                         }}
                     >
-                        Imotara is a privacy-first, non-commercial companion built in India.
-                        {" If you want to support this initiative, you can donate to help keep the app reliable and safe."}
+                        Imotara is a privacy-first companion built in India. If you'd like to leave a tip to support development, you can do so below. All features remain completely free.
                     </Text>
 
                     {Platform.OS === "ios" ? (
