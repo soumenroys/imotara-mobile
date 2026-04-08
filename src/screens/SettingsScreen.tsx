@@ -714,10 +714,9 @@ export default function SettingsScreen() {
                                 }
                             }
 
-                            // 3. Show confirmation before signOut — signOut unmounts the screen
-                            //    for authenticated users, so the alert must fire first.
+                            // 3. Show confirmation before signOut — signOut may unmount the screen.
+                            //    Alert.alert is a native call; no mountedRef check needed.
                             await new Promise<void>((resolve) => {
-                                if (!mountedRef.current) { resolve(); return; }
                                 Alert.alert(
                                     "Data Deleted",
                                     "All your conversations, memories, and settings have been permanently deleted.",
