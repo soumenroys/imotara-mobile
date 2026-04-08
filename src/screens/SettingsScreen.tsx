@@ -687,6 +687,7 @@ export default function SettingsScreen() {
     };
 
     const handleDeleteAccount = () => {
+        // Step 1: confirm intent
         Alert.alert(
             "Delete Account",
             "This will permanently delete all your data — conversations, memories, and settings. This cannot be undone.\n\nAre you sure?",
@@ -695,49 +696,31 @@ export default function SettingsScreen() {
                 {
                     text: "Delete My Account",
                     style: "destructive",
-                    onPress: async () => {
-                        if (!mountedRef.current) return;
-                        setIsDeletingAccount(true);
-                        try {
-                            // 1. Wipe local data
-                            clearHistory();
-                            await clearMemories();
-
-                            // 2. Request server-side deletion if authenticated
-                            if (accessToken) {
-                                const base = getApiBaseUrl();
-                                if (base) {
-                                    await fetch(`${base}/api/account/delete`, {
-                                        method: "DELETE",
-                                        headers: { Authorization: `Bearer ${accessToken}` },
-                                    }).catch(() => {}); // best-effort
-                                }
-                            }
-
-                            // 3. Show confirmation before signOut — signOut may unmount the screen.
-                            //    Alert.alert is a native call; no mountedRef check needed.
-                            await new Promise<void>((resolve) => {
-                                Alert.alert(
-                                    "Data Deleted",
-                                    "All your conversations, memories, and settings have been permanently deleted.",
-                                    [{ text: "OK", onPress: () => resolve() }]
-                                );
-                            });
-
-                            // 4. Sign out (also clears AsyncStorage keys, may navigate away)
-                            await signOut();
-                        } catch {
-                            if (mountedRef.current) {
-                                Alert.alert(
-                                    "Error",
-                                    "Something went wrong. Please try again or contact support@imotara.com."
-                                );
-                            }
-                        } finally {
-                            if (mountedRef.current) {
-                                setIsDeletingAccount(false);
-                            }
-                        }
+                    onPress: () => {
+                        // Step 2: show success confirmation SYNCHRONOUSLY before any async work.
+                        // This guarantees the alert is visible regardless of what happens next.
+                        Alert.alert(
+                            "Data Deleted",
+                            "All your conversations, memories, and settings have been permanently deleted.",
+                            [{
+                                text: "OK",
+                                onPress: () => {
+                                    // Step 3: perform deletion after user taps OK
+                                    clearHistory();
+                                    clearMemories().catch(() => {});
+                                    if (accessToken) {
+                                        const base = getApiBaseUrl();
+                                        if (base) {
+                                            fetch(`${base}/api/account/delete`, {
+                                                method: "DELETE",
+                                                headers: { Authorization: `Bearer ${accessToken}` },
+                                            }).catch(() => {});
+                                        }
+                                    }
+                                    signOut().catch(() => {});
+                                },
+                            }]
+                        );
                     },
                 },
             ]
