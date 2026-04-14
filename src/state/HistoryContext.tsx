@@ -57,7 +57,19 @@ export type HistoryItem = {
      * - true → this record is known to exist in the cloud as well
      */
     isSynced?: boolean;
+
+    /** Conversation thread this message belongs to. Defaults to DEFAULT_THREAD_ID. */
+    threadId?: string;
 };
+
+export type ConversationThread = {
+    id: string;
+    title: string;
+    createdAt: number;
+};
+
+/** All messages without an explicit threadId belong here (safe migration anchor). */
+export const DEFAULT_THREAD_ID = "default";
 
 
 type MergeRemoteResult = {
@@ -129,6 +141,21 @@ type HistoryContextValue = {
      */
     licenseTier: LicenseTier;
     setLicenseTier: (tier: LicenseTier) => void;
+
+    /** All conversation threads for the current scope. */
+    threads: ConversationThread[];
+    /** ID of the currently active thread. */
+    activeThreadId: string;
+    /** Messages belonging to the active thread only. */
+    activeHistory: HistoryItem[];
+    /** Create a new thread and make it active. Returns the new thread id. */
+    startNewThread: (title?: string) => string;
+    /** Switch to an existing thread by id. */
+    setActiveThreadId: (id: string) => void;
+    /** Rename a thread. */
+    renameThread: (id: string, title: string) => void;
+    /** Delete a thread and all its messages. */
+    deleteThread: (id: string) => void;
 };
 
 // Base keys (scoped per chatLinkKey when present)
@@ -136,6 +163,9 @@ const STORAGE_KEY_BASE = "imotara_history_v1";
 
 // ✅ Cursor for remote history incremental sync (also should be scoped)
 const HISTORY_REMOTE_SINCE_KEY_BASE = "imotara_history_remote_since_v1";
+
+// Thread list storage key (scoped per scope, same as history)
+const THREADS_KEY_BASE = "imotara_threads_v1";
 
 /**
  * Storage keys must be scoped so different identities don't see each other's history.
@@ -366,6 +396,12 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     // ✅ Licensing state (default FREE; hydrated from AsyncStorage)
     const [licenseTier, _setLicenseTier] = useState<LicenseTier>("FREE");
 
+    // ── Thread state ──────────────────────────────────────────────────────────
+    const [threads, setThreads] = useState<ConversationThread[]>([]);
+    const [activeThreadId, setActiveThreadIdState] = useState<string>(DEFAULT_THREAD_ID);
+    const threadsRef = useRef<ConversationThread[]>([]);
+    useEffect(() => { threadsRef.current = threads; }, [threads]);
+
     // Lite sync status state for Mobile Sync Phase 2
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncPaused, setSyncPaused] = useState(false);
@@ -486,6 +522,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     ? scopedKey(HISTORY_REMOTE_SINCE_KEY_BASE, null, localUserScopeId)
                     : null;
 
+                const threadsKey = scopedKey(THREADS_KEY_BASE, chatLinkKey, localUserScopeId);
+
                 const [
                     rawHistoryNew,
                     rawTier,
@@ -494,6 +532,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                     rawRemoteSinceLegacy,
                     rawHistoryPreLink,
                     rawRemoteSincePreLink,
+                    rawThreads,
                 ] = await Promise.all([
                     AsyncStorage.getItem(historyKey),
                     AsyncStorage.getItem(LICENSE_TIER_KEY),
@@ -504,6 +543,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                         : Promise.resolve(null),
                     preLinkHistoryKey ? AsyncStorage.getItem(preLinkHistoryKey) : Promise.resolve(null),
                     preLinkRemoteSinceKey ? AsyncStorage.getItem(preLinkRemoteSinceKey) : Promise.resolve(null),
+                    AsyncStorage.getItem(threadsKey),
                 ]);
 
                 // Prefer primary key, fall back to pre-link local scope, then legacy local key
@@ -552,11 +592,16 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                                 const intensityRaw = (item as any).intensity;
                                 const isSyncedRaw = (item as any).isSynced;
 
+                                const threadIdRaw = (item as any).threadId;
+
                                 return {
                                     id,
                                     text,
                                     from,
                                     timestamp,
+                                    threadId: typeof threadIdRaw === "string" && threadIdRaw.trim()
+                                        ? threadIdRaw.trim()
+                                        : DEFAULT_THREAD_ID,
                                     ...(typeof emotionRaw === "string" && emotionRaw.trim()
                                         ? { emotion: emotionRaw.trim() }
                                         : {}),
@@ -585,6 +630,31 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 // Only set if it matches this app's LicenseTier union
                 if (rawTier && isValidTier(rawTier)) {
                     _setLicenseTier(rawTier);
+                }
+
+                // 3) Threads — hydrate or create default
+                {
+                    let loadedThreads: ConversationThread[] = [];
+                    if (rawThreads) {
+                        try {
+                            const parsed = JSON.parse(rawThreads);
+                            if (Array.isArray(parsed)) {
+                                loadedThreads = parsed.filter(
+                                    (t: any) => t && typeof t.id === "string" && typeof t.title === "string"
+                                );
+                            }
+                        } catch { /* ignore parse errors */ }
+                    }
+                    // Ensure default thread always exists
+                    if (!loadedThreads.find((t) => t.id === DEFAULT_THREAD_ID)) {
+                        loadedThreads = [
+                            { id: DEFAULT_THREAD_ID, title: "My conversations", createdAt: Date.now() },
+                            ...loadedThreads,
+                        ];
+                        AsyncStorage.setItem(threadsKey, JSON.stringify(loadedThreads)).catch(() => {});
+                    }
+                    setThreads(loadedThreads);
+                    setActiveThreadIdState(DEFAULT_THREAD_ID);
                 }
             } catch (error) {
                 debugWarn("Failed to load history/license from storage:", error);
@@ -673,6 +743,51 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     const deleteFromHistory = useCallback((id: string) => {
         setHistory((prev) => prev.filter((item) => item.id !== id));
     }, []);
+
+    // ── Thread persistence helper ─────────────────────────────────────────────
+    const saveThreads = useCallback((updated: ConversationThread[]) => {
+        const threadsKey = scopedKey(THREADS_KEY_BASE, chatLinkKey, localUserScopeId);
+        AsyncStorage.setItem(threadsKey, JSON.stringify(updated)).catch((err) =>
+            debugWarn("Failed to save threads:", err)
+        );
+    }, [chatLinkKey, localUserScopeId]);
+
+    const startNewThread = useCallback((title?: string): string => {
+        const id = `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const newThread: ConversationThread = {
+            id,
+            title: title?.trim() || `Chat ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
+            createdAt: Date.now(),
+        };
+        const updated = [...threadsRef.current, newThread];
+        setThreads(updated);
+        saveThreads(updated);
+        setActiveThreadIdState(id);
+        return id;
+    }, [saveThreads]);
+
+    const setActiveThreadId = useCallback((id: string) => {
+        setActiveThreadIdState(id);
+    }, []);
+
+    const renameThread = useCallback((id: string, title: string) => {
+        const updated = threadsRef.current.map((t) =>
+            t.id === id ? { ...t, title: title.trim() || t.title } : t
+        );
+        setThreads(updated);
+        saveThreads(updated);
+    }, [saveThreads]);
+
+    const deleteThread = useCallback((id: string) => {
+        if (id === DEFAULT_THREAD_ID) return; // cannot delete default
+        const updated = threadsRef.current.filter((t) => t.id !== id);
+        setThreads(updated);
+        saveThreads(updated);
+        // Remove all messages belonging to this thread
+        setHistory((prev) => prev.filter((h) => (h.threadId ?? DEFAULT_THREAD_ID) !== id));
+        // If the deleted thread was active, fall back to default
+        setActiveThreadIdState((prev) => (prev === id ? DEFAULT_THREAD_ID : prev));
+    }, [saveThreads]);
 
     const pushHistoryToRemote = useCallback(async (): Promise<PushRemoteHistoryResult> => {
         // Avoid overlap (especially with background auto-sync / foreground resume)
@@ -1067,6 +1182,12 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
     const hasUnsyncedChanges = history.some((h) => !h.isSynced);
 
+    // Filtered view of history for the currently active thread
+    const activeHistory = useMemo(
+        () => history.filter((h) => (h.threadId ?? DEFAULT_THREAD_ID) === activeThreadId),
+        [history, activeThreadId]
+    );
+
     // Detect potential duplicates: same sender + text fingerprint + timestamps within 60s, different IDs
     const potentialDuplicates: Array<[HistoryItem, HistoryItem]> = (() => {
         const dupes: Array<[HistoryItem, HistoryItem]> = [];
@@ -1137,6 +1258,13 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         setLicenseTier,
         pauseAutoSync,
         resumeAutoSync,
+        threads,
+        activeThreadId,
+        activeHistory,
+        startNewThread,
+        setActiveThreadId,
+        renameThread,
+        deleteThread,
     }), [
         history,
         addToHistory,
@@ -1155,6 +1283,13 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         setLicenseTier,
         pauseAutoSync,
         resumeAutoSync,
+        threads,
+        activeThreadId,
+        activeHistory,
+        startNewThread,
+        setActiveThreadId,
+        renameThread,
+        deleteThread,
     ]);
 
     return (

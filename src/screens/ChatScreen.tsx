@@ -1027,7 +1027,7 @@ function MessageBubble({
         {isUser ? "You" : `Imotara${message.source === "local" ? " (offline)" : ""}`}
       </Text>
 
-      {!isUser && message.source === "local"
+      {!isUser
         ? (() => {
             const seed = getReflectionSeedCard({
               message: message.text,
@@ -1051,7 +1051,6 @@ function MessageBubble({
       <Text style={{ fontSize: 14, color: colors.textPrimary }} selectable>
         {(() => {
           if (isUser) return message.text;
-          if (message.source !== "local") return message.text;
           const seed = getReflectionSeedCard({ message: message.text, reflectionSeed: message.reflectionSeed } as any);
           if (!seed?.prompt) return message.text;
           return stripReflectionPromptFromMessage(message.text, seed.prompt);
@@ -1435,6 +1434,10 @@ export default function ChatScreen() {
   const {
     addToHistory,
     history,
+    activeHistory,
+    activeThreadId,
+    threads,
+    startNewThread,
     clearHistory,
     deleteFromHistory,
     isSyncing,
@@ -2202,6 +2205,7 @@ export default function ChatScreen() {
       from: "user",
       timestamp: userMessage.timestamp,
       isSynced: false,
+      threadId: activeThreadId,
 
       // ✅ emotion required for moodSummary / session insight card in HistoryScreen
       ...(userEmotion ? { emotion: userEmotion } : {}),
@@ -2246,7 +2250,35 @@ export default function ChatScreen() {
           // ── Build emotionMemory for cloud (mirrors web's runRespondWithConsent) ──
           // Combines factual memories + emotional history pattern into one context string
           const emotionalHistory = buildEmotionMemorySummary(history);
-          const emotionMemory = [memoryContext, emotionalHistory]
+
+          // ── Cross-thread memory breadcrumb (mirrors web's buildCrossThreadContext) ──
+          // Summarises recent past threads so the AI stays aware of long-term topics.
+          const crossThreadContext = (() => {
+              const allThreads: any[] = Array.isArray(threads) ? threads : [];
+              const pastThreads = allThreads
+                  .filter((t) => t.id !== activeThreadId)
+                  .sort((a: any, b: any) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+                  .slice(0, 5);
+              if (pastThreads.length === 0) return "";
+              const lines = pastThreads.map((t: any) => {
+                  const daysAgo = Math.round((Date.now() - (t.createdAt ?? 0)) / 86_400_000);
+                  const when = daysAgo === 0 ? "today" : daysAgo === 1 ? "yesterday" : `${daysAgo}d ago`;
+                  const threadMsgs = history.filter((h: any) => (h.threadId ?? "default") === t.id && h.from === "user");
+                  const lastSnippets = [...threadMsgs]
+                      .sort((a: any, b: any) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
+                      .slice(0, 2)
+                      .map((h: any) => String(h.text ?? "").slice(0, 100).trim())
+                      .filter(Boolean)
+                      .join(" / ");
+                  const title = String(t.title ?? "").slice(0, 40);
+                  return `• [${when}] ${title}${lastSnippets ? ` — ${lastSnippets}` : ""}`;
+              });
+              return lines.length > 0
+                  ? `[Past conversations — brief context only]\n${lines.join("\n")}`
+                  : "";
+          })();
+
+          const emotionMemory = [memoryContext, emotionalHistory, crossThreadContext]
               .map((s) => s.trim())
               .filter(Boolean)
               .join("\n\n") || undefined;
@@ -2616,6 +2648,7 @@ export default function ChatScreen() {
             timestamp: botMessage.timestamp,
             isSynced: false,
             source: botMessage.source,
+            threadId: activeThreadId,
 
             // ✅ Existing persisted hint
             moodHint: botMessage.moodHint,
@@ -2737,15 +2770,15 @@ export default function ChatScreen() {
     }
   };
 
-  // Hydrate from persisted history whenever history changes
+  // Hydrate from persisted history whenever active thread changes
   useEffect(() => {
-    if (history.length === 0) {
-      // Scope changed or cleared → reset local messages
+    if (activeHistory.length === 0) {
+      // Thread switched or cleared → reset local messages
       setMessages([]);
       return;
     }
 
-    const sorted = [...history].sort(
+    const sorted = [...activeHistory].sort(
       (a: any, b: any) => (a.timestamp ?? 0) - (b.timestamp ?? 0),
     );
 
@@ -2763,7 +2796,7 @@ export default function ChatScreen() {
 
     setMessages(hydrated);
     smoothScrollToBottom(scrollViewRef);
-  }, [history]);
+  }, [activeHistory]);
 
   // ✅ NEW: when history updates (e.g., after Sync Now), reflect isSynced/source changes in chat bubbles
   useEffect(() => {
@@ -3328,6 +3361,30 @@ export default function ChatScreen() {
             accessibilityLabel="Breathing exercise"
           >
             <Ionicons name="pulse-outline" size={16} color={colors.textPrimary} />
+          </TouchableOpacity>
+
+          {/* New Chat button */}
+          <TouchableOpacity
+            onPress={() => {
+              startNewThread();
+            }}
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: "rgba(99,102,241,0.5)",
+              backgroundColor: "rgba(99,102,241,0.12)",
+              marginRight: 8,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Start new conversation"
+          >
+            <Ionicons name="add-outline" size={14} color="#818cf8" />
+            <Text style={{ fontSize: 12, fontWeight: "600", color: "#818cf8" }}>New Chat</Text>
           </TouchableOpacity>
 
           {messages.length > 0 && (

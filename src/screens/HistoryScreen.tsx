@@ -324,7 +324,20 @@ export default function HistoryScreen() {
 
         // ✅ Licensing (stored in HistoryContext)
         licenseTier,
+
+        // ── Thread management ─────────────────────────────────────────────────
+        threads,
+        activeThreadId,
+        setActiveThreadId,
+        startNewThread,
+        renameThread,
+        deleteThread,
     } = useHistoryStore() as any;
+
+    // Tab: "messages" (emotion history) or "conversations" (thread list)
+    const [historyTab, setHistoryTab] = React.useState<"messages" | "conversations">("conversations");
+    const [renamingThreadId, setRenamingThreadId] = React.useState<string | null>(null);
+    const [renameText, setRenameText] = React.useState("");
 
     // ✅ Cloud sync gate (soft gating)
     const cloudGate = gate("CLOUD_SYNC", licenseTier);
@@ -683,6 +696,22 @@ export default function HistoryScreen() {
         return () => clearTimeout(t);
     }, [searchQuery]);
 
+    // View mode: list (default) or timeline
+    const [viewMode, setViewMode] = React.useState<"list" | "timeline">("list");
+
+    // Emotion filter
+    const EMOTION_FILTER_OPTIONS = [
+        { emoji: "all", label: "All" },
+        { emoji: "💙", label: "Sad" },
+        { emoji: "💛", label: "Stressed" },
+        { emoji: "❤️", label: "Angry" },
+        { emoji: "🟣", label: "Confused" },
+        { emoji: "💚", label: "Hopeful" },
+        { emoji: "💜", label: "Happy" },
+        { emoji: "⚪️", label: "Neutral" },
+    ];
+    const [selectedEmotionFilter, setSelectedEmotionFilter] = React.useState<string>("all");
+
     // Conflict resolution state
     const [showConflictModal, setShowConflictModal] = React.useState(false);
     const [dismissedPairs, setDismissedPairs] = React.useState<Set<string>>(new Set());
@@ -717,13 +746,20 @@ export default function HistoryScreen() {
         return visibleHistory.filter((h) => h.text?.toLowerCase().includes(q));
     }, [visibleHistory, showSearch, debouncedSearch]);
 
+    const emotionFilteredHistory = React.useMemo(() => {
+        if (selectedEmotionFilter === "all") return searchFilteredHistory;
+        return searchFilteredHistory.filter(
+            (h) => getMoodEmojiForText(h.text ?? "") === selectedEmotionFilter
+        );
+    }, [searchFilteredHistory, selectedEmotionFilter]);
+
     const groupedHistory = React.useMemo(() => {
         const groups: { label: string; items: HistoryRecord[] }[] = [];
 
         let currentLabel: string | null = null;
         let currentItems: HistoryRecord[] = [];
 
-        searchFilteredHistory.forEach((item) => {
+        emotionFilteredHistory.forEach((item) => {
             const label = formatDateLabel(item.timestamp);
 
             if (label !== currentLabel) {
@@ -742,16 +778,23 @@ export default function HistoryScreen() {
         }
 
         return groups;
-    }, [searchFilteredHistory]);
+    }, [emotionFilteredHistory]);
 
     // Flat list data — list-header (stats/controls) + date headers + message items
     type FlatItem =
         | { kind: "list-header" }
+        | { kind: "timeline" }
         | { kind: "header"; label: string }
         | { kind: "msg"; item: HistoryRecord; siblings: HistoryRecord[]; idx: number };
 
     const flatItems = React.useMemo<FlatItem[]>(() => {
         const result: FlatItem[] = [{ kind: "list-header" }];
+        // In Conversations tab, list-header renders the thread list — no message rows needed
+        if (historyTab === "conversations") return result;
+        if (viewMode === "timeline") {
+            result.push({ kind: "timeline" });
+            return result;
+        }
         for (const group of groupedHistory) {
             result.push({ kind: "header", label: group.label });
             group.items.forEach((item, idx) => {
@@ -759,7 +802,7 @@ export default function HistoryScreen() {
             });
         }
         return result;
-    }, [groupedHistory]);
+    }, [groupedHistory, viewMode, historyTab]);
 
     const retryLabel = isSyncing
         ? "Syncing…"
@@ -832,11 +875,130 @@ export default function HistoryScreen() {
                         return (
                             <View style={{ marginBottom: 8 }}>
                                 <Text style={{ fontSize: 22, fontWeight: "700", marginBottom: 4, color: colors.textPrimary }}>
-                                    Emotion History
+                                    History
                                 </Text>
-                                <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 6 }}>
-                                    Your recent conversations with Imotara on this device.
-                                </Text>
+
+                                {/* Tab toggle: Conversations | Emotion History */}
+                                <View style={{ flexDirection: "row", gap: 8, marginBottom: 12, marginTop: 4 }}>
+                                    {(["conversations", "messages"] as const).map((tab) => (
+                                        <TouchableOpacity
+                                            key={tab}
+                                            onPress={() => setHistoryTab(tab)}
+                                            style={{
+                                                flexDirection: "row", alignItems: "center", gap: 4,
+                                                borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7,
+                                                borderWidth: 1,
+                                                borderColor: historyTab === tab ? "rgba(99,102,241,0.6)" : "rgba(255,255,255,0.14)",
+                                                backgroundColor: historyTab === tab ? "rgba(99,102,241,0.18)" : "rgba(148,163,184,0.08)",
+                                            }}
+                                        >
+                                            <Ionicons
+                                                name={tab === "conversations" ? "chatbubbles-outline" : "time-outline"}
+                                                size={13}
+                                                color={historyTab === tab ? "#818cf8" : colors.textSecondary}
+                                            />
+                                            <Text style={{ fontSize: 12, color: historyTab === tab ? "#818cf8" : colors.textSecondary, fontWeight: historyTab === tab ? "600" : "400" }}>
+                                                {tab === "conversations" ? "Conversations" : "Emotion History"}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+
+                                {/* Thread list — shown when Conversations tab is active */}
+                                {historyTab === "conversations" && (() => {
+                                    const threadList: any[] = Array.isArray(threads) ? threads : [];
+                                    return (
+                                        <View>
+                                            {/* New conversation button */}
+                                            <TouchableOpacity
+                                                onPress={() => { startNewThread(); navigation.navigate("Chat"); }}
+                                                style={{ flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.4)", backgroundColor: "rgba(99,102,241,0.10)", padding: 12, marginBottom: 12 }}
+                                            >
+                                                <Ionicons name="add-circle-outline" size={20} color="#818cf8" />
+                                                <Text style={{ fontSize: 14, fontWeight: "600", color: "#818cf8" }}>Start new conversation</Text>
+                                            </TouchableOpacity>
+
+                                            {threadList.length === 0 && (
+                                                <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", paddingVertical: 16 }}>No conversations yet.</Text>
+                                            )}
+
+                                            {[...threadList].reverse().map((thread: any) => {
+                                                const threadMessages = history.filter((h: any) => (h.threadId ?? "default") === thread.id);
+                                                const lastMsg = [...threadMessages].sort((a: any, b: any) => (b.timestamp ?? 0) - (a.timestamp ?? 0))[0];
+                                                const isActive = thread.id === activeThreadId;
+                                                const isRenaming = renamingThreadId === thread.id;
+
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={thread.id}
+                                                        onPress={() => { setActiveThreadId(thread.id); navigation.navigate("Chat"); }}
+                                                        style={{
+                                                            borderRadius: 14, borderWidth: 1,
+                                                            borderColor: isActive ? "rgba(99,102,241,0.5)" : colors.border,
+                                                            backgroundColor: isActive ? "rgba(99,102,241,0.10)" : colors.surface,
+                                                            padding: 12, marginBottom: 8,
+                                                        }}
+                                                    >
+                                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                                            <Ionicons name="chatbubble-ellipses-outline" size={16} color={isActive ? "#818cf8" : colors.textSecondary} />
+                                                            {isRenaming ? (
+                                                                <TextInput
+                                                                    value={renameText}
+                                                                    onChangeText={setRenameText}
+                                                                    autoFocus
+                                                                    style={{ flex: 1, fontSize: 14, color: colors.textPrimary, borderBottomWidth: 1, borderBottomColor: "#818cf8", paddingVertical: 2 }}
+                                                                    onBlur={() => { if (renameText.trim()) renameThread(thread.id, renameText); setRenamingThreadId(null); }}
+                                                                    onSubmitEditing={() => { if (renameText.trim()) renameThread(thread.id, renameText); setRenamingThreadId(null); }}
+                                                                    returnKeyType="done"
+                                                                />
+                                                            ) : (
+                                                                <Text style={{ flex: 1, fontSize: 14, fontWeight: isActive ? "700" : "500", color: colors.textPrimary }} numberOfLines={1}>
+                                                                    {thread.title}
+                                                                </Text>
+                                                            )}
+                                                            {isActive && (
+                                                                <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999, backgroundColor: "rgba(99,102,241,0.25)" }}>
+                                                                    <Text style={{ fontSize: 10, color: "#818cf8", fontWeight: "600" }}>Active</Text>
+                                                                </View>
+                                                            )}
+                                                        </View>
+                                                        {lastMsg && (
+                                                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4, marginLeft: 24 }} numberOfLines={1}>
+                                                                {lastMsg.from === "user" ? "You: " : "Imotara: "}{lastMsg.text}
+                                                            </Text>
+                                                        )}
+                                                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 6, marginLeft: 24 }}>
+                                                            <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                                                                {threadMessages.length} message{threadMessages.length !== 1 ? "s" : ""} · {new Date(thread.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                                            </Text>
+                                                            <View style={{ flexDirection: "row", gap: 8 }}>
+                                                                <TouchableOpacity onPress={() => { setRenamingThreadId(thread.id); setRenameText(thread.title); }}>
+                                                                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>Rename</Text>
+                                                                </TouchableOpacity>
+                                                                {thread.id !== "default" && (
+                                                                    <TouchableOpacity onPress={() => {
+                                                                        Alert.alert("Delete conversation", "This will delete all messages in this conversation. Cannot be undone.", [
+                                                                            { text: "Cancel", style: "cancel" },
+                                                                            { text: "Delete", style: "destructive", onPress: () => deleteThread(thread.id) },
+                                                                        ]);
+                                                                    }}>
+                                                                        <Text style={{ fontSize: 11, color: "#f87171" }}>Delete</Text>
+                                                                    </TouchableOpacity>
+                                                                )}
+                                                            </View>
+                                                        </View>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                    );
+                                })()}
+
+                                {historyTab === "messages" && (
+                                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 6 }}>
+                                        Your recent conversations with Imotara on this device.
+                                    </Text>
+                                )}
                                 <View style={{ marginTop: 4, marginBottom: 6 }}>
                                     <AppChip label={topChip.label} variant={topChip.variant} icon={(topChip as any).icon} iconName={(topChip as any).iconName} animate />
                                 </View>
@@ -925,6 +1087,58 @@ export default function HistoryScreen() {
                                         {isSyncing && <Text style={{ marginTop: 4, fontSize: 11, color: colors.textSecondary, fontStyle: "italic" }}>Syncing in background…</Text>}
                                     </View>
                                 )}
+                                {/* View mode toggle + filters — only shown in Emotion History tab */}
+                                {historyTab === "messages" && <>
+                                <View style={{ flexDirection: "row", gap: 8, marginTop: 12, marginBottom: 4 }}>
+                                    {(["list", "timeline"] as const).map((mode) => (
+                                        <TouchableOpacity
+                                            key={mode}
+                                            onPress={() => setViewMode(mode)}
+                                            style={{
+                                                flexDirection: "row", alignItems: "center", gap: 4,
+                                                borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7,
+                                                borderWidth: 1,
+                                                borderColor: viewMode === mode ? "rgba(99,102,241,0.6)" : "rgba(255,255,255,0.14)",
+                                                backgroundColor: viewMode === mode ? "rgba(99,102,241,0.18)" : "rgba(148,163,184,0.08)",
+                                            }}
+                                        >
+                                            <Ionicons
+                                                name={mode === "list" ? "list-outline" : "git-commit-outline"}
+                                                size={13}
+                                                color={viewMode === mode ? "#818cf8" : colors.textSecondary}
+                                            />
+                                            <Text style={{ fontSize: 12, color: viewMode === mode ? "#818cf8" : colors.textSecondary, fontWeight: viewMode === mode ? "600" : "400" }}>
+                                                {mode === "list" ? "List" : "Timeline"}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+
+                                {/* Emotion filter chips */}
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8, marginBottom: 4 }} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
+                                    {EMOTION_FILTER_OPTIONS.map((opt) => {
+                                        const isActive = selectedEmotionFilter === opt.emoji;
+                                        return (
+                                            <TouchableOpacity
+                                                key={opt.emoji}
+                                                onPress={() => setSelectedEmotionFilter(isActive ? "all" : opt.emoji)}
+                                                style={{
+                                                    flexDirection: "row", alignItems: "center", gap: 4,
+                                                    borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5,
+                                                    borderWidth: 1,
+                                                    borderColor: isActive ? "rgba(56,189,248,0.6)" : "rgba(255,255,255,0.12)",
+                                                    backgroundColor: isActive ? "rgba(56,189,248,0.15)" : "rgba(148,163,184,0.08)",
+                                                }}
+                                            >
+                                                {opt.emoji !== "all" && <Text style={{ fontSize: 12 }}>{opt.emoji}</Text>}
+                                                <Text style={{ fontSize: 11, color: isActive ? "#38bdf8" : colors.textSecondary, fontWeight: isActive ? "600" : "400" }}>
+                                                    {opt.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+
                                 <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginTop: 8, gap: 8 }}>
                                     <TouchableOpacity
                                         onPress={() => {
@@ -969,7 +1183,8 @@ export default function HistoryScreen() {
                                         clearButtonMode="while-editing"
                                     />
                                 )}
-                                {DEBUG_UI_ENABLED && (
+                                </>}
+                                {DEBUG_UI_ENABLED && historyTab === "messages" && (
                                     <AppButton title={isLoadingRemote ? "Loading remote…" : !canCloudSync ? "Load Remote (Premium)" : "Load Remote History"}
                                         onPress={handleLoadRemote} disabled={isLoadingRemote || !canCloudSync} variant="success" size="sm"
                                         style={{ alignSelf: "flex-start", marginBottom: 16, opacity: isLoadingRemote || !canCloudSync ? 0.7 : 1 }}
@@ -985,6 +1200,78 @@ export default function HistoryScreen() {
                                         <Text style={{ marginTop: 10, fontSize: 12, color: colors.textSecondary }}>Tip: long-press a message to see the timestamp.</Text>
                                     </View>
                                 )}
+                            </View>
+                        );
+                    }
+
+                    if (fi.kind === "timeline") {
+                        // Group emotionFilteredHistory by date, newest first
+                        const byDay = new Map<string, HistoryRecord[]>();
+                        emotionFilteredHistory.forEach((h) => {
+                            const d = new Date(h.timestamp ?? 0);
+                            const key = d.toISOString().slice(0, 10);
+                            const arr = byDay.get(key);
+                            if (arr) arr.push(h); else byDay.set(key, [h]);
+                        });
+                        const days = Array.from(byDay.entries()).sort(([a], [b]) => b.localeCompare(a));
+
+                        const EMOTION_COLOR: Record<string, string> = {
+                            "💙": "rgba(96,165,250,0.85)",
+                            "💛": "rgba(250,204,21,0.85)",
+                            "❤️": "rgba(248,113,113,0.85)",
+                            "🟣": "rgba(167,139,250,0.85)",
+                            "💚": "rgba(74,222,128,0.85)",
+                            "💜": "rgba(192,132,252,0.85)",
+                            "⚪️": "rgba(148,163,184,0.6)",
+                        };
+
+                        if (days.length === 0) {
+                            return (
+                                <View style={{ paddingVertical: 24, alignItems: "center" }}>
+                                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>No entries match the current filter.</Text>
+                                </View>
+                            );
+                        }
+
+                        return (
+                            <View style={{ paddingTop: 8 }}>
+                                {days.map(([dayKey, items]) => {
+                                    const dayLabel = (() => {
+                                        try { return new Date(dayKey).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" }); }
+                                        catch { return dayKey; }
+                                    })();
+                                    const sortedItems = [...items].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+                                    return (
+                                        <View key={dayKey} style={{ marginBottom: 20 }}>
+                                            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 8 }}>
+                                                <View style={{ height: 1, flex: 1, backgroundColor: "rgba(255,255,255,0.08)" }} />
+                                                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.textSecondary, letterSpacing: 0.5 }}>{dayLabel}</Text>
+                                                <View style={{ height: 1, flex: 1, backgroundColor: "rgba(255,255,255,0.08)" }} />
+                                            </View>
+                                            <View style={{ paddingLeft: 14, borderLeftWidth: 2, borderLeftColor: "rgba(99,102,241,0.25)" }}>
+                                                {sortedItems.map((h) => {
+                                                    const emoji = getMoodEmojiForText(h.text ?? "");
+                                                    const dotColor = EMOTION_COLOR[emoji] ?? EMOTION_COLOR["⚪️"];
+                                                    const timeStr = h.timestamp ? new Date(h.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
+                                                    const isUser = h.from === "user";
+                                                    if (!isUser) return null;
+                                                    return (
+                                                        <View key={h.id} style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+                                                            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: dotColor, marginTop: 4, flexShrink: 0 }} />
+                                                            <View style={{ flex: 1, borderRadius: 12, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", backgroundColor: colors.surface, padding: 10 }}>
+                                                                <Text style={{ fontSize: 13, color: colors.textPrimary, lineHeight: 18 }} numberOfLines={3}>{h.text}</Text>
+                                                                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5 }}>
+                                                                    <Text style={{ fontSize: 14 }}>{emoji}</Text>
+                                                                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>{timeStr}</Text>
+                                                                </View>
+                                                            </View>
+                                                        </View>
+                                                    );
+                                                })}
+                                            </View>
+                                        </View>
+                                    );
+                                })}
                             </View>
                         );
                     }
