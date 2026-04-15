@@ -1084,7 +1084,6 @@ export default function HistoryScreen() {
                                                 {!cloudGate.enabled ? (cloudGate as any).reason || "Cloud sync available with Premium." : null}
                                             </Text>
                                         )}
-                                        {isSyncing && <Text style={{ marginTop: 4, fontSize: 11, color: colors.textSecondary, fontStyle: "italic" }}>Syncing in background…</Text>}
                                     </View>
                                 )}
                                 {/* View mode toggle + filters — only shown in Emotion History tab */}

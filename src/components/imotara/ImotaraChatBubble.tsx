@@ -94,10 +94,7 @@ export const ImotaraChatBubble: React.FC<ImotaraChatBubbleProps> = ({
 
     if (!isSynced) {
         if (isPending) {
-            syncLabel = "Syncing…";
-            syncBorderColor = "#fbbf24";
-            syncBgColor = "rgba(251, 191, 36, 0.15)";
-            syncTextColor = "#fbbf24";
+            // syncing silently — no label shown
         } else {
             syncLabel = "On this device only";
             syncBorderColor = "#fca5a5";

@@ -3223,10 +3223,6 @@ export default function ChatScreen() {
             📡 Offline{hasUnsynced ? ` — ${history.filter((h: any) => !h.isSynced).length} message${history.filter((h: any) => !h.isSynced).length !== 1 ? "s" : ""} queued` : " — replies from device"}
           </Text>
         </View>
-      ) : hasUnsynced && isSyncing ? (
-        <View style={{ backgroundColor: "rgba(56,189,248,0.12)", paddingVertical: 4, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderBottomWidth: 1, borderBottomColor: "rgba(56,189,248,0.2)" }}>
-          <Text style={{ fontSize: 11, color: "#7dd3fc" }}>⟳ Syncing {history.filter((h: any) => !h.isSynced).length} message{history.filter((h: any) => !h.isSynced).length !== 1 ? "s" : ""}…</Text>
-        </View>
       ) : null}
       {/* Header */}
       <View
@@ -3444,14 +3440,6 @@ export default function ChatScreen() {
               {syncHint}
             </Text>
           </View>
-        )}
-
-        {!keyboardVisible && isSyncing && (
-          <Text
-            style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}
-          >
-            Syncing your latest messages…
-          </Text>
         )}
 
         {showRecentlySyncedPulse && !keyboardVisible && (

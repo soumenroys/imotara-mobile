@@ -243,7 +243,6 @@ export default function RootNavigator() {
                 visible={onboardingVisible}
                 onComplete={(result) => { void handleOnboardingComplete(result); }}
             />
-            <SyncStatusStrip />
             {/* Android: fill the safe area below the tab bar with the tab bar colour (hidden when keyboard open to avoid overlapping input) */}
             {Platform.OS === "android" && insets.bottom > 0 && !keyboardVisible && (
                 <View style={{
