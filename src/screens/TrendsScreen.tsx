@@ -3,7 +3,7 @@
 // Shows: streak, weekly emotion frequency bars, dominant emotion per day, summary.
 
 import React, { useMemo, useState, useEffect } from "react";
-import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, Vibration } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -52,6 +52,7 @@ function FeelSection({
     setNote("");
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2000);
+    try { Vibration.vibrate([0, 8, 40, 8]); } catch {}
   }
 
   return (
@@ -102,6 +103,7 @@ function FeelSection({
             placeholder={`What's making you feel ${selected.label.toLowerCase()}?`}
             placeholderTextColor={colors.textSecondary}
             multiline
+            returnKeyType="default"
             style={{
               color: colors.textPrimary,
               fontSize: 14,
@@ -347,6 +349,7 @@ function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useC
             placeholder="Write here…"
             placeholderTextColor={colors.textSecondary}
             multiline
+            returnKeyType="default"
             style={{
               minHeight: 100,
               color: colors.textPrimary,
@@ -550,6 +553,7 @@ function FutureLetterSection({ colors }: { colors: ReturnType<typeof useColors> 
             placeholder="Dear future me…"
             placeholderTextColor={colors.textSecondary}
             multiline
+            returnKeyType="default"
             numberOfLines={5}
             style={{ fontSize: 13, color: colors.textPrimary, minHeight: 90, textAlignVertical: "top", marginBottom: 12 }}
           />

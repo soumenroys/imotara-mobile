@@ -867,8 +867,8 @@ export default function HistoryScreen() {
                     <RefreshControl
                         refreshing={isRefreshing}
                         onRefresh={handleRefresh}
-                        tintColor="#38bdf8"
-                        colors={["#38bdf8"]}
+                        tintColor={colors.primary}
+                        colors={[colors.primary]}
                     />
                 }
                 ListEmptyComponent={isEmpty ? (

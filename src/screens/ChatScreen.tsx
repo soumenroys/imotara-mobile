@@ -18,6 +18,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   useWindowDimensions,
+  ActivityIndicator,
 } from "react-native";
 
 // Haptic helpers (Vibration API — no native deps needed)
@@ -1540,6 +1541,16 @@ export default function ChatScreen() {
     return () => {
       mountedRef.current = false;
     };
+  }, []);
+
+  // ITEM 2: track initial mount so we can show a spinner instead of starters
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  useEffect(() => {
+    // After one render cycle, mark load as done (messages are hydrated from storage by then)
+    const t = setTimeout(() => {
+      if (mountedRef.current) setInitialLoadDone(true);
+    }, 300);
+    return () => clearTimeout(t);
   }, []);
 
   // NEW: lifecycle safety refs (additive)
@@ -3625,7 +3636,12 @@ export default function ChatScreen() {
             if (pullOffset < -60) handleRefresh();
           }}
           ListHeaderComponent={<View>
-          {messages.length === 0 && (
+          {messages.length === 0 && !initialLoadDone && (
+            <View style={{ paddingVertical: 40, alignItems: "center" }}>
+              <ActivityIndicator size="small" color={colors.textSecondary} />
+            </View>
+          )}
+          {messages.length === 0 && initialLoadDone && (
             <View style={{ paddingTop: 24, paddingBottom: 16 }}>
               <Text
                 style={{ fontSize: 15, color: colors.textSecondary, marginBottom: 6 }}

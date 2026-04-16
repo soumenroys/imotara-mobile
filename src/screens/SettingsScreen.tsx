@@ -213,7 +213,11 @@ export default function SettingsScreen() {
                     Authorization: `Bearer ${accessToken}`,
                 },
                 body: JSON.stringify(toneContext ?? {}),
-            }).catch(() => {}); // silent — sync is best-effort
+            }).catch(() => {
+                if (mountedRef.current) {
+                    showLinkStatus("Sync failed — changes saved locally");
+                }
+            });
         }, 2000);
         return () => clearTimeout(timer);
     }, [toneContext, accessToken]);
@@ -245,7 +249,10 @@ export default function SettingsScreen() {
                     Alert.alert(
                         "Permission needed",
                         "Please allow notifications in your device settings to enable daily reminders.",
-                        [{ text: "OK" }]
+                        [
+                            { text: "Not now", style: "cancel" },
+                            { text: "Open Settings", onPress: () => Linking.openSettings() },
+                        ]
                     );
                 }
             } else {
@@ -299,6 +306,9 @@ export default function SettingsScreen() {
     const [editingMemoryText, setEditingMemoryText] = React.useState("");
     const [addingMemory, setAddingMemory] = React.useState(false);
     const [newMemoryText, setNewMemoryText] = React.useState("");
+    const [memoryInputFocused, setMemoryInputFocused] = React.useState(false);
+    const [editMemoryInputFocused, setEditMemoryInputFocused] = React.useState(false);
+    const MEMORY_MAX_LENGTH = 500;
     React.useEffect(() => {
         loadMemories().then(setMemories).catch(() => {});
     }, []);
@@ -1309,9 +1319,17 @@ export default function SettingsScreen() {
                                 placeholder="E.g. I have anxiety around social situations"
                                 placeholderTextColor={colors.textSecondary}
                                 multiline
-                                maxLength={200}
+                                returnKeyType="default"
+                                maxLength={MEMORY_MAX_LENGTH}
+                                onFocus={() => setMemoryInputFocused(true)}
+                                onBlur={() => setMemoryInputFocused(false)}
                                 style={{ fontSize: 12, color: colors.textPrimary, borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, minHeight: 40 }}
                             />
+                            {(memoryInputFocused || newMemoryText.length > MEMORY_MAX_LENGTH * 0.8) && (
+                                <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: "right", marginTop: -2 }}>
+                                    {newMemoryText.length}/{MEMORY_MAX_LENGTH}
+                                </Text>
+                            )}
                             <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
                                 <TouchableOpacity onPress={() => setAddingMemory(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                                     <Text style={{ fontSize: 11, color: colors.textSecondary }}>Cancel</Text>
@@ -1338,9 +1356,17 @@ export default function SettingsScreen() {
                                         onChangeText={setEditingMemoryText}
                                         autoFocus
                                         multiline
-                                        maxLength={200}
+                                        returnKeyType="default"
+                                        maxLength={MEMORY_MAX_LENGTH}
+                                        onFocus={() => setEditMemoryInputFocused(true)}
+                                        onBlur={() => setEditMemoryInputFocused(false)}
                                         style={{ fontSize: 12, color: colors.textPrimary, borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, minHeight: 40 }}
                                     />
+                                    {(editMemoryInputFocused || editingMemoryText.length > MEMORY_MAX_LENGTH * 0.8) && (
+                                        <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: "right", marginTop: -2 }}>
+                                            {editingMemoryText.length}/{MEMORY_MAX_LENGTH}
+                                        </Text>
+                                    )}
                                     <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
                                         <TouchableOpacity onPress={() => setEditingMemoryId(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                                             <Text style={{ fontSize: 11, color: colors.textSecondary }}>Cancel</Text>
@@ -2530,6 +2556,7 @@ export default function SettingsScreen() {
                         placeholder={feedbackType === "bug" ? "Describe the bug — what happened, what you expected, steps to reproduce…" : "What's on your mind? Suggestions, thoughts, anything…"}
                         placeholderTextColor={colors.textSecondary}
                         multiline
+                        returnKeyType="default"
                         numberOfLines={5}
                         style={{
                             backgroundColor: "rgba(255,255,255,0.06)",
