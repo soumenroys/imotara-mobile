@@ -3221,7 +3221,9 @@ export default function ChatScreen() {
       {!isOnline ? (
         <View style={{ backgroundColor: "rgba(202,138,4,0.92)", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
           <Text style={{ fontSize: 12, color: "#fff", fontWeight: "600" }}>
-            You're offline — Imotara will reply using on-device AI
+            {hasUnsynced
+              ? `📡 Offline — ${history.filter((h: any) => !h.isSynced).length} message${history.filter((h: any) => !h.isSynced).length !== 1 ? "s" : ""} queued`
+              : "You're offline — Imotara will reply using on-device AI"}
           </Text>
         </View>
       ) : null}
