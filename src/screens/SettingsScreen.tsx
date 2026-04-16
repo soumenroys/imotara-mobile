@@ -369,11 +369,11 @@ export default function SettingsScreen() {
     };
 
     // ── Accordion section open/closed state ─────────────────────────────────
-    const [sectionAccount, setSectionAccount] = React.useState(true);
+    const [sectionAccount, setSectionAccount] = React.useState(false);
     const [sectionAppearance, setSectionAppearance] = React.useState(false);
     const [sectionCompanion, setSectionCompanion] = React.useState(false);
     const [sectionPrivacy, setSectionPrivacy] = React.useState(false);
-    const [sectionSupport, setSectionSupport] = React.useState(false);
+    const [sectionSupport, setSectionSupport] = React.useState(true);
 
     function toggleSection(setter: React.Dispatch<React.SetStateAction<boolean>>) {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
