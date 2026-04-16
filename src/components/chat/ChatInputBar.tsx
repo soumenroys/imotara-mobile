@@ -94,6 +94,8 @@ export function ChatInputBar({
                 ? "rgba(239,68,68,0.9)"
                 : "rgba(148, 163, 184, 0.9)"
             }
+            accessibilityLabel="Type your message"
+            accessibilityHint="Send a message to Imotara"
             style={{
               color: colors.textPrimary,
               fontSize: 14,

@@ -56,6 +56,7 @@ import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
+import { ImotaraTypingIndicator } from "../components/imotara/ImotaraTypingIndicator";
 import { Toast, type ToastHandle } from "../components/ui/Toast";
 import type { ReflectionSeed } from "../lib/reflectionSeedContract";
 import {
@@ -3218,9 +3219,9 @@ export default function ChatScreen() {
       )}
       {/* Offline / unsynced indicator */}
       {!isOnline ? (
-        <View style={{ backgroundColor: "rgba(239,68,68,0.90)", paddingVertical: 5, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
+        <View style={{ backgroundColor: "rgba(202,138,4,0.92)", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
           <Text style={{ fontSize: 12, color: "#fff", fontWeight: "600" }}>
-            📡 Offline{hasUnsynced ? ` — ${history.filter((h: any) => !h.isSynced).length} message${history.filter((h: any) => !h.isSynced).length !== 1 ? "s" : ""} queued` : " — replies from device"}
+            You're offline — Imotara will reply using on-device AI
           </Text>
         </View>
       ) : null}
@@ -4044,23 +4045,7 @@ export default function ChatScreen() {
                 ],
               }}
             >
-              <View
-                style={{
-                  alignSelf: "flex-start",
-                  marginTop: 4,
-                  marginHorizontal: 14,
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 999,
-                  backgroundColor: typingBubbleBg,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-              >
-                <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                  {typingStatusText || "Imotara is typing…"}
-                </Text>
-              </View>
+              <ImotaraTypingIndicator />
             </Animated.View>
           ) : null}
         />

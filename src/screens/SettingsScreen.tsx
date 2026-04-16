@@ -19,6 +19,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     Linking,
+    LayoutAnimation,
 } from "react-native";
 
 import { useHistoryStore } from "../state/HistoryContext";
@@ -356,6 +357,18 @@ export default function SettingsScreen() {
         setNewMemoryText("");
         setAddingMemory(false);
     };
+
+    // ── Accordion section open/closed state ─────────────────────────────────
+    const [sectionAccount, setSectionAccount] = React.useState(true);
+    const [sectionAppearance, setSectionAppearance] = React.useState(false);
+    const [sectionCompanion, setSectionCompanion] = React.useState(false);
+    const [sectionPrivacy, setSectionPrivacy] = React.useState(false);
+    const [sectionSupport, setSectionSupport] = React.useState(false);
+
+    function toggleSection(setter: React.Dispatch<React.SetStateAction<boolean>>) {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setter((v) => !v);
+    }
 
     // ✅ Link key status (UI only)
     const [chatLinkStatus, setChatLinkStatus] = React.useState<string | null>(null);
@@ -731,6 +744,34 @@ export default function SettingsScreen() {
         ? new Date(lastSyncAt).toLocaleString()
         : "Not synced yet";
 
+    function AccordionHeader({ title, open, onPress }: { title: string; open: boolean; onPress: () => void }) {
+        return (
+            <TouchableOpacity
+                onPress={onPress}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`${title} section, ${open ? "collapse" : "expand"}`}
+                style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingVertical: 12,
+                    paddingHorizontal: 4,
+                    marginBottom: 4,
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.border,
+                }}
+            >
+                <Text style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>{title}</Text>
+                <Ionicons
+                    name={open ? "chevron-up-outline" : "chevron-down-outline"}
+                    size={18}
+                    color={colors.textSecondary}
+                />
+            </TouchableOpacity>
+        );
+    }
+
     // Utility: set auto-sync delay via preset, clamped to 3–60 seconds
     const setDelayPreset = (seconds: number) => {
         const safe = Math.min(Math.max(seconds, 3), 60);
@@ -822,6 +863,11 @@ export default function SettingsScreen() {
                     </TouchableOpacity>
                 </View>
 
+                {/* ── Support section ── */}
+                <AccordionHeader title="Support" open={sectionSupport} onPress={() => toggleSection(setSectionSupport)} />
+                {sectionSupport && (
+                <View>
+
                 {/* Support / Donation card
                     - iOS: Apple IAP "tip jar" via StoreKit 2 (guideline 3.1.1 compliant)
                     - Android: existing Razorpay preset buttons */}
@@ -894,6 +940,14 @@ export default function SettingsScreen() {
                         </View>
                     )}
                 </AppSurface>
+
+                </View>
+                )}
+
+                {/* ── Account section ── */}
+                <AccordionHeader title="Account" open={sectionAccount} onPress={() => toggleSection(setSectionAccount)} />
+                {sectionAccount && (
+                <View>
 
                 {/* ✅ Plan / Licensing card (foundation) */}
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -1063,7 +1117,14 @@ export default function SettingsScreen() {
                     </Text>
                 </AppSurface>
 
-                {/* Appearance */}
+                </View>
+                )}
+
+                {/* ── Appearance section ── */}
+                <AccordionHeader title="Appearance" open={sectionAppearance} onPress={() => toggleSection(setSectionAppearance)} />
+                {sectionAppearance && (
+                <View>
+
                 <AppSurface style={{ marginBottom: 16 }}>
                     <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 6 }}>
                         Appearance
@@ -1093,6 +1154,14 @@ export default function SettingsScreen() {
                         </TouchableOpacity>
                     </View>
                 </AppSurface>
+
+                </View>
+                )}
+
+                {/* ── Companion section ── */}
+                <AccordionHeader title="Companion" open={sectionCompanion} onPress={() => toggleSection(setSectionCompanion)} />
+                {sectionCompanion && (
+                <View>
 
                 {/* Daily check-in reminder */}
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -2080,6 +2149,14 @@ export default function SettingsScreen() {
                     )}
                 </AppSurface>
 
+                </View>
+                )}
+
+                {/* ── Privacy & Data section ── */}
+                <AccordionHeader title="Privacy & Data" open={sectionPrivacy} onPress={() => toggleSection(setSectionPrivacy)} />
+                {sectionPrivacy && (
+                <View>
+
                 {/* Local history card */}
                 <AppSurface style={{ marginBottom: 16 }}>
                     <Text
@@ -2579,6 +2656,10 @@ export default function SettingsScreen() {
                         );
                     })()}
                 </AppSurface>
+
+                </View>
+                )}
+
             </ScrollView>
         </KeyboardAvoidingView>
     );

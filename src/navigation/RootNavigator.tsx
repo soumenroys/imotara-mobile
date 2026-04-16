@@ -195,6 +195,7 @@ export default function RootNavigator() {
                         tabBarHideOnKeyboard: true,
                         tabBarActiveTintColor: colors.primary,
                         tabBarInactiveTintColor: colors.textSecondary,
+                        animation: "fade",
                         tabBarIcon: ({ color, size, focused }) => {
                             let iconName: keyof typeof Ionicons.glyphMap;
 

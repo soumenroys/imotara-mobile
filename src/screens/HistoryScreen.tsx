@@ -34,6 +34,7 @@ import {
 
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
 const SESSION_GAP_MS = 45 * 60 * 1000;
+const PAGE_SIZE = 50;
 
 function getMoodEmojiForText(text: string): string {
     const t = text || "";
@@ -333,6 +334,9 @@ export default function HistoryScreen() {
         renameThread,
         deleteThread,
     } = useHistoryStore() as any;
+
+    // Pagination state
+    const [page, setPage] = React.useState(1);
 
     // Tab: "messages" (emotion history) or "conversations" (thread list)
     const [historyTab, setHistoryTab] = React.useState<"messages" | "conversations">("conversations");
@@ -795,14 +799,20 @@ export default function HistoryScreen() {
             result.push({ kind: "timeline" });
             return result;
         }
+        let msgCount = 0;
+        const limit = page * PAGE_SIZE;
         for (const group of groupedHistory) {
+            if (msgCount >= limit) break;
             result.push({ kind: "header", label: group.label });
             group.items.forEach((item, idx) => {
-                result.push({ kind: "msg", item, siblings: group.items, idx });
+                if (msgCount < limit) {
+                    result.push({ kind: "msg", item, siblings: group.items, idx });
+                    msgCount++;
+                }
             });
         }
         return result;
-    }, [groupedHistory, viewMode, historyTab]);
+    }, [groupedHistory, viewMode, historyTab, page]);
 
     const retryLabel = isSyncing
         ? "Syncing…"
@@ -851,6 +861,8 @@ export default function HistoryScreen() {
                 maxToRenderPerBatch={12}
                 windowSize={7}
                 initialNumToRender={20}
+                onEndReached={() => setPage((p) => p + 1)}
+                onEndReachedThreshold={0.3}
                 refreshControl={
                     <RefreshControl
                         refreshing={isRefreshing}

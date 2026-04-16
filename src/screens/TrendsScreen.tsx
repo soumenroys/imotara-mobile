@@ -66,6 +66,8 @@ function FeelSection({
             <TouchableOpacity
               key={btn.label}
               onPress={() => setSelected(isActive ? null : { bucket: btn.bucket, label: btn.label })}
+              accessibilityLabel={btn.label}
+              accessibilityRole="button"
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -681,7 +683,7 @@ const RADAR_AXES: { key: EmotionBucket; label: string; angleDeg: number }[] = [
   { key: "confused", label: "Confused", angleDeg: -150 },
 ];
 
-function EmotionRadarChart({
+const EmotionRadarChart = React.memo(function EmotionRadarChart({
   weekFreq,
   maxCount,
   colors,
@@ -772,7 +774,7 @@ function EmotionRadarChart({
       })}
     </View>
   );
-}
+});
 
 // ── 30-day mood line chart ──────────────────────────────────────────────────────
 const EMOTION_VALENCE: Record<EmotionBucket, number> = {
@@ -785,7 +787,7 @@ const EMOTION_VALENCE: Record<EmotionBucket, number> = {
   sadness:  0.10,
 };
 
-function MoodLineChart({
+const MoodLineChart = React.memo(function MoodLineChart({
   data,
   colors,
 }: {
@@ -894,7 +896,7 @@ function MoodLineChart({
       </View>
     </View>
   );
-}
+});
 
 function mapEmotionToKey(raw?: string): EmotionBucket {
   if (!raw) return "neutral";
