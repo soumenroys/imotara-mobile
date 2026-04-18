@@ -3250,65 +3250,71 @@ export default function ChatScreen() {
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <View
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: 999,
-              marginRight: 6,
-              backgroundColor: hasUnsynced
-                ? "#fbbf24"
-                : (lastSyncStatus || "").toLowerCase().includes("failed")
-                  ? "#f87171"
-                  : colors.primary,
-            }}
-          />
+          {/* Title section — flex: 1 so it yields space to buttons on small screens */}
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0 }}>
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 999,
+                marginRight: 6,
+                backgroundColor: hasUnsynced
+                  ? "#fbbf24"
+                  : (lastSyncStatus || "").toLowerCase().includes("failed")
+                    ? "#f87171"
+                    : colors.primary,
+              }}
+            />
 
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "700",
-              color: colors.textPrimary,
-            }}
-          >
-            Imotara
-          </Text>
-
-          <Text
-            style={{ marginLeft: 6, fontSize: 11, color: colors.textSecondary }}
-          >
-            (mobile)
-          </Text>
-
-          {/* AI mode badge */}
-          <View
-            style={{
-              marginLeft: 8,
-              paddingHorizontal: 7,
-              paddingVertical: 2,
-              borderRadius: 999,
-              backgroundColor: analysisMode === "local"
-                ? "rgba(139, 92, 246, 0.18)"
-                : "rgba(59, 130, 246, 0.18)",
-              borderWidth: 1,
-              borderColor: analysisMode === "local"
-                ? "rgba(139, 92, 246, 0.45)"
-                : "rgba(59, 130, 246, 0.45)",
-            }}
-          >
             <Text
               style={{
-                fontSize: 10,
-                fontWeight: "600",
-                color: analysisMode === "local" ? "#a78bfa" : "#60a5fa",
-                letterSpacing: 0.3,
+                fontSize: 18,
+                fontWeight: "700",
+                color: colors.textPrimary,
+              }}
+              numberOfLines={1}
+            >
+              Imotara
+            </Text>
+
+            <Text
+              style={{ marginLeft: 6, fontSize: 11, color: colors.textSecondary }}
+              numberOfLines={1}
+            >
+              (mobile)
+            </Text>
+
+            {/* AI mode badge */}
+            <View
+              style={{
+                marginLeft: 8,
+                paddingHorizontal: 7,
+                paddingVertical: 2,
+                borderRadius: 999,
+                backgroundColor: analysisMode === "local"
+                  ? "rgba(139, 92, 246, 0.18)"
+                  : "rgba(59, 130, 246, 0.18)",
+                borderWidth: 1,
+                borderColor: analysisMode === "local"
+                  ? "rgba(139, 92, 246, 0.45)"
+                  : "rgba(59, 130, 246, 0.45)",
               }}
             >
-              {analysisMode === "local" ? "LOCAL" : "CLOUD"}
-            </Text>
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: "600",
+                  color: analysisMode === "local" ? "#a78bfa" : "#60a5fa",
+                  letterSpacing: 0.3,
+                }}
+              >
+                {analysisMode === "local" ? "LOCAL" : "CLOUD"}
+              </Text>
+            </View>
           </View>
 
-          <View style={{ flex: 1 }} />
+          {/* Buttons section — flexShrink: 0 ensures buttons are never clipped on narrow screens */}
+          <View style={{ flexDirection: "row", alignItems: "center", flexShrink: 0 }}>
 
           {/* Search toggle */}
           {messages.length > 0 && (
@@ -3422,6 +3428,7 @@ export default function ChatScreen() {
               </Text>
             </TouchableOpacity>
           )}
+          </View>
         </View>
 
         {!keyboardVisible && (

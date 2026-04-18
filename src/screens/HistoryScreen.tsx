@@ -832,7 +832,10 @@ export default function HistoryScreen() {
                 ref={scrollRef}
                 data={flatItems}
                 keyExtractor={(fi) =>
-                    fi.kind === "list-header" ? "__list-header__" : fi.kind === "header" ? `hdr-${fi.label}` : fi.item.id
+                    fi.kind === "list-header" ? "__list-header__"
+                    : fi.kind === "header"    ? `hdr-${fi.label}`
+                    : fi.kind === "timeline"  ? "__timeline__"
+                    : fi.item.id
                 }
                 contentContainerStyle={{
                     paddingHorizontal: 16,
