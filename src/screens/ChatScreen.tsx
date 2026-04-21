@@ -2503,6 +2503,7 @@ export default function ChatScreen() {
               recentUserTexts: messages.filter((m) => m.from === "user").slice(-5).map((m) => m.text),
               recentAssistantTexts: messages.filter((m) => m.from === "bot").slice(-3).map((m) => m.text),
               emotionMemory: memoryContext || undefined,
+              preferredLang: toneContext?.user?.preferredLang ?? undefined,
             };
             const local = buildLocalReply(trimmed, toneContext, localRecentCtx);
 
@@ -2699,6 +2700,7 @@ export default function ChatScreen() {
           const localRecentCtxErr: LocalRecentContext = {
             recentUserTexts: messages.filter((m) => m.from === "user").slice(-5).map((m) => m.text),
             recentAssistantTexts: messages.filter((m) => m.from === "bot").slice(-3).map((m) => m.text),
+            preferredLang: toneContext?.user?.preferredLang ?? undefined,
           };
           const local = buildLocalReply(trimmed, toneContext, localRecentCtxErr);
 

@@ -26,6 +26,7 @@ export type LocalRecentContext = {
     recentAssistantTexts?: string[];
     lastDetectedLanguage?: string;
     emotionMemory?: string;
+    preferredLang?: string; // user's stored language preference — fallback when detection is ambiguous
 };
 
 export type LocalReplyResult = {
@@ -202,6 +203,11 @@ function detectLanguage(text: string, recentContext?: LocalRecentContext): Local
 
     const hintLang = recentContext?.lastDetectedLanguage;
     if (hintLang && hintLang !== "en") return hintLang as LocalLanguage;
+
+    // Use the user's stored preferred language as a last resort before defaulting to English.
+    const prefLang = recentContext?.preferredLang;
+    if (prefLang && prefLang !== "en") return prefLang as LocalLanguage;
+
     return "en";
 }
 
@@ -636,12 +642,12 @@ export function buildLocalReply(
 
     const companionToneFromRel = relationshipToTone(relationship as string);
     const companionName = (toneContext?.companion?.name?.trim() || "Imotara");
-    const userName = ((toneContext?.user as any)?.name ?? "").trim();
+    const userName = (toneContext?.user?.name ?? "").trim();
     const companionGender = toneContext?.companion?.gender;
-    const userGender = (toneContext?.user as any)?.gender;
-    const userAge = (toneContext?.user as any)?.ageTone ?? (toneContext?.user as any)?.ageRange;
+    const userGender = toneContext?.user?.gender;
+    const userAge = toneContext?.user?.ageTone ?? toneContext?.user?.ageRange;
 
-    const sessionTurn = (toneContext as any)?.sessionTurn ?? recentContext?.recentAssistantTexts?.length ?? 0;
+    const sessionTurn = toneContext?.sessionTurn ?? recentContext?.recentAssistantTexts?.length ?? 0;
     const seed = hash32(
         `${message}::${language}::${recentSignature}::${relationship}::${companionToneFromRel}::${sessionTurn}`
     );
@@ -928,7 +934,7 @@ export function buildLocalReply(
     const isVagueReply = /^(yes|yeah|yep|no|nope|same|still|exactly|right|kind of|i guess|maybe|sure|ok|okay|mm|hmm|idk|dunno)\.?$/i.test(message.trim());
 
     let companionTone: LocalResponseTone = companionToneFromRel;
-    const prefStyle = (toneContext as any)?.preferredResponseStyle;
+    const prefStyle = toneContext?.user?.responseStyle;
     if (prefStyle === "motivate") companionTone = "coach";
     else if (prefStyle === "advise") companionTone = "practical";
     else if (prefStyle === "comfort") companionTone = "supportive";
