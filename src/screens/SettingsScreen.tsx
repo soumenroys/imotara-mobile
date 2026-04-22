@@ -893,6 +893,37 @@ export default function SettingsScreen() {
                 {sectionSupport && (
                 <View>
 
+                {/* Upgrade Plan card — opens web /upgrade page */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "600", marginBottom: 4 }}>
+                        Upgrade your plan
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
+                        Remove the daily AI limit, extend history to 90 days, or top up with message credits.
+                    </Text>
+                    <TouchableOpacity
+                        onPress={() => {
+                            const base = getApiBaseUrl();
+                            Linking.openURL(`${base}/upgrade`).catch(() => {
+                                Alert.alert("Error", "Could not open upgrade page.", [{ text: "OK" }]);
+                            });
+                        }}
+                        style={{
+                            alignSelf: "flex-start",
+                            paddingHorizontal: 16,
+                            paddingVertical: 8,
+                            borderRadius: 12,
+                            backgroundColor: "rgba(99,102,241,0.2)",
+                            borderWidth: 1,
+                            borderColor: "rgba(99,102,241,0.4)",
+                        }}
+                    >
+                        <Text style={{ fontSize: 13, fontWeight: "700", color: "#a5b4fc" }}>
+                            View plans →
+                        </Text>
+                    </TouchableOpacity>
+                </AppSurface>
+
                 {/* Support / Donation card
                     - iOS: Apple IAP "tip jar" via StoreKit 2 (guideline 3.1.1 compliant)
                     - Android: existing Razorpay preset buttons */}

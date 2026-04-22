@@ -1453,26 +1453,6 @@ export default function ChatScreen() {
     // "offline" card just dismisses
   }
 
-  // Trial countdown banner — shown once per day when ≤14 days remain
-  const TRIAL_BANNER_DISMISSED_KEY = "imotara.trial.bannerDismissed.v1";
-  const [showTrialBanner, setShowTrialBanner] = useState(false);
-  useEffect(() => {
-    if (!licenseExpiresAt || cloudSyncAllowed) return;
-    const msLeft = new Date(licenseExpiresAt).getTime() - Date.now();
-    const daysLeft = Math.ceil(msLeft / 86_400_000);
-    if (daysLeft <= 0 || daysLeft > 14) return;
-    AsyncStorage.getItem(TRIAL_BANNER_DISMISSED_KEY).then((dismissed) => {
-      const today = new Date().toISOString().slice(0, 10);
-      if (dismissed !== today) setShowTrialBanner(true);
-    }).catch(() => { });
-  }, [licenseExpiresAt, cloudSyncAllowed]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function dismissTrialBanner() {
-    setShowTrialBanner(false);
-    const today = new Date().toISOString().slice(0, 10);
-    AsyncStorage.setItem(TRIAL_BANNER_DISMISSED_KEY, today).catch(() => { });
-  }
-
   // Return greeting — shown after >24h absence
   const [showReturnGreeting, setShowReturnGreeting] = useState(false);
   useEffect(() => {
@@ -1532,6 +1512,26 @@ export default function ChatScreen() {
     // ✅ Web parity: stable user scope → sent as threadId + userId to /api/respond
     localUserScopeId,
   } = useSettings();
+
+  // Trial countdown banner — shown once per day when ≤14 days remain
+  const TRIAL_BANNER_DISMISSED_KEY = "imotara.trial.bannerDismissed.v1";
+  const [showTrialBanner, setShowTrialBanner] = useState(false);
+  useEffect(() => {
+    if (!licenseExpiresAt || cloudSyncAllowed) return;
+    const msLeft = new Date(licenseExpiresAt).getTime() - Date.now();
+    const daysLeft = Math.ceil(msLeft / 86_400_000);
+    if (daysLeft <= 0 || daysLeft > 14) return;
+    AsyncStorage.getItem(TRIAL_BANNER_DISMISSED_KEY).then((dismissed) => {
+      const today = new Date().toISOString().slice(0, 10);
+      if (dismissed !== today) setShowTrialBanner(true);
+    }).catch(() => { });
+  }, [licenseExpiresAt, cloudSyncAllowed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function dismissTrialBanner() {
+    setShowTrialBanner(false);
+    const today = new Date().toISOString().slice(0, 10);
+    AsyncStorage.setItem(TRIAL_BANNER_DISMISSED_KEY, today).catch(() => { });
+  }
 
   // ── Auth: get Supabase session token for mobile API calls ──────────────────
   const { accessToken } = useAuth();
@@ -4203,12 +4203,12 @@ export default function ChatScreen() {
               <Text style={{ color: "#fcd34d", fontWeight: "600", fontSize: 13 }}>
                 {daysLeft === 1 ? "Last day of your free trial" : `${daysLeft} days left in your free trial`}
               </Text>
-              <Text style={{ color: colors.subtext ?? "#9ca3af", fontSize: 12, marginTop: 2 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>
                 After your trial, Imotara keeps working with on-device replies.
               </Text>
             </View>
             <TouchableOpacity onPress={dismissTrialBanner} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={{ color: colors.subtext ?? "#9ca3af", fontSize: 16, lineHeight: 18 }}>✕</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: 16, lineHeight: 18 }}>✕</Text>
             </TouchableOpacity>
           </View>
         );
