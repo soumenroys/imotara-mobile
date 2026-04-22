@@ -13,6 +13,7 @@ import { DEBUG_UI_ENABLED } from "../config/debug";
 import type { LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
 import type { ToneContextPayload } from "../api/aiClient";
+import { supabase } from "../lib/supabase/client";
 
 type SettingsContextValue = {
     // Emotion insight toggle for Imotara replies
@@ -245,6 +246,36 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         }
     };
 
+
+    // ---- LIC-6: sync real license tier from Supabase on sign-in ----
+    useEffect(() => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            async (_event, session) => {
+                if (!session?.user?.id) return;
+                try {
+                    const { data: licRow } = await supabase
+                        .from("licenses")
+                        .select("tier")
+                        .eq("user_id", session.user.id)
+                        .maybeSingle();
+
+                    if (!licRow) return;
+
+                    const t = String(licRow.tier || "free").toLowerCase();
+                    const mobileTier: LicenseTier =
+                        t === "plus" || t === "pro" ? "PREMIUM" :
+                        t === "family" ? "FAMILY" : "FREE";
+
+                    await AsyncStorage.setItem(LICENSE_TIER_KEY, mobileTier);
+                    const g = gate("CLOUD_SYNC", mobileTier);
+                    setCloudSyncAllowed(g.enabled);
+                } catch {
+                    // Fail-open: keep current tier if Supabase is unreachable
+                }
+            }
+        );
+        return () => subscription.unsubscribe();
+    }, []);
 
     // ---- Hydrate once ----
     useEffect(() => {
