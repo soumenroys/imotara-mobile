@@ -51,6 +51,12 @@ type SettingsContextValue = {
     cloudSyncAllowed: boolean;
 
     /**
+     * ISO string of when the current trial / subscription expires.
+     * Null if not on a timed license.
+     */
+    licenseExpiresAt: string | null;
+
+    /**
      * Optional helper to re-check the current license tier from AsyncStorage
      * and recompute cloudSyncAllowed. Safe to call after setLicenseTier(...) in debug.
      */
@@ -129,6 +135,7 @@ function makeLocalScopeId(): string {
 
 // ✅ Same key used by HistoryContext (we are only reading it here)
 const LICENSE_TIER_KEY = "imotara_license_tier_v1";
+const LICENSE_EXPIRES_AT_KEY = "imotara_license_expires_at_v1";
 
 function isValidTier(v: unknown): v is LicenseTier {
     return (
@@ -227,6 +234,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     // ✅ Licensing-derived flag (default FREE behavior: device-only)
     const [cloudSyncAllowed, setCloudSyncAllowed] = useState<boolean>(false);
+    const [licenseExpiresAt, setLicenseExpiresAt] = useState<string | null>(null);
 
     const refreshCloudSyncAllowed = async () => {
         try {
@@ -247,7 +255,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     };
 
 
-    // ---- LIC-6: sync real license tier from Supabase on sign-in ----
+    // ---- LIC-6 + LIC-7: sync real license tier + expiry from Supabase on sign-in ----
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event, session) => {
@@ -255,7 +263,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 try {
                     const { data: licRow } = await supabase
                         .from("licenses")
-                        .select("tier")
+                        .select("tier, expires_at")
                         .eq("user_id", session.user.id)
                         .maybeSingle();
 
@@ -266,9 +274,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                         t === "plus" || t === "pro" ? "PREMIUM" :
                         t === "family" ? "FAMILY" : "FREE";
 
+                    const expiresAt: string | null = licRow.expires_at ?? null;
+
                     await AsyncStorage.setItem(LICENSE_TIER_KEY, mobileTier);
+                    if (expiresAt) {
+                        await AsyncStorage.setItem(LICENSE_EXPIRES_AT_KEY, expiresAt);
+                    } else {
+                        await AsyncStorage.removeItem(LICENSE_EXPIRES_AT_KEY);
+                    }
+
                     const g = gate("CLOUD_SYNC", mobileTier);
                     setCloudSyncAllowed(g.enabled);
+                    setLicenseExpiresAt(expiresAt);
                 } catch {
                     // Fail-open: keep current tier if Supabase is unreachable
                 }
@@ -284,9 +301,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const hydrate = async () => {
             try {
                 // ✅ hydrate settings + compute license gate in parallel
-                const [raw, rawTier] = await Promise.all([
+                const [raw, rawTier, rawExpiresAt] = await Promise.all([
                     AsyncStorage.getItem(STORAGE_KEY),
                     AsyncStorage.getItem(LICENSE_TIER_KEY),
+                    AsyncStorage.getItem(LICENSE_EXPIRES_AT_KEY),
                 ]);
 
                 // 1) Settings payload
@@ -398,7 +416,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 const g = gate("CLOUD_SYNC", tier);
                 if (alive) {
                     setCloudSyncAllowed(g.enabled);
-
+                    setLicenseExpiresAt(rawExpiresAt ?? null);
                 }
 
             } catch (e) {
@@ -548,6 +566,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 autoSyncDelaySeconds,
                 setAutoSyncDelaySeconds,
                 cloudSyncAllowed,
+                licenseExpiresAt,
                 refreshCloudSyncAllowed,
                 debugUIEnabled: DEBUG_UI_ENABLED,
                 analysisMode,
