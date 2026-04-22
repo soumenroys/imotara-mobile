@@ -48,6 +48,7 @@ import AppSeparator from "../components/ui/AppSeparator";
 import AppSurface from "../components/ui/AppSurface";
 import AppButton from "../components/ui/AppButton";
 import { DEBUG_UI_ENABLED } from "../config/debug";
+import { HowItWorksModal } from "../components/imotara/HowItWorksModal";
 import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
 
 
@@ -379,6 +380,8 @@ export default function SettingsScreen() {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setter((v) => !v);
     }
+
+    const [showHowItWorks, setShowHowItWorks] = React.useState(false);
 
     // ✅ Link key status (UI only)
     const [chatLinkStatus, setChatLinkStatus] = React.useState<string | null>(null);
@@ -852,6 +855,18 @@ export default function SettingsScreen() {
                     {"\n\n"}Your messages are never shared publicly — sync only stores a
                     private cloud copy for you.
                 </Text>
+
+                {/* How to use Imotara */}
+                <TouchableOpacity
+                    onPress={() => setShowHowItWorks(true)}
+                    style={{ flexDirection: "row", alignItems: "center", marginBottom: 20, gap: 8 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="How to use Imotara"
+                >
+                    <Ionicons name="information-circle-outline" size={17} color={colors.primary} />
+                    <Text style={{ fontSize: 13.5, color: colors.primary }}>How to use Imotara</Text>
+                </TouchableOpacity>
 
                 {/* Privacy Policy & Terms links — required by App Store guideline 5.1.1 */}
                 <View style={{ flexDirection: "row", marginBottom: 24, gap: 20 }}>
@@ -2688,6 +2703,8 @@ export default function SettingsScreen() {
                 )}
 
             </ScrollView>
+
+            <HowItWorksModal visible={showHowItWorks} onClose={() => setShowHowItWorks(false)} />
         </KeyboardAvoidingView>
     );
 }
