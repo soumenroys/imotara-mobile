@@ -512,6 +512,17 @@ export async function callImotaraAI(
 
         const chatReplyText = String(chatData?.text ?? "").trim();
 
+        // LIC-2: quota exceeded — skip /api/respond cloud fallback, let ChatScreen use local reply
+        if (!chatReplyText && chatData?.meta?.from === "quota_exceeded") {
+          return {
+            ok: false,
+            replyText: "",
+            errorMessage: "quota_exceeded",
+            analysisSource: "cloud",
+            remoteUrl: chatReplyUrl,
+          };
+        }
+
         // Accept any non-empty reply from the server — including server-side fallbacks.
         // Previously required meta.from === "openai" which discarded valid cached/fallback
         // replies and caused a redundant second call to /api/respond.
