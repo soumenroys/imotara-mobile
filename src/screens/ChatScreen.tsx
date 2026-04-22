@@ -1406,6 +1406,15 @@ export default function ChatScreen() {
     }).catch(() => setAiConsentGiven(true));
   }, []);
 
+  // First-time onboarding hint — shown until the user sends their first ever message
+  const FIRST_MSG_SEEN_KEY = "imotara.onboarding.firstMsgSeen.v1";
+  const [showFirstTimeTip, setShowFirstTimeTip] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(FIRST_MSG_SEEN_KEY).then((val) => {
+      if (!val) setShowFirstTimeTip(true);
+    }).catch(() => { });
+  }, []);
+
   // Return greeting — shown after >24h absence
   const [showReturnGreeting, setShowReturnGreeting] = useState(false);
   useEffect(() => {
@@ -2228,6 +2237,12 @@ export default function ChatScreen() {
     setInput("");
     setInputHeight(40);
     Keyboard.dismiss();
+
+    // Dismiss first-time onboarding hint on first send
+    if (showFirstTimeTip) {
+      setShowFirstTimeTip(false);
+      AsyncStorage.setItem(FIRST_MSG_SEEN_KEY, "1").catch(() => { });
+    }
 
     setIsTyping(true);
     typingStartedAtRef.current = Date.now();
@@ -4126,6 +4141,7 @@ export default function ChatScreen() {
           if (voiceInput.state === "idle") await voiceInput.startRecording();
           else if (voiceInput.state === "recording") await voiceInput.stopRecording();
         }}
+        firstTimeTip={showFirstTimeTip ? "Just talk — Imotara listens without judgment." : null}
       />
 
       {renderActionSheet()}

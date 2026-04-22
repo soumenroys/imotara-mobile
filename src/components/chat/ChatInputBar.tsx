@@ -20,6 +20,7 @@ type Props = {
   onContentSizeChange: (e: any) => void;
   onSend: () => void;
   onMicPress: () => void;
+  firstTimeTip?: string | null;
 };
 
 export function ChatInputBar({
@@ -33,6 +34,7 @@ export function ChatInputBar({
   onContentSizeChange,
   onSend,
   onMicPress,
+  firstTimeTip,
 }: Props) {
   const insets = useSafeAreaInsets();
   return (
@@ -46,6 +48,19 @@ export function ChatInputBar({
         backgroundColor: "rgba(15, 23, 42, 0.98)",
       }}
     >
+      {firstTimeTip ? (
+        <Text
+          style={{
+            fontSize: 11,
+            color: "rgba(148, 163, 184, 0.75)",
+            textAlign: "center",
+            marginBottom: 6,
+            fontStyle: "italic",
+          }}
+        >
+          {firstTimeTip}
+        </Text>
+      ) : null}
       {input.length > 800 && (
         <Text
           style={{
@@ -86,6 +101,8 @@ export function ChatInputBar({
                 ? `Recording… ${Math.round(voiceDurationMs / 1000)}s`
                 : voiceState === "transcribing"
                 ? "Transcribing voice…"
+                : firstTimeTip
+                ? "Try: 'I've been feeling anxious about work lately'"
                 : "Type something you feel…"
             }
             editable={voiceState === "idle"}
