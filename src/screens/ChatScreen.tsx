@@ -57,6 +57,8 @@ import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
+import { DiscoveryCard, DISCOVERY_CARDS_KEY, CARD_ORDER, getNextCard, type DiscoveryCardId } from "../components/chat/DiscoveryCard";
+import { useNavigation } from "@react-navigation/native";
 import { ImotaraTypingIndicator } from "../components/imotara/ImotaraTypingIndicator";
 import { Toast, type ToastHandle } from "../components/ui/Toast";
 import type { ReflectionSeed } from "../lib/reflectionSeedContract";
@@ -1414,6 +1416,42 @@ export default function ChatScreen() {
       if (!val) setShowFirstTimeTip(true);
     }).catch(() => { });
   }, []);
+
+  // Feature discovery cards — one per session, after 3+ user messages
+  const navigation = useNavigation<any>();
+  const [discoveryCard, setDiscoveryCard] = useState<DiscoveryCardId | null>(null);
+  const discoveryShownThisSession = useRef(false);
+  useEffect(() => {
+    const userCount = messages.filter((m) => m.from === "user").length;
+    if (userCount < 3 || discoveryShownThisSession.current || discoveryCard) return;
+    AsyncStorage.getItem(DISCOVERY_CARDS_KEY).then((raw) => {
+      const dismissed: DiscoveryCardId[] = raw ? JSON.parse(raw) : [];
+      const next = getNextCard(dismissed);
+      if (next) {
+        setDiscoveryCard(next);
+        discoveryShownThisSession.current = true;
+      }
+    }).catch(() => { });
+  }, [messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function dismissDiscoveryCard() {
+    if (!discoveryCard) return;
+    const id = discoveryCard;
+    setDiscoveryCard(null);
+    AsyncStorage.getItem(DISCOVERY_CARDS_KEY).then((raw) => {
+      const dismissed: DiscoveryCardId[] = raw ? JSON.parse(raw) : [];
+      if (!dismissed.includes(id)) {
+        AsyncStorage.setItem(DISCOVERY_CARDS_KEY, JSON.stringify([...dismissed, id])).catch(() => { });
+      }
+    }).catch(() => { });
+  }
+
+  function handleDiscoveryAction() {
+    dismissDiscoveryCard();
+    if (discoveryCard === "trends") navigation.navigate("Trends");
+    else if (discoveryCard === "companion") navigation.navigate("Settings");
+    // "offline" card just dismisses
+  }
 
   // Return greeting — shown after >24h absence
   const [showReturnGreeting, setShowReturnGreeting] = useState(false);
@@ -4127,6 +4165,15 @@ export default function ChatScreen() {
       )}
 
       {/* Input */}
+      {discoveryCard && (
+        <DiscoveryCard
+          cardId={discoveryCard}
+          colors={colors}
+          onDismiss={dismissDiscoveryCard}
+          onAction={handleDiscoveryAction}
+        />
+      )}
+
       <ChatInputBar
         input={input}
         inputHeight={inputHeight}
