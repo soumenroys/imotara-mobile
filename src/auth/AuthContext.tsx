@@ -20,6 +20,7 @@ import * as WebBrowser from "expo-web-browser";
 import * as AuthSession from "expo-auth-session";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../lib/supabase/client";
+import { buildApiUrl } from "../config/api";
 
 // Required so the auth redirect can close the browser tab on iOS.
 // Guarded: native module may not be available in bare Expo Go dev environment.
@@ -90,6 +91,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             (_event, newSession) => {
                 setSession(newSession);
                 setStatus(newSession ? "authenticated" : "unauthenticated");
+
+                // LIC-4: seed free license row on sign-in (no-op if already exists)
+                if (newSession?.access_token) {
+                    fetch(buildApiUrl("/api/license/seed"), {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${newSession.access_token}` },
+                    }).catch(() => {});
+                }
             },
         );
 
