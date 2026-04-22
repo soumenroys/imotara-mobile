@@ -121,6 +121,8 @@ export type ToneContextPayload = {
     gender?: ToneGender;
     relationship?: ToneRelationship;
   };
+  // per-turn seed offset for local reply variety; mirrors web ToneContext.sessionTurn
+  sessionTurn?: number;
 };
 
 type CallAIOptions = {
