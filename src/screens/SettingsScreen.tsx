@@ -2,6 +2,7 @@
 import React from "react";
 import Constants from "expo-constants";
 import IOSTipJar from "../components/imotara/IOSTipJar";
+import UpgradeSheet from "../components/imotara/UpgradeSheet";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import * as FileSystem from "expo-file-system/legacy";
@@ -138,6 +139,9 @@ export default function SettingsScreen() {
         // ✅ Cross-device chat link key (optional)
         chatLinkKey,
         setChatLinkKey,
+
+        cloudSyncAllowed,
+        refreshLicense,
     } = useSettings();
 
     const { themeMode, toggleTheme, isDark, colors } = useTheme();
@@ -370,6 +374,7 @@ export default function SettingsScreen() {
     };
 
     // ── Accordion section open/closed state ─────────────────────────────────
+    const [showUpgradeSheet, setShowUpgradeSheet] = React.useState(false);
     const [sectionAccount, setSectionAccount] = React.useState(false);
     const [sectionAppearance, setSectionAppearance] = React.useState(false);
     const [sectionCompanion, setSectionCompanion] = React.useState(false);
@@ -893,7 +898,7 @@ export default function SettingsScreen() {
                 {sectionSupport && (
                 <View>
 
-                {/* Upgrade Plan card — opens web /upgrade page */}
+                {/* Upgrade Plan card — native IAP (iOS) / Razorpay (Android) */}
                 <AppSurface style={{ marginBottom: 16 }}>
                     <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "600", marginBottom: 4 }}>
                         Upgrade your plan
@@ -902,12 +907,7 @@ export default function SettingsScreen() {
                         Remove the daily AI limit, extend history to 90 days, or top up with message credits.
                     </Text>
                     <TouchableOpacity
-                        onPress={() => {
-                            const base = getApiBaseUrl();
-                            Linking.openURL(`${base}/upgrade`).catch(() => {
-                                Alert.alert("Error", "Could not open upgrade page.", [{ text: "OK" }]);
-                            });
-                        }}
+                        onPress={() => setShowUpgradeSheet(true)}
                         style={{
                             alignSelf: "flex-start",
                             paddingHorizontal: 16,
@@ -2736,6 +2736,11 @@ export default function SettingsScreen() {
             </ScrollView>
 
             <HowItWorksModal visible={showHowItWorks} onClose={() => setShowHowItWorks(false)} />
+            <UpgradeSheet
+                visible={showUpgradeSheet}
+                onClose={() => setShowUpgradeSheet(false)}
+                onPurchaseComplete={refreshLicense}
+            />
         </KeyboardAvoidingView>
     );
 }

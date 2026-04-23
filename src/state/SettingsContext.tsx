@@ -63,6 +63,12 @@ type SettingsContextValue = {
     refreshCloudSyncAllowed: () => Promise<void>;
 
     /**
+     * Re-fetch the license row from Supabase and update all in-memory + AsyncStorage state.
+     * Call this after a successful in-app purchase.
+     */
+    refreshLicense: () => Promise<void>;
+
+    /**
      * Global debug-only UI enablement.
      * Read-only. Sourced from src/config/debug.ts
      */
@@ -242,15 +248,42 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             const tier: LicenseTier = isValidTier(rawTier) ? rawTier : "FREE";
             const g = gate("CLOUD_SYNC", tier);
             setCloudSyncAllowed(g.enabled);
-
-
         } catch (e) {
-            // Safe fallback: treat as FREE
             setCloudSyncAllowed(false);
+            if (DEBUG_UI_ENABLED) console.warn("License gate refresh failed:", e);
+        }
+    };
 
+    const refreshLicense = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user?.id) return;
 
-            if (DEBUG_UI_ENABLED)
-                console.warn("License gate refresh failed:", e);
+            const { data: licRow } = await supabase
+                .from("licenses")
+                .select("tier, expires_at")
+                .eq("user_id", session.user.id)
+                .maybeSingle();
+
+            if (!licRow) return;
+
+            const t = String(licRow.tier || "free").toLowerCase();
+            const mobileTier: LicenseTier =
+                t === "plus" || t === "pro" ? "PREMIUM" :
+                t === "family" ? "FAMILY" : "FREE";
+            const expiresAt: string | null = licRow.expires_at ?? null;
+
+            await AsyncStorage.setItem(LICENSE_TIER_KEY, mobileTier);
+            if (expiresAt) {
+                await AsyncStorage.setItem(LICENSE_EXPIRES_AT_KEY, expiresAt);
+            } else {
+                await AsyncStorage.removeItem(LICENSE_EXPIRES_AT_KEY);
+            }
+
+            setCloudSyncAllowed(gate("CLOUD_SYNC", mobileTier).enabled);
+            setLicenseExpiresAt(expiresAt);
+        } catch {
+            // fail-open
         }
     };
 
@@ -568,6 +601,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 cloudSyncAllowed,
                 licenseExpiresAt,
                 refreshCloudSyncAllowed,
+                refreshLicense,
                 debugUIEnabled: DEBUG_UI_ENABLED,
                 analysisMode,
                 setAnalysisMode,
