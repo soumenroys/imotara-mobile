@@ -140,7 +140,6 @@ export default function SettingsScreen() {
         chatLinkKey,
         setChatLinkKey,
 
-        cloudSyncAllowed,
         refreshLicense,
     } = useSettings();
 

@@ -15,7 +15,7 @@ import {
     Alert,
 } from "react-native";
 import { useIAP } from "expo-iap";
-import type { Purchase, Product } from "expo-iap";
+import type { Purchase, Product, ProductSubscription } from "expo-iap";
 import { useColors } from "../../theme/ThemeContext";
 import { supabase } from "../../lib/supabase/client";
 import { buildApiUrl } from "../../config/api";
@@ -112,6 +112,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
     const {
         connected,
         products,
+        subscriptions,
         fetchProducts,
         requestPurchase,
         finishTransaction,
@@ -163,7 +164,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
         fetchProducts({ skus: [...IOS_TOKEN_SKUS], type: "in-app" }).catch(() => {});
     }, [connected, visible]);
 
-    const iosProduct = (sku: string): Product | undefined => products.find((p) => p.id === sku);
+    // expo-iap v3: in-app products → products[], auto-renewable → subscriptions[]
+    const iosProduct = (sku: string): Product | ProductSubscription | undefined =>
+        products.find((p) => p.id === sku) ?? subscriptions.find((s) => s.id === sku);
     const iosPrice = (sku: string, fallback: number): string =>
         (iosProduct(sku) as any)?.displayPrice ?? `₹${fallback}`;
 
