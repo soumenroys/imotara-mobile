@@ -42,8 +42,13 @@ async function doAndroidPurchase(
     productId: ProductId,
     userEmail: string | undefined,
 ): Promise<{ ok: boolean; error?: string }> {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return { ok: false, error: "Not signed in" };
+    let { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+        // Session missing or expired — attempt a silent refresh before giving up
+        const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+        session = refreshed;
+    }
+    if (!session?.access_token) return { ok: false, error: "sign_in_required" };
 
     const headers = {
         "Content-Type": "application/json",
@@ -101,12 +106,14 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
     const [period, setPeriod] = useState<PlanPeriod>("monthly");
     const [purchasing, setPurchasing] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState<string | undefined>();
+    const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null); // null = loading
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
             setUserEmail(session?.user?.email);
+            setIsSignedIn(!!session?.access_token);
         });
-    }, []);
+    }, [visible]);
 
     // ── iOS IAP (expo-iap) ─────────────────────────────────────────────────────
     const {
@@ -194,6 +201,14 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
     // ── Android purchase ───────────────────────────────────────────────────────
     const handleAndroidPurchase = async (productId: ProductId) => {
         if (purchasing) return;
+        if (isSignedIn === false) {
+            Alert.alert(
+                "Sign in required",
+                "Please sign in to your Imotara account before upgrading.",
+                [{ text: "OK" }],
+            );
+            return;
+        }
         setPurchasing(productId);
         try {
             const result = await doAndroidPurchase(productId, userEmail);
@@ -201,6 +216,13 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                 await onPurchaseComplete();
                 onClose();
                 Alert.alert("Thank you!", "Your plan has been upgraded. Enjoy Imotara Plus/Pro!");
+            } else if (result.error === "sign_in_required") {
+                setIsSignedIn(false);
+                Alert.alert(
+                    "Sign in required",
+                    "Please sign in to your Imotara account before upgrading.",
+                    [{ text: "OK" }],
+                );
             } else if (result.error !== "cancelled") {
                 Alert.alert("Payment failed", result.error ?? "Please try again.");
             }
@@ -246,6 +268,16 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                         <ActivityIndicator size="large" color={colors.primary} />
                         <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 12 }}>
                             Connecting to App Store…
+                        </Text>
+                    </View>
+                ) : isSignedIn === false ? (
+                    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>
+                        <Text style={{ fontSize: 36, marginBottom: 16 }}>🔒</Text>
+                        <Text style={{ fontSize: 17, fontWeight: "700", color: colors.textPrimary, textAlign: "center", marginBottom: 8 }}>
+                            Sign in to upgrade
+                        </Text>
+                        <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: "center", lineHeight: 20 }}>
+                            Please sign in to your Imotara account first. Your purchase will be linked to your account so you can restore it on any device.
                         </Text>
                     </View>
                 ) : (
