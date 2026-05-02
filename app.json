@@ -17,7 +17,7 @@
       "supportsTablet": true,
       "requireFullScreen": false,
       "bundleIdentifier": "com.imotara.imotara",
-      "buildNumber": "81",
+      "buildNumber": "82",
       "deploymentTarget": "16.0",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -80,7 +80,7 @@
     },
     "android": {
       "package": "com.imotara.imotara",
-      "versionCode": 81,
+      "versionCode": 82,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
