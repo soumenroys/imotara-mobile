@@ -86,6 +86,19 @@ async function hasNativeVoice(lang: string): Promise<boolean> {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/** Strip markdown formatting so Azure TTS reads clean prose, not asterisks and dashes. */
+function stripMarkdown(text: string): string {
+    return text
+        .replace(/\*\*(.+?)\*\*/gs, "$1")   // **bold**
+        .replace(/\*(.+?)\*/gs,     "$1")   // *italic*
+        .replace(/^#{1,6}\s+/gm,    "")     // # headings
+        .replace(/^[-*+]\s+/gm,     "")     // - list items
+        .replace(/`(.+?)`/gs,       "$1")   // `code`
+        .replace(/\[(.+?)\]\(.+?\)/g, "$1") // [link](url)
+        .replace(/\n{3,}/g,         "\n\n") // collapse excess blank lines
+        .trim();
+}
+
 function apiBase(): string {
     const url = process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL ?? "https://imotaraapp.vercel.app";
     return url.endsWith("/") ? url.slice(0, -1) : url;
@@ -102,9 +115,10 @@ async function stopAll(): Promise<void> {
 
 async function playSound(uri: string, onDone?: () => void): Promise<void> {
     await Audio.setAudioModeAsync({
-        playsInSilentModeIOS:      true,
-        playThroughEarpieceAndroid: false, // route to loudspeaker, not earpiece
-        staysActiveInBackground:   false,
+        allowsRecordingIOS:         false,
+        playsInSilentModeIOS:       true,
+        playThroughEarpieceAndroid: false, // loudspeaker, not earpiece
+        staysActiveInBackground:    true,  // keep session alive between plays
     });
     const { sound } = await Audio.Sound.createAsync(
         { uri },
@@ -151,7 +165,7 @@ export async function speakMessage(
         const res = await fetch(`${apiBase()}/api/tts`, {
             method:  "POST",
             headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ text, lang, gender: gender ?? "neutral" }),
+            body:    JSON.stringify({ text: stripMarkdown(text), lang, gender: gender ?? "neutral" }),
         });
         if (!res.ok) throw new Error(`TTS API ${res.status}`);
         const arrayBuf = await res.arrayBuffer();
