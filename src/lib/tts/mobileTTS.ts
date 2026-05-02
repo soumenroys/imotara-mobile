@@ -8,8 +8,9 @@
 //
 // English is always available natively on iOS and Android — Azure is never called for English.
 
-import * as Speech from "expo-speech";
-import { Audio }   from "expo-av";
+import * as Speech     from "expo-speech";
+import { Audio }       from "expo-av";
+import * as FileSystem from "expo-file-system";
 
 // ── BCP-47 map ────────────────────────────────────────────────────────────────
 
@@ -100,7 +101,11 @@ async function stopAll(): Promise<void> {
 }
 
 async function playSound(uri: string, onDone?: () => void): Promise<void> {
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    await Audio.setAudioModeAsync({
+        playsInSilentModeIOS:      true,
+        playThroughEarpieceAndroid: false, // route to loudspeaker, not earpiece
+        staysActiveInBackground:   false,
+    });
     const { sound } = await Audio.Sound.createAsync(
         { uri },
         { shouldPlay: true, rate: 0.95, volume: 1.0 },
@@ -151,7 +156,12 @@ export async function speakMessage(
         if (!res.ok) throw new Error(`TTS API ${res.status}`);
         const arrayBuf = await res.arrayBuffer();
         const base64   = Buffer.from(arrayBuf).toString("base64");
-        await playSound(`data:audio/mpeg;base64,${base64}`, onDone);
+        // Write to a real temp file — data URIs are unreliable on Android MediaPlayer
+        const tmpPath  = (FileSystem.cacheDirectory ?? "") + "imotara_tts.mp3";
+        await FileSystem.writeAsStringAsync(tmpPath, base64, {
+            encoding: FileSystem.EncodingType.Base64,
+        });
+        await playSound(tmpPath, onDone);
     } catch (err) {
         console.warn("[mobileTTS] Azure TTS failed, falling back to native:", err);
         // Offline fallback — gender not honored but at least something plays
