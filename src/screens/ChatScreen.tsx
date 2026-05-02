@@ -1166,7 +1166,7 @@ function MessageBubble({
           delayLongPress={250}
           accessibilityLabel={`${isUser ? "You" : "Imotara"}: ${message.text}`}
           accessibilityRole="text"
-          style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: Math.min(screenWidth * (isUser ? 0.82 : 0.75), 520), marginBottom: 10, paddingHorizontal: 1 }}
+          style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: Math.min(screenWidth * (isUser ? 0.76 : 0.75), 480), marginBottom: 10, paddingHorizontal: 1, marginRight: isUser ? 2 : 0 }}
         >
           {isUser ? (
             <View style={{ backgroundColor: bubbleBackground, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: bubbleBorderColor === "transparent" ? 0 : 1, borderColor: bubbleBorderColor }}>

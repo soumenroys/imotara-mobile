@@ -7,26 +7,28 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
-import { IMOTARA_API_BASE_URL } from "../config/api";
 
-// Check actual API reachability, not just generic internet connectivity.
-// Uses GET /api/health (lightweight JSON endpoint) instead of HEAD on the root —
-// React Native's fetch can silently fail HEAD requests on some networks/CDNs.
-const API_HEALTH_URL = IMOTARA_API_BASE_URL
-    ? `${IMOTARA_API_BASE_URL}/api/health`
-    : "https://connectivitycheck.gstatic.com/generate_204";
-const TIMEOUT_MS = 8000;      // 8s — enough for Indian networks without being too forgiving
-const POLL_INTERVAL_MS = 10_000; // reduced from 20s — halves the stale-status window
+// Use Google's connectivity check — returns 204 instantly, no cold-start delays,
+// no Vercel/Supabase latency. Any thrown exception (timeout/DNS/network) = offline.
+const CONNECTIVITY_URL = "https://connectivitycheck.gstatic.com/generate_204";
+const TIMEOUT_MS = 6000;
+const POLL_INTERVAL_MS = 15_000;
+
+// Require 2 consecutive failures before flipping to offline, to avoid
+// a single slow response (Vercel cold start, brief WiFi blip) triggering the banner.
+let _failStreak = 0;
 
 async function checkOnline(): Promise<boolean> {
     try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-        await fetch(API_HEALTH_URL, { method: "GET", signal: controller.signal });
+        await fetch(CONNECTIVITY_URL, { method: "GET", signal: controller.signal });
         clearTimeout(timer);
-        return true; // any HTTP response (even 5xx) means network is up; only thrown exceptions mean offline
+        _failStreak = 0;
+        return true;
     } catch {
-        return false;
+        _failStreak += 1;
+        return _failStreak < 2; // stay "online" until 2nd consecutive failure
     }
 }
 

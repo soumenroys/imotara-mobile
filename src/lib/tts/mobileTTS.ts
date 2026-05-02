@@ -188,7 +188,15 @@ export async function speakPreview(
 
     _speakingId = "preview";
 
-    if (await hasNativeVoice(lang)) {
+    // Always use pre-generated Azure MP3 for preview — native Speech.speak() uses
+    // the device default voice and ignores gender, giving a misleading preview.
+    // The Azure MP3s are the actual production voice the user will hear.
+    const genderFile = gender === "male" ? "male" : "female";
+    const uri = `${apiBase()}/tts-preview/${lang}-${genderFile}.mp3`;
+    try {
+        await playSound(uri, onDone);
+    } catch {
+        // Fallback to native speech if CDN is unreachable
         const text = PREVIEW_TEXT_BY_LANG[lang] ?? PREVIEW_TEXT_BY_LANG["en"];
         Speech.speak(text, {
             language: toBCP47(lang),
@@ -197,18 +205,6 @@ export async function speakPreview(
             onDone:  () => { _speakingId = null; onDone?.(); },
             onError: () => { _speakingId = null; onDone?.(); },
         });
-        return;
-    }
-
-    // Use pre-generated static Azure MP3 (served via Vercel CDN — fast globally)
-    const genderFile = gender === "male" ? "male" : "female";
-    const uri = `${apiBase()}/tts-preview/${lang}-${genderFile}.mp3`;
-    try {
-        await playSound(uri, onDone);
-    } catch (err) {
-        console.warn("[mobileTTS] preview playback failed:", err);
-        _speakingId = null;
-        onDone?.();
     }
 }
 
