@@ -3,15 +3,18 @@
 // user-shared facts. Injected into AI context on every message.
 //
 // Design goals:
-//  - Zero new packages (AsyncStorage only)
+//  - Sensitive user facts stored in SecureStore (device Keychain / Keystore)
+//  - One-time migration from legacy AsyncStorage key on first load
 //  - Additive to existing AI calls — inject as a userMemories string
 //  - Works with both local and cloud AI modes
 //  - User can view and clear from Settings
 
+import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const KEY = "imotara.companion.memories.v1";
-const MAX_ITEMS = 12;
+const KEY         = "imotara.companion.memories.v2";
+const LEGACY_KEY  = "imotara.companion.memories.v1";
+const MAX_ITEMS   = 12;
 
 export type MemoryItem = {
     id: string;
@@ -22,23 +25,42 @@ export type MemoryItem = {
 
 // ── Persistence ──────────────────────────────────────────────────────────────
 
-export async function loadMemories(): Promise<MemoryItem[]> {
+async function migrateFromAsyncStorage(): Promise<MemoryItem[]> {
     try {
-        const raw = await AsyncStorage.getItem(KEY);
+        const raw = await AsyncStorage.getItem(LEGACY_KEY);
         if (!raw) return [];
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
+        const items: MemoryItem[] = Array.isArray(parsed) ? parsed : [];
+        if (items.length > 0) {
+            await SecureStore.setItemAsync(KEY, JSON.stringify(items.slice(0, MAX_ITEMS)));
+            await AsyncStorage.removeItem(LEGACY_KEY);
+        }
+        return items;
+    } catch {
+        return [];
+    }
+}
+
+export async function loadMemories(): Promise<MemoryItem[]> {
+    try {
+        const raw = await SecureStore.getItemAsync(KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        }
+        // First run after upgrade — check legacy key
+        return await migrateFromAsyncStorage();
     } catch {
         return [];
     }
 }
 
 export async function saveMemories(items: MemoryItem[]): Promise<void> {
-    await AsyncStorage.setItem(KEY, JSON.stringify(items.slice(0, MAX_ITEMS)));
+    await SecureStore.setItemAsync(KEY, JSON.stringify(items.slice(0, MAX_ITEMS)));
 }
 
 export async function clearMemories(): Promise<void> {
-    await AsyncStorage.removeItem(KEY);
+    await SecureStore.deleteItemAsync(KEY);
 }
 
 export async function removeMemory(id: string): Promise<void> {

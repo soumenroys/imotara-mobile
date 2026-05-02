@@ -30,3 +30,16 @@ ios
 # misc artifacts
 *.pdf
 *.zip
+
+# test / dev files
+__tests__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+tests
+coverage
+
+# docs
+*.md
+docs
