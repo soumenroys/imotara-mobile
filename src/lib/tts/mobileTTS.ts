@@ -140,18 +140,8 @@ export async function speakMessage(
 
     _speakingId = messageId;
 
-    if (await hasNativeVoice(lang)) {
-        Speech.speak(text, {
-            language: toBCP47(lang),
-            pitch:    1.0,
-            rate:     0.95,
-            onDone:  () => { _speakingId = null; onDone?.(); },
-            onError: () => { _speakingId = null; onDone?.(); },
-        });
-        return;
-    }
-
-    // Language not on device — call Azure via /api/tts
+    // Always use Azure Neural TTS — native Speech.speak() ignores gender,
+    // so the companion voice setting would be silently overridden by the device default.
     try {
         const res = await fetch(`${apiBase()}/api/tts`, {
             method:  "POST",
@@ -159,14 +149,19 @@ export async function speakMessage(
             body:    JSON.stringify({ text, lang, gender: gender ?? "neutral" }),
         });
         if (!res.ok) throw new Error(`TTS API ${res.status}`);
-        // expo-av requires a URI, not a blob — write to a temp cache path
         const arrayBuf = await res.arrayBuffer();
         const base64   = Buffer.from(arrayBuf).toString("base64");
         await playSound(`data:audio/mpeg;base64,${base64}`, onDone);
     } catch (err) {
-        console.warn("[mobileTTS] chat TTS failed:", err);
-        _speakingId = null;
-        onDone?.();
+        console.warn("[mobileTTS] Azure TTS failed, falling back to native:", err);
+        // Offline fallback — gender not honored but at least something plays
+        Speech.speak(text, {
+            language: toBCP47(lang),
+            pitch:    1.0,
+            rate:     0.95,
+            onDone:  () => { _speakingId = null; onDone?.(); },
+            onError: () => { _speakingId = null; onDone?.(); },
+        });
     }
 }
 
