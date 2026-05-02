@@ -1,10 +1,11 @@
 // src/components/chat/ChatInputBar.tsx
 // Bottom input area for ChatScreen — text field, mic button, send button.
 
-import React from "react";
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Platform, Keyboard } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import type { ColorPalette } from "../../theme/colors";
 
 export type VoiceInputState = "idle" | "recording" | "transcribing";
@@ -37,6 +38,22 @@ export function ChatInputBar({
   firstTimeTip,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  // On Android with edgeToEdgeEnabled the tab bar overlays screen content.
+  // When the keyboard is hidden: pad by tabBarHeight so the input area sits
+  // above the overlaying tab bar. When the keyboard is visible: the tab bar
+  // is hidden (tabBarHideOnKeyboard), so 8dp is enough.
+  // On iOS the tab bar takes layout space AND handles its own bottom safe area
+  // (insets.bottom), so the input bar only needs a small fixed padding.
+  const paddingBottom = Platform.OS === "android"
+    ? (keyboardVisible ? 8 : tabBarHeight)
+    : 8;
   return (
     <View
       style={{
@@ -44,7 +61,7 @@ export function ChatInputBar({
         borderTopColor: colors.border,
         paddingHorizontal: 12,
         paddingTop: 8,
-        paddingBottom: Math.max(insets.bottom, 8),
+        paddingBottom,
         backgroundColor: "rgba(15, 23, 42, 0.98)",
       }}
     >

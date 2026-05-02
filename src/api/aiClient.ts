@@ -109,6 +109,7 @@ export type ToneContextPayload = {
     // ✅ parity with web: preferred language + response style
     preferredLang?: SupportedLang;
     responseStyle?: ResponseStyle;
+    avatarAge?: number;
   };
   companion?: {
     enabled?: boolean;
@@ -120,6 +121,7 @@ export type ToneContextPayload = {
 
     gender?: ToneGender;
     relationship?: ToneRelationship;
+    avatarAge?: number;
   };
   // per-turn seed offset for local reply variety; mirrors web ToneContext.sessionTurn
   sessionTurn?: number;
@@ -320,6 +322,8 @@ function detectExplicitLangRequest(text: string): string | null {
     [/\bfrench\b/,     "fr"],
     [/\bgerman\b/,     "de"],
     [/\bportuguese\b/, "pt"],
+    [/\bindonesian\b/, "id"],
+    [/\bhebrew\b/,     "he"],
   ];
 
   if (!hasIntent) return null;
@@ -499,7 +503,10 @@ export async function callImotaraAI(
         chatReplyUrl,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(opts?.accessToken ? { Authorization: `Bearer ${opts.accessToken}` } : {}),
+          },
           body: JSON.stringify(chatReplyPayload),
         },
         opts?.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS,

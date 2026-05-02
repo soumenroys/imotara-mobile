@@ -122,12 +122,11 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
             try {
                 const productId = iosSkuToProductId(purchase.productId ?? "");
                 const isTokenPack = productId?.startsWith("tokens_") ?? false;
-                await finishTransaction({ purchase, isConsumable: isTokenPack });
 
                 if (productId) {
                     const { data: { session } } = await supabase.auth.getSession();
                     if (session?.access_token) {
-                        await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
+                        const verifyRes = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
                             method: "POST",
                             headers: {
                                 "Content-Type": "application/json",
@@ -138,9 +137,20 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                                 transactionId: (purchase as any).transactionId ?? purchase.productId,
                             }),
                         });
+                        if (!verifyRes.ok) {
+                            // Don't finish — Apple will re-deliver on next launch so the user
+                            // gets another verification attempt.
+                            Alert.alert(
+                                "Verification failed",
+                                "Your purchase was recorded by Apple but we couldn't activate it. Re-open the app to retry, or tap 'Restore previous purchases'.",
+                            );
+                            return;
+                        }
                     }
                 }
 
+                // Only finish the transaction after successful server verification.
+                await finishTransaction({ purchase, isConsumable: isTokenPack });
                 await onPurchaseComplete();
                 onClose();
                 Alert.alert("Thank you!", "Your plan has been upgraded. Enjoy Imotara Plus/Pro!");

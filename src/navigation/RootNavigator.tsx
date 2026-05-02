@@ -4,7 +4,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { View, Text, TouchableOpacity, Platform, Keyboard } from "react-native";
+import { View, Text, TouchableOpacity, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ChatScreen from "../screens/ChatScreen";
@@ -17,7 +17,8 @@ import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 
 import { OnboardingModal, type OnboardingResult } from "../components/imotara/OnboardingModal";
-import { useColors } from "../theme/ThemeContext";
+import { useColors, useTheme } from "../theme/ThemeContext";
+import * as NavigationBar from "expo-navigation-bar";
 
 // ── Global sync status strip ───────────────────────────────────────────────────
 function SyncStatusStrip() {
@@ -105,16 +106,19 @@ const linking = {
 
 export default function RootNavigator() {
     const colors = useColors();
+    const { isDark } = useTheme();
     const insets = useSafeAreaInsets();
-    const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+    // Paint the Android system navigation bar to match the tab bar — prevents
+    // the black strip that appears with edgeToEdgeEnabled on 3-button nav mode.
     useEffect(() => {
-        const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
-        // Delay hiding to let the resize animation fully settle before the fill View reappears
-        const hide = Keyboard.addListener("keyboardDidHide", () =>
-            setTimeout(() => setKeyboardVisible(false), 200)
-        );
-        return () => { show.remove(); hide.remove(); };
-    }, []);
+        if (Platform.OS !== "android") return;
+        const bg = isDark ? "#1e293b" : "#e2e8f0";
+        const style = isDark ? "light" : "dark";
+        NavigationBar.setBackgroundColorAsync(bg).catch(() => {});
+        NavigationBar.setButtonStyleAsync(style).catch(() => {});
+    }, [isDark]);
+
     // --- Lifecycle-driven "resume" sync (deduped) ---
     const history = useHistoryStore();
     const { toneContext, setToneContext, setAnalysisMode } = useSettings() as any;
@@ -177,7 +181,7 @@ export default function RootNavigator() {
     if (!onboardingChecked) return null;
 
     return (
-        <View style={{ flex: 1, backgroundColor: "#0f172a" }}>
+        <View style={{ flex: 1, backgroundColor: isDark ? "#1e293b" : "#e2e8f0" }}>
             <NavigationContainer linking={linking}>
                 <Tab.Navigator
                     screenOptions={({ route }) => ({
@@ -244,17 +248,6 @@ export default function RootNavigator() {
                 visible={onboardingVisible}
                 onComplete={(result) => { void handleOnboardingComplete(result); }}
             />
-            {/* Android: fill the safe area below the tab bar with the tab bar colour (hidden when keyboard open to avoid overlapping input) */}
-            {Platform.OS === "android" && insets.bottom > 0 && !keyboardVisible && (
-                <View style={{
-                    position: "absolute",
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: insets.bottom,
-                    backgroundColor: colors.surfaceSoft,
-                }} />
-            )}
         </View>
     );
 }

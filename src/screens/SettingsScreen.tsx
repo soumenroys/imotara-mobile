@@ -21,6 +21,7 @@ import {
     Platform,
     Linking,
     LayoutAnimation,
+    Image,
 } from "react-native";
 
 import { useHistoryStore } from "../state/HistoryContext";
@@ -50,7 +51,7 @@ import AppSurface from "../components/ui/AppSurface";
 import AppButton from "../components/ui/AppButton";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 import { HowItWorksModal } from "../components/imotara/HowItWorksModal";
-import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
+import { speakMessage, speakPreview, stopSpeaking } from "../lib/tts/mobileTTS";
 
 
 // ✅ Licensing types (foundation only)
@@ -96,6 +97,168 @@ function getApiBaseUrl(): string {
 
     // Normalize trailing slash
     return v.endsWith("/") ? v.slice(0, -1) : v;
+}
+
+const AVATAR_AGES = [6, 16, 26, 36, 46, 56, 66, 76, 86, 96];
+
+const AGE_RANGE_TO_AVATAR: Record<string, number> = {
+    prefer_not: 26, under_13: 6, "13_17": 16, "18_24": 26,
+    "25_34": 26, "35_44": 36, "45_54": 46, "55_64": 56, "65_plus": 66,
+};
+
+const AVATAR_AGE_LABEL: Record<number, string> = {
+    6: "Under 13", 16: "13–17", 26: "18–34", 36: "35–44",
+    46: "45–54", 56: "55–64", 66: "65–75", 76: "76–85", 86: "86–95", 96: "96+",
+};
+
+// Static require map — bundler needs literal paths at build time
+const AVATAR_IMAGES: Record<string, Record<number, any>> = {
+    male: {
+        6: require("../../assets/avatars/male/6.png"),
+        16: require("../../assets/avatars/male/16.png"),
+        26: require("../../assets/avatars/male/26.png"),
+        36: require("../../assets/avatars/male/36.png"),
+        46: require("../../assets/avatars/male/46.png"),
+        56: require("../../assets/avatars/male/56.png"),
+        66: require("../../assets/avatars/male/66.png"),
+        76: require("../../assets/avatars/male/76.png"),
+        86: require("../../assets/avatars/male/86.png"),
+        96: require("../../assets/avatars/male/96.png"),
+    },
+    female: {
+        6: require("../../assets/avatars/female/6.png"),
+        16: require("../../assets/avatars/female/16.png"),
+        26: require("../../assets/avatars/female/26.png"),
+        36: require("../../assets/avatars/female/36.png"),
+        46: require("../../assets/avatars/female/46.png"),
+        56: require("../../assets/avatars/female/56.png"),
+        66: require("../../assets/avatars/female/66.png"),
+        76: require("../../assets/avatars/female/76.png"),
+        86: require("../../assets/avatars/female/86.png"),
+        96: require("../../assets/avatars/female/96.png"),
+    },
+};
+
+function AvatarSlider({
+    gender,
+    ageValue,
+    onChange,
+    name,
+    enabled: companionEnabled = true,
+    colors,
+}: {
+    gender: string | undefined;
+    ageValue: number;
+    onChange: (age: number) => void;
+    name?: string;
+    enabled?: boolean;
+    colors: any;
+}) {
+    const avatarEnabled = (gender === "male" || gender === "female") && companionEnabled;
+    const idx = AVATAR_AGES.indexOf(ageValue);
+    const safeIdx = idx === -1 ? 2 : idx;
+    const safeAge = AVATAR_AGES[safeIdx];
+
+    return (
+        <View style={{ marginTop: 14, marginBottom: 14 }}>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 8 }}>
+                Avatar appearance
+            </Text>
+            {avatarEnabled ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    {/* Selected avatar image + name */}
+                    <View style={{ alignItems: "center", gap: 4 }}>
+                        <View
+                            style={{
+                                width: 64,
+                                height: 64,
+                                borderRadius: 16,
+                                overflow: "hidden",
+                                borderWidth: 1,
+                                borderColor: "rgba(255,255,255,0.1)",
+                                backgroundColor: "rgba(0,0,0,0.2)",
+                            }}
+                        >
+                            <Image
+                                source={AVATAR_IMAGES[gender!]?.[safeAge]}
+                                style={{ width: 64, height: 64 }}
+                                resizeMode="cover"
+                            />
+                        </View>
+                        {name ? (
+                            <Text
+                                numberOfLines={1}
+                                style={{
+                                    fontSize: 11,
+                                    fontWeight: "600",
+                                    color: colors.textSecondary,
+                                    maxWidth: 64,
+                                }}
+                            >
+                                {name}
+                            </Text>
+                        ) : null}
+                    </View>
+
+                    {/* Thumbnail strip */}
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={{ flex: 1 }}
+                        contentContainerStyle={{ gap: 6, paddingVertical: 2 }}
+                    >
+                        {AVATAR_AGES.map((age, i) => {
+                            const active = i === safeIdx;
+                            return (
+                                <TouchableOpacity
+                                    key={age}
+                                    onPress={() => onChange(age)}
+                                    style={{
+                                        alignItems: "center",
+                                        gap: 3,
+                                    }}
+                                >
+                                    <View
+                                        style={{
+                                            width: 44,
+                                            height: 44,
+                                            borderRadius: 10,
+                                            overflow: "hidden",
+                                            borderWidth: active ? 2 : 1,
+                                            borderColor: active ? colors.primary : "rgba(255,255,255,0.1)",
+                                        }}
+                                    >
+                                        <Image
+                                            source={AVATAR_IMAGES[gender!]?.[age]}
+                                            style={{ width: 44, height: 44 }}
+                                            resizeMode="cover"
+                                        />
+                                    </View>
+                                    <Text
+                                        style={{
+                                            fontSize: 9,
+                                            color: active ? colors.primary : colors.textSecondary,
+                                            fontWeight: active ? "700" : "400",
+                                        }}
+                                    >
+                                        {AVATAR_AGE_LABEL[age]}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </ScrollView>
+                </View>
+            ) : (
+                <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                    Set Gender to{" "}
+                    <Text style={{ fontWeight: "700", color: colors.textPrimary }}>Male</Text>
+                    {" "}or{" "}
+                    <Text style={{ fontWeight: "700", color: colors.textPrimary }}>Female</Text>
+                    {" "}above to choose an avatar.
+                </Text>
+            )}
+        </View>
+    );
 }
 
 export default function SettingsScreen() {
@@ -1683,6 +1846,7 @@ export default function SettingsScreen() {
                                                 ...(toneContext?.user || {}),
                                                 ageTone: opt.id as any,
                                                 ageRange: opt.id as any,
+                                                avatarAge: AGE_RANGE_TO_AVATAR[opt.id] ?? 26,
                                             },
                                         })
                                     }
@@ -1759,9 +1923,7 @@ export default function SettingsScreen() {
                                 const gender = toneContext?.user?.gender;
                                 const lang = toneContext?.user?.preferredLang ?? "en";
                                 setVoicePreviewId(id);
-                                speakMessage(id, "Hi, I'm Imotara — I'm here with you.", gender, lang, () =>
-                                    setVoicePreviewId(null)
-                                );
+                                speakPreview(gender, lang, () => setVoicePreviewId(null));
                             }
                         }}
                         style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 }}
@@ -1770,6 +1932,20 @@ export default function SettingsScreen() {
                             {voicePreviewId === "settings-user-preview" ? "⏹ Stop preview" : "🔊 Preview voice"}
                         </Text>
                     </TouchableOpacity>
+
+                    {/* Avatar appearance */}
+                    <AvatarSlider
+                        gender={toneContext?.user?.gender}
+                        ageValue={toneContext?.user?.avatarAge ?? 26}
+                        onChange={(age) =>
+                            setToneContext({
+                                ...(toneContext || {}),
+                                user: { ...(toneContext?.user || {}), avatarAge: age },
+                            })
+                        }
+                        name={toneContext?.user?.name?.trim() || undefined}
+                        colors={colors}
+                    />
 
                     {/* Preferred language */}
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>
@@ -2002,6 +2178,7 @@ export default function SettingsScreen() {
                                                 ...(toneContext?.companion || {}),
                                                 ageTone: opt.id,
                                                 ageRange: opt.id, // legacy compatibility
+                                                avatarAge: AGE_RANGE_TO_AVATAR[opt.id] ?? 26,
                                             },
                                         })
                                     }
@@ -2161,6 +2338,49 @@ export default function SettingsScreen() {
                             );
                         })}
                     </View>
+
+                    {/* Companion voice preview */}
+                    <TouchableOpacity
+                        onPress={() => {
+                            const id = "settings-comp-preview";
+                            if (voicePreviewId === id) {
+                                stopSpeaking();
+                                setVoicePreviewId(null);
+                            } else {
+                                const gender = toneContext?.companion?.gender;
+                                const lang = toneContext?.user?.preferredLang ?? "en";
+                                setVoicePreviewId(id);
+                                speakPreview(gender, lang, () => setVoicePreviewId(null));
+                            }
+                        }}
+                        disabled={!toneContext?.companion?.enabled}
+                        style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 6,
+                            marginBottom: 14,
+                            opacity: toneContext?.companion?.enabled ? 1 : 0.4,
+                        }}
+                    >
+                        <Text style={{ fontSize: 12, color: colors.primary }}>
+                            {voicePreviewId === "settings-comp-preview" ? "⏹ Stop preview" : "🔊 Preview companion voice"}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* Avatar appearance */}
+                    <AvatarSlider
+                        gender={toneContext?.companion?.gender}
+                        ageValue={toneContext?.companion?.avatarAge ?? 26}
+                        onChange={(age) =>
+                            setToneContext({
+                                ...(toneContext || {}),
+                                companion: { ...(toneContext?.companion || {}), avatarAge: age },
+                            })
+                        }
+                        name={toneContext?.companion?.name?.trim() || undefined}
+                        enabled={toneContext?.companion?.enabled ?? false}
+                        colors={colors}
+                    />
 
                     {/* Companion respond */}
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 10, marginBottom: 6 }}>

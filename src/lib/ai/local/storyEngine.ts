@@ -1309,12 +1309,223 @@ const ID: LangEntry = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// German (Deutsch)
+// ─────────────────────────────────────────────────────────────────────────────
+const DE: LangEntry = {
+    framings: [
+        "Jemand hat mir einmal etwas erzählt, das mich nicht mehr losgelassen hat:",
+        "Ich denke manchmal an jemanden, der Ähnliches durchgemacht hat:",
+        "Das erinnert mich an etwas, das ich einmal gehört habe:",
+        "Eine Person, die ich kenne, hat etwas geteilt, das ich nicht vergessen kann:",
+        "Das lässt mich an etwas denken, das mir jemand erzählt hat:",
+        "Manchmal hilft es, von anderen zu hören — da ist eine Geschichte:",
+    ],
+    sad: {
+        situations: [
+            "sie trugen etwas so lange, dass es sich normal anfühlte — bis sie bemerkten, wie schwer es eigentlich war",
+            "sie konnten es nicht benennen, aber es war immer da — ein Gewicht, das einfach nicht wegging",
+            "die Traurigkeit kam nicht von einem großen Moment — sie sammelte sich langsam an, ganz still",
+            "sie lächelten nach außen und wussten nicht, wie sie das Innere erklären sollten",
+        ],
+        insights: [
+            "Als sie es endlich aussprachen — nicht um es zu lösen, sondern einfach um es zu sagen — wurde etwas ein bisschen leichter.",
+            "Sie erkannten, dass Traurigkeit nicht bedeutet, dass etwas falsch läuft. Manchmal zeigt sie, was wirklich wichtig ist.",
+            "Es half nicht sofort. Aber benennen, was da war, gab ihm einen Ort — und das reichte für diesen Moment.",
+            "Sie hörten auf, es wegzuschieben, und merkten: Es war da, weil ihnen etwas wichtig gewesen war.",
+        ],
+    },
+    anxious: {
+        situations: [
+            "alles erschien dringend auf einmal — und sie wussten nicht, womit sie anfangen sollten",
+            "der Verstand lief schon vor, bevor irgendetwas passiert war",
+            "kleine Entscheidungen fühlten sich groß an, und sie wussten nicht warum",
+            "viele Dinge liefen gleichzeitig und keines ließ sie loslassen",
+        ],
+        insights: [
+            "Sie fragten sich: 'Passiert das gerade wirklich — oder male ich mir etwas aus?' Diese eine Frage ließ etwas nach.",
+            "Nur eine Sache. Nicht alles lösen — nur eine Sache halten. Das war genug.",
+            "Als sie aufhörten, die Zukunft zu kontrollieren, und sich mit dem Jetzt befassten, wurde der Atem ruhiger.",
+            "Sie erkannten: Angst lügt über die Dringlichkeit. Sehr wenig muss genau jetzt gelöst werden.",
+        ],
+    },
+    angry: {
+        situations: [
+            "sie hatten es lange zurückgehalten — und dann löste eine Kleinigkeit alles aus",
+            "die Wut war nicht von diesem Moment — sie war alt, sie war angestaut",
+            "alles war unter Kontrolle, bis auf einmal etwas riss",
+            "nach der Wut kam die Scham, und das war noch schwerer",
+        ],
+        insights: [
+            "Es zu benennen — nicht um es zu lösen, sondern damit es nicht allein getragen werden musste — veränderte wirklich etwas.",
+            "In der Wut war keine Wut. Es war das, was keinen anderen Ort hatte.",
+            "Sie erkannten: Wut ist oft Trauer oder Enttäuschung in lautem Gewand.",
+            "Als sie aufhörten, die Wut zu bekämpfen, und fragten, was dahinter steckt, wurde etwas klarer.",
+        ],
+    },
+    tired: {
+        situations: [
+            "sie taten so, als wäre alles gut — bis der Körper aufhörte mitzuspielen",
+            "die Erschöpfung saß tiefer als Schlaf — es war eine Art Leere",
+            "der Kopf ruhte sich nie aus, auch wenn der Körper stillstand",
+            "sie funktionierten weiter, obwohl innen schon lange nichts mehr da war",
+        ],
+        insights: [
+            "Nicht Schlafen — sondern Ruhen. Den Unterschied zu spüren war der Anfang.",
+            "Sie gaben sich eine Stunde, um alles loszulassen. Das war der erste Schritt.",
+            "Statt 'Wie lange halte ich noch durch?' fragten sie 'Was brauche ich?' — das veränderte alles.",
+            "Erschöpfung zuzugeben — ohne sie zu bekämpfen — war der sanfteste Weg vorwärts.",
+        ],
+    },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hebrew (עברית)
+// ─────────────────────────────────────────────────────────────────────────────
+const HE: LangEntry = {
+    framings: [
+        "מישהו סיפר לי פעם משהו שלא עזב אותי:",
+        "אני חושב לפעמים על מישהו שעבר משהו דומה:",
+        "זה מזכיר לי סיפור ששמעתי פעם:",
+        "אדם שהכרתי שיתף משהו שאני זוכר עד היום:",
+        "זה מביא אותי לחשוב על משהו שאמרו לי:",
+        "לפעמים עוזר לשמוע על אחרים — הנה סיפור אחד:",
+    ],
+    sad: {
+        situations: [
+            "הם נשאו משהו כל כך הרבה זמן עד שהרגיש נורמלי — עד שהבינו כמה הוא כבד",
+            "הם לא יכלו לתת לזה שם, אבל הוא תמיד היה שם — משקל שלא הלך",
+            "העצב לא הגיע מרגע גדול אחד — הוא התצבר לאט לאט, בשקט",
+            "הם חייכו לאחרים ולא ידעו איך להסביר את מה שבפנים",
+        ],
+        insights: [
+            "כשסוף סוף אמרו את זה בקול — לא כדי לפתור, אלא פשוט לומר — משהו נעשה קצת יותר קל.",
+            "הם הבינו שעצב לא אומר שמשהו לא בסדר. לפעמים הוא מראה מה באמת חשוב.",
+            "זה לא עזר מיד. אבל לתת שם למה שהיה — נתן לו מקום. וזה הספיק לאותו רגע.",
+            "הם הפסיקו לדחוף את זה הצידה והבינו: זה היה שם כי משהו היה חשוב להם.",
+        ],
+    },
+    anxious: {
+        situations: [
+            "הכל נראה דחוף בבת אחת — והם לא ידעו מאיפה להתחיל",
+            "הראש כבר רץ קדימה לפני שקרה כל דבר",
+            "החלטות קטנות הרגישו גדולות, בלי לדעת למה",
+            "הרבה דברים רצו במקביל ואף אחד לא נתן להם ללכת",
+        ],
+        insights: [
+            "הם שאלו את עצמם: 'האם זה קורה עכשיו באמת — או שאני מדמיין?' שאלה אחת שיחררה הרבה.",
+            "רק דבר אחד. לא לפתור הכל — רק להחזיק דבר אחד. זה הספיק.",
+            "כשהם הפסיקו לנסות לשלוט בעתיד ועסקו בהווה — הנשימה נרגעה.",
+            "הם הבינו: חרדה משקרת על דחיפות. כמעט כלום לא צריך פתרון עכשיו ממש.",
+        ],
+    },
+    angry: {
+        situations: [
+            "הם עצרו את זה הרבה זמן — ואז משהו קטן שחרר הכל",
+            "הכעס לא היה מאותו רגע — הוא היה ישן, הוא התצבר",
+            "הכל היה נשלט, עד שמשהו נסדק",
+            "אחרי הכעס הגיעה הבושה, וזה היה כבד אפילו יותר",
+        ],
+        insights: [
+            "לתת לזה שם — לא כדי לפתור, אלא כדי שלא יישא לבד — שינה משהו אמיתי.",
+            "בתוך הכעס לא היה כעס. זה היה מה שלא היה לו מקום אחר.",
+            "הם הבינו: כעס הוא לרוב עצב או אכזבה בקול רם.",
+            "כשהפסיקו להילחם בכעס ושאלו מה יש מאחוריו — משהו נעשה ברור יותר.",
+        ],
+    },
+    tired: {
+        situations: [
+            "הם עשו כאילו הכל בסדר — עד שהגוף הפסיק לשתף פעולה",
+            "העייפות הייתה עמוקה יותר משינה — סוג של ריקנות",
+            "הראש לא נח גם כשהגוף עמד",
+            "הם המשיכו לתפקד גם כשבפנים כבר הרבה זמן לא היה כלום",
+        ],
+        insights: [
+            "לא לישון — אלא לנוח. להרגיש את ההבדל היה ההתחלה.",
+            "הם נתנו לעצמם שעה לשחרר הכל. זה היה הצעד הראשון.",
+            "במקום 'עד מתי אוכל לעמוד?' שאלו 'מה אני צריך?' — זה שינה הכל.",
+            "להודות בעייפות — בלי להילחם בה — היה הדרך הרכה קדימה.",
+        ],
+    },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Japanese (日本語)
+// ─────────────────────────────────────────────────────────────────────────────
+const JA: LangEntry = {
+    framings: [
+        "以前、誰かが話してくれたことが、ずっと頭に残っています：",
+        "似たようなことを経験した人のことを、ときどき思い出します：",
+        "これを聞いて、昔聞いた話を思い出しました：",
+        "知り合いが話してくれたことで、今でも忘れられないことがあります：",
+        "ふと、誰かから聞いた言葉が浮かびました：",
+        "他の人の経験が助けになることがあります。一つ話を：",
+    ],
+    sad: {
+        situations: [
+            "長い間何かを抱えていて、それが当たり前になっていた — でも、本当はとても重かった",
+            "名前はつけられないけれど、いつもそこにある — 消えない重さ",
+            "悲しみは大きな出来事から来たのではなく — ゆっくり、静かに積み重なっていた",
+            "外では笑っていたけれど、内側をどう説明すればいいか分からなかった",
+        ],
+        insights: [
+            "声に出して言ったとき — 解決するためではなく、ただ言うために — 少し楽になった。",
+            "悲しみは何かがおかしいということではない、と気づいた。大切なものがあった証だと。",
+            "すぐには楽にならなかった。でも、あるものに名前をつけることで、居場所ができた。それで十分だった。",
+            "押しのけるのをやめたとき、気づいた — それはここにあった、なぜなら何かが大切だったから。",
+        ],
+    },
+    anxious: {
+        situations: [
+            "一度に全てが急いでいるように見えた — どこから始めればいいかわからなかった",
+            "何も起きる前から、頭がもう先へ走っていた",
+            "小さな決断でも大きく感じた、理由もわからないまま",
+            "たくさんのことが同時に動いていて、何一つ手放せなかった",
+        ],
+        insights: [
+            "「これは本当に今起きていること？それとも想像している？」と自問した。その一言で、何かが緩んだ。",
+            "一つだけ。全部解決しなくていい — 一つだけ持っていればいい。それで十分だった。",
+            "未来をコントロールしようとするのをやめて、今に向き合ったとき、呼吸が落ち着いた。",
+            "不安は緊急性について嘘をつく。今すぐ解決しなければならないことは、ほとんどない。",
+        ],
+    },
+    angry: {
+        situations: [
+            "長い間抑えていた — 小さなことが全部を解き放った",
+            "怒りはその瞬間のものではなかった — 古く、積み重なったものだった",
+            "全てがコントロールできていた、何かが崩れるまで",
+            "怒りの後に恥が来て、それがさらに重かった",
+        ],
+        insights: [
+            "名前をつけること — 解決するためではなく、一人で抱えないために — 本当に何かが変わった。",
+            "怒りの中に怒りはなかった。他に行き場がないものがそこにあった。",
+            "怒りは、多くの場合、大きな声の悲しみや失望だと気づいた。",
+            "怒りと戦うのをやめて、その奥に何があるか聞いたとき、何かが見えてきた。",
+        ],
+    },
+    tired: {
+        situations: [
+            "大丈夫なふりをしていた — 体がついてこなくなるまで",
+            "疲れは眠りよりも深いところにあった — 一種の空虚さ",
+            "体が止まっていても、頭は休まらなかった",
+            "内側にもう何もなくても、機能し続けていた",
+        ],
+        insights: [
+            "眠ることではなく、休むこと。その違いを感じることが始まりだった。",
+            "一時間だけ、全てを手放してみた。それが最初の一歩だった。",
+            "「いつまで持ちこたえられる？」ではなく「何が必要？」と聞いたとき、何かが変わった。",
+            "疲れを認めること — 戦わずに — それが一番優しい前へ進む道だった。",
+        ],
+    },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Registry
 // ─────────────────────────────────────────────────────────────────────────────
 const STORY_DATA: Record<string, LangEntry> = {
     en: EN, hi: HI, bn: BN, mr: MR, gu: GU, pa: PA,
     ta: TA, te: TE, kn: KN, ml: ML, or: OR,
     ur: UR, zh: ZH, es: ES, ar: AR, fr: FR, pt: PT, ru: RU, id: ID,
+    de: DE, he: HE, ja: JA,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

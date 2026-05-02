@@ -286,61 +286,6 @@ export const ImotaraChatBubble: React.FC<ImotaraChatBubbleProps> = ({
                                 </AppText>
                             )}
 
-                            {/* BOT SYNC PILL */}
-                            {syncLabel && (
-                                <View
-                                    style={[
-                                        styles.statusPill,
-                                        {
-                                            borderColor: syncBorderColor,
-                                            backgroundColor: syncBgColor,
-                                        },
-                                        { alignSelf: "flex-start" },
-                                    ]}
-                                >
-                                    {isPending ? (
-                                        <View style={{ flexDirection: "row", alignItems: "center" }}>
-                                            <Animated.View
-                                                style={{
-                                                    marginRight: 4,
-                                                    transform: [
-                                                        {
-                                                            rotate: rotateAnim.interpolate({
-                                                                inputRange: [0, 1],
-                                                                outputRange: ["0deg", "360deg"],
-                                                            }),
-                                                        },
-                                                    ],
-                                                }}
-                                            >
-                                                <AppText
-                                                    size={11}
-                                                    weight="semibold"
-                                                    style={{ color: syncTextColor }}
-                                                >
-                                                    ⟳
-                                                </AppText>
-                                            </Animated.View>
-
-                                            <AppText
-                                                size={11}
-                                                weight="semibold"
-                                                style={{ color: syncTextColor }}
-                                            >
-                                                {syncLabel}
-                                            </AppText>
-                                        </View>
-                                    ) : (
-                                        <AppText
-                                            size={11}
-                                            weight="semibold"
-                                            style={{ color: syncTextColor }}
-                                        >
-                                            {syncLabel}
-                                        </AppText>
-                                    )}
-                                </View>
-                            )}
                         </LinearGradient>
                     )}
                 </Wrapper>

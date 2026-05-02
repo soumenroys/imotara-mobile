@@ -934,7 +934,7 @@ export default function HistoryScreen() {
                                             </TouchableOpacity>
 
                                             {threadList.length === 0 && (
-                                                <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", paddingVertical: 16 }}>No conversations yet.</Text>
+                                                <Text style={{ fontSize: 13, color: "rgba(165,180,252,0.7)", textAlign: "center", paddingVertical: 16, fontStyle: "italic" }}>When you{"'"}re ready to talk, I{"'"}m here.</Text>
                                             )}
 
                                             {[...threadList].reverse().map((thread: any) => {

@@ -8,7 +8,7 @@ import { View, Text, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { ColorPalette } from "../../theme/colors";
 
-export type DiscoveryCardId = "trends" | "companion" | "offline";
+export type DiscoveryCardId = "trends" | "companion" | "offline" | "unsent_letter";
 
 type Props = {
   cardId: DiscoveryCardId;
@@ -32,6 +32,11 @@ const CARD_CONTENT: Record<DiscoveryCardId, { icon: string; message: string; act
     icon: "cloud-offline-outline",
     message: "Imotara replies even without internet — local mode is always on",
     action: "Got it",
+  },
+  unsent_letter: {
+    icon: "mail-open-outline",
+    message: "Write to someone you can't reach — the Unsent Letter space is here for you",
+    action: "Try it →",
   },
 };
 
@@ -77,7 +82,7 @@ export function DiscoveryCard({ cardId, colors, onDismiss, onAction }: Props) {
 // ── Storage helpers ──────────────────────────────────────────────────────────
 
 export const DISCOVERY_CARDS_KEY = "imotara.onboarding.discovery.v1";
-export const CARD_ORDER: DiscoveryCardId[] = ["trends", "companion", "offline"];
+export const CARD_ORDER: DiscoveryCardId[] = ["trends", "companion", "offline", "unsent_letter"];
 
 export function getNextCard(dismissed: DiscoveryCardId[]): DiscoveryCardId | null {
   return CARD_ORDER.find((id) => !dismissed.includes(id)) ?? null;

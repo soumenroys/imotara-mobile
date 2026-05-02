@@ -270,7 +270,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             const t = String(licRow.tier || "free").toLowerCase();
             const mobileTier: LicenseTier =
                 t === "plus" || t === "pro" ? "PREMIUM" :
-                t === "family" ? "FAMILY" : "FREE";
+                t === "family" ? "FAMILY" :
+                t === "edu" ? "EDU" :
+                t === "enterprise" ? "ENTERPRISE" : "FREE";
             const expiresAt: string | null = licRow.expires_at ?? null;
 
             await AsyncStorage.setItem(LICENSE_TIER_KEY, mobileTier);
@@ -305,7 +307,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                     const t = String(licRow.tier || "free").toLowerCase();
                     const mobileTier: LicenseTier =
                         t === "plus" || t === "pro" ? "PREMIUM" :
-                        t === "family" ? "FAMILY" : "FREE";
+                        t === "family" ? "FAMILY" :
+                        t === "edu" ? "EDU" :
+                        t === "enterprise" ? "ENTERPRISE" : "FREE";
 
                     const expiresAt: string | null = licRow.expires_at ?? null;
 
