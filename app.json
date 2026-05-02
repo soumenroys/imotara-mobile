@@ -80,7 +80,7 @@
     },
     "android": {
       "package": "com.imotara.imotara",
-      "versionCode": 79,
+      "versionCode": 80,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
