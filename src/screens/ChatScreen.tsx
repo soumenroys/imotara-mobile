@@ -1454,7 +1454,13 @@ export default function ChatScreen() {
           { text: "Discard", style: "destructive" },
           {
             text: "Use",
-            onPress: () => setInput((prev) => prev ? `${prev} ${text}` : text),
+            onPress: () => {
+              const newText = latestInputRef.current
+                ? `${latestInputRef.current} ${text}`
+                : text;
+              latestInputRef.current = newText;
+              setInput(newText);
+            },
           },
         ],
       );
