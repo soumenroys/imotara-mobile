@@ -499,6 +499,8 @@ export async function callImotaraAI(
         ...(toneContext?.companion?.gender && toneContext.companion.gender !== "prefer_not" ? { companionGender: toneContext.companion.gender } : {}),
         // companion name — sent whenever a custom name is configured so the AI uses it as its identity
         ...(toneContext?.companion?.name?.trim() ? { companionName: toneContext.companion.name.trim() } : {}),
+        // response style — how the user wants Imotara to respond (comfort / reflect / motivate / advise)
+        ...(toneContext?.user?.responseStyle ? { responseStyle: toneContext.user.responseStyle } : {}),
       };
 
       const chatRes = await fetchWithTimeout(
