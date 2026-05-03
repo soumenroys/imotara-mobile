@@ -109,10 +109,16 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
     const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null); // null = loading
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        async function checkSession() {
+            let { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) {
+                const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                session = refreshed;
+            }
             setUserEmail(session?.user?.email);
             setIsSignedIn(!!session?.access_token);
-        });
+        }
+        checkSession();
     }, [visible]);
 
     // ── iOS IAP (expo-iap) ─────────────────────────────────────────────────────
