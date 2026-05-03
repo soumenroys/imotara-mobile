@@ -497,6 +497,8 @@ export async function callImotaraAI(
         // gender context for verb conjugation and grammatical agreement
         ...(toneContext?.user?.gender && toneContext.user.gender !== "prefer_not" ? { userGender: toneContext.user.gender } : {}),
         ...(toneContext?.companion?.gender && toneContext.companion.gender !== "prefer_not" ? { companionGender: toneContext.companion.gender } : {}),
+        // companion name — sent whenever a custom name is configured so the AI uses it as its identity
+        ...(toneContext?.companion?.name?.trim() ? { companionName: toneContext.companion.name.trim() } : {}),
       };
 
       const chatRes = await fetchWithTimeout(
