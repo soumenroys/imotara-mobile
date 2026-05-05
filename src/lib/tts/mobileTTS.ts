@@ -224,18 +224,28 @@ export async function speakPreview(
         }
     }
 
-    const baseText = PREVIEW_TEXT_BY_LANG[lang] ?? PREVIEW_TEXT_BY_LANG["en"];
-    const text = hasCustomName
-        ? `Hi, I'm ${effectiveName}. I'm here with you.`
-        : baseText;
-
-    Speech.speak(text, {
-        language: toBCP47(lang),
-        pitch:    1.0,
-        rate:     0.95,
-        onDone:  () => { _speakingId = null; onDone?.(); },
-        onError: () => { _speakingId = null; onDone?.(); },
-    });
+    if (hasCustomName) {
+        // Custom name greeting is English text — always use English TTS so the
+        // language matches the text. Using a non-English engine on English words
+        // produces broken/wrong-sounding speech.
+        Speech.speak(`Hi, I'm ${effectiveName}. I'm here with you.`, {
+            language: "en-US",
+            pitch:    1.0,
+            rate:     0.95,
+            onDone:  () => { _speakingId = null; onDone?.(); },
+            onError: () => { _speakingId = null; onDone?.(); },
+        });
+    } else {
+        // Fallback for when CDN MP3 failed — use native TTS in the correct language
+        const text = PREVIEW_TEXT_BY_LANG[lang] ?? PREVIEW_TEXT_BY_LANG["en"];
+        Speech.speak(text, {
+            language: toBCP47(lang),
+            pitch:    1.0,
+            rate:     0.95,
+            onDone:  () => { _speakingId = null; onDone?.(); },
+            onError: () => { _speakingId = null; onDone?.(); },
+        });
+    }
 }
 
 export function stopSpeaking(): void {
