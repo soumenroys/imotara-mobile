@@ -196,6 +196,7 @@ export async function speakMessage(
 export async function speakPreview(
     gender: string | undefined,
     lang: string = "en",
+    name?: string,
     onDone?: () => void,
 ): Promise<void> {
     const isSpeaking = await Speech.isSpeakingAsync();
@@ -207,24 +208,34 @@ export async function speakPreview(
 
     _speakingId = "preview";
 
-    // Always use pre-generated Azure MP3 for preview — native Speech.speak() uses
-    // the device default voice and ignores gender, giving a misleading preview.
-    // The Azure MP3s are the actual production voice the user will hear.
-    const genderFile = gender === "male" ? "male" : "female";
-    const uri = `${apiBase()}/tts-preview/${lang}-${genderFile}.mp3`;
-    try {
-        await playSound(uri, onDone);
-    } catch {
-        // Fallback to native speech if CDN is unreachable
-        const text = PREVIEW_TEXT_BY_LANG[lang] ?? PREVIEW_TEXT_BY_LANG["en"];
-        Speech.speak(text, {
-            language: toBCP47(lang),
-            pitch:    1.0,
-            rate:     0.95,
-            onDone:  () => { _speakingId = null; onDone?.(); },
-            onError: () => { _speakingId = null; onDone?.(); },
-        });
+    const effectiveName = name?.trim() || "Imotara";
+    const hasCustomName = effectiveName !== "Imotara";
+
+    // When a custom name is set, use native TTS so the correct name is spoken.
+    // Otherwise use the pre-generated Azure MP3 for accurate gender/voice preview.
+    if (!hasCustomName) {
+        const genderFile = gender === "male" ? "male" : "female";
+        const uri = `${apiBase()}/tts-preview/${lang}-${genderFile}.mp3`;
+        try {
+            await playSound(uri, onDone);
+            return;
+        } catch {
+            // fall through to native TTS
+        }
     }
+
+    const baseText = PREVIEW_TEXT_BY_LANG[lang] ?? PREVIEW_TEXT_BY_LANG["en"];
+    const text = hasCustomName
+        ? `Hi, I'm ${effectiveName}. I'm here with you.`
+        : baseText;
+
+    Speech.speak(text, {
+        language: toBCP47(lang),
+        pitch:    1.0,
+        rate:     0.95,
+        onDone:  () => { _speakingId = null; onDone?.(); },
+        onError: () => { _speakingId = null; onDone?.(); },
+    });
 }
 
 export function stopSpeaking(): void {

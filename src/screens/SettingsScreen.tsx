@@ -1922,8 +1922,9 @@ export default function SettingsScreen() {
                             } else {
                                 const gender = toneContext?.user?.gender;
                                 const lang = toneContext?.user?.preferredLang ?? "en";
+                                const name = toneContext?.user?.name?.trim();
                                 setVoicePreviewId(id);
-                                speakPreview(gender, lang, () => setVoicePreviewId(null));
+                                speakPreview(gender, lang, name, () => setVoicePreviewId(null));
                             }
                         }}
                         style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 }}
@@ -2349,8 +2350,9 @@ export default function SettingsScreen() {
                             } else {
                                 const gender = toneContext?.companion?.gender;
                                 const lang = toneContext?.user?.preferredLang ?? "en";
+                                const name = toneContext?.companion?.name?.trim();
                                 setVoicePreviewId(id);
-                                speakPreview(gender, lang, () => setVoicePreviewId(null));
+                                speakPreview(gender, lang, name, () => setVoicePreviewId(null));
                             }
                         }}
                         disabled={!toneContext?.companion?.enabled}
