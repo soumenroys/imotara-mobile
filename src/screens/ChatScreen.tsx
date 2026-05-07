@@ -16,6 +16,7 @@ import {
   NativeScrollEvent,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   useWindowDimensions,
   ActivityIndicator,
@@ -98,6 +99,7 @@ import {
 } from "../lib/emotion/keywordMaps";
 import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { detectCountryCode } from "../lib/safety/detectCountry";
+import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adultContentGuard";
 import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -1411,6 +1413,7 @@ export default function ChatScreen() {
     setDismissedCrisisCards((prev) => new Set([...prev, id]));
 
   // Breathing modal
+  const [showThreadPanel, setShowThreadPanel] = useState(false);
   const [breathingVisible, setBreathingVisible] = useState(false);
 
   // P4 — Unsent Letter mode
@@ -1593,6 +1596,9 @@ export default function ChatScreen() {
     activeThreadId,
     threads,
     startNewThread,
+    setActiveThreadId,
+    renameThread,
+    deleteThread,
     clearHistory,
     deleteFromHistory,
     isSyncing,
@@ -2487,6 +2493,38 @@ export default function ChatScreen() {
     typingTimeoutRef.current = setTimeout(() => {
       (async () => {
         try {
+          // ── Adult content safety gate ─────────────────────────
+          if (detectAdultContent(trimmed)) {
+            const lang = toneContext?.user?.preferredLang ?? "en";
+            const userAge = toneContext?.user?.ageRange ?? undefined;
+            const safetyTs = Date.now();
+            const safetyMsg: ChatMessage = {
+              id: `b-${safetyTs}`,
+              from: "bot",
+              text: buildAdultSafetyRefusal(lang, userAge),
+              timestamp: safetyTs,
+              isSynced: false,
+              source: "local",
+            };
+            if (mountedRef.current) {
+              addToHistory({
+                id: safetyMsg.id,
+                text: safetyMsg.text,
+                from: "bot",
+                timestamp: safetyMsg.timestamp,
+                isSynced: false,
+                source: safetyMsg.source,
+                threadId: activeThreadId,
+              });
+              setTypingStatus("responding");
+              haptic.receive();
+              setMessages((prev) => [...prev, safetyMsg]);
+              smoothScrollToBottom(scrollViewRef);
+            }
+            return; // finally block handles cleanup
+          }
+          // ─────────────────────────────────────────────────────
+
           const wantsCloud = analysisMode !== "local";
           const wantsInsights = emotionInsightsEnabled;
 
@@ -3649,6 +3687,26 @@ export default function ChatScreen() {
             <Ionicons name="pencil-outline" size={15} color={unsentLetterSetup ? "#a78bfa" : colors.textPrimary} />
           </TouchableOpacity>
 
+          {/* Thread list panel button */}
+          <TouchableOpacity
+            onPress={() => setShowThreadPanel(true)}
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: threads.length > 1 ? "rgba(99,102,241,0.5)" : colors.border,
+              backgroundColor: threads.length > 1 ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.06)",
+              marginRight: 8,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="View all conversations"
+          >
+            <Ionicons name="chatbubbles-outline" size={15} color={threads.length > 1 ? "#818cf8" : colors.textSecondary} />
+          </TouchableOpacity>
+
           {/* New Chat button — icon-only to avoid header overflow on narrow screens */}
           <TouchableOpacity
             onPress={() => {
@@ -3707,32 +3765,6 @@ export default function ChatScreen() {
           </Text>
         )}
 
-        {!keyboardVisible && (
-          <View
-            style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}
-          >
-            <View
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 999,
-                marginRight: 6,
-                backgroundColor: hasUnsynced && isSyncing ? "#fbbf24" : hasUnsynced ? "#f97373" : syncHintAccent,
-              }}
-            />
-            <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-              {syncHint}
-            </Text>
-          </View>
-        )}
-
-        {showRecentlySyncedPulse && !keyboardVisible && (
-          <Text
-            style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}
-          >
-            ✅ All changes synced · Imotara cloud copy updated.
-          </Text>
-        )}
 
         {/* Privacy mode badge */}
         {!keyboardVisible && (analysisMode === "local" || !cloudSyncAllowed) && (
@@ -4597,6 +4629,141 @@ export default function ChatScreen() {
       />
 
       {renderActionSheet()}
+
+      {/* ── Thread Panel Modal ───────────────────────────────────────── */}
+      <Modal
+        visible={showThreadPanel}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowThreadPanel(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          {/* Panel header */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14, borderBottomWidth: 0.5, borderBottomColor: colors.border }}>
+            <Text style={{ fontSize: 18, fontWeight: "700", color: colors.textPrimary }}>Conversations</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowThreadPanel(false);
+                  setUnsentLetterSetup(null);
+                  startNewThread();
+                }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: `${colors.primary}22`, borderWidth: 1, borderColor: `${colors.primary}55` }}
+                accessibilityRole="button"
+                accessibilityLabel="New conversation"
+              >
+                <Ionicons name="add-outline" size={15} color={colors.primary} />
+                <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600" }}>New</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowThreadPanel(false)} accessibilityRole="button" accessibilityLabel="Close">
+                <Ionicons name="close-outline" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Thread list */}
+          <FlatList
+            data={[...threads].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))}
+            keyExtractor={(t) => t.id}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, paddingBottom: 40 }}
+            ListEmptyComponent={
+              <View style={{ alignItems: "center", paddingTop: 40 }}>
+                <Ionicons name="chatbubble-ellipses-outline" size={28} color={colors.textSecondary} style={{ marginBottom: 12 }} />
+                <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: "center" }}>No conversations yet.</Text>
+              </View>
+            }
+            renderItem={({ item: t }) => {
+              const isActive = t.id === activeThreadId;
+              const msgCount = history.filter((h: any) => (h.threadId ?? "default") === t.id).length;
+              const lastMsg = history
+                .filter((h: any) => (h.threadId ?? "default") === t.id)
+                .sort((a: any, b: any) => (b.timestamp ?? 0) - (a.timestamp ?? 0))[0];
+              const age = lastMsg
+                ? (() => {
+                    const diff = Date.now() - lastMsg.timestamp;
+                    if (diff < 60_000) return "just now";
+                    if (diff < 3_600_000) return `${Math.round(diff / 60_000)}m ago`;
+                    if (diff < 86_400_000) return `${Math.round(diff / 3_600_000)}h ago`;
+                    return `${Math.round(diff / 86_400_000)}d ago`;
+                  })()
+                : new Date(t.createdAt).toLocaleDateString();
+
+              return (
+                <TouchableOpacity
+                  onPress={() => {
+                    setActiveThreadId(t.id);
+                    setShowThreadPanel(false);
+                  }}
+                  onLongPress={() => {
+                    Alert.alert(
+                      t.title || "Conversation",
+                      "What would you like to do?",
+                      [
+                        {
+                          text: "Rename",
+                          onPress: () => {
+                            if (Platform.OS === "ios") {
+                              Alert.prompt(
+                                "Rename conversation",
+                                "Enter a new name",
+                                (newTitle) => {
+                                  if (newTitle?.trim()) renameThread(t.id, newTitle.trim());
+                                },
+                                "plain-text",
+                                t.title,
+                              );
+                            } else {
+                              // Android: Alert.prompt not available — use a quick fallback name
+                              const ts = new Date().toLocaleDateString();
+                              renameThread(t.id, `Conversation ${ts}`);
+                            }
+                          },
+                        },
+                        {
+                          text: "Delete",
+                          style: "destructive",
+                          onPress: () => {
+                            Alert.alert("Delete conversation?", "This removes all messages in this conversation from your device.", [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Delete", style: "destructive", onPress: () => deleteThread(t.id) },
+                            ]);
+                          },
+                        },
+                        { text: "Cancel", style: "cancel" },
+                      ],
+                    );
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingVertical: 13,
+                    paddingHorizontal: 14,
+                    marginBottom: 8,
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderColor: isActive ? `${colors.primary}55` : colors.border,
+                    backgroundColor: isActive ? `${colors.primary}14` : "rgba(255,255,255,0.04)",
+                  }}
+                  accessibilityRole="button"
+                >
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: isActive ? "700" : "500", color: isActive ? colors.primary : colors.textPrimary }}>
+                      {t.title || "Conversation"}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                      {msgCount} message{msgCount !== 1 ? "s" : ""} · {age}
+                    </Text>
+                  </View>
+                  {isActive && (
+                    <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: colors.primary, marginLeft: 10 }} />
+                  )}
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+      </Modal>
+      {/* ─────────────────────────────────────────────────────────────── */}
 
       <BreathingModal
         visible={breathingVisible}

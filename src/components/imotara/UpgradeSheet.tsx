@@ -17,6 +17,7 @@ import {
 import { useIAP } from "expo-iap";
 import type { Purchase, Product, ProductSubscription } from "expo-iap";
 import { useColors } from "../../theme/ThemeContext";
+import { useAuth } from "../../auth/AuthContext";
 import { supabase } from "../../lib/supabase/client";
 import { buildApiUrl } from "../../config/api";
 import {
@@ -103,8 +104,10 @@ async function doAndroidPurchase(
 
 export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: Props) {
     const colors = useColors();
+    const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const [period, setPeriod] = useState<PlanPeriod>("monthly");
     const [purchasing, setPurchasing] = useState<string | null>(null);
+    const [signingIn, setSigningIn] = useState(false);
     const [userEmail, setUserEmail] = useState<string | undefined>();
     const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null); // null = loading
 
@@ -194,8 +197,65 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
         (iosProduct(sku) as any)?.displayPrice ?? `₹${fallback}`;
 
     // ── iOS purchase ───────────────────────────────────────────────────────────
+    // ── Sign-in prompt (shown when purchase attempted while logged out) ───────
+    const promptSignIn = (onSuccess: () => void) => {
+        const buttons: any[] = [
+            { text: "Not now", style: "cancel" },
+            {
+                text: "Sign in with Google",
+                onPress: async () => {
+                    setSigningIn(true);
+                    try {
+                        await signInWithGoogle();
+                        // Refresh session state after sign-in
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (session?.access_token) {
+                            setUserEmail(session.user?.email);
+                            setIsSignedIn(true);
+                            onSuccess();
+                        }
+                    } catch {
+                        Alert.alert("Sign in failed", "Please try again.");
+                    } finally {
+                        setSigningIn(false);
+                    }
+                },
+            },
+        ];
+        if (Platform.OS === "ios" && appleSignInAvailable) {
+            buttons.push({
+                text: "Sign in with Apple",
+                onPress: async () => {
+                    setSigningIn(true);
+                    try {
+                        await signInWithApple();
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (session?.access_token) {
+                            setUserEmail(session.user?.email);
+                            setIsSignedIn(true);
+                            onSuccess();
+                        }
+                    } catch {
+                        Alert.alert("Sign in failed", "Please try again.");
+                    } finally {
+                        setSigningIn(false);
+                    }
+                },
+            });
+        }
+        Alert.alert(
+            "Sign in to upgrade",
+            "Sign in so your purchase is linked to your account and can be restored on any device.",
+            buttons,
+        );
+    };
+
     const handleIosPurchase = async (sku: string, type: "subs" | "in-app") => {
-        if (purchasing) return;
+        if (purchasing || signingIn) return;
+        if (isSignedIn === false) {
+            promptSignIn(() => handleIosPurchase(sku, type));
+            return;
+        }
         setPurchasing(sku);
         try {
             await requestPurchase({ type, request: { apple: { sku } } });
@@ -206,13 +266,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
 
     // ── Android purchase ───────────────────────────────────────────────────────
     const handleAndroidPurchase = async (productId: ProductId) => {
-        if (purchasing) return;
+        if (purchasing || signingIn) return;
         if (isSignedIn === false) {
-            Alert.alert(
-                "Sign in required",
-                "Please sign in to your Imotara account before upgrading.",
-                [{ text: "OK" }],
-            );
+            promptSignIn(() => handleAndroidPurchase(productId));
             return;
         }
         setPurchasing(productId);
@@ -224,11 +280,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                 Alert.alert("Thank you!", "Your plan has been upgraded. Enjoy Imotara Plus/Pro!");
             } else if (result.error === "sign_in_required") {
                 setIsSignedIn(false);
-                Alert.alert(
-                    "Sign in required",
-                    "Please sign in to your Imotara account before upgrading.",
-                    [{ text: "OK" }],
-                );
+                promptSignIn(() => handleAndroidPurchase(productId));
             } else if (result.error !== "cancelled") {
                 Alert.alert("Payment failed", result.error ?? "Please try again.");
             }
@@ -274,16 +326,6 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                         <ActivityIndicator size="large" color={colors.primary} />
                         <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 12 }}>
                             Connecting to App Store…
-                        </Text>
-                    </View>
-                ) : isSignedIn === false ? (
-                    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>
-                        <Text style={{ fontSize: 36, marginBottom: 16 }}>🔒</Text>
-                        <Text style={{ fontSize: 17, fontWeight: "700", color: colors.textPrimary, textAlign: "center", marginBottom: 8 }}>
-                            Sign in to upgrade
-                        </Text>
-                        <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: "center", lineHeight: 20 }}>
-                            Please sign in to your Imotara account first. Your purchase will be linked to your account so you can restore it on any device.
                         </Text>
                     </View>
                 ) : (

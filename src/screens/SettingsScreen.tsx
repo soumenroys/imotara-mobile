@@ -2954,6 +2954,44 @@ export default function SettingsScreen() {
                 </View>
                 )}
 
+                {/* ── Admin Tools (EDU / ENTERPRISE only) ──────────────────── */}
+                {gate("ADMIN_DASHBOARD", licenseTier).enabled && (() => {
+                    const adminUrl = `${process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL || "https://imotaraapp.vercel.app"}/admin`;
+                    const messageCount = history.length;
+                    return (
+                        <AppSurface style={{ marginHorizontal: 16, marginBottom: 24 }}>
+                            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 8 }}>
+                                <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
+                                <Text style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>Admin Tools</Text>
+                                <View style={{ marginLeft: "auto", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: `${colors.primary}22`, borderWidth: 1, borderColor: `${colors.primary}44` }}>
+                                    <Text style={{ fontSize: 10, fontWeight: "700", color: colors.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>{prettyTier(licenseTier)}</Text>
+                                </View>
+                            </View>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, lineHeight: 18 }}>
+                                Full admin controls — user management, license audits, payments — are available on the Imotara web admin panel.
+                            </Text>
+                            {[
+                                { label: "Account tier", value: prettyTier(licenseTier) },
+                                { label: "Messages stored", value: String(messageCount) },
+                            ].map(({ label, value }) => (
+                                <View key={label} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 6, borderTopWidth: 0.5, borderTopColor: colors.border }}>
+                                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>{label}</Text>
+                                    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textPrimary }}>{value}</Text>
+                                </View>
+                            ))}
+                            <TouchableOpacity
+                                onPress={() => WebBrowser.openBrowserAsync(adminUrl)}
+                                style={{ marginTop: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingVertical: 11, borderRadius: 12, backgroundColor: colors.primary }}
+                                accessibilityRole="link"
+                                accessibilityLabel="Open web admin panel"
+                            >
+                                <Ionicons name="open-outline" size={15} color="#fff" />
+                                <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>Open Web Admin Panel</Text>
+                            </TouchableOpacity>
+                        </AppSurface>
+                    );
+                })()}
+
             </ScrollView>
 
             <HowItWorksModal visible={showHowItWorks} onClose={() => setShowHowItWorks(false)} />
