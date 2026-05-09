@@ -111,8 +111,11 @@ export default function RootNavigator() {
 
     // Paint the Android system navigation bar to match the tab bar — prevents
     // the black strip that appears with edgeToEdgeEnabled on 3-button nav mode.
+    // Android 15 (API 35) enforces edge-to-edge and deprecates setNavigationBarColor;
+    // skip on API 35+ to avoid Play Store deprecation warnings (color is a no-op anyway).
     useEffect(() => {
         if (Platform.OS !== "android") return;
+        if (typeof Platform.Version === "number" && Platform.Version >= 35) return;
         const bg = isDark ? "#1e293b" : "#e2e8f0";
         const style = isDark ? "light" : "dark";
         NavigationBar.setBackgroundColorAsync(bg).catch(() => {});
