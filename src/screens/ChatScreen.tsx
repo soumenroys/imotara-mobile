@@ -1415,6 +1415,7 @@ export default function ChatScreen() {
   // Breathing modal
   const [showThreadPanel, setShowThreadPanel] = useState(false);
   const [breathingVisible, setBreathingVisible] = useState(false);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
 
   // P4 — Unsent Letter mode
   const [unsentLetterVisible, setUnsentLetterVisible] = useState(false);
@@ -3599,156 +3600,57 @@ export default function ChatScreen() {
             </View>
           </View>
 
-          {/* Buttons section — flexShrink: 0 ensures buttons are never clipped on narrow screens */}
-          <View style={{ flexDirection: "row", alignItems: "center", flexShrink: 0 }}>
+          {/* Buttons section — 3 items max to prevent header overflow */}
+          <View style={{ flexDirection: "row", alignItems: "center", flexShrink: 0, gap: 6 }}>
 
-          {/* Search toggle */}
-          {messages.length > 0 && (
+            {/* Thread list */}
             <TouchableOpacity
-              onPress={() => {
-                setShowSearch((v) => {
-                  if (v) { setSearchQuery(""); setSearchMatchIndex(0); }
-                  return !v;
-                });
-                setTimeout(() => searchInputRef.current?.focus(), 80);
-              }}
+              onPress={() => setShowThreadPanel(true)}
               style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 999,
+                width: 34, height: 34, borderRadius: 999,
                 borderWidth: 1,
-                borderColor: showSearch ? colors.primary : colors.border,
-                backgroundColor: showSearch ? `${colors.primary}22` : "rgba(255,255,255,0.06)",
-                marginRight: 8,
+                borderColor: threads.length > 1 ? "rgba(99,102,241,0.5)" : colors.border,
+                backgroundColor: threads.length > 1 ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.06)",
+                alignItems: "center", justifyContent: "center",
               }}
               accessibilityRole="button"
-              accessibilityLabel="Search chat"
+              accessibilityLabel="View all conversations"
             >
-              <Ionicons name={showSearch ? "search" : "search-outline"} size={14} color={showSearch ? colors.primary : colors.textSecondary} />
+              <Ionicons name="chatbubbles-outline" size={15} color={threads.length > 1 ? "#818cf8" : colors.textSecondary} />
             </TouchableOpacity>
-          )}
 
-          {bookmarks.size > 0 && (
+            {/* New chat */}
             <TouchableOpacity
-              onPress={() => setShowBookmarksOnly((v) => !v)}
+              onPress={() => { setUnsentLetterSetup(null); startNewThread(); }}
               style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 999,
+                width: 34, height: 34, borderRadius: 999,
                 borderWidth: 1,
-                borderColor: showBookmarksOnly ? "#fde68a" : colors.border,
-                backgroundColor: showBookmarksOnly ? "rgba(251,191,36,0.18)" : "rgba(255,255,255,0.06)",
-                marginRight: 8,
+                borderColor: "rgba(99,102,241,0.5)",
+                backgroundColor: "rgba(99,102,241,0.12)",
+                alignItems: "center", justifyContent: "center",
               }}
               accessibilityRole="button"
-              accessibilityLabel="Show bookmarks"
+              accessibilityLabel="Start new conversation"
             >
-              <Text style={{ fontSize: 14 }}>{showBookmarksOnly ? "★" : "☆"}</Text>
+              <Ionicons name="add-outline" size={16} color="#818cf8" />
             </TouchableOpacity>
-          )}
 
-          {/* Breathing exercise button */}
-          <TouchableOpacity
-            onPress={() => setBreathingVisible(true)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: "rgba(255,255,255,0.06)",
-              marginRight: 8,
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Breathing exercise"
-          >
-            <Ionicons name="pulse-outline" size={16} color={colors.textPrimary} />
-          </TouchableOpacity>
-
-          {/* Unsent Letter button — P4 */}
-          <TouchableOpacity
-            onPress={() => {
-              setUnsentLetterVisible(true);
-              AsyncStorage.setItem(UNSENT_TRIED_KEY, "1").catch(() => {});
-              setShowUnsentHint(false);
-            }}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: unsentLetterSetup ? "rgba(167,139,250,0.6)" : colors.border,
-              backgroundColor: unsentLetterSetup ? "rgba(167,139,250,0.12)" : "rgba(255,255,255,0.06)",
-              marginRight: 8,
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Write an unsent letter"
-          >
-            <Ionicons name="pencil-outline" size={15} color={unsentLetterSetup ? "#a78bfa" : colors.textPrimary} />
-          </TouchableOpacity>
-
-          {/* Thread list panel button */}
-          <TouchableOpacity
-            onPress={() => setShowThreadPanel(true)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: threads.length > 1 ? "rgba(99,102,241,0.5)" : colors.border,
-              backgroundColor: threads.length > 1 ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.06)",
-              marginRight: 8,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="View all conversations"
-          >
-            <Ionicons name="chatbubbles-outline" size={15} color={threads.length > 1 ? "#818cf8" : colors.textSecondary} />
-          </TouchableOpacity>
-
-          {/* New Chat button — icon-only to avoid header overflow on narrow screens */}
-          <TouchableOpacity
-            onPress={() => {
-              setUnsentLetterSetup(null);
-              startNewThread();
-            }}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: "rgba(99,102,241,0.5)",
-              backgroundColor: "rgba(99,102,241,0.12)",
-              marginRight: 8,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Start new conversation"
-          >
-            <Ionicons name="add-outline" size={16} color="#818cf8" />
-          </TouchableOpacity>
-
-          {messages.length > 0 && (
+            {/* More (⋯) — breathing, unsent letter, search, bookmarks, clear */}
             <TouchableOpacity
-              onPress={handleClearLocalChat}
+              onPress={() => setShowHeaderMenu(true)}
               style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 999,
+                width: 34, height: 34, borderRadius: 999,
                 borderWidth: 1,
                 borderColor: colors.border,
                 backgroundColor: "rgba(255,255,255,0.06)",
-                alignItems: "center",
-                justifyContent: "center",
+                alignItems: "center", justifyContent: "center",
               }}
               accessibilityRole="button"
-              accessibilityLabel="Clear local chat"
+              accessibilityLabel="More options"
             >
-              <Ionicons name="trash-outline" size={15} color={colors.textSecondary} />
+              <Ionicons name="ellipsis-horizontal" size={16} color={colors.textSecondary} />
             </TouchableOpacity>
-          )}
+
           </View>
         </View>
 
@@ -4762,6 +4664,101 @@ export default function ChatScreen() {
             }}
           />
         </View>
+      </Modal>
+      {/* ─────────────────────────────────────────────────────────────── */}
+
+      {/* ── Header overflow menu ─────────────────────────────────────── */}
+      <Modal
+        visible={showHeaderMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowHeaderMenu(false)}
+      >
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-start", alignItems: "flex-end" }}
+          activeOpacity={1}
+          onPress={() => setShowHeaderMenu(false)}
+        >
+          <View
+            style={{
+              marginTop: insets.top + 52,
+              marginRight: 12,
+              backgroundColor: "#1e293b",
+              borderRadius: 14,
+              borderWidth: 0.5,
+              borderColor: "rgba(255,255,255,0.1)",
+              minWidth: 220,
+              overflow: "hidden",
+            }}
+          >
+            {/* Search */}
+            {messages.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  setShowHeaderMenu(false);
+                  setShowSearch((v) => {
+                    if (v) { setSearchQuery(""); setSearchMatchIndex(0); }
+                    return !v;
+                  });
+                  setTimeout(() => searchInputRef.current?.focus(), 120);
+                }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+              >
+                <Ionicons name={showSearch ? "search" : "search-outline"} size={17} color={showSearch ? colors.primary : colors.textSecondary} />
+                <Text style={{ color: showSearch ? colors.primary : colors.textPrimary, fontSize: 14 }}>
+                  {showSearch ? "Close search" : "Search messages"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Bookmarks filter */}
+            {bookmarks.size > 0 && (
+              <TouchableOpacity
+                onPress={() => { setShowHeaderMenu(false); setShowBookmarksOnly((v) => !v); }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+              >
+                <Ionicons name={showBookmarksOnly ? "star" : "star-outline"} size={17} color={showBookmarksOnly ? "#fde68a" : colors.textSecondary} />
+                <Text style={{ color: showBookmarksOnly ? "#fde68a" : colors.textPrimary, fontSize: 14 }}>
+                  {showBookmarksOnly ? "Show all messages" : "Show bookmarks"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Breathing exercise */}
+            <TouchableOpacity
+              onPress={() => { setShowHeaderMenu(false); setBreathingVisible(true); }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+            >
+              <Ionicons name="pulse-outline" size={17} color={colors.textSecondary} />
+              <Text style={{ color: colors.textPrimary, fontSize: 14 }}>Breathing exercise</Text>
+            </TouchableOpacity>
+
+            {/* Unsent Letter */}
+            <TouchableOpacity
+              onPress={() => {
+                setShowHeaderMenu(false);
+                setUnsentLetterVisible(true);
+                AsyncStorage.setItem(UNSENT_TRIED_KEY, "1").catch(() => {});
+                setShowUnsentHint(false);
+              }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+            >
+              <Ionicons name="pencil-outline" size={17} color={unsentLetterSetup ? "#a78bfa" : colors.textSecondary} />
+              <Text style={{ color: unsentLetterSetup ? "#a78bfa" : colors.textPrimary, fontSize: 14 }}>Unsent letter</Text>
+            </TouchableOpacity>
+
+            {/* Clear chat */}
+            {messages.length > 0 && (
+              <TouchableOpacity
+                onPress={() => { setShowHeaderMenu(false); handleClearLocalChat(); }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13 }}
+              >
+                <Ionicons name="trash-outline" size={17} color="#f87171" />
+                <Text style={{ color: "#f87171", fontSize: 14 }}>Clear chat</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableOpacity>
       </Modal>
       {/* ─────────────────────────────────────────────────────────────── */}
 
