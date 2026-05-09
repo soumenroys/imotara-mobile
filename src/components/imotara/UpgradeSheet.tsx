@@ -124,6 +124,15 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
         checkSession();
     }, [visible]);
 
+    // Keep isSignedIn in sync with the global auth state (handles async deep-link OAuth)
+    useEffect(() => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setIsSignedIn(!!session?.access_token);
+            setUserEmail(session?.user?.email);
+        });
+        return () => subscription.unsubscribe();
+    }, []);
+
     // ── iOS IAP (expo-iap) ─────────────────────────────────────────────────────
     const {
         connected,
@@ -196,52 +205,60 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
     const iosPrice = (sku: string, fallback: number): string =>
         (iosProduct(sku) as any)?.displayPrice ?? `₹${fallback}`;
 
-    // ── iOS purchase ───────────────────────────────────────────────────────────
     // ── Sign-in prompt (shown when purchase attempted while logged out) ───────
+    // On Android, WebBrowser.openAuthSessionAsync returns type:'dismiss' when the
+    // OAuth redirect fires as a system deep-link intent. The session arrives async
+    // via onAuthStateChange, not synchronously after signInWithGoogle() resolves.
+    // We subscribe to onAuthStateChange BEFORE opening OAuth so we catch both paths.
     const promptSignIn = (onSuccess: () => void) => {
+        const doSignIn = async (method: "google" | "apple") => {
+            setSigningIn(true);
+            let resolved = false;
+
+            const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+                if (resolved) return;
+                if (event === "SIGNED_IN" && session?.access_token) {
+                    resolved = true;
+                    subscription.unsubscribe();
+                    setUserEmail(session.user?.email);
+                    setIsSignedIn(true);
+                    setSigningIn(false);
+                    // Yield one tick so signingIn state flushes before purchase check
+                    setTimeout(() => onSuccess(), 0);
+                }
+            });
+
+            try {
+                if (method === "google") await signInWithGoogle();
+                else await signInWithApple();
+
+                if (!resolved) {
+                    // Synchronous path: session already set inside signInWithGoogle/Apple
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session?.access_token) {
+                        resolved = true;
+                        subscription.unsubscribe();
+                        setUserEmail(session.user?.email);
+                        setIsSignedIn(true);
+                        setSigningIn(false);
+                        setTimeout(() => onSuccess(), 0);
+                    }
+                    // else: still waiting for async deep-link — onAuthStateChange will fire
+                }
+            } catch {
+                resolved = true;
+                subscription.unsubscribe();
+                setSigningIn(false);
+                Alert.alert("Sign in failed", "Please try again.");
+            }
+        };
+
         const buttons: any[] = [
             { text: "Not now", style: "cancel" },
-            {
-                text: "Sign in with Google",
-                onPress: async () => {
-                    setSigningIn(true);
-                    try {
-                        await signInWithGoogle();
-                        // Refresh session state after sign-in
-                        const { data: { session } } = await supabase.auth.getSession();
-                        if (session?.access_token) {
-                            setUserEmail(session.user?.email);
-                            setIsSignedIn(true);
-                            onSuccess();
-                        }
-                    } catch {
-                        Alert.alert("Sign in failed", "Please try again.");
-                    } finally {
-                        setSigningIn(false);
-                    }
-                },
-            },
+            { text: "Sign in with Google", onPress: () => doSignIn("google") },
         ];
         if (Platform.OS === "ios" && appleSignInAvailable) {
-            buttons.push({
-                text: "Sign in with Apple",
-                onPress: async () => {
-                    setSigningIn(true);
-                    try {
-                        await signInWithApple();
-                        const { data: { session } } = await supabase.auth.getSession();
-                        if (session?.access_token) {
-                            setUserEmail(session.user?.email);
-                            setIsSignedIn(true);
-                            onSuccess();
-                        }
-                    } catch {
-                        Alert.alert("Sign in failed", "Please try again.");
-                    } finally {
-                        setSigningIn(false);
-                    }
-                },
-            });
+            buttons.push({ text: "Sign in with Apple", onPress: () => doSignIn("apple") });
         }
         Alert.alert(
             "Sign in to upgrade",
