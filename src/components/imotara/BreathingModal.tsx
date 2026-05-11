@@ -161,9 +161,9 @@ const MUSIC_OPTIONS: { id: MusicTrack; label: string; icon: React.ComponentProps
 ];
 
 const MUSIC_SOURCES: Record<Exclude<MusicTrack, "none">, any> = {
-  bowl:  require("../../../assets/sounds/bowl.wav"),
-  rain:  require("../../../assets/sounds/rain.wav"),
-  ocean: require("../../../assets/sounds/ocean.wav"),
+  bowl:  require("../../../assets/sounds/bowl.mp3"),
+  rain:  require("../../../assets/sounds/rain.mp3"),
+  ocean: require("../../../assets/sounds/ocean.mp3"),
 };
 
 type Props = {

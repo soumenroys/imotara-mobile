@@ -109,6 +109,7 @@ export type ToneContextPayload = {
     // ✅ parity with web: preferred language + response style
     preferredLang?: SupportedLang;
     responseStyle?: ResponseStyle;
+    avatarAge?: number;
   };
   companion?: {
     enabled?: boolean;
@@ -120,6 +121,7 @@ export type ToneContextPayload = {
 
     gender?: ToneGender;
     relationship?: ToneRelationship;
+    avatarAge?: number;
   };
   // per-turn seed offset for local reply variety; mirrors web ToneContext.sessionTurn
   sessionTurn?: number;
@@ -320,6 +322,8 @@ function detectExplicitLangRequest(text: string): string | null {
     [/\bfrench\b/,     "fr"],
     [/\bgerman\b/,     "de"],
     [/\bportuguese\b/, "pt"],
+    [/\bindonesian\b/, "id"],
+    [/\bhebrew\b/,     "he"],
   ];
 
   if (!hasIntent) return null;
@@ -493,13 +497,20 @@ export async function callImotaraAI(
         // gender context for verb conjugation and grammatical agreement
         ...(toneContext?.user?.gender && toneContext.user.gender !== "prefer_not" ? { userGender: toneContext.user.gender } : {}),
         ...(toneContext?.companion?.gender && toneContext.companion.gender !== "prefer_not" ? { companionGender: toneContext.companion.gender } : {}),
+        // companion name — sent whenever a custom name is configured so the AI uses it as its identity
+        ...(toneContext?.companion?.name?.trim() ? { companionName: toneContext.companion.name.trim() } : {}),
+        // response style — how the user wants Imotara to respond (comfort / reflect / motivate / advise)
+        ...(toneContext?.user?.responseStyle ? { responseStyle: toneContext.user.responseStyle } : {}),
       };
 
       const chatRes = await fetchWithTimeout(
         chatReplyUrl,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(opts?.accessToken ? { Authorization: `Bearer ${opts.accessToken}` } : {}),
+          },
           body: JSON.stringify(chatReplyPayload),
         },
         opts?.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS,

@@ -17,6 +17,7 @@ import {
 import { useIAP } from "expo-iap";
 import type { Purchase, Product, ProductSubscription } from "expo-iap";
 import { useColors } from "../../theme/ThemeContext";
+import { useAuth } from "../../auth/AuthContext";
 import { supabase } from "../../lib/supabase/client";
 import { buildApiUrl } from "../../config/api";
 import {
@@ -42,8 +43,13 @@ async function doAndroidPurchase(
     productId: ProductId,
     userEmail: string | undefined,
 ): Promise<{ ok: boolean; error?: string }> {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return { ok: false, error: "Not signed in" };
+    let { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+        // Session missing or expired — attempt a silent refresh before giving up
+        const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+        session = refreshed;
+    }
+    if (!session?.access_token) return { ok: false, error: "sign_in_required" };
 
     const headers = {
         "Content-Type": "application/json",
@@ -98,14 +104,33 @@ async function doAndroidPurchase(
 
 export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: Props) {
     const colors = useColors();
+    const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const [period, setPeriod] = useState<PlanPeriod>("monthly");
     const [purchasing, setPurchasing] = useState<string | null>(null);
+    const [signingIn, setSigningIn] = useState(false);
     const [userEmail, setUserEmail] = useState<string | undefined>();
+    const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null); // null = loading
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        async function checkSession() {
+            let { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) {
+                const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                session = refreshed;
+            }
+            setUserEmail(session?.user?.email);
+            setIsSignedIn(!!session?.access_token);
+        }
+        checkSession();
+    }, [visible]);
+
+    // Keep isSignedIn in sync with the global auth state (handles async deep-link OAuth)
+    useEffect(() => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setIsSignedIn(!!session?.access_token);
             setUserEmail(session?.user?.email);
         });
+        return () => subscription.unsubscribe();
     }, []);
 
     // ── iOS IAP (expo-iap) ─────────────────────────────────────────────────────
@@ -122,25 +147,51 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
             try {
                 const productId = iosSkuToProductId(purchase.productId ?? "");
                 const isTokenPack = productId?.startsWith("tokens_") ?? false;
-                await finishTransaction({ purchase, isConsumable: isTokenPack });
 
                 if (productId) {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session?.access_token) {
-                        await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                Authorization: `Bearer ${session.access_token}`,
-                            },
-                            body: JSON.stringify({
-                                productId,
-                                transactionId: (purchase as any).transactionId ?? purchase.productId,
-                            }),
-                        });
+                    // Require a valid session to call the verification endpoint.
+                    // Mirror the Android pattern: try refresh before giving up.
+                    let { data: { session } } = await supabase.auth.getSession();
+                    if (!session?.access_token) {
+                        const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                        session = refreshed;
+                    }
+                    if (!session?.access_token) {
+                        // No auth — leave the transaction pending so Apple re-delivers it on
+                        // next app launch, where the user can sign in and try again.
+                        Alert.alert(
+                            "Sign in required",
+                            "Please sign in and re-open the app to activate your purchase. Your payment is safe.",
+                        );
+                        return;
+                    }
+
+                    const verifyRes = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${session.access_token}`,
+                        },
+                        body: JSON.stringify({
+                            productId,
+                            // purchase.id is the StoreKit 2 transaction identifier (e.g. "2000000123456789").
+                            // purchase.productId is the SKU — wrong field for Apple's transaction lookup API.
+                            transactionId: purchase.id,
+                        }),
+                    });
+                    if (!verifyRes.ok) {
+                        // Don't finish — Apple will re-deliver on next launch so the user
+                        // gets another verification attempt.
+                        Alert.alert(
+                            "Verification failed",
+                            "Your purchase was recorded by Apple but we couldn't activate it. Re-open the app to retry, or tap 'Restore previous purchases'.",
+                        );
+                        return;
                     }
                 }
 
+                // Only finish the transaction after successful server verification.
+                await finishTransaction({ purchase, isConsumable: isTokenPack });
                 await onPurchaseComplete();
                 onClose();
                 Alert.alert("Thank you!", "Your plan has been upgraded. Enjoy Imotara Plus/Pro!");
@@ -170,9 +221,74 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
     const iosPrice = (sku: string, fallback: number): string =>
         (iosProduct(sku) as any)?.displayPrice ?? `₹${fallback}`;
 
-    // ── iOS purchase ───────────────────────────────────────────────────────────
+    // ── Sign-in prompt (shown when purchase attempted while logged out) ───────
+    // On Android, WebBrowser.openAuthSessionAsync returns type:'dismiss' when the
+    // OAuth redirect fires as a system deep-link intent. The session arrives async
+    // via onAuthStateChange, not synchronously after signInWithGoogle() resolves.
+    // We subscribe to onAuthStateChange BEFORE opening OAuth so we catch both paths.
+    const promptSignIn = (onSuccess: () => void) => {
+        const doSignIn = async (method: "google" | "apple") => {
+            setSigningIn(true);
+            let resolved = false;
+
+            const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+                if (resolved) return;
+                if (event === "SIGNED_IN" && session?.access_token) {
+                    resolved = true;
+                    subscription.unsubscribe();
+                    setUserEmail(session.user?.email);
+                    setIsSignedIn(true);
+                    setSigningIn(false);
+                    // Yield one tick so signingIn state flushes before purchase check
+                    setTimeout(() => onSuccess(), 0);
+                }
+            });
+
+            try {
+                if (method === "google") await signInWithGoogle();
+                else await signInWithApple();
+
+                if (!resolved) {
+                    // Synchronous path: session already set inside signInWithGoogle/Apple
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session?.access_token) {
+                        resolved = true;
+                        subscription.unsubscribe();
+                        setUserEmail(session.user?.email);
+                        setIsSignedIn(true);
+                        setSigningIn(false);
+                        setTimeout(() => onSuccess(), 0);
+                    }
+                    // else: still waiting for async deep-link — onAuthStateChange will fire
+                }
+            } catch {
+                resolved = true;
+                subscription.unsubscribe();
+                setSigningIn(false);
+                Alert.alert("Sign in failed", "Please try again.");
+            }
+        };
+
+        const buttons: any[] = [
+            { text: "Not now", style: "cancel" },
+            { text: "Sign in with Google", onPress: () => doSignIn("google") },
+        ];
+        if (Platform.OS === "ios" && appleSignInAvailable) {
+            buttons.push({ text: "Sign in with Apple", onPress: () => doSignIn("apple") });
+        }
+        Alert.alert(
+            "Sign in to upgrade",
+            "Sign in so your purchase is linked to your account and can be restored on any device.",
+            buttons,
+        );
+    };
+
     const handleIosPurchase = async (sku: string, type: "subs" | "in-app") => {
-        if (purchasing) return;
+        if (purchasing || signingIn) return;
+        if (isSignedIn === false) {
+            promptSignIn(() => handleIosPurchase(sku, type));
+            return;
+        }
         setPurchasing(sku);
         try {
             await requestPurchase({ type, request: { apple: { sku } } });
@@ -183,7 +299,11 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
 
     // ── Android purchase ───────────────────────────────────────────────────────
     const handleAndroidPurchase = async (productId: ProductId) => {
-        if (purchasing) return;
+        if (purchasing || signingIn) return;
+        if (isSignedIn === false) {
+            promptSignIn(() => handleAndroidPurchase(productId));
+            return;
+        }
         setPurchasing(productId);
         try {
             const result = await doAndroidPurchase(productId, userEmail);
@@ -191,6 +311,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                 await onPurchaseComplete();
                 onClose();
                 Alert.alert("Thank you!", "Your plan has been upgraded. Enjoy Imotara Plus/Pro!");
+            } else if (result.error === "sign_in_required") {
+                setIsSignedIn(false);
+                promptSignIn(() => handleAndroidPurchase(productId));
             } else if (result.error !== "cancelled") {
                 Alert.alert("Payment failed", result.error ?? "Please try again.");
             }

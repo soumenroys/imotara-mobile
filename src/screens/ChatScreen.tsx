@@ -16,6 +16,7 @@ import {
   NativeScrollEvent,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   useWindowDimensions,
   ActivityIndicator,
@@ -29,6 +30,8 @@ const haptic = {
 };
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
+import { Image } from "react-native";
+import { resolveAvatarImage } from "../assets/avatarImages";
 
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
@@ -53,11 +56,24 @@ import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
 
 // NEW: lifecycle hook (additive)
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
+import { getConversationDepth } from "../lib/imotara/companionLetter";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
 import { DiscoveryCard, DISCOVERY_CARDS_KEY, CARD_ORDER, getNextCard, type DiscoveryCardId } from "../components/chat/DiscoveryCard";
+import { OpenLoopCard } from "../components/chat/OpenLoopCard";
+import { CompanionInsightCard } from "../components/imotara/CompanionInsightCard";
+import { UnsentLetterModal, buildUnsentLetterSystemPrompt, type UnsentLetterSetup } from "../components/imotara/UnsentLetterModal";
+import {
+  detectAndUpdateOpenLoops,
+  dismissLoop,
+  deferLoop,
+  loadOpenLoops,
+  getActiveLoop,
+  getLoopPrompt,
+  type OpenLoop,
+} from "../lib/imotara/openLoops";
 import { useNavigation } from "@react-navigation/native";
 import { ImotaraTypingIndicator } from "../components/imotara/ImotaraTypingIndicator";
 import { Toast, type ToastHandle } from "../components/ui/Toast";
@@ -83,6 +99,7 @@ import {
 } from "../lib/emotion/keywordMaps";
 import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { detectCountryCode } from "../lib/safety/detectCountry";
+import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adultContentGuard";
 import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -342,11 +359,11 @@ function toRgba(color: string, alpha: number): string {
   return `rgba(148, 163, 184, ${a})`;
 }
 
-// Create a medium-intensity gradient from the mood tint
+// Create a very subtle gradient from the mood tint — a gentle wash, not a saturated fill
 function getMoodGradient(baseColor: string) {
   return {
-    start: toRgba(baseColor, 0.55),
-    end: toRgba(baseColor, 0.95),
+    start: toRgba(baseColor, 0.12),
+    end: toRgba(baseColor, 0.26),
   };
 }
 
@@ -907,6 +924,7 @@ type MessageBubbleProps = {
   dismissedCrisisCards: Set<string>;
   reactions: Map<string, string>;
   speakingMessageId: string | null;
+  companionAvatarSource?: any;
   onLongPress: (msg: ChatMessage) => void;
   onDismissCrisisCard: (id: string) => void;
   onRetry: (messageId: string, prevUserText: string) => void;
@@ -929,6 +947,7 @@ function MessageBubble({
   dismissedCrisisCards,
   reactions,
   speakingMessageId,
+  companionAvatarSource,
   onLongPress,
   onDismissCrisisCard,
   onRetry,
@@ -956,14 +975,22 @@ function MessageBubble({
   let gradientEnd: string | null = null;
 
   if (!isUser) {
-    const tintSource = message.moodHint || message.text;
-    const tint = getMoodTintForHint(tintSource, colors);
+    // Only tint from explicit moodHint metadata — never from raw response text,
+    // which triggers false positives (e.g. "stuck in a loop" → confused purple).
+    const tint = getMoodTintForHint(message.moodHint, colors);
     const gradient = getMoodGradient(tint);
     gradientStart = gradient.start;
     gradientEnd = gradient.end;
   }
 
-  if (message.isPending) {
+  const isGreeting = message.id.startsWith("greeting-");
+
+  if (isGreeting) {
+    bubbleBorderColor = "rgba(99, 102, 241, 0.25)";
+    statusLabel = "";
+    statusBg = "transparent";
+    statusTextColor = "transparent";
+  } else if (message.isPending) {
     bubbleBorderColor = "rgba(148, 163, 184, 0.55)";
     statusLabel = "Syncing…";
     statusBg = "rgba(148, 163, 184, 0.18)";
@@ -1068,7 +1095,7 @@ function MessageBubble({
       ) : null}
 
       <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4, opacity: 0.85 }}>
-        {new Date(message.timestamp).toLocaleTimeString()} · {message.text.length} chars
+        {new Date(message.timestamp).toLocaleTimeString()}
       </Text>
 
       {DEBUG_UI_ENABLED && message.meta?.compatibility && (
@@ -1085,14 +1112,16 @@ function MessageBubble({
         </View>
       )}
 
-      <View style={{
-        alignSelf: isUser ? "flex-end" : "flex-start",
-        marginTop: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1,
-        borderColor: bubbleBorderColor === "transparent" ? "rgba(148, 163, 184, 0.4)" : bubbleBorderColor,
-        backgroundColor: statusBg,
-      }}>
-        <Text style={{ fontSize: 10, fontWeight: "500", color: statusTextColor }}>{statusLabel}</Text>
-      </View>
+      {isUser && (
+        <View style={{
+          alignSelf: "flex-end",
+          marginTop: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1,
+          borderColor: bubbleBorderColor === "transparent" ? "rgba(148, 163, 184, 0.4)" : bubbleBorderColor,
+          backgroundColor: statusBg,
+        }}>
+          <Text style={{ fontSize: 10, fontWeight: "500", color: statusTextColor }}>{statusLabel}</Text>
+        </View>
+      )}
 
       {!isUser && message.cloudAttempted && message.source === "local" && (
         <TouchableOpacity
@@ -1125,28 +1154,38 @@ function MessageBubble({
       ]}
     >
       {sessionDivider}
-      <Pressable
-        onLongPress={message.isPending ? undefined : () => onLongPress(message)}
-        delayLongPress={250}
-        accessibilityLabel={`${isUser ? "You" : "Imotara"}: ${message.text}`}
-        accessibilityRole="text"
-        style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: Math.min(screenWidth * 0.82, 520), marginBottom: 10, paddingHorizontal: 1 }}
-      >
-        {isUser ? (
-          <View style={{ backgroundColor: bubbleBackground, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: bubbleBorderColor === "transparent" ? 0 : 1, borderColor: bubbleBorderColor }}>
-            {bubbleContent}
-          </View>
-        ) : (
-          <LinearGradient
-            colors={[gradientStart || "rgba(148, 163, 184, 0.25)", gradientEnd || "rgba(148, 163, 184, 0.45)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={{ borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, borderWidth: bubbleBorderColor === "transparent" ? 0 : 1, borderColor: bubbleBorderColor === "transparent" ? "rgba(148, 163, 184, 0.4)" : bubbleBorderColor }}
-          >
-            {bubbleContent}
-          </LinearGradient>
+      {/* UX-2 — avatar row wrapper for bot messages */}
+      <View style={!isUser ? { flexDirection: "row", alignItems: "flex-start", gap: 6 } : undefined}>
+        {!isUser && (
+          companionAvatarSource
+            ? <Image source={companionAvatarSource} style={{ width: 26, height: 26, borderRadius: 13, marginTop: 4, flexShrink: 0 }} />
+            : <View style={{ width: 26, height: 26, borderRadius: 13, marginTop: 4, flexShrink: 0, backgroundColor: "rgba(99,102,241,0.25)", alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ fontSize: 9, color: "#a5b4fc", fontWeight: "800" }}>I</Text>
+              </View>
         )}
-      </Pressable>
+        <Pressable
+          onLongPress={message.isPending ? undefined : () => onLongPress(message)}
+          delayLongPress={250}
+          accessibilityLabel={`${isUser ? "You" : "Imotara"}: ${message.text}`}
+          accessibilityRole="text"
+          style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: Math.min(screenWidth * (isUser ? 0.76 : 0.75), 480), marginBottom: 10, paddingHorizontal: 1, marginRight: isUser ? 2 : 0 }}
+        >
+          {isUser ? (
+            <View style={{ backgroundColor: bubbleBackground, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: bubbleBorderColor === "transparent" ? 0 : 1, borderColor: bubbleBorderColor }}>
+              {bubbleContent}
+            </View>
+          ) : (
+            <LinearGradient
+              colors={[gradientStart || "rgba(148, 163, 184, 0.25)", gradientEnd || "rgba(148, 163, 184, 0.45)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={{ borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, borderWidth: bubbleBorderColor === "transparent" ? 0 : 1, borderColor: bubbleBorderColor === "transparent" ? "rgba(148, 163, 184, 0.4)" : bubbleBorderColor }}
+            >
+              {bubbleContent}
+            </LinearGradient>
+          )}
+        </Pressable>
+      </View>
 
       {/* Inline action row — bot messages only */}
       {!isUser && !message.isPending && (() => {
@@ -1374,7 +1413,40 @@ export default function ChatScreen() {
     setDismissedCrisisCards((prev) => new Set([...prev, id]));
 
   // Breathing modal
+  const [showThreadPanel, setShowThreadPanel] = useState(false);
   const [breathingVisible, setBreathingVisible] = useState(false);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+
+  // P4 — Unsent Letter mode
+  const [unsentLetterVisible, setUnsentLetterVisible] = useState(false);
+  const [unsentLetterSetup, setUnsentLetterSetup] = useState<UnsentLetterSetup | null>(null);
+
+  // UX-3 — contextual unsent-letter hint (relationship keywords detected)
+  const UNSENT_TRIED_KEY = "imotara.unsent_letter.tried.v1";
+  const [showUnsentHint, setShowUnsentHint] = useState(false);
+  const unsentHintShownRef = useRef(false);
+
+  // UX-1 — first-chat intake arc
+  const INTAKE_KEY = "imotara.intake.done.v1";
+  const [intakeStep, setIntakeStep] = useState<0 | 1 | 2 | 3>(0);
+  const [intakeAnswers, setIntakeAnswers] = useState<[string, string, string]>(["", "", ""]);
+  const intakeInitialisedRef = useRef(false);
+  useEffect(() => {
+    if (intakeInitialisedRef.current) return;
+    intakeInitialisedRef.current = true;
+    AsyncStorage.getItem(INTAKE_KEY).then((v) => {
+      if (!v) setIntakeStep(1);
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // P3/P5 state — effects wired after history is declared (below store destructure)
+  const [companionInsight, setCompanionInsight] = useState<{
+    variant: "letter" | "arc";
+    title: string;
+    body: string;
+  } | null>(null);
+  const insightCheckedRef = useRef(false);
 
   // Voice input
   const voiceInput = useVoiceInput(
@@ -1386,7 +1458,13 @@ export default function ChatScreen() {
           { text: "Discard", style: "destructive" },
           {
             text: "Use",
-            onPress: () => setInput((prev) => prev ? `${prev} ${text}` : text),
+            onPress: () => {
+              const newText = latestInputRef.current
+                ? `${latestInputRef.current} ${text}`
+                : text;
+              latestInputRef.current = newText;
+              setInput(newText);
+            },
           },
         ],
       );
@@ -1397,16 +1475,7 @@ export default function ChatScreen() {
   // Message reactions — messageId → emoji
   const [reactions, setReactions] = useState<Map<string, string>>(new Map());
 
-  // AI consent — shown once before first cloud message
-  const AI_CONSENT_KEY = "imotara_ai_consent_v1";
-  const [aiConsentGiven, setAiConsentGiven] = useState<boolean | null>(null);
-  const [showAiConsentModal, setShowAiConsentModal] = useState(false);
   const pendingConsentSendRef = useRef<string | null>(null);
-  useEffect(() => {
-    AsyncStorage.getItem(AI_CONSENT_KEY).then((val) => {
-      setAiConsentGiven(val === "1");
-    }).catch(() => setAiConsentGiven(true));
-  }, []);
 
   // First-time onboarding hint — shown until the user sends their first ever message
   const FIRST_MSG_SEEN_KEY = "imotara.onboarding.firstMsgSeen.v1";
@@ -1416,6 +1485,35 @@ export default function ChatScreen() {
       if (!val) setShowFirstTimeTip(true);
     }).catch(() => { });
   }, []);
+
+  // EN-3 — Daily micro check-in (once per day on chat open)
+  const DAILY_CHECKIN_KEY = "imotara.dailycheckin.lastDate.v1";
+  const [showDailyCheckin, setShowDailyCheckin] = useState(false);
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    AsyncStorage.getItem(DAILY_CHECKIN_KEY).then((stored) => {
+      if (stored !== today) setShowDailyCheckin(true);
+    }).catch(() => {});
+  }, []);
+
+  // P1 state — effect wired after history is declared (below store destructure)
+  const [activeOpenLoop, setActiveOpenLoop] = useState<OpenLoop | null>(null);
+  const [milestoneLoop, setMilestoneLoop] = useState<{ themeName: string } | null>(null);
+
+  // NF-5: Anonymous Collective Pulse
+  const [collectivePulse, setCollectivePulse] = useState<{ heavyPercent: number } | null>(null);
+  const [pulseDismissed, setPulseDismissed] = useState(false);
+  useEffect(() => {
+    const apiBase = (process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL ?? "").replace(/\/$/, "");
+    if (!apiBase) return;
+    fetch(`${apiBase}/api/pulse`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.available && data.heavyPercent >= 15) setCollectivePulse({ heavyPercent: data.heavyPercent });
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const openLoopCheckedRef = useRef(false);
 
   // Feature discovery cards — one per session, after 3+ user messages
   const navigation = useNavigation<any>();
@@ -1450,7 +1548,19 @@ export default function ChatScreen() {
     dismissDiscoveryCard();
     if (discoveryCard === "trends") navigation.navigate("Trends");
     else if (discoveryCard === "companion") navigation.navigate("Settings");
+    else if (discoveryCard === "unsent_letter") setUnsentLetterVisible(true);
     // "offline" card just dismisses
+  }
+
+  // EN-3 — complete the daily check-in ritual
+  function handleDailyCheckin(label: string) {
+    const today = new Date().toISOString().slice(0, 10);
+    AsyncStorage.setItem(DAILY_CHECKIN_KEY, today).catch(() => {});
+    setShowDailyCheckin(false);
+    const text = `Feeling ${label.toLowerCase()} today.`;
+    latestInputRef.current = text;
+    setInput(text);
+    setTimeout(() => handleSend(text), 80);
   }
 
   // Return greeting — shown after >24h absence
@@ -1487,6 +1597,9 @@ export default function ChatScreen() {
     activeThreadId,
     threads,
     startNewThread,
+    setActiveThreadId,
+    renameThread,
+    deleteThread,
     clearHistory,
     deleteFromHistory,
     isSyncing,
@@ -1513,6 +1626,12 @@ export default function ChatScreen() {
     localUserScopeId,
   } = useSettings();
 
+  // UX-2 — companion avatar for chat bubbles
+  const companionAvatarSource = resolveAvatarImage(
+    toneContext?.companion?.gender ?? toneContext?.user?.gender,
+    toneContext?.companion?.avatarAge ?? toneContext?.user?.avatarAge,
+  );
+
   // Trial countdown banner — shown once per day when ≤14 days remain
   const TRIAL_BANNER_DISMISSED_KEY = "imotara.trial.bannerDismissed.v1";
   const [showTrialBanner, setShowTrialBanner] = useState(false);
@@ -1535,6 +1654,63 @@ export default function ChatScreen() {
 
   // ── Auth: get Supabase session token for mobile API calls ──────────────────
   const { accessToken } = useAuth();
+
+  // P1 — Emotional Open Loops + NF-1 milestone celebration
+  useEffect(() => {
+    if (openLoopCheckedRef.current || history.length < 10) return;
+    openLoopCheckedRef.current = true;
+    (async () => {
+      try {
+        const prevLoops = await loadOpenLoops();
+        const loops = await detectAndUpdateOpenLoops(history);
+        // NF-1: detect any loop that just transitioned to "closed"
+        const newlyClosed = loops.find(
+          (l) => l.status === "closed" &&
+            prevLoops.some((p) => p.id === l.id && p.status !== "closed")
+        );
+        if (newlyClosed) setMilestoneLoop({ themeName: newlyClosed.themeName });
+        setActiveOpenLoop(getActiveLoop(loops));
+      } catch {}
+    })();
+  }, [history.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // P3/P5 — Companion insight effect (needs history, toneContext, accessToken)
+  useEffect(() => {
+    if (insightCheckedRef.current || history.length < 15) return;
+    insightCheckedRef.current = true;
+    (async () => {
+      const { isLetterDue, loadStoredLetter, generateCompanionLetter } = await import("../lib/imotara/companionLetter");
+      const { isArcDue, loadStoredArc, generateEmotionalArc } = await import("../lib/imotara/emotionalArc");
+
+      if (await isLetterDue()) {
+        const stored = await loadStoredLetter();
+        if (stored) {
+          setCompanionInsight({ variant: "letter", title: `A letter from ${stored.companionName}`, body: stored.body });
+          return;
+        }
+        const companionName = (toneContext as any)?.companion?.name ?? "Imotara";
+        const userName = (toneContext as any)?.user?.name ?? "you";
+        const letter = await generateCompanionLetter(history, companionName, userName, localUserScopeId, accessToken ?? undefined).catch(() => null);
+        if (letter) {
+          setCompanionInsight({ variant: "letter", title: `A letter from ${letter.companionName}`, body: letter.body });
+          return;
+        }
+      }
+
+      if (await isArcDue()) {
+        const stored = await loadStoredArc();
+        if (stored) {
+          setCompanionInsight({ variant: "arc", title: `Your ${stored.periodLabel}`, body: stored.narrative });
+          return;
+        }
+        const userName = (toneContext as any)?.user?.name ?? "you";
+        const arc = await generateEmotionalArc(history, userName, localUserScopeId, accessToken ?? undefined).catch(() => null);
+        if (arc) {
+          setCompanionInsight({ variant: "arc", title: `Your ${arc.periodLabel}`, body: arc.narrative });
+        }
+      }
+    })();
+  }, [history.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ✅ Scoped bookmarks key — isolates bookmarks per user/session to prevent cross-user leakage
   const bookmarksKey = chatLinkKey
@@ -2097,6 +2273,7 @@ export default function ChatScreen() {
             setInput("");
             setInputHeight(40);
             setActionMessage(null);
+            setUnsentLetterSetup(null);
           },
         },
       ],
@@ -2248,13 +2425,6 @@ export default function ChatScreen() {
       return;
     }
 
-    // AI consent gate — show once before first cloud message
-    if (isOnline && aiConsentGiven === false) {
-      pendingConsentSendRef.current = trimmed;
-      setShowAiConsentModal(true);
-      return;
-    }
-
     // ✅ 80/20: block double taps / overlapping send cycles
     if (isTyping || isSendingRef.current) return;
     isSendingRef.current = true;
@@ -2303,6 +2473,16 @@ export default function ChatScreen() {
       AsyncStorage.setItem(FIRST_MSG_SEEN_KEY, "1").catch(() => { });
     }
 
+    // UX-3 — contextual unsent-letter hint
+    if (!unsentHintShownRef.current && !unsentLetterSetup) {
+      const relKeywords = /\b(can't say|never told|wish i could tell|unsent|dear |letter to|miss you|hurt me|forgive|goodbye|i love you|you left|you never|i need you to know|i wanted to say|never got to)\b/i;
+      if (relKeywords.test(trimmed)) {
+        AsyncStorage.getItem(UNSENT_TRIED_KEY).then((tried) => {
+          if (!tried) { unsentHintShownRef.current = true; setShowUnsentHint(true); }
+        }).catch(() => {});
+      }
+    }
+
     setIsTyping(true);
     typingStartedAtRef.current = Date.now();
     setTypingStatus("thinking");
@@ -2314,6 +2494,38 @@ export default function ChatScreen() {
     typingTimeoutRef.current = setTimeout(() => {
       (async () => {
         try {
+          // ── Adult content safety gate ─────────────────────────
+          if (detectAdultContent(trimmed)) {
+            const lang = toneContext?.user?.preferredLang ?? "en";
+            const userAge = toneContext?.user?.ageRange ?? undefined;
+            const safetyTs = Date.now();
+            const safetyMsg: ChatMessage = {
+              id: `b-${safetyTs}`,
+              from: "bot",
+              text: buildAdultSafetyRefusal(lang, userAge),
+              timestamp: safetyTs,
+              isSynced: false,
+              source: "local",
+            };
+            if (mountedRef.current) {
+              addToHistory({
+                id: safetyMsg.id,
+                text: safetyMsg.text,
+                from: "bot",
+                timestamp: safetyMsg.timestamp,
+                isSynced: false,
+                source: safetyMsg.source,
+                threadId: activeThreadId,
+              });
+              setTypingStatus("responding");
+              haptic.receive();
+              setMessages((prev) => [...prev, safetyMsg]);
+              smoothScrollToBottom(scrollViewRef);
+            }
+            return; // finally block handles cleanup
+          }
+          // ─────────────────────────────────────────────────────
+
           const wantsCloud = analysisMode !== "local";
           const wantsInsights = emotionInsightsEnabled;
 
@@ -2369,10 +2581,15 @@ export default function ChatScreen() {
               .filter(Boolean)
               .join("\n\n") || undefined;
 
+          // P4 — Unsent Letter: prepend role-play context so AI responds in recipient's voice
+          const aiMessage = unsentLetterSetup
+            ? `${buildUnsentLetterSystemPrompt(unsentLetterSetup)}\n\nThe user's letter:\n${trimmed}`
+            : trimmed;
+
           // 1) Try cloud if allowed by Analysis Mode AND device is online
           //    Skip immediately if offline — avoids a 20s fetch timeout before local fallback
           const remote: any = wantsCloud && isOnline
-            ? await callImotaraAI(trimmed, {
+            ? await callImotaraAI(aiMessage, {
                 // ✅ always send toneContext if present (server can decide what to use)
                 // ✅ parity: ensure ageTone is present (fallback to ageRange) when sending
                 toneContext: toneContext
@@ -2571,6 +2788,10 @@ export default function ChatScreen() {
                 source: cloudMoodHint ? "cloud" : "local_fallback",
               });
             }
+          } else if (unsentLetterSetup) {
+            // P4 — Unsent Letter: cloud-only; show a gentle offline message
+            replyText = `I wasn't able to reach ${unsentLetterSetup.recipientName} right now. Please check your connection and try again.`;
+            source = "local";
           } else {
             // 3) Otherwise fallback to NEW local reply engine
             const localRecentCtx: LocalRecentContext = {
@@ -2745,6 +2966,13 @@ export default function ChatScreen() {
             intensity: finalIntensity,
           });
 
+          // UX-5: pacing delay on heavy emotions — typing indicator stays visible during wait
+          const HEAVY_EMOTIONS_MOBILE = new Set(["sad", "stressed", "anxious", "grief", "hopeless", "lonely", "frustrated", "hurt", "depressed", "empty"]);
+          if (finalEmotion && HEAVY_EMOTIONS_MOBILE.has(finalEmotion)) {
+            await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+            if (!mountedRef.current) return;
+          }
+
           setTypingStatus("responding");
           haptic.receive();
           setMessages((prev) => [...prev, botMessage]);
@@ -2829,6 +3057,13 @@ export default function ChatScreen() {
           // User message already added to history at send time (line ~2182).
           // Do NOT call addToHistory again here — addToHistory always appends
           // and would create a duplicate entry in history on every cloud failure.
+
+          // UX-5: pacing delay on heavy emotions (local fallback path)
+          const HEAVY_EMOTIONS_FB = new Set(["sad", "stressed", "anxious", "grief", "hopeless", "lonely", "frustrated", "hurt", "depressed", "empty"]);
+          if (userEmotion && HEAVY_EMOTIONS_FB.has(userEmotion)) {
+            await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+            if (!mountedRef.current) return;
+          }
 
           setTypingStatus("responding");
           haptic.receive();
@@ -2932,24 +3167,57 @@ export default function ChatScreen() {
     let greetText = "";
 
     if (messages.length === 0) {
-      // Fresh start — simple welcome
-      greetText = `${timeGreet} I'm Imotara, and I'm here with you. How are you feeling right now?`;
+      // EN-1 — depth-aware welcome based on total conversation history
+      const { level } = getConversationDepth(history);
+      if (level === 3) {
+        greetText = `${timeGreet} You know I'm always here. How are you carrying things today?`;
+      } else if (level === 2) {
+        greetText = `${timeGreet} It's been good walking alongside you lately. What's on your heart today?`;
+      } else if (level === 1) {
+        greetText = `${timeGreet} We've been talking for a while now — I'm glad you're here. How are you today?`;
+      } else {
+        greetText = `${timeGreet} I'm Imotara, and I'm here with you. How are you feeling right now?`;
+      }
     } else {
       // Returning session — check time gap and last emotion
       const lastMsg = [...messages].sort((a, b) => b.timestamp - a.timestamp)[0];
       const gapHours = (now - (lastMsg?.timestamp ?? now)) / 3_600_000;
 
       if (gapHours >= 6) {
-        // Check last strong emotion from bot replies
-        const lastBotMsgs = messages.filter((m) => m.from === "bot").slice(-3);
-        const prevEmotion = lastBotMsgs
-          .map((m) => m.moodHint ?? "")
-          .find((h) => /low|tense|worried|upset|frustrated|stuck/i.test(h));
-
-        if (prevEmotion) {
-          greetText = `${timeGreet} Last time we talked, things seemed a little heavy. How are you doing now?`;
+        // EN-2: topic-specific re-opener from last user messages
+        const EN2_TOPICS: Array<{ pattern: RegExp; reOpener: string }> = [
+          { pattern: /\b(work|job|boss|deadline|career|burnout|workload|promotion|fired|manager|office|salary)\b/i,
+            reOpener: `${timeGreet} Last time you were navigating some work stress. How has that been since we spoke?` },
+          { pattern: /\b(lonely|loneliness|alone|isolated|no friends|disconnected|left out|no one cares)\b/i,
+            reOpener: `${timeGreet} Last time you were feeling a bit lonely. How are you doing today?` },
+          { pattern: /\b(anxious|anxiety|worry|worried|nervous|panic|overwhelmed|overthinking|dread)\b/i,
+            reOpener: `${timeGreet} Last time you were carrying some anxiety. How is that sitting with you now?` },
+          { pattern: /\b(grief|grieving|loss|lost someone|died|death|passed away|miss them|mourning)\b/i,
+            reOpener: `${timeGreet} Last time you were sitting with some grief. How have you been holding up?` },
+          { pattern: /\b(relationship|partner|boyfriend|girlfriend|husband|wife|breakup|broke up|divorce|fight|conflict)\b/i,
+            reOpener: `${timeGreet} Last time there was some relationship tension on your mind. How have things been?` },
+          { pattern: /\b(can'?t sleep|insomnia|sleepless|exhausted|no energy|fatigue|nightmares|awake all night)\b/i,
+            reOpener: `${timeGreet} Last time you were struggling with sleep. Has that improved at all?` },
+          { pattern: /\b(worthless|not good enough|failure|shame|hate myself|inadequate|imposter|don'?t deserve)\b/i,
+            reOpener: `${timeGreet} Last time some questions of self-worth were coming up for you. How are you feeling today?` },
+          { pattern: /\b(family|parents?|toxic|controlling|expectations|family pressure|family conflict)\b/i,
+            reOpener: `${timeGreet} Last time there was some family tension weighing on you. How has that been?` },
+        ];
+        const recentUserText = messages.filter((m) => m.from === "user").slice(-4).map((m) => m.text).join(" ");
+        const matched = EN2_TOPICS.find((t) => t.pattern.test(recentUserText));
+        if (matched) {
+          greetText = matched.reOpener;
         } else {
-          greetText = `${timeGreet} Good to have you back. How has your day been?`;
+          // UX-4 fallback: generic heavy-emotion greeting
+          const lastBotMsgs = messages.filter((m) => m.from === "bot").slice(-3);
+          const prevEmotion = lastBotMsgs
+            .map((m) => m.moodHint ?? "")
+            .find((h) => /low|tense|worried|upset|frustrated|stuck/i.test(h));
+          if (prevEmotion) {
+            greetText = `${timeGreet} Last time we talked, things seemed a little heavy. How are you doing now?`;
+          } else {
+            greetText = `${timeGreet} Good to have you back. How has your day been?`;
+          }
         }
       }
     }
@@ -3254,56 +3522,6 @@ export default function ChatScreen() {
       enabled={!(Platform.OS === "ios" && Platform.isPad)}
     >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
-      {/* AI data consent modal — shown once before first cloud message */}
-      {showAiConsentModal && (
-        <View style={{
-          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: "rgba(0,0,0,0.75)", zIndex: 999,
-          alignItems: "center", justifyContent: "center", padding: 24,
-        }}>
-          <View style={{
-            backgroundColor: "#0f172a", borderRadius: 16, padding: 24,
-            borderWidth: 1, borderColor: "rgba(56,189,248,0.3)", maxWidth: 360,
-          }}>
-            <Text style={{ color: "#fff", fontSize: 17, fontWeight: "700", marginBottom: 12 }}>
-              About Cloud AI Replies
-            </Text>
-            <Text style={{ color: "#cbd5e1", fontSize: 14, lineHeight: 22, marginBottom: 16 }}>
-              When you send a message in cloud mode, your message text is sent to OpenAI (ChatGPT) to generate a reply, with Google (Gemini) as a fallback.{"\n\n"}
-              No account information, your name, or device data is attached. Only the text you type is sent. OpenAI's and Google's privacy policies apply to data processed by their APIs.{"\n\n"}
-              You can switch to Local mode at any time from Settings → Analysis Mode to keep everything on-device with no external calls.
-            </Text>
-            <Text style={{ color: "#64748b", fontSize: 12, lineHeight: 18, marginBottom: 16, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 12 }}>
-              Imotara is not a medical service and is not a substitute for professional mental health treatment. If you are in crisis or need immediate help, please contact emergency services or a crisis helpline.
-            </Text>
-            <TouchableOpacity
-              onPress={async () => {
-                await AsyncStorage.setItem(AI_CONSENT_KEY, "1");
-                setAiConsentGiven(true);
-                setShowAiConsentModal(false);
-                const pending = pendingConsentSendRef.current;
-                pendingConsentSendRef.current = null;
-                if (pending) setTimeout(() => handleSend(pending), 0);
-              }}
-              style={{
-                backgroundColor: "#0ea5e9", borderRadius: 10, paddingVertical: 12,
-                alignItems: "center", marginBottom: 10,
-              }}
-            >
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>I Understand &amp; Agree</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                setShowAiConsentModal(false);
-                pendingConsentSendRef.current = null;
-              }}
-              style={{ alignItems: "center", paddingVertical: 8 }}
-            >
-              <Text style={{ color: "#94a3b8", fontSize: 14 }}>Use offline mode instead</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
       {/* Offline / unsynced indicator */}
       {!isOnline ? (
         <View style={{ backgroundColor: "rgba(202,138,4,0.92)", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
@@ -3353,13 +3571,6 @@ export default function ChatScreen() {
               Imotara
             </Text>
 
-            <Text
-              style={{ marginLeft: 6, fontSize: 11, color: colors.textSecondary }}
-              numberOfLines={1}
-            >
-              (mobile)
-            </Text>
-
             {/* AI mode badge */}
             <View
               style={{
@@ -3389,121 +3600,57 @@ export default function ChatScreen() {
             </View>
           </View>
 
-          {/* Buttons section — flexShrink: 0 ensures buttons are never clipped on narrow screens */}
-          <View style={{ flexDirection: "row", alignItems: "center", flexShrink: 0 }}>
+          {/* Buttons section — 3 items max to prevent header overflow */}
+          <View style={{ flexDirection: "row", alignItems: "center", flexShrink: 0, gap: 6 }}>
 
-          {/* Search toggle */}
-          {messages.length > 0 && (
+            {/* Thread list */}
             <TouchableOpacity
-              onPress={() => {
-                setShowSearch((v) => {
-                  if (v) { setSearchQuery(""); setSearchMatchIndex(0); }
-                  return !v;
-                });
-                setTimeout(() => searchInputRef.current?.focus(), 80);
-              }}
+              onPress={() => setShowThreadPanel(true)}
               style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 999,
+                width: 34, height: 34, borderRadius: 999,
                 borderWidth: 1,
-                borderColor: showSearch ? colors.primary : colors.border,
-                backgroundColor: showSearch ? `${colors.primary}22` : "rgba(255,255,255,0.06)",
-                marginRight: 8,
+                borderColor: threads.length > 1 ? "rgba(99,102,241,0.5)" : colors.border,
+                backgroundColor: threads.length > 1 ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.06)",
+                alignItems: "center", justifyContent: "center",
               }}
               accessibilityRole="button"
-              accessibilityLabel="Search chat"
+              accessibilityLabel="View all conversations"
             >
-              <Ionicons name={showSearch ? "search" : "search-outline"} size={14} color={showSearch ? colors.primary : colors.textSecondary} />
+              <Ionicons name="chatbubbles-outline" size={15} color={threads.length > 1 ? "#818cf8" : colors.textSecondary} />
             </TouchableOpacity>
-          )}
 
-          {bookmarks.size > 0 && (
+            {/* New chat */}
             <TouchableOpacity
-              onPress={() => setShowBookmarksOnly((v) => !v)}
+              onPress={() => { setUnsentLetterSetup(null); startNewThread(); }}
               style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 999,
+                width: 34, height: 34, borderRadius: 999,
                 borderWidth: 1,
-                borderColor: showBookmarksOnly ? "#fde68a" : colors.border,
-                backgroundColor: showBookmarksOnly ? "rgba(251,191,36,0.18)" : "rgba(255,255,255,0.06)",
-                marginRight: 8,
+                borderColor: "rgba(99,102,241,0.5)",
+                backgroundColor: "rgba(99,102,241,0.12)",
+                alignItems: "center", justifyContent: "center",
               }}
               accessibilityRole="button"
-              accessibilityLabel="Show bookmarks"
+              accessibilityLabel="Start new conversation"
             >
-              <Text style={{ fontSize: 14 }}>{showBookmarksOnly ? "★" : "☆"}</Text>
+              <Ionicons name="add-outline" size={16} color="#818cf8" />
             </TouchableOpacity>
-          )}
 
-          {/* Breathing exercise button */}
-          <TouchableOpacity
-            onPress={() => setBreathingVisible(true)}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: "rgba(255,255,255,0.06)",
-              marginRight: 8,
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Breathing exercise"
-          >
-            <Ionicons name="pulse-outline" size={16} color={colors.textPrimary} />
-          </TouchableOpacity>
-
-          {/* New Chat button */}
-          <TouchableOpacity
-            onPress={() => {
-              startNewThread();
-            }}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: "rgba(99,102,241,0.5)",
-              backgroundColor: "rgba(99,102,241,0.12)",
-              marginRight: 8,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 4,
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Start new conversation"
-          >
-            <Ionicons name="add-outline" size={14} color="#818cf8" />
-            <Text style={{ fontSize: 12, fontWeight: "600", color: "#818cf8" }}>New Chat</Text>
-          </TouchableOpacity>
-
-          {messages.length > 0 && (
+            {/* More (⋯) — breathing, unsent letter, search, bookmarks, clear */}
             <TouchableOpacity
-              onPress={handleClearLocalChat}
+              onPress={() => setShowHeaderMenu(true)}
               style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 999,
+                width: 34, height: 34, borderRadius: 999,
                 borderWidth: 1,
                 borderColor: colors.border,
                 backgroundColor: "rgba(255,255,255,0.06)",
+                alignItems: "center", justifyContent: "center",
               }}
               accessibilityRole="button"
-              accessibilityLabel="Clear local chat"
+              accessibilityLabel="More options"
             >
-              <Text
-                style={{
-                  fontSize: 12,
-                  fontWeight: "700",
-                  color: colors.textPrimary,
-                }}
-              >
-                Clear
-              </Text>
+              <Ionicons name="ellipsis-horizontal" size={16} color={colors.textSecondary} />
             </TouchableOpacity>
-          )}
+
           </View>
         </View>
 
@@ -3520,32 +3667,6 @@ export default function ChatScreen() {
           </Text>
         )}
 
-        {!keyboardVisible && (
-          <View
-            style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}
-          >
-            <View
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 999,
-                marginRight: 6,
-                backgroundColor: hasUnsynced && isSyncing ? "#fbbf24" : hasUnsynced ? "#f97373" : syncHintAccent,
-              }}
-            />
-            <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-              {syncHint}
-            </Text>
-          </View>
-        )}
-
-        {showRecentlySyncedPulse && !keyboardVisible && (
-          <Text
-            style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}
-          >
-            ✅ All changes synced · Imotara cloud copy updated.
-          </Text>
-        )}
 
         {/* Privacy mode badge */}
         {!keyboardVisible && (analysisMode === "local" || !cloudSyncAllowed) && (
@@ -3684,6 +3805,7 @@ export default function ChatScreen() {
               dismissedCrisisCards={dismissedCrisisCards}
               reactions={reactions}
               speakingMessageId={speakingMessageId}
+              companionAvatarSource={companionAvatarSource}
               onLongPress={setActionMessage}
               onDismissCrisisCard={dismissCrisisCard}
               onRetry={(messageId, prevUserText) => {
@@ -3707,10 +3829,10 @@ export default function ChatScreen() {
           )}
           contentContainerStyle={{
             paddingHorizontal: 14,
-            paddingTop: 4,
-            paddingBottom: 80,
+            paddingTop: messages.length <= 2 ? 20 : 4,
+            paddingBottom: 8,
             flexGrow: 1,
-            justifyContent: "flex-end",
+            justifyContent: messages.length <= 2 ? "flex-end" : "flex-end",
           }}
           onScroll={handleScroll}
           scrollEventThrottle={50}
@@ -4129,26 +4251,74 @@ export default function ChatScreen() {
             })()}
 
           </View>}
-          ListFooterComponent={isTyping ? (
-            <Animated.View
-              style={{
-                opacity: typingGlow.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.5, 1],
-                }),
-                transform: [
-                  {
-                    scale: typingGlow.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.98, 1.03],
-                    }),
-                  },
-                ],
-              }}
-            >
-              <ImotaraTypingIndicator />
-            </Animated.View>
-          ) : null}
+          ListFooterComponent={(() => {
+            const showIntake = intakeStep > 0 && intakeStep <= 3 && messages.filter((m) => m.from === "user").length === 0;
+            if (!isTyping && !showIntake) return null;
+            return (
+              <View>
+                {isTyping && (
+                  <Animated.View
+                    style={{
+                      opacity: typingGlow.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.5, 1],
+                      }),
+                      transform: [
+                        {
+                          scale: typingGlow.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.98, 1.03],
+                          }),
+                        },
+                      ],
+                    }}
+                  >
+                    <ImotaraTypingIndicator />
+                  </Animated.View>
+                )}
+                {showIntake && (
+                  <View style={{ marginHorizontal: 12, marginTop: 8, marginBottom: 6, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.3)", backgroundColor: "rgba(15,23,42,0.85)", padding: 14 }}>
+                    <Text style={{ fontSize: 10, fontWeight: "700", color: "rgba(165,180,252,0.7)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6 }}>
+                      {intakeStep === 1 ? "Step 1 of 3" : intakeStep === 2 ? "Step 2 of 3" : "Step 3 of 3"}
+                    </Text>
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#e2e8f0", marginBottom: 10 }}>
+                      {intakeStep === 1 ? "How are you feeling right now?" : intakeStep === 2 ? "What brings you here today?" : "What would feel most helpful?"}
+                    </Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                      {(intakeStep === 1
+                        ? ["Overwhelmed", "Anxious", "Low", "Okay", "Good", "Just exploring"]
+                        : intakeStep === 2
+                        ? ["Something happened", "Processing something hard", "Wanting support", "Just checking in", "Curiosity"]
+                        : ["Someone to listen", "Gentle guidance", "Space to reflect", "Just being heard"]
+                      ).map((chip) => (
+                        <TouchableOpacity
+                          key={chip}
+                          onPress={() => {
+                            const updated = [...intakeAnswers] as [string, string, string];
+                            updated[intakeStep - 1] = chip;
+                            setIntakeAnswers(updated);
+                            if (intakeStep < 3) {
+                              setIntakeStep((intakeStep + 1) as 1 | 2 | 3);
+                            } else {
+                              const combined = `I'm feeling ${updated[0].toLowerCase()}. I'm here because: ${updated[1].toLowerCase()}. What I need most: ${updated[2].toLowerCase()}.`;
+                              setIntakeStep(0);
+                              AsyncStorage.setItem(INTAKE_KEY, "1").catch(() => {});
+                              latestInputRef.current = combined;
+                              setInput(combined);
+                              setTimeout(() => handleSend(combined), 100);
+                            }
+                          }}
+                          style={{ borderRadius: 999, borderWidth: 1, borderColor: "rgba(99,102,241,0.4)", backgroundColor: "rgba(99,102,241,0.12)", paddingHorizontal: 12, paddingVertical: 5 }}
+                        >
+                          <Text style={{ fontSize: 11, color: "#a5b4fc", fontWeight: "500" }}>{chip}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
         />
 
       </View>
@@ -4185,6 +4355,19 @@ export default function ChatScreen() {
         </Animated.View>
       )}
 
+      {/* P4 — Unsent Letter mode banner */}
+      {unsentLetterSetup && (
+        <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 12, borderWidth: 1, borderColor: "rgba(167,139,250,0.3)", backgroundColor: "rgba(167,139,250,0.08)", paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Ionicons name="pencil-outline" size={13} color="#a78bfa" />
+          <Text style={{ flex: 1, fontSize: 12, color: "#a78bfa" }}>
+            Writing to <Text style={{ fontWeight: "700" }}>{unsentLetterSetup.recipientName}</Text> — Imotara will respond in their voice.
+          </Text>
+          <TouchableOpacity onPress={() => setUnsentLetterSetup(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close-outline" size={16} color="rgba(167,139,250,0.6)" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Trial countdown banner */}
       {showTrialBanner && licenseExpiresAt && (() => {
         const daysLeft = Math.ceil((new Date(licenseExpiresAt).getTime() - Date.now()) / 86_400_000);
@@ -4213,6 +4396,112 @@ export default function ChatScreen() {
           </View>
         );
       })()}
+
+      {/* P3/P5 — Companion Insight Card (letter or arc) */}
+      {companionInsight && (
+        <CompanionInsightCard
+          variant={companionInsight.variant}
+          title={companionInsight.title}
+          body={companionInsight.body}
+          colors={colors}
+          onDismiss={() => setCompanionInsight(null)}
+        />
+      )}
+
+      {/* NF-5 — Anonymous Collective Pulse */}
+      {collectivePulse && !pulseDismissed && (
+        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.2)", backgroundColor: "rgba(30,27,75,0.5)", paddingHorizontal: 14, paddingVertical: 10 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ flex: 1, fontSize: 12, color: "rgba(196,181,253,0.85)", lineHeight: 18 }}>
+              <Text style={{ color: "#a5b4fc", fontWeight: "600" }}>{collectivePulse.heavyPercent}% of people</Text> are carrying something heavy today. You{"'"}re not alone.
+            </Text>
+            <TouchableOpacity onPress={() => setPulseDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={{ color: "rgba(165,180,252,0.5)", fontSize: 18, marginLeft: 8 }}>×</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* NF-1 — Emotional Milestone Celebration */}
+      {milestoneLoop && (
+        <View style={{ marginHorizontal: 16, marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: "rgba(52,211,153,0.3)", backgroundColor: "rgba(6,78,59,0.35)", padding: 14 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: "#6ee7b7", marginBottom: 4 }}>You closed a loop ✦</Text>
+              <Text style={{ fontSize: 13, color: "rgba(209,250,229,0.85)", lineHeight: 19 }}>
+                The theme of <Text style={{ fontStyle: "italic", color: "#a7f3d0" }}>{milestoneLoop.themeName}</Text> that kept returning — it looks like you found some resolution. That{"'"}s real growth.
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setMilestoneLoop(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={{ color: "rgba(110,231,183,0.6)", fontSize: 18, marginLeft: 8 }}>×</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* P1 — Open Loop Card */}
+      {activeOpenLoop && (
+        <OpenLoopCard
+          loop={activeOpenLoop}
+          colors={colors}
+          onExplore={() => {
+            const prompt = getLoopPrompt(activeOpenLoop.themeKey);
+            dismissLoop(activeOpenLoop.id).catch(() => {});
+            setActiveOpenLoop(null);
+            setUnsentLetterSetup(null);
+            startNewThread(activeOpenLoop.themeName);
+            setInput(prompt);
+            latestInputRef.current = prompt;
+          }}
+          onDefer={() => {
+            deferLoop(activeOpenLoop.id).then(() => setActiveOpenLoop(null)).catch(() => {});
+          }}
+          onDismiss={() => {
+            dismissLoop(activeOpenLoop.id).then(() => setActiveOpenLoop(null)).catch(() => {});
+          }}
+        />
+      )}
+
+      {/* UX-3 — contextual unsent-letter hint */}
+      {showUnsentHint && (
+        <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 12, borderWidth: 1, borderColor: "rgba(167,139,250,0.3)", backgroundColor: "rgba(167,139,250,0.08)", paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Ionicons name="mail-open-outline" size={16} color="#a78bfa" />
+          <Text style={{ flex: 1, fontSize: 11.5, color: "rgba(196,181,253,0.9)", lineHeight: 16 }}>
+            Sounds like there's something you might want to say to someone. The Unsent Letter space is here if you need it.
+          </Text>
+          <TouchableOpacity onPress={() => { setShowUnsentHint(false); setUnsentLetterVisible(true); AsyncStorage.setItem(UNSENT_TRIED_KEY, "1").catch(() => {}); }} accessibilityRole="button">
+            <Text style={{ fontSize: 11, color: "#a78bfa", fontWeight: "600" }}>Try it →</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowUnsentHint(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Dismiss" accessibilityRole="button">
+            <Ionicons name="close-outline" size={16} color="rgba(148,163,184,0.6)" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* EN-3 — Daily micro check-in pulse (once per day, not during first-chat intake arc) */}
+      {showDailyCheckin && intakeStep === 0 && (
+        <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 14, borderWidth: 1, borderColor: "rgba(56,189,248,0.2)", backgroundColor: "rgba(12,74,110,0.2)", paddingHorizontal: 12, paddingVertical: 10 }}>
+          <Text style={{ fontSize: 11.5, fontWeight: "600", color: "rgba(186,230,253,0.85)", marginBottom: 8 }}>How are you feeling today?</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {([
+              { emoji: "😔", label: "Heavy" }, { emoji: "😟", label: "Anxious" }, { emoji: "😐", label: "Okay" },
+              { emoji: "🙂", label: "Good" }, { emoji: "😊", label: "Grateful" }, { emoji: "⚡", label: "Energized" },
+            ] as const).map(({ emoji, label }) => (
+              <TouchableOpacity
+                key={label}
+                onPress={() => handleDailyCheckin(label)}
+                style={{ flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, borderColor: "rgba(56,189,248,0.25)", backgroundColor: "rgba(56,189,248,0.08)", paddingHorizontal: 10, paddingVertical: 4 }}
+              >
+                <Text style={{ fontSize: 13 }}>{emoji}</Text>
+                <Text style={{ fontSize: 11, color: "#7dd3fc", fontWeight: "500" }}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity onPress={() => { AsyncStorage.setItem(DAILY_CHECKIN_KEY, new Date().toISOString().slice(0, 10)).catch(() => {}); setShowDailyCheckin(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ alignSelf: "flex-end", marginTop: 6 }}>
+            <Text style={{ fontSize: 10, color: "rgba(148,163,184,0.5)" }}>Later</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Input */}
       {discoveryCard && (
@@ -4243,9 +4532,253 @@ export default function ChatScreen() {
 
       {renderActionSheet()}
 
+      {/* ── Thread Panel Modal ───────────────────────────────────────── */}
+      <Modal
+        visible={showThreadPanel}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowThreadPanel(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          {/* Panel header */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14, borderBottomWidth: 0.5, borderBottomColor: colors.border }}>
+            <Text style={{ fontSize: 18, fontWeight: "700", color: colors.textPrimary }}>Conversations</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowThreadPanel(false);
+                  setUnsentLetterSetup(null);
+                  startNewThread();
+                }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: `${colors.primary}22`, borderWidth: 1, borderColor: `${colors.primary}55` }}
+                accessibilityRole="button"
+                accessibilityLabel="New conversation"
+              >
+                <Ionicons name="add-outline" size={15} color={colors.primary} />
+                <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600" }}>New</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowThreadPanel(false)} accessibilityRole="button" accessibilityLabel="Close">
+                <Ionicons name="close-outline" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Thread list */}
+          <FlatList
+            data={[...threads].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))}
+            keyExtractor={(t) => t.id}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, paddingBottom: 40 }}
+            ListEmptyComponent={
+              <View style={{ alignItems: "center", paddingTop: 40 }}>
+                <Ionicons name="chatbubble-ellipses-outline" size={28} color={colors.textSecondary} style={{ marginBottom: 12 }} />
+                <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: "center" }}>No conversations yet.</Text>
+              </View>
+            }
+            renderItem={({ item: t }) => {
+              const isActive = t.id === activeThreadId;
+              const msgCount = history.filter((h: any) => (h.threadId ?? "default") === t.id).length;
+              const lastMsg = history
+                .filter((h: any) => (h.threadId ?? "default") === t.id)
+                .sort((a: any, b: any) => (b.timestamp ?? 0) - (a.timestamp ?? 0))[0];
+              const age = lastMsg
+                ? (() => {
+                    const diff = Date.now() - lastMsg.timestamp;
+                    if (diff < 60_000) return "just now";
+                    if (diff < 3_600_000) return `${Math.round(diff / 60_000)}m ago`;
+                    if (diff < 86_400_000) return `${Math.round(diff / 3_600_000)}h ago`;
+                    return `${Math.round(diff / 86_400_000)}d ago`;
+                  })()
+                : new Date(t.createdAt).toLocaleDateString();
+
+              return (
+                <TouchableOpacity
+                  onPress={() => {
+                    setActiveThreadId(t.id);
+                    setShowThreadPanel(false);
+                  }}
+                  onLongPress={() => {
+                    Alert.alert(
+                      t.title || "Conversation",
+                      "What would you like to do?",
+                      [
+                        {
+                          text: "Rename",
+                          onPress: () => {
+                            if (Platform.OS === "ios") {
+                              Alert.prompt(
+                                "Rename conversation",
+                                "Enter a new name",
+                                (newTitle) => {
+                                  if (newTitle?.trim()) renameThread(t.id, newTitle.trim());
+                                },
+                                "plain-text",
+                                t.title,
+                              );
+                            } else {
+                              // Android: Alert.prompt not available — use a quick fallback name
+                              const ts = new Date().toLocaleDateString();
+                              renameThread(t.id, `Conversation ${ts}`);
+                            }
+                          },
+                        },
+                        {
+                          text: "Delete",
+                          style: "destructive",
+                          onPress: () => {
+                            Alert.alert("Delete conversation?", "This removes all messages in this conversation from your device.", [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Delete", style: "destructive", onPress: () => deleteThread(t.id) },
+                            ]);
+                          },
+                        },
+                        { text: "Cancel", style: "cancel" },
+                      ],
+                    );
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingVertical: 13,
+                    paddingHorizontal: 14,
+                    marginBottom: 8,
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderColor: isActive ? `${colors.primary}55` : colors.border,
+                    backgroundColor: isActive ? `${colors.primary}14` : "rgba(255,255,255,0.04)",
+                  }}
+                  accessibilityRole="button"
+                >
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: isActive ? "700" : "500", color: isActive ? colors.primary : colors.textPrimary }}>
+                      {t.title || "Conversation"}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                      {msgCount} message{msgCount !== 1 ? "s" : ""} · {age}
+                    </Text>
+                  </View>
+                  {isActive && (
+                    <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: colors.primary, marginLeft: 10 }} />
+                  )}
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+      </Modal>
+      {/* ─────────────────────────────────────────────────────────────── */}
+
+      {/* ── Header overflow menu ─────────────────────────────────────── */}
+      <Modal
+        visible={showHeaderMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowHeaderMenu(false)}
+      >
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-start", alignItems: "flex-end" }}
+          activeOpacity={1}
+          onPress={() => setShowHeaderMenu(false)}
+        >
+          <View
+            style={{
+              marginTop: insets.top + 52,
+              marginRight: 12,
+              backgroundColor: "#1e293b",
+              borderRadius: 14,
+              borderWidth: 0.5,
+              borderColor: "rgba(255,255,255,0.1)",
+              minWidth: 220,
+              overflow: "hidden",
+            }}
+          >
+            {/* Search */}
+            {messages.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  setShowHeaderMenu(false);
+                  setShowSearch((v) => {
+                    if (v) { setSearchQuery(""); setSearchMatchIndex(0); }
+                    return !v;
+                  });
+                  setTimeout(() => searchInputRef.current?.focus(), 120);
+                }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+              >
+                <Ionicons name={showSearch ? "search" : "search-outline"} size={17} color={showSearch ? colors.primary : colors.textSecondary} />
+                <Text style={{ color: showSearch ? colors.primary : colors.textPrimary, fontSize: 14 }}>
+                  {showSearch ? "Close search" : "Search messages"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Bookmarks filter */}
+            {bookmarks.size > 0 && (
+              <TouchableOpacity
+                onPress={() => { setShowHeaderMenu(false); setShowBookmarksOnly((v) => !v); }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+              >
+                <Ionicons name={showBookmarksOnly ? "star" : "star-outline"} size={17} color={showBookmarksOnly ? "#fde68a" : colors.textSecondary} />
+                <Text style={{ color: showBookmarksOnly ? "#fde68a" : colors.textPrimary, fontSize: 14 }}>
+                  {showBookmarksOnly ? "Show all messages" : "Show bookmarks"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Breathing exercise */}
+            <TouchableOpacity
+              onPress={() => { setShowHeaderMenu(false); setBreathingVisible(true); }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+            >
+              <Ionicons name="pulse-outline" size={17} color={colors.textSecondary} />
+              <Text style={{ color: colors.textPrimary, fontSize: 14 }}>Breathing exercise</Text>
+            </TouchableOpacity>
+
+            {/* Unsent Letter */}
+            <TouchableOpacity
+              onPress={() => {
+                setShowHeaderMenu(false);
+                setUnsentLetterVisible(true);
+                AsyncStorage.setItem(UNSENT_TRIED_KEY, "1").catch(() => {});
+                setShowUnsentHint(false);
+              }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+            >
+              <Ionicons name="pencil-outline" size={17} color={unsentLetterSetup ? "#a78bfa" : colors.textSecondary} />
+              <Text style={{ color: unsentLetterSetup ? "#a78bfa" : colors.textPrimary, fontSize: 14 }}>Unsent letter</Text>
+            </TouchableOpacity>
+
+            {/* Clear chat */}
+            {messages.length > 0 && (
+              <TouchableOpacity
+                onPress={() => { setShowHeaderMenu(false); handleClearLocalChat(); }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13 }}
+              >
+                <Ionicons name="trash-outline" size={17} color="#f87171" />
+                <Text style={{ color: "#f87171", fontSize: 14 }}>Clear chat</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+      {/* ─────────────────────────────────────────────────────────────── */}
+
       <BreathingModal
         visible={breathingVisible}
         onClose={() => setBreathingVisible(false)}
+      />
+
+      <UnsentLetterModal
+        visible={unsentLetterVisible}
+        colors={colors}
+        onStart={(setup) => {
+          setUnsentLetterSetup(setup);
+          setUnsentLetterVisible(false);
+          startNewThread(`Unsent letter to ${setup.recipientName}`);
+          const prefill = `Dear ${setup.recipientName},\n\n`;
+          setInput(prefill);
+          latestInputRef.current = prefill;
+        }}
+        onCancel={() => setUnsentLetterVisible(false)}
       />
 
       {/* Non-intrusive sign-in prompt — appears after first message, one-time only */}

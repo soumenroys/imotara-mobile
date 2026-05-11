@@ -828,6 +828,32 @@ export default function HistoryScreen() {
 
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
+            {/* Sync status banner — moved from ChatScreen header */}
+            {(() => {
+                const chipColor =
+                    topChip.variant === "danger" ? "#f87171"
+                    : topChip.variant === "primary" ? colors.primary
+                    : colors.textSecondary;
+                const bgColor =
+                    topChip.variant === "danger" ? "rgba(248,113,113,0.10)"
+                    : topChip.variant === "primary" ? `${colors.primary}18`
+                    : "rgba(255,255,255,0.04)";
+                return (
+                    <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 7, borderBottomWidth: 0.5, borderBottomColor: colors.border, backgroundColor: bgColor }}>
+                        {"icon" in topChip ? (
+                            <Text style={{ fontSize: 12, marginRight: 6, color: chipColor }}>{topChip.icon}</Text>
+                        ) : (
+                            <Ionicons name={(topChip.iconName ?? "cloud-outline") as any} size={13} color={chipColor} style={{ marginRight: 6 }} />
+                        )}
+                        <Text style={{ fontSize: 11, color: chipColor }}>{topChip.label}</Text>
+                        {unsyncedCount > 0 && (
+                            <Text style={{ fontSize: 11, color: "#fbbf24", marginLeft: 8 }}>
+                                · {unsyncedCount} message{unsyncedCount !== 1 ? "s" : ""} not yet backed up
+                            </Text>
+                        )}
+                    </View>
+                );
+            })()}
             <FlatList
                 ref={scrollRef}
                 data={flatItems}
@@ -934,7 +960,7 @@ export default function HistoryScreen() {
                                             </TouchableOpacity>
 
                                             {threadList.length === 0 && (
-                                                <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", paddingVertical: 16 }}>No conversations yet.</Text>
+                                                <Text style={{ fontSize: 13, color: "rgba(165,180,252,0.7)", textAlign: "center", paddingVertical: 16, fontStyle: "italic" }}>When you{"'"}re ready to talk, I{"'"}m here.</Text>
                                             )}
 
                                             {[...threadList].reverse().map((thread: any) => {

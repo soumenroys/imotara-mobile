@@ -1,57 +1,147 @@
 // src/lib/tts/mobileTTS.ts
-// Mobile TTS helper — gender-aware speech options via expo-speech
-import * as Speech from "expo-speech";
+// Mobile TTS — native-first, Azure Neural fallback for missing languages.
+//
+// Strategy:
+//   1. Check Speech.getAvailableVoicesAsync() for the selected language.
+//   2. If a native voice exists → use expo-speech (free, offline-capable).
+//   3. If not → fetch the pre-generated Azure MP3 from Imotara's CDN and play via expo-av.
+//
+// English is always available natively on iOS and Android — Azure is never called for English.
 
-// Map app language codes to BCP-47
+import * as Speech     from "expo-speech";
+import { Audio }       from "expo-av";
+import * as FileSystem from "expo-file-system/legacy";
+
+// ── BCP-47 map ────────────────────────────────────────────────────────────────
+
 const LANG_TO_BCP47: Record<string, string> = {
-    en: "en-US",
-    bn: "bn-IN",
-    gu: "gu-IN",
-    hi: "hi-IN",
-    kn: "kn-IN",
-    ml: "ml-IN",
-    mr: "mr-IN",
-    or: "or-IN",
-    pa: "pa-IN",
-    ta: "ta-IN",
-    te: "te-IN",
-    ur: "ur-PK",
-    ar: "ar-SA",
-    zh: "zh-CN",
-    fr: "fr-FR",
-    de: "de-DE",
-    he: "he-IL",
-    id: "id-ID",
-    ja: "ja-JP",
-    pt: "pt-BR",
-    ru: "ru-RU",
-    es: "es-ES",
+    en: "en-US", hi: "hi-IN", mr: "mr-IN", bn: "bn-IN",
+    ta: "ta-IN", te: "te-IN", gu: "gu-IN", pa: "pa-IN",
+    kn: "kn-IN", ml: "ml-IN", or: "or-IN", ur: "ur-PK",
+    ar: "ar-SA", zh: "zh-CN", fr: "fr-FR", de: "de-DE",
+    he: "he-IL", id: "id-ID", ja: "ja-JP", pt: "pt-BR",
+    ru: "ru-RU", es: "es-ES",
 };
 
 export function toBCP47(lang: string): string {
     return LANG_TO_BCP47[lang] ?? "en-US";
 }
 
-// Map gender preference to pitch approximation
-// iOS/Android don't expose easy named voice selection via expo-speech,
-// so we use pitch to approximate gendered voice quality.
-function pitchForGender(gender: string | undefined): number {
-    if (gender === "female") return 1.25;
-    if (gender === "male") return 0.75;
-    return 1.0; // nonbinary / other / undefined
+// ── Preview text ──────────────────────────────────────────────────────────────
+
+const PREVIEW_TEXT_BY_LANG: Record<string, string> = {
+    en: "Hi, I'm Imotara. I'm here with you.",
+    hi: "नमस्ते, मैं इमोतारा हूँ. मैं आपके साथ हूँ।",
+    mr: "नमस्कार, मी इमोतारा आहे. मी तुमच्यासोबत आहे।",
+    bn: "হ্যালো, আমি ইমোতারা. আমি তোমার সাথে আছি।",
+    ta: "வணக்கம், நான் இமோதாரா. நான் உங்களுடன் இருக்கிறேன்.",
+    te: "నమస్కారం, నేను ఇమోతారా. నేను మీతో ఉన్నాను.",
+    gu: "નમસ્તે, હું ઇમોતારા છું. હું તમારી સાથે છું.",
+    pa: "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਂ ਇਮੋਤਾਰਾ ਹਾਂ. ਮੈਂ ਤੁਹਾਡੇ ਨਾਲ ਹਾਂ।",
+    kn: "ನಮಸ್ಕಾರ, ನಾನು ಇಮೋತಾರ. ನಾನು ನಿಮ್ಮೊಂದಿಗೆ ಇದ್ದೇನೆ.",
+    ml: "ഹലോ, ഞാൻ ഇമോതാര. ഞാൻ നിങ്ങളോടൊപ്പം ഉണ്ട്.",
+    or: "ନମସ୍କାର, ମୁଁ ଇମୋତାରା. ମୁଁ ଆପଣଙ୍କ ସହ ଅଛି।",
+    ur: "ہیلو، میں امتارا ہوں. میں آپ کے ساتھ ہوں۔",
+    zh: "你好，我是 Imotara。我在你身边。",
+    es: "Hola, soy Imotara. Estoy aqui contigo.",
+    ar: "مرحباً، أنا إيموتارا. أنا هنا معك.",
+    fr: "Bonjour, je suis Imotara. Je suis la pour vous.",
+    pt: "Ola, sou o Imotara. Estou aqui com voce.",
+    ru: "Привет, я Имотара. Я здесь рядом с тобой.",
+    id: "Halo, saya Imotara. Saya di sini bersamamu.",
+    he: "שלום, אני אימוטרה. אני כאן איתך.",
+    de: "Hallo, ich bin Imotara. Ich bin fuer dich da.",
+    ja: "こんにちは、私はイモタラです。ここにいますよ。",
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let _speakingId:  string | null      = null;
+let _soundObject: Audio.Sound | null = null;
+
+// ── Native voice availability ─────────────────────────────────────────────────
+
+let _voiceCache: Speech.Voice[] | null = null;
+
+async function getNativeVoices(): Promise<Speech.Voice[]> {
+    if (_voiceCache) return _voiceCache;
+    try {
+        _voiceCache = await Speech.getAvailableVoicesAsync();
+    } catch {
+        _voiceCache = [];
+    }
+    return _voiceCache;
 }
 
-let _speakingId: string | null = null;
+async function hasNativeVoice(lang: string): Promise<boolean> {
+    const bcp47    = toBCP47(lang);
+    const langBase = bcp47.split("-")[0];
+    const voices   = await getNativeVoices();
+    return voices.some(
+        v => v.language === bcp47
+          || v.language.startsWith(langBase + "-")
+          || v.language === langBase,
+    );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Strip markdown formatting so Azure TTS reads clean prose, not asterisks and dashes. */
+function stripMarkdown(text: string): string {
+    return text
+        .replace(/\*\*(.+?)\*\*/gs, "$1")   // **bold**
+        .replace(/\*(.+?)\*/gs,     "$1")   // *italic*
+        .replace(/^#{1,6}\s+/gm,    "")     // # headings
+        .replace(/^[-*+]\s+/gm,     "")     // - list items
+        .replace(/`(.+?)`/gs,       "$1")   // `code`
+        .replace(/\[(.+?)\]\(.+?\)/g, "$1") // [link](url)
+        .replace(/\n{3,}/g,         "\n\n") // collapse excess blank lines
+        .trim();
+}
+
+function apiBase(): string {
+    const url = process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL ?? "https://imotaraapp.vercel.app";
+    return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+
+async function stopAll(): Promise<void> {
+    Speech.stop();
+    if (_soundObject) {
+        await _soundObject.unloadAsync().catch(() => {});
+        _soundObject = null;
+    }
+    _speakingId = null;
+}
+
+async function playSound(uri: string, onDone?: () => void): Promise<void> {
+    await Audio.setAudioModeAsync({
+        allowsRecordingIOS:         false,
+        playsInSilentModeIOS:       true,
+        playThroughEarpieceAndroid: false, // loudspeaker, not earpiece
+        staysActiveInBackground:    true,  // keep session alive between plays
+    });
+    const { sound } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true, rate: 0.95, volume: 1.0 },
+    );
+    _soundObject = sound;
+    sound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded) return;
+        if (status.didJustFinish) {
+            sound.unloadAsync().catch(() => {});
+            _soundObject = null;
+            _speakingId  = null;
+            onDone?.();
+        }
+    });
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Speak a message aloud. If the same message is already speaking, stops it.
- * If a different message is speaking, stops that first then starts the new one.
- *
- * @param messageId  Unique id for the message (used to track stop/start)
- * @param text       Text to speak
- * @param gender     Companion gender preference ("female" | "male" | "nonbinary" | "other" | undefined)
- * @param lang       App language code (e.g. "en", "hi") — defaults to "en"
- * @param onDone     Called when speech ends or is stopped
+ * Speak a chat message aloud.
+ * Uses native TTS when available, calls /api/tts for languages not on the device.
+ * Toggling the same messageId stops playback.
  */
 export async function speakMessage(
     messageId: string,
@@ -61,36 +151,108 @@ export async function speakMessage(
     onDone?: () => void,
 ): Promise<void> {
     const isSpeaking = await Speech.isSpeakingAsync();
-
-    if (isSpeaking) {
-        Speech.stop();
-        const wasThisMessage = _speakingId === messageId;
-        _speakingId = null;
-        if (wasThisMessage) {
-            onDone?.();
-            return; // toggle off
-        }
+    if (isSpeaking || _soundObject) {
+        const wasThis = _speakingId === messageId;
+        await stopAll();
+        if (wasThis) { onDone?.(); return; }
     }
 
     _speakingId = messageId;
-    Speech.speak(text, {
-        language: toBCP47(lang),
-        pitch: pitchForGender(gender),
-        rate: 0.95,
-        onDone: () => {
-            _speakingId = null;
-            onDone?.();
-        },
-        onError: () => {
-            _speakingId = null;
-            onDone?.();
-        },
-    });
+
+    // Always use Azure Neural TTS — native Speech.speak() ignores gender,
+    // so the companion voice setting would be silently overridden by the device default.
+    try {
+        const res = await fetch(`${apiBase()}/api/tts`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ text: stripMarkdown(text), lang, gender: gender ?? "neutral" }),
+        });
+        if (!res.ok) throw new Error(`TTS API ${res.status}`);
+        const arrayBuf = await res.arrayBuffer();
+        const base64   = Buffer.from(arrayBuf).toString("base64");
+        // Write to a real temp file — data URIs are unreliable on Android MediaPlayer
+        const tmpPath  = (FileSystem.cacheDirectory ?? "") + "imotara_tts.mp3";
+        await FileSystem.writeAsStringAsync(tmpPath, base64, {
+            encoding: FileSystem.EncodingType.Base64,
+        });
+        await playSound(tmpPath, onDone);
+    } catch (err) {
+        console.warn("[mobileTTS] Azure TTS failed, falling back to native:", err);
+        // Offline fallback — gender not honored but at least something plays
+        Speech.speak(text, {
+            language: toBCP47(lang),
+            pitch:    1.0,
+            rate:     0.95,
+            onDone:  () => { _speakingId = null; onDone?.(); },
+            onError: () => { _speakingId = null; onDone?.(); },
+        });
+    }
+}
+
+/**
+ * Voice preview in settings.
+ * Uses static pre-generated Azure MP3s for languages not on the device.
+ */
+export async function speakPreview(
+    gender: string | undefined,
+    lang: string = "en",
+    name?: string,
+    onDone?: () => void,
+): Promise<void> {
+    const isSpeaking = await Speech.isSpeakingAsync();
+    if (isSpeaking || _soundObject) {
+        await stopAll();
+        onDone?.();
+        return;
+    }
+
+    _speakingId = "preview";
+
+    const effectiveName = name?.trim() || "Imotara";
+    const hasCustomName = effectiveName !== "Imotara";
+
+    // When a custom name is set, use native TTS so the correct name is spoken.
+    // Otherwise use the pre-generated Azure MP3 for accurate gender/voice preview.
+    if (!hasCustomName) {
+        const genderFile = gender === "male" ? "male" : "female";
+        const uri = `${apiBase()}/tts-preview/${lang}-${genderFile}.mp3`;
+        try {
+            await playSound(uri, onDone);
+            return;
+        } catch {
+            // fall through to native TTS
+        }
+    }
+
+    if (hasCustomName) {
+        // Custom name greeting is English text — always use English TTS so the
+        // language matches the text. Using a non-English engine on English words
+        // produces broken/wrong-sounding speech.
+        Speech.speak(`Hi, I'm ${effectiveName}. I'm here with you.`, {
+            language: "en-US",
+            pitch:    1.0,
+            rate:     0.95,
+            onDone:  () => { _speakingId = null; onDone?.(); },
+            onError: () => { _speakingId = null; onDone?.(); },
+        });
+    } else {
+        // Fallback for when CDN MP3 failed — use native TTS in the correct language
+        const text = PREVIEW_TEXT_BY_LANG[lang] ?? PREVIEW_TEXT_BY_LANG["en"];
+        Speech.speak(text, {
+            language: toBCP47(lang),
+            pitch:    1.0,
+            rate:     0.95,
+            onDone:  () => { _speakingId = null; onDone?.(); },
+            onError: () => { _speakingId = null; onDone?.(); },
+        });
+    }
 }
 
 export function stopSpeaking(): void {
     Speech.stop();
-    _speakingId = null;
+    _soundObject?.unloadAsync().catch(() => {});
+    _soundObject = null;
+    _speakingId  = null;
 }
 
 export function currentSpeakingId(): string | null {

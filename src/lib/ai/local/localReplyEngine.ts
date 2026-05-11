@@ -20,7 +20,7 @@ type LocalResponseTone = "calm" | "supportive" | "practical" | "coach" | "gentle
 
 type LocalLanguage =
     | "en" | "hi" | "mr" | "bn" | "ta" | "te" | "gu" | "pa" | "kn" | "ml" | "or" | "ur"
-    | "zh" | "es" | "ar" | "fr" | "pt" | "ru" | "id" | "de";
+    | "zh" | "es" | "ar" | "fr" | "pt" | "ru" | "id" | "de" | "he" | "ja";
 
 export type LocalRecentContext = {
     recentUserTexts?: string[];
@@ -1923,6 +1923,92 @@ export function buildLocalReply(
     const nextStepLinesDe = ["Wir können weiter reden oder eine kleine Sache versuchen  -  was sich richtig anfühlt.", "Manche müssen erst alles raussagen. Andere wollen einen Plan. Wo bist du gerade?", "Wir können das weiter auspacken oder einen kleinen Schritt finden. Was fühlt sich jetzt nützlicher an?", "Ich bin hier  -  ob weiterreden oder etwas Konkretes angehen.", "Was wäre gerade hilfreicher  -  weiterreden, oder etwas Kleines in Bewegung setzen?", "Was wäre echter jetzt  -  einfach gehört werden, oder etwas dagegen tun?"];
     const listeningOnlyExtrasDe = ["Du musst das jetzt nicht herausfinden.", "Ich gehe nirgendwo hin. Sag so viel du brauchst.", "Du darfst das alles fühlen.", "Du musst das nicht ordentlich einpacken.", "Es gibt keine Eile, all das zu verstehen.", "Sag so viel oder so wenig du willst  -  ich bin sowieso hier."];
 
+    const openersByToneHe: Record<LocalResponseTone, string[]> = {
+        calm: ["אני כאן.", "אני מקשיב.", "קח את הזמן שלך.", "הכול בסדר, אני איתך.", "אין לחץ — אני פשוט כאן.", "נתמודד עם זה ביחד."],
+        supportive: ["זה נשמע ממש קשה.", "זה הרבה בבת אחת.", "אני מבין שזה מאוד מכביד.", "זה לא קל בכלל.", "תודה שסיפרת לי.", "צריך אומץ להגיד את זה."],
+        practical: ["בוא נתמודד עם זה ביחד.", "מה יהיה הצעד הקטן הבא?", "אנחנו יכולים לסדר את זה.", "מה אתה הכי צריך עכשיו?", "טוב, בוא נסתכל על זה יותר מקרוב.", "נפתור את זה ביחד."],
+        coach: ["אתה מסוגל לזה.", "מה עוזר לך להחזיק מעמד עכשיו?", "אתה חזק יותר ממה שאתה חושב.", "מה עזר לך בפעמים קודמות כאלה?", "אתה יותר קדימה ממה שאתה מאמין.", "בוא נמצא את הצעד הבא המוצק."],
+        "gentle-humor": ["זה נשמע מתיש — טוב שאתה מדבר.", "החיים לפעמים ממש מציקים.", "תדמיין שאתה מספר לחבר — מה היית אומר?", "לפעמים יום רע הוא פשוט יום רע.", "נעבור את זה ביחד — אין צורך בהיאבקות."],
+        direct: ["מה קרה?", "ספר לי יותר.", "מה מעסיק אותך?", "מאיפה נתחיל?", "תגיד לי ישירות — אני מקשיב."],
+    };
+    const validationsHe: Record<Signal, string[]> = {
+        sad: ["זה כואב באמת.", "הכאב הזה אמיתי.", "זה יכול להרגיש בדידות מאוד.", "קשה לשאת את זה.", "זה ראוי ליותר מסתם 'בסדר'.", "אתה לא צריך להמעיט בחשיבות זה."],
+        anxious: ["החרדה הזו הגיונית.", "בסדר להרגיש מוצף.", "התחושה הזו בבטן אמיתית.", "לפעמים הכול יחד זה פשוט יותר מדי.", "זה נשמע מאוד מעייף.", "הגוף שלך מרגיש שמשהו כאן באמת חשוב."],
+        angry: ["לכעס הזה יש סיבה.", "בסדר לכעוס.", "זה נשמע ממש מתסכל.", "זה היה מכעיס כל אחד.", "זה מובן — קרה כאן משהו אמיתי.", "דברים כאלה כואבים, לא משנה כמה חזק אתה."],
+        tired: ["אתה ממש מותש.", "העייפות הזו אמיתית.", "נשאת יותר מדי כבר זמן רב.", "לפעמים הגוף פשוט גמר כוחות.", "זו לא עייפות רגילה — זה שחיקה אמיתית.", "זה ניכר — זו לא חולשה."],
+        okay: ["ספר לי יותר.", "אני כאן — מה קורה?", "מה מכביד עליך הכי הרבה עכשיו?", "מה הכי מסתובב לך בראש כרגע?", "איך עובר עליך היום?", "מה שיהיה — אני מקשיב."],
+    };
+    const carryValidationsHe = ["זה עוד איתך — אני מרגיש את זה.", "זה נראה כאילו עדיין לא שחרר לגמרי — וזה בסדר.", "אתה עדיין בתוך זה, נכון?", "זה לא מרפה ממך. בוא נישאר עם זה עוד רגע.", "משהו מזה חוזר אליך שוב ושוב."];
+    const carryExtrasHe: Record<LocalResponseTone, string[]> = {
+        calm: ["אנחנו לא צריכים לדחוף את זה לשום מקום עדיין.", "אנחנו יכולים פשוט להישאר עם זה רגע.", "לא צריך לכפות את זה."],
+        supportive: ["אתה לא צריך להבין את זה מושלם עכשיו.", "אני עדיין כאן איתך בזה.", "בסדר אם עדיין לא הכול מובן."],
+        practical: ["בוא פשוט נשמור על זה פשוט עכשיו.", "אנחנו לא צריכים את כל התשובה, רק את החלק הבא הברור.", "הצעד הבא הברור מספיק."],
+        coach: ["בוא נייצב את זה לפני שנעשה משהו אחר.", "צעד מוצק אחד אחר כך יספיק.", "קודם כל מצא צעד יציב."],
+        "gentle-humor": ["אנחנו יכולים לשמור על זה עדין בלי להכביד.", "אין צורך להתמודד עם הכול עכשיו.", "אין היאבקות היום."],
+        direct: ["בוא לא נסבך את זה עכשיו.", "נישאר קודם עם החלק האמיתי.", "התמקד רק במה שחשוב עכשיו."],
+    };
+    const extrasByToneHe: Record<LocalResponseTone, string[]> = {
+        calm: [``, `אנחנו יכולים להישאר עם חלק אחד עכשיו.`, `אין ממהרים לסדר הכול בבת אחת.`, `אנחנו יכולים לשמור על זה יציב בלי לכפות.`, `דבר אחד בכל פעם — אין לחץ.`, `אנחנו יכולים לשבת כאן רגע לפני שמתקדמים.`],
+        supportive: [``, `אתה לא צריך לשאת את כל הכובד בבת אחת.`, `אנחנו יכולים להישאר עם מה שהכי כבד קודם.`, `בסדר אם זה עדיין נראה מבולגן.`, `הגיוני שזה עדיין כבד.`, `אין ממהרים להבין הכול עכשיו.`],
+        practical: [``, `בוא נסתכל קודם על מה שהכי חשוב.`, `אנחנו יכולים לשמור על זה ניתן לניהול.`, `חלק שימושי אחד מספיק עכשיו.`, `אנחנו יכולים לפרק את זה עוד קצת.`, `רק הצעד הבא הברור — לא יותר.`],
+        coach: [``, `בוא נמצא קודם את החלק הניתן לניהול.`, `אנחנו צריכים רק תנועה אחת יציבה עכשיו.`, `אתה לא צריך לפתור הכול בבת אחת.`, `צעד אחד מוצק זה כל מה שצריך.`, `אנחנו יכולים לפשט את זה יותר ממה שזה מרגיש.`],
+        "gentle-humor": [``, `אנחנו יכולים לשמור על זה קצת יותר קל בלי להתעלם.`, `שינוי קטן אחד מספיק עכשיו.`, `אני עדיין כאן איתך.`, `ניצחון קטן הוא עדיין ניצחון.`, `אין היאבקות דרושה היום.`],
+        direct: [``, `בוא נשמור על זה ברור.`, `אנחנו יכולים לטפל בחלק אמיתי אחד בכל פעם.`, `רק החלק השימושי הבא חשוב עכשיו.`, `מה חשוב הכי הרבה ממש עכשיו?`, `בוא נתמקד בחלק שסופר.`],
+    };
+    const reflectLinesHe = [
+        "מה מעסיק אותך הכי הרבה עכשיו?",
+        "עוזר יותר לדבר — או שצעד קטן יהיה טוב יותר?",
+        "אנחנו יכולים להמשיך לאט — מאיפה נתחיל?",
+        "מה השתנה לאחרונה?",
+        "איך זה מרגיש לשאת את כל זה בגוף עכשיו?",
+        "אם זה היה קצת יותר קל — מה היה משתנה קודם?",
+    ];
+    const nextStepLinesHe = ["אנחנו יכולים להמשיך לדבר או לנסות משהו קטן — מה שמרגיש נכון.", "יש אנשים שצריכים קודם להוציא הכול. אחרים רוצים תוכנית. איפה אתה עכשיו?", "אנחנו יכולים לפתוח את זה עוד, או למצוא צעד קטן. מה יותר שימושי עכשיו?", "אני כאן — בין אם להמשיך לדבר ובין אם לגשת למשהו קונקרטי.", "מה יהיה יותר מועיל עכשיו — להמשיך לדבר, או להזיז משהו קטן?", "מה יהיה אמיתי יותר עכשיו — פשוט להיות נשמע, או לעשות משהו?"];
+    const listeningOnlyExtrasHe = ["אתה לא צריך להבין את זה עכשיו.", "אני לא הולק לשום מקום. תגיד כמה שאתה צריך.", "אתה יכול להרגיש את כל זה.", "אתה לא צריך לארוז את זה בצורה מסודרת.", "אין ממהרים להבין הכול.", "תגיד כמה או מעט שתרצה — אני כאן בכל מקרה."];
+
+    const openersByToneJa: Record<LocalResponseTone, string[]> = {
+        calm: ["ここにいます。", "聞いています。", "ゆっくりで大丈夫です。", "大丈夫、一緒にいます。", "プレッシャーはありません — ただここにいます。", "一緒に向き合いましょう。"],
+        supportive: ["それは本当につらいですね。", "一度にたくさんのことがありますね。", "とても重荷に感じているのがわかります。", "簡単ではないですよね。", "話してくれてありがとうございます。", "それを言葉にするのには勇気が要ります。"],
+        practical: ["一緒に取り組みましょう。", "次の小さなステップは何でしょうか?", "整理することができます。", "今一番必要なことは何ですか?", "もう少し詳しく見てみましょう。", "一緒に解決しましょう。"],
+        coach: ["あなたならできます。", "今、何があなたを支えていますか?", "あなたが思うよりずっと強い。", "こういう時、何が助けになりましたか?", "あなたは思っているより前に進んでいます。", "次の確かな一歩を見つけましょう。"],
+        "gentle-humor": ["疲れましたよね — 話してくれてよかった。", "人生って時々本当に大変ですね。", "友人に話すとしたら、どう言いますか?", "悪い日は悪い日ってこともありますよね。", "一緒に乗り越えましょう — 戦わなくても大丈夫。"],
+        direct: ["何があったのですか?", "もっと教えてください。", "何が気になっていますか?", "どこから始めましょうか?", "直接教えてください — 聞いています。"],
+    };
+    const validationsJa: Record<Signal, string[]> = {
+        sad: ["それは本当に痛いですね。", "その痛みは本物です。", "とても孤独に感じることがありますよね。", "それを抱えるのは大変です。", "それはただの「大丈夫」以上のものに値します。", "それを小さくしなくていいです。"],
+        anxious: ["その不安は理にかなっています。", "圧倒されていても大丈夫です。", "その胸のドキドキは本物です。", "時に全てが一度に多すぎることがあります。", "それはとても疲れますね。", "体が何か大切なことを感じ取っています。"],
+        angry: ["その怒りには理由があります。", "怒っても大丈夫です。", "それは本当にイライラしますね。", "誰でも怒るような状況です。", "わかります — 何か本当のことが起きています。", "こういうことは、どれだけ強くても傷つきます。"],
+        tired: ["本当に疲れ切っていますね。", "その疲れは本物です。", "ずっと多くを抱えすぎていました。", "時に体はただ限界なのです。", "普通の疲れではない — 本当の消耗です。", "それは体に出ています — 弱さではありません。"],
+        okay: ["もっと教えてください。", "ここにいます — どうしましたか?", "今一番重く感じることは何ですか?", "今、頭の中で一番大きいことは何ですか?", "今日はどうですか?", "何でも — 聞いています。"],
+    };
+    const carryValidationsJa = ["それはまだあなたと一緒にあります — 感じます。", "まだ完全に離れていないように見えます — 大丈夫ですよ。", "まだその中にいるんですよね?", "それはまだ手放してくれていません。もう少し一緒にいましょう。", "その何かが何度も戻ってきているんですね。"];
+    const carryExtrasJa: Record<LocalResponseTone, string[]> = {
+        calm: ["まだどこかに押しやる必要はありません。", "少しの間、ただそれと一緒にいましょう。", "無理に解決しなくていいです。"],
+        supportive: ["今すぐ完全に理解しなくていいです。", "まだあなたと一緒にここにいます。", "全てがわからなくても大丈夫です。"],
+        practical: ["今はシンプルに保ちましょう。", "全ての答えじゃなく、次の明確な部分だけでいいです。", "次の明確な一歩で十分です。"],
+        coach: ["他に何かする前に、まず安定させましょう。", "後で一つ安定したステップがあれば十分です。", "まず安定した一歩を見つけましょう。"],
+        "gentle-humor": ["重くせずに穏やかに保てます。", "今すぐ全部戦わなくていいです。", "今日は格闘しなくていいです。"],
+        direct: ["今は複雑にしないようにしましょう。", "まず本当の部分に集中しましょう。", "今本当に大切なことだけに焦点を当てましょう。"],
+    };
+    const extrasByToneJa: Record<LocalResponseTone, string[]> = {
+        calm: [``, `今は一つの部分にとどまりましょう。`, `全部を一度に急ぐ必要はありません。`, `無理せず安定を保てます。`, `一つずつ — プレッシャーなし。`, `前に進む前に少しここにいましょう。`],
+        supportive: [``, `全ての重さを一度に運ばなくていいです。`, `一番重いと感じるところから始めましょう。`, `まだごちゃごちゃしていても大丈夫です。`, `まだ重く感じるのは当然です。`, `今すぐ全部理解しなくていいです。`],
+        practical: [``, `まず一番大切なことを見てみましょう。`, `管理できる状態に保てます。`, `今は一つ役立つ部分で十分です。`, `もう少し分解できます。`, `次の明確な一歩だけ — それ以上は不要。`],
+        coach: [``, `まず一番扱いやすい部分を見つけましょう。`, `今は一つの安定した動きだけでいいです。`, `全部を一度に解かなくていいです。`, `一つの安定したステップで十分です。`, `思っているより簡単にできます。`],
+        "gentle-humor": [``, `無視せずに少し軽くできます。`, `今は小さな変化一つで十分です。`, `まだここにいます。`, `小さな勝利も勝利です。`, `今日は戦わなくても大丈夫。`],
+        direct: [``, `明確に保ちましょう。`, `一度に一つの本当の部分を扱えます。`, `今は次の役立つ部分だけが大切です。`, `今ここで一番大切なことは何ですか?`, `重要な部分に集中しましょう。`],
+    };
+    const reflectLinesJa = [
+        "今一番気になっていることは何ですか?",
+        "ただ話す方がいいですか、それとも小さな一歩の方がいいですか?",
+        "ゆっくり進められます — どこから始めましょうか?",
+        "最近、何か変わりましたか?",
+        "今、これを体で抱えているとどんな感じですか?",
+        "もう少し楽になったら — 最初に何が変わりますか?",
+    ];
+    const nextStepLinesJa = ["話し続けることもできますし、小さなことを試すこともできます — どちらが合っているかで。", "まず全部話す必要がある人もいます。計画が欲しい人もいます。今あなたはどちらですか?", "もっと掘り下げることも、小さな一歩を見つけることもできます。今はどちらが役立ちますか?", "ここにいます — 話し続けることでも、具体的に何かに取り組むことでも。", "今はどちらが役立ちますか — 話し続ける、それとも小さな何かを動かす?", "今より本当なのはどちらですか — ただ聞いてもらうこと、それとも何かすること?"];
+    const listeningOnlyExtrasJa = ["今すぐそれを解決しなくていいです。", "どこにも行きません。必要なだけ話してください。", "この全てを感じていていいです。", "きれいにまとめる必要はありません。", "全部を理解するのに急ぐ必要はありません。", "どれだけでも、少しでも — ここにいます。"];
+
     // ── Extras banks ──────────────────────────────────────────────────────────
 
     const extrasByToneEn: Record<LocalResponseTone, string[]> = {
@@ -2487,6 +2573,8 @@ export function buildLocalReply(
         language === "id" ? openersByToneId[companionTone] :
         language === "ur" ? openersByToneUr[companionTone] :
         language === "de" ? openersByToneDe[companionTone] :
+        language === "he" ? openersByToneHe[companionTone] :
+        language === "ja" ? openersByToneJa[companionTone] :
         openersByToneEn[companionTone];
 
     const validations =
@@ -2509,6 +2597,8 @@ export function buildLocalReply(
         language === "id" ? validationsId :
         language === "ur" ? validationsUr :
         language === "de" ? validationsDe :
+        language === "he" ? validationsHe :
+        language === "ja" ? validationsJa :
         validationsEn;
 
     const reflectLines =
@@ -2531,6 +2621,8 @@ export function buildLocalReply(
         language === "id" ? reflectLinesId :
         language === "ur" ? reflectLinesUr :
         language === "de" ? reflectLinesDe :
+        language === "he" ? reflectLinesHe :
+        language === "ja" ? reflectLinesJa :
         reflectLinesEn;
 
     const nextStepLines =
@@ -2553,6 +2645,8 @@ export function buildLocalReply(
         language === "id" ? nextStepLinesId :
         language === "ur" ? nextStepLinesUr :
         language === "de" ? nextStepLinesDe :
+        language === "he" ? nextStepLinesHe :
+        language === "ja" ? nextStepLinesJa :
         nextStepLinesEn;
 
     const extrasByTone =
@@ -2575,6 +2669,8 @@ export function buildLocalReply(
         language === "id" ? extrasByToneId :
         language === "ur" ? extrasByToneUr :
         language === "de" ? extrasByToneDe :
+        language === "he" ? extrasByToneHe :
+        language === "ja" ? extrasByToneJa :
         extrasByToneEn;
 
     // P4 — Situational person extraction for personalized Phase 3 bridge
@@ -2717,6 +2813,7 @@ export function buildLocalReply(
         zh: carryValidationsZh, es: carryValidationsEs, ar: carryValidationsAr,
         fr: carryValidationsFr, pt: carryValidationsPt, ru: carryValidationsRu,
         id: carryValidationsId, ur: carryValidationsUr, de: carryValidationsDe,
+        he: carryValidationsHe, ja: carryValidationsJa,
     };
     const carryExtrasMap: Partial<Record<string, Record<LocalResponseTone, string[]>>> = {
         hi: carryExtrasHi, mr: carryExtrasMr, bn: carryExtrasBn,
@@ -2726,6 +2823,7 @@ export function buildLocalReply(
         zh: carryExtrasZh, es: carryExtrasEs, ar: carryExtrasAr,
         fr: carryExtrasFr, pt: carryExtrasPt, ru: carryExtrasRu,
         id: carryExtrasId, ur: carryExtrasUr, de: carryExtrasDe,
+        he: carryExtrasHe, ja: carryExtrasJa,
     };
 
     const recent = recentContext?.recentAssistantTexts ?? [];
@@ -2741,6 +2839,7 @@ export function buildLocalReply(
         zh: listeningOnlyExtrasZh, es: listeningOnlyExtrasEs, ar: listeningOnlyExtrasAr,
         fr: listeningOnlyExtrasFr, pt: listeningOnlyExtrasPt, ru: listeningOnlyExtrasRu,
         id: listeningOnlyExtrasId, ur: listeningOnlyExtrasUr, de: listeningOnlyExtrasDe,
+        he: listeningOnlyExtrasHe, ja: listeningOnlyExtrasJa,
     };
     const extra = hasCarry
         ? pick((carryExtrasMap[language] ?? carryExtrasEn)[companionTone], seed >>> 5)

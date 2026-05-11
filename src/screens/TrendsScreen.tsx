@@ -9,6 +9,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useColors } from "../theme/ThemeContext";
+import { useSettings } from "../state/SettingsContext";
+import { useAuth } from "../auth/AuthContext";
+import {
+  loadStoredYearReview,
+  generateYearReview,
+  reviewYear,
+  type YearReview,
+} from "../lib/imotara/yearInReview";
 
 // ── Quick Mood Check-in ─────────────────────────────────────────────────────────
 const FEEL_EMOTIONS: { key: EmotionBucket; emoji: string; label: string }[] = [
@@ -177,6 +185,33 @@ async function saveJournal(entries: JournalEntry[]): Promise<void> {
   await AsyncStorage.setItem(JOURNAL_KEY, JSON.stringify(entries));
 }
 
+const THEME_STOP_WORDS = new Set([
+  "i","me","my","the","a","an","and","or","but","in","on","at","to","for",
+  "of","with","is","are","was","were","it","this","that","have","had","has",
+  "do","did","be","been","so","am","not","no","you","we","they","he","she",
+  "what","when","how","why","if","can","will","just","more","about","there",
+  "from","than","like","your","its","their","really","very","much","still",
+  "even","feel","feels","felt","feeling","time","day","days","week","know",
+  "think","want","need","get","got","make","made","could","would","should",
+  "im","ive","dont","cant","wont","thats","theres","heres","going",
+]);
+
+function computeThemes(entries: JournalEntry[]): string[] {
+  if (entries.length < 3) return [];
+  const wordCount: Record<string, number> = {};
+  for (const entry of entries) {
+    const words = entry.body.toLowerCase().match(/\b[a-z]{4,}\b/g) ?? [];
+    for (const w of words) {
+      if (!THEME_STOP_WORDS.has(w)) wordCount[w] = (wordCount[w] ?? 0) + 1;
+    }
+  }
+  return Object.entries(wordCount)
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([word]) => word);
+}
+
 const JOURNAL_EMOTION_PROMPTS: Record<string, string[]> = {
   sadness: [
     "What's weighing on your heart most right now?",
@@ -295,6 +330,7 @@ function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useC
   };
 
   const recent = entries.slice(0, 5);
+  const themes = useMemo(() => computeThemes(entries), [entries]);
 
   return (
     <View style={{ marginTop: 28 }}>
@@ -451,6 +487,25 @@ function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useC
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Recurring journal themes */}
+      {themes.length > 0 && (
+        <View style={{ marginTop: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 12 }}>
+          <Text style={{ fontSize: 10, fontWeight: "700", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+            Themes in your reflections
+          </Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {themes.map((theme) => (
+              <View key={theme} style={{ borderRadius: 999, borderWidth: 1, borderColor: "rgba(99,102,241,0.3)", backgroundColor: "rgba(99,102,241,0.1)", paddingHorizontal: 10, paddingVertical: 4 }}>
+                <Text style={{ fontSize: 11, color: "#a5b4fc", textTransform: "capitalize" }}>{theme}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 8 }}>
+            Words that appear often across your reflections.
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -957,6 +1012,8 @@ export default function TrendsScreen() {
   const store = useHistoryStore() as any;
   const history: any[] = store.history ?? [];
   const addToHistory: ((item: any) => void) | undefined = store.addToHistory;
+  const { toneContext, localUserScopeId } = useSettings() as any;
+  const { accessToken } = useAuth();
 
   const handleCheckin = (emotion: EmotionBucket, label: string, note: string) => {
     if (!addToHistory) return;
@@ -977,6 +1034,24 @@ export default function TrendsScreen() {
     try { await store.pushHistoryToRemote?.(); } catch { /* ignore */ }
     finally { setIsRefreshing(false); }
   }, [isRefreshing, store]);
+
+  const [yearReview, setYearReview] = useState<YearReview | null>(null);
+  const [yearReviewLoading, setYearReviewLoading] = useState(false);
+  const [yearReviewExpanded, setYearReviewExpanded] = useState(false);
+
+  useEffect(() => {
+    const y = reviewYear();
+    loadStoredYearReview(y).then((stored) => {
+      if (stored) { setYearReview(stored); return; }
+      if (history.length < 30) return;
+      setYearReviewLoading(true);
+      const userName = (toneContext as any)?.user?.name ?? "you";
+      generateYearReview(history, userName, y, localUserScopeId, accessToken ?? undefined)
+        .then((review) => { if (review) setYearReview(review); })
+        .finally(() => setYearReviewLoading(false));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history.length]);
 
   // Only look at user messages (they carry emotion)
   const userMsgs = useMemo(() =>
@@ -1001,6 +1076,19 @@ export default function TrendsScreen() {
 
   const streak = useMemo(() => computeStreak(allActiveDays), [allActiveDays]);
   const chattedToday = allActiveDays.has(todayKey());
+
+  // EN-5: Social Proof Benchmarking
+  const [socialProof, setSocialProof] = useState<{ percentileBetter: number; userActiveDays: number } | null>(null);
+  useEffect(() => {
+    const apiBase = (process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL ?? "").replace(/\/$/, "");
+    if (!apiBase) return;
+    fetch(`${apiBase}/api/social-proof`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.available) setSocialProof({ percentileBetter: data.percentileBetter, userActiveDays: data.userActiveDays });
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Group by calendar day (key = "YYYY-MM-DD")
   const byDay = useMemo(() => {
@@ -1195,6 +1283,109 @@ export default function TrendsScreen() {
           </Text>
         </View>
       </View>
+
+      {/* EN-5: Social Proof Benchmarking */}
+      {socialProof && (
+        <View style={{ borderRadius: 14, borderWidth: 1, borderColor: "rgba(56,189,248,0.2)", backgroundColor: "rgba(8,47,73,0.4)", paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16 }}>
+          <Text style={{ fontSize: 12, color: "rgba(186,230,253,0.8)", lineHeight: 18 }}>
+            You{"'"}ve been reflecting{" "}
+            <Text style={{ color: "#7dd3fc", fontWeight: "600" }}>{socialProof.userActiveDays} day{socialProof.userActiveDays !== 1 ? "s" : ""} this week</Text>
+            {" "}— more consistently than{" "}
+            <Text style={{ color: "#7dd3fc", fontWeight: "600" }}>{socialProof.percentileBetter}%</Text>
+            {" "}of Imotara users.
+          </Text>
+        </View>
+      )}
+
+      {/* Year in Review card */}
+      {(yearReview || yearReviewLoading) && (
+        <View style={{
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: "rgba(251,191,36,0.3)",
+          backgroundColor: "rgba(245,158,11,0.06)",
+          padding: 16,
+          marginBottom: 16,
+        }}>
+          {/* Header */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={{ fontSize: 16, color: "#fbbf24" }}>✦</Text>
+              <View>
+                <Text style={{ fontSize: 10, fontWeight: "700", color: "#fbbf24", textTransform: "uppercase", letterSpacing: 0.8 }}>
+                  Year in Review
+                </Text>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textPrimary }}>
+                  Your {yearReview?.year ?? reviewYear()} emotional journey
+                </Text>
+              </View>
+            </View>
+            {yearReview && (
+              <TouchableOpacity
+                onPress={() => setYearReviewExpanded((v) => !v)}
+                style={{
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: "rgba(251,191,36,0.3)",
+                  backgroundColor: "rgba(245,158,11,0.12)",
+                  paddingHorizontal: 12,
+                  paddingVertical: 5,
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: "600", color: "#fbbf24" }}>
+                  {yearReviewExpanded ? "Collapse" : "Read →"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Stats */}
+          {yearReview && (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "rgba(251,191,36,0.15)", marginBottom: yearReviewExpanded ? 8 : 0 }}>
+              <Text style={{ fontSize: 11, color: colors.textSecondary }}>{yearReview.totalMessages} conversations</Text>
+              <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                Dominant tone: <Text style={{ color: colors.textPrimary, textTransform: "capitalize" }}>{yearReview.dominantEmotion}</Text>
+              </Text>
+              <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                Most active: <Text style={{ color: colors.textPrimary }}>{yearReview.peakMonth}</Text>
+              </Text>
+            </View>
+          )}
+
+          {/* Loading */}
+          {yearReviewLoading && !yearReview && (
+            <Text style={{ fontSize: 12, color: colors.textSecondary, fontStyle: "italic" }}>
+              Composing your year in review…
+            </Text>
+          )}
+
+          {/* Narrative */}
+          {yearReview && yearReviewExpanded && (
+            <View style={{ paddingTop: 8, borderTopWidth: 1, borderTopColor: "rgba(251,191,36,0.15)" }}>
+              {yearReview.narrative.split("\n\n").filter(Boolean).map((para, i) => (
+                <Text key={i} style={{ fontSize: 13, color: colors.textPrimary, lineHeight: 20, marginBottom: 10 }}>
+                  {para.trim()}
+                </Text>
+              ))}
+              <TouchableOpacity
+                onPress={() => Share.share({ message: yearReview.narrative })}
+                style={{
+                  marginTop: 4,
+                  alignSelf: "flex-start",
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: "rgba(251,191,36,0.3)",
+                  backgroundColor: "rgba(245,158,11,0.12)",
+                  paddingHorizontal: 12,
+                  paddingVertical: 5,
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: "600", color: "#fbbf24" }}>Share ↗</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Export button */}
       <TouchableOpacity
