@@ -15,6 +15,8 @@ import TrendsScreen from "../screens/TrendsScreen";
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
+import { useAuth } from "../auth/AuthContext";
+import { buildApiUrl } from "../config/api";
 
 import { OnboardingModal, type OnboardingResult } from "../components/imotara/OnboardingModal";
 import { useColors, useTheme } from "../theme/ThemeContext";
@@ -125,6 +127,7 @@ export default function RootNavigator() {
     // --- Lifecycle-driven "resume" sync (deduped) ---
     const history = useHistoryStore();
     const { toneContext, setToneContext, setAnalysisMode } = useSettings() as any;
+    const { accessToken } = useAuth();
 
     const fgSyncInFlightRef = useRef(false);
     const lastFgSyncAtRef = useRef(0);
@@ -164,20 +167,34 @@ export default function RootNavigator() {
 
         // Apply settings from onboarding
         if (setAnalysisMode) setAnalysisMode(result.analysisMode);
-        if (setToneContext) {
-            setToneContext({
-                ...(toneContext ?? {}),
-                user: {
-                    ...(toneContext?.user ?? {}),
-                    name: result.name || toneContext?.user?.name || "",
+
+        const nextToneContext = {
+            ...(toneContext ?? {}),
+            user: {
+                ...(toneContext?.user ?? {}),
+                name: result.name || toneContext?.user?.name || "",
+            },
+            companion: {
+                ...(toneContext?.companion ?? {}),
+                enabled: true,
+                name: toneContext?.companion?.name || "Imotara",
+                relationship: result.relationship,
+            },
+        };
+
+        if (setToneContext) setToneContext(nextToneContext);
+
+        // Push profile to server immediately if already signed in, so the name is
+        // available on other devices without waiting for the user to visit Settings.
+        if (accessToken) {
+            fetch(buildApiUrl("/api/profile/sync"), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`,
                 },
-                companion: {
-                    ...(toneContext?.companion ?? {}),
-                    enabled: true,
-                    name: toneContext?.companion?.name || "Imotara",
-                    relationship: result.relationship,
-                },
-            });
+                body: JSON.stringify(nextToneContext),
+            }).catch(() => {}); // best-effort; local AsyncStorage is the source of truth
         }
     };
 

@@ -1,6 +1,6 @@
 {
   "name": "imotara-mobile",
-  "version": "1.0.8",
+  "version": "1.1.3",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

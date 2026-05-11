@@ -149,28 +149,44 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                 const isTokenPack = productId?.startsWith("tokens_") ?? false;
 
                 if (productId) {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session?.access_token) {
-                        const verifyRes = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                Authorization: `Bearer ${session.access_token}`,
-                            },
-                            body: JSON.stringify({
-                                productId,
-                                transactionId: (purchase as any).transactionId ?? purchase.productId,
-                            }),
-                        });
-                        if (!verifyRes.ok) {
-                            // Don't finish — Apple will re-deliver on next launch so the user
-                            // gets another verification attempt.
-                            Alert.alert(
-                                "Verification failed",
-                                "Your purchase was recorded by Apple but we couldn't activate it. Re-open the app to retry, or tap 'Restore previous purchases'.",
-                            );
-                            return;
-                        }
+                    // Require a valid session to call the verification endpoint.
+                    // Mirror the Android pattern: try refresh before giving up.
+                    let { data: { session } } = await supabase.auth.getSession();
+                    if (!session?.access_token) {
+                        const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                        session = refreshed;
+                    }
+                    if (!session?.access_token) {
+                        // No auth — leave the transaction pending so Apple re-delivers it on
+                        // next app launch, where the user can sign in and try again.
+                        Alert.alert(
+                            "Sign in required",
+                            "Please sign in and re-open the app to activate your purchase. Your payment is safe.",
+                        );
+                        return;
+                    }
+
+                    const verifyRes = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${session.access_token}`,
+                        },
+                        body: JSON.stringify({
+                            productId,
+                            // purchase.id is the StoreKit 2 transaction identifier (e.g. "2000000123456789").
+                            // purchase.productId is the SKU — wrong field for Apple's transaction lookup API.
+                            transactionId: purchase.id,
+                        }),
+                    });
+                    if (!verifyRes.ok) {
+                        // Don't finish — Apple will re-deliver on next launch so the user
+                        // gets another verification attempt.
+                        Alert.alert(
+                            "Verification failed",
+                            "Your purchase was recorded by Apple but we couldn't activate it. Re-open the app to retry, or tap 'Restore previous purchases'.",
+                        );
+                        return;
                     }
                 }
 

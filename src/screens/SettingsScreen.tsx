@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 
 import {
@@ -350,8 +351,11 @@ export default function SettingsScreen() {
         if (!accessToken) return;
         const base = getApiBaseUrl();
         if (!base) return;
-        const hasLocal = initialToneRef.current?.user?.name || initialToneRef.current?.companion?.name;
-        if (hasLocal) return; // local profile exists — don't overwrite
+        // Only guard on the user's own name — companion always defaults to "Imotara", so
+        // checking companion?.name would make hasLocal permanently truthy and the server
+        // pull would never happen (breaks name sync when signing in on a new device).
+        const hasLocalUserName = !!(initialToneRef.current?.user?.name?.trim());
+        if (hasLocalUserName) return; // user already has a local name — don't overwrite
         fetch(`${base}/api/profile/sync`, {
             headers: { Authorization: `Bearer ${accessToken}` },
         })
@@ -2998,7 +3002,17 @@ export default function SettingsScreen() {
             <UpgradeSheet
                 visible={showUpgradeSheet}
                 onClose={() => setShowUpgradeSheet(false)}
-                onPurchaseComplete={refreshLicense}
+                onPurchaseComplete={async () => {
+                    await refreshLicense();
+                    // refreshLicense writes the new tier to AsyncStorage but doesn't update
+                    // HistoryContext's licenseTier state — read it back and sync so the
+                    // tier label in Settings refreshes immediately without an app restart.
+                    const raw = await AsyncStorage.getItem("imotara_license_tier_v1").catch(() => null);
+                    const VALID: LicenseTier[] = ["FREE", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"];
+                    if (raw && VALID.includes(raw as LicenseTier) && setLicenseTier) {
+                        setLicenseTier(raw as LicenseTier);
+                    }
+                }}
             />
         </KeyboardAvoidingView>
     );
