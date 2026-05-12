@@ -118,7 +118,8 @@
       "expo-web-browser",
       "expo-secure-store",
       "expo-apple-authentication",
-      "expo-iap"
+      "expo-iap",
+      "./plugins/withAndroidR8Mapping"
     ],
     "scheme": "imotara",
     "runtimeVersion": {
