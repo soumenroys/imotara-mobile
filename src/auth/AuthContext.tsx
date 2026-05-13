@@ -13,11 +13,10 @@ import React, {
     useState,
     useCallback,
 } from "react";
-import { Alert, Platform } from "react-native";
+import { Alert, Linking, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session, User } from "@supabase/supabase-js";
 import * as WebBrowser from "expo-web-browser";
-import * as AuthSession from "expo-auth-session";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../lib/supabase/client";
 import { buildApiUrl } from "../config/api";
@@ -36,7 +35,9 @@ export type AuthContextValue = {
     session: Session | null;
     /** Supabase JWT — pass as Authorization: Bearer header to /api/respond */
     accessToken: string | null;
-    signInWithGoogle: () => Promise<void>;
+    /** Returns {success:true} if a session was established synchronously, {success:false} otherwise.
+     *  On Android the session may still arrive async via onAuthStateChange after success:false. */
+    signInWithGoogle: () => Promise<{ success: boolean }>;
     signInWithApple: () => Promise<void>;
     signOut: () => Promise<void>;
     /** True if running on a device where Apple Sign In is available */
@@ -50,7 +51,7 @@ const AuthContext = createContext<AuthContextValue>({
     user: null,
     session: null,
     accessToken: null,
-    signInWithGoogle: async () => {},
+    signInWithGoogle: async () => ({ success: false }),
     signInWithApple: async () => {},
     signOut: async () => {},
     appleSignInAvailable: false,
@@ -107,18 +108,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
+    // ── Android deep-link auth handler ────────────────────────────────────────
+    // On Android, Chrome Custom Tabs cannot intercept custom URI schemes mid-flow.
+    // Instead the system fires an intent to the app with the imotara:// URL.
+    // This useEffect catches that URL, extracts tokens, and sets the session
+    // so onAuthStateChange fires and completes the sign-in / purchase flow.
+    useEffect(() => {
+        const handleAuthUrl = async (url: string) => {
+            if (!url.includes("auth/callback")) return;
+            try {
+                const u = new URL(url);
+                const src = u.hash.startsWith("#") ? u.hash.slice(1) : u.search.startsWith("?") ? u.search.slice(1) : "";
+                const params = new URLSearchParams(src);
+                const accessToken = params.get("access_token");
+                const refreshToken = params.get("refresh_token");
+                if (accessToken && refreshToken) {
+                    await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+                }
+            } catch {
+                // malformed URL — ignore
+            }
+        };
+
+        // App opened cold from a deep link (Android background → foreground)
+        Linking.getInitialURL().then((url) => { if (url) handleAuthUrl(url); }).catch(() => {});
+
+        // App already running — deep link arrives while foregrounded
+        const sub = Linking.addEventListener("url", ({ url }) => handleAuthUrl(url));
+        return () => sub.remove();
+    }, []);
+
     // ── Google Sign In ────────────────────────────────────────────────────────
-    // Uses expo-auth-session to open a browser-based OAuth flow.
-    // Supabase generates the OAuth URL; the redirect lands back in the app.
+    // Uses a relay page on imotara.com as the Supabase redirect destination.
+    // The relay page reads the tokens from the URL hash and fires imotara://auth/callback#<tokens>.
+    // On iOS: ASWebAuthenticationSession intercepts imotara:// and returns it to the app.
+    // On Android: the system intent brings the app to foreground; the Linking handler above
+    //             picks up the URL and calls supabase.auth.setSession asynchronously.
+    //
+    // Required Supabase config (one-time):
+    //   Authentication → URL Configuration → Additional Redirect URLs →
+    //   add:  https://imotara.com/auth/callback-mobile
 
-    const signInWithGoogle = useCallback(async () => {
+    const MOBILE_AUTH_REDIRECT = "https://imotara.com/auth/callback-mobile";
+
+    const signInWithGoogle = useCallback(async (): Promise<{ success: boolean }> => {
         try {
-            const redirectTo = AuthSession.makeRedirectUri({ scheme: "imotara" });
-
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: "google",
                 options: {
-                    redirectTo,
+                    redirectTo: MOBILE_AUTH_REDIRECT,
                     skipBrowserRedirect: true,
                 },
             });
@@ -126,33 +164,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (error || !data.url) {
                 console.warn("[Auth] Google OAuth init failed:", error?.message);
                 Alert.alert("Sign-in failed", "Could not start Google sign-in. Please try again.");
-                return;
+                return { success: false };
             }
 
+            // callbackURLScheme:"imotara" tells ASWebAuthenticationSession (iOS) to
+            // intercept ANY navigation to imotara://, including the relay page's redirect.
             const result = await WebBrowser.openAuthSessionAsync(
                 data.url,
-                redirectTo,
+                "imotara://",
             );
 
             if (result.type === "success" && result.url) {
-                // Extract tokens from the redirect URL fragment
-                const url = new URL(result.url);
-                const params = new URLSearchParams(
-                    url.hash.startsWith("#") ? url.hash.slice(1) : url.search.slice(1),
-                );
+                // iOS path: relay page redirected to imotara://auth/callback#<tokens>
+                // and ASWebAuthenticationSession intercepted it synchronously.
+                const u = new URL(result.url);
+                const src = u.hash.startsWith("#") ? u.hash.slice(1) : u.search.startsWith("?") ? u.search.slice(1) : "";
+                const params = new URLSearchParams(src);
                 const accessToken = params.get("access_token");
                 const refreshToken = params.get("refresh_token");
 
                 if (accessToken && refreshToken) {
-                    await supabase.auth.setSession({
-                        access_token: accessToken,
-                        refresh_token: refreshToken,
-                    });
+                    await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+                    return { success: true };
                 }
             }
+
+            // result.type === "dismiss" or "cancel":
+            // On Android the relay page fired imotara:// as a system intent; the browser
+            // closed and the Linking handler above will call setSession asynchronously.
+            // On iOS this means the user manually closed the browser — no session.
+            return { success: false };
         } catch (err) {
             console.warn("[Auth] Google sign-in error:", err);
             Alert.alert("Sign-in failed", "An unexpected error occurred during Google sign-in. Please try again.");
+            return { success: false };
         }
     }, []);
 

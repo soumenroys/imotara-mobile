@@ -230,41 +230,66 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
         const doSignIn = async (method: "google" | "apple") => {
             setSigningIn(true);
             let resolved = false;
+            let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
+
+            const resolve = (session: { access_token?: string; user?: { email?: string } } | null) => {
+                if (resolved) return;
+                resolved = true;
+                if (cleanupTimer) { clearTimeout(cleanupTimer); cleanupTimer = null; }
+                subscription.unsubscribe();
+                setUserEmail(session?.user?.email);
+                setIsSignedIn(!!session?.access_token);
+                setSigningIn(false);
+                if (session?.access_token) setTimeout(() => onSuccess(), 0);
+            };
 
             const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
                 if (resolved) return;
                 if (event === "SIGNED_IN" && session?.access_token) {
-                    resolved = true;
-                    subscription.unsubscribe();
-                    setUserEmail(session.user?.email);
-                    setIsSignedIn(true);
-                    setSigningIn(false);
-                    // Yield one tick so signingIn state flushes before purchase check
-                    setTimeout(() => onSuccess(), 0);
+                    resolve(session);
                 }
             });
 
             try {
-                if (method === "google") await signInWithGoogle();
-                else await signInWithApple();
+                if (method === "google") {
+                    const result = await signInWithGoogle();
 
-                if (!resolved) {
-                    // Synchronous path: session already set inside signInWithGoogle/Apple
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session?.access_token) {
-                        resolved = true;
-                        subscription.unsubscribe();
-                        setUserEmail(session.user?.email);
-                        setIsSignedIn(true);
-                        setSigningIn(false);
-                        setTimeout(() => onSuccess(), 0);
+                    if (!resolved) {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (session?.access_token) {
+                            resolve(session);
+                            return;
+                        }
+
+                        if (result.success) {
+                            // Session set but onAuthStateChange hasn't fired yet — wait briefly
+                            cleanupTimer = setTimeout(() => {
+                                if (!resolved) resolve(null);
+                            }, 3000);
+                        } else {
+                            // Browser was dismissed or auth failed.
+                            // On Android the session might still arrive via the Linking deep-link
+                            // handler (AuthContext) which calls supabase.auth.setSession, triggering
+                            // onAuthStateChange above. Give it 8 s before giving up.
+                            cleanupTimer = setTimeout(() => {
+                                if (!resolved) resolve(null);
+                            }, 8000);
+                        }
                     }
-                    // else: still waiting for async deep-link — onAuthStateChange will fire
+                } else {
+                    await signInWithApple();
+                    if (!resolved) {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (session?.access_token) {
+                            resolve(session);
+                        } else {
+                            // Apple sign-in resolves synchronously — if no session, it failed
+                            resolve(null);
+                        }
+                    }
                 }
             } catch {
-                resolved = true;
-                subscription.unsubscribe();
-                setSigningIn(false);
+                resolve(null);
                 Alert.alert("Sign in failed", "Please try again.");
             }
         };
