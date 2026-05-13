@@ -351,6 +351,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
             } else if (result.error !== "cancelled") {
                 Alert.alert("Payment failed", result.error ?? "Please try again.");
             }
+        } catch {
+            Alert.alert("Payment failed", "Network error. Please check your connection and try again.");
         } finally {
             setPurchasing(null);
         }
