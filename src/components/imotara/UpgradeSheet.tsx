@@ -3,7 +3,7 @@
 //   iOS  → Apple IAP via expo-iap (StoreKit 2). Requires App Store Connect products — see upgradePlans.ts.
 //   Android → Razorpay native checkout via react-native-razorpay.
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
     Modal,
     View,
@@ -110,6 +110,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
     const [signingIn, setSigningIn] = useState(false);
     const [userEmail, setUserEmail] = useState<string | undefined>();
     const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null); // null = loading
+    // Ref mirrors isSignedIn so stale closures (e.g. the onSuccess callback captured
+    // in promptSignIn before sign-in) always read the latest value via .current.
+    const isSignedInRef = useRef<boolean | null>(null);
 
     useEffect(() => {
         async function checkSession() {
@@ -120,6 +123,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
             }
             setUserEmail(session?.user?.email);
             setIsSignedIn(!!session?.access_token);
+            isSignedInRef.current = !!session?.access_token;
         }
         checkSession();
     }, [visible]);
@@ -128,6 +132,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setIsSignedIn(!!session?.access_token);
+            isSignedInRef.current = !!session?.access_token;
             setUserEmail(session?.user?.email);
         });
         return () => subscription.unsubscribe();
@@ -239,6 +244,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                 subscription.unsubscribe();
                 setUserEmail(session?.user?.email);
                 setIsSignedIn(!!session?.access_token);
+                isSignedInRef.current = !!session?.access_token;
                 setSigningIn(false);
                 if (session?.access_token) setTimeout(() => onSuccess(), 0);
             };
@@ -262,18 +268,20 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                         }
 
                         if (result.success) {
-                            // Session set but onAuthStateChange hasn't fired yet — wait briefly
+                            // iOS: session set synchronously — wait briefly for onAuthStateChange
                             cleanupTimer = setTimeout(() => {
                                 if (!resolved) resolve(null);
                             }, 3000);
-                        } else {
-                            // Browser was dismissed or auth failed.
-                            // On Android the session might still arrive via the Linking deep-link
-                            // handler (AuthContext) which calls supabase.auth.setSession, triggering
-                            // onAuthStateChange above. Give it 8 s before giving up.
+                        } else if (Platform.OS === "android") {
+                            // Android: openAuthSessionAsync returns "dismiss" when the deep-link
+                            // intent fires. The Linking handler in AuthContext calls setSession
+                            // asynchronously — give it time to arrive.
                             cleanupTimer = setTimeout(() => {
                                 if (!resolved) resolve(null);
                             }, 8000);
+                        } else {
+                            // iOS: user cancelled the browser — no session is coming
+                            resolve(null);
                         }
                     }
                 } else {
@@ -310,7 +318,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
 
     const handleIosPurchase = async (sku: string, type: "subs" | "in-app") => {
         if (purchasing || signingIn) return;
-        if (isSignedIn === false) {
+        if (isSignedInRef.current === false) {
             promptSignIn(() => handleIosPurchase(sku, type));
             return;
         }
@@ -325,7 +333,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
     // ── Android purchase ───────────────────────────────────────────────────────
     const handleAndroidPurchase = async (productId: ProductId) => {
         if (purchasing || signingIn) return;
-        if (isSignedIn === false) {
+        if (isSignedInRef.current === false) {
             promptSignIn(() => handleAndroidPurchase(productId));
             return;
         }
@@ -338,6 +346,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                 Alert.alert("Thank you!", "Your plan has been upgraded. Enjoy Imotara Plus/Pro!");
             } else if (result.error === "sign_in_required") {
                 setIsSignedIn(false);
+                isSignedInRef.current = false;
                 promptSignIn(() => handleAndroidPurchase(productId));
             } else if (result.error !== "cancelled") {
                 Alert.alert("Payment failed", result.error ?? "Please try again.");
