@@ -197,11 +197,18 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
 
                 // Only finish the transaction after successful server verification.
                 await finishTransaction({ purchase, isConsumable: isTokenPack });
-                await onPurchaseComplete();
+                // onPurchaseComplete refreshes local license state — non-critical if it fails.
+                // License is already granted server-side at this point.
+                try { await onPurchaseComplete(); } catch { /* best-effort */ }
                 onClose();
                 Alert.alert("Thank you!", "Your plan has been upgraded. Enjoy Imotara Plus/Pro!");
             } catch {
-                // best-effort
+                // An error escaped after server verification succeeded — the license is granted
+                // but the UI didn't reflect it. Tell the user to restart to pick up the new plan.
+                Alert.alert(
+                    "Purchase complete",
+                    "Your payment was received. Please restart the app to activate your new plan.",
+                );
             } finally {
                 setPurchasing(null);
             }

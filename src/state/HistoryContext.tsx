@@ -566,9 +566,10 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
                 // 1) History
                 if (rawHistory) {
-                    const parsed = JSON.parse(rawHistory);
+                    try {
+                        const parsed = JSON.parse(rawHistory);
 
-                    if (Array.isArray(parsed)) {
+                        if (Array.isArray(parsed)) {
                         const cleaned: HistoryItem[] = parsed
                             .filter((item) => item && typeof item === "object")
                             .map((item) => {
@@ -623,6 +624,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                             // Migrate legacy local key (older installs)
                             AsyncStorage.setItem(historyKey, rawHistoryLegacy).catch(() => { });
                         }
+                        }
+                    } catch {
+                        debugWarn("Failed to parse stored history — treating as empty");
                     }
                 }
 

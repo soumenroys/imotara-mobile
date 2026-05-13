@@ -343,8 +343,14 @@ export default function SettingsScreen() {
     }>({ testRemote: false, pushOnly: false, syncNow: false, donate: false });
 
     // ─── Profile sync (Supabase cross-device) ────────────────────────────────
-    // Capture initial toneContext to decide whether to pull from server on mount
+    // Capture initial toneContext to decide whether to pull from server on mount.
+    // Updated on sign-out so a subsequent sign-in (different user, same device session)
+    // gets the fresh empty defaults instead of the previous user's stale name.
     const initialToneRef = React.useRef(toneContext);
+    React.useEffect(() => {
+        if (!accessToken) initialToneRef.current = toneContext;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [accessToken]);
 
     // Pull: on mount, if local profile is empty/default, fetch from server
     React.useEffect(() => {
@@ -553,6 +559,16 @@ export default function SettingsScreen() {
     }
 
     const [showHowItWorks, setShowHowItWorks] = React.useState(false);
+
+    // Local draft for companion name — allows empty intermediate state while typing.
+    // Committed to toneContext on blur so normalization (empty → "Imotara") doesn't
+    // fire on every keystroke and prevent the user from clearing the field.
+    const [companionNameDraft, setCompanionNameDraft] = React.useState(
+        toneContext?.companion?.name ?? ""
+    );
+    React.useEffect(() => {
+        setCompanionNameDraft(toneContext?.companion?.name ?? "");
+    }, [toneContext?.companion?.name]);
 
     // ✅ Link key status (UI only)
     const [chatLinkStatus, setChatLinkStatus] = React.useState<string | null>(null);
@@ -2065,11 +2081,12 @@ export default function SettingsScreen() {
                         Companion name (optional)
                     </Text>
                     <TextInput
-                        value={toneContext?.companion?.name ?? ""}
-                        onChangeText={(t) =>
+                        value={companionNameDraft}
+                        onChangeText={setCompanionNameDraft}
+                        onBlur={() =>
                             setToneContext({
                                 ...(toneContext || {}),
-                                companion: { ...(toneContext?.companion || {}), name: t },
+                                companion: { ...(toneContext?.companion || {}), name: companionNameDraft },
                             })
                         }
                         placeholder="e.g. Imotara"
