@@ -2,10 +2,10 @@
 //
 // iOS App Store Connect — create these products before going live:
 //   Auto-renewable Subscriptions:
-//     com.imotara.imotara.plus_monthly  ₹79/mo
+//     com.imotara.imotara.plus_monthly  ₹99/mo
 //     com.imotara.imotara.plus_annual   ₹699/yr
 //     com.imotara.imotara.pro_monthly   ₹149/mo
-//     com.imotara.imotara.pro_annual    ₹1199/yr
+//     com.imotara.imotara.pro_annual    ₹1299/yr
 //   Consumable In-App Purchases:
 //     com.imotara.imotara.tokens_100    ₹49
 //     com.imotara.imotara.tokens_250    ₹99
@@ -60,12 +60,12 @@ export type PlanDef = {
 export const PLAN_DEFS: PlanDef[] = [
     {
         id: "plus_monthly", tier: "plus", period: "monthly",
-        priceInr: 79, paise: 7_900,
+        priceInr: 99, paise: 9_900,
         features: ["Unlimited AI chat", "Cloud sync across devices", "90-day history", "All companion tones"],
     },
     {
         id: "plus_annual", tier: "plus", period: "annual",
-        priceInr: 699, paise: 69_900, monthlyPriceInr: 58, savingsPct: 27,
+        priceInr: 699, paise: 69_900, monthlyPriceInr: 58, savingsPct: 41,
         features: ["Unlimited AI chat", "Cloud sync across devices", "90-day history", "All companion tones"],
     },
     {
@@ -75,7 +75,7 @@ export const PLAN_DEFS: PlanDef[] = [
     },
     {
         id: "pro_annual", tier: "pro", period: "annual",
-        priceInr: 1_199, paise: 119_900, monthlyPriceInr: 100, savingsPct: 33,
+        priceInr: 1_299, paise: 129_900, monthlyPriceInr: 108, savingsPct: 27,
         features: ["Everything in Plus", "Priority AI responses", "Mood trends & insights", "Export conversations"],
     },
 ];
