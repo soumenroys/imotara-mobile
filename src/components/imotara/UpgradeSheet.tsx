@@ -13,6 +13,7 @@ import {
     ActivityIndicator,
     Platform,
     Alert,
+    Linking,
 } from "react-native";
 import { useIAP } from "expo-iap";
 import type { Purchase, Product, ProductSubscription } from "expo-iap";
@@ -549,9 +550,23 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
 
                         <Text style={{ fontSize: 11, color: colors.textSecondary, textAlign: "center", marginTop: 8 }}>
                             {Platform.OS === "ios"
-                                ? "Subscriptions auto-renew. Cancel anytime in iOS Settings → Subscriptions."
+                                ? "Subscriptions auto-renew monthly or annually at the price shown. Cancel anytime in iOS Settings → Subscriptions."
                                 : "Secure payment via Razorpay. No subscription — pay once per period."}
                         </Text>
+                        {Platform.OS === "ios" && (
+                            <View style={{ flexDirection: "row", justifyContent: "center", gap: 16, marginTop: 10 }}>
+                                <TouchableOpacity onPress={() => Linking.openURL("https://imotara.com/privacy")}>
+                                    <Text style={{ fontSize: 11, color: colors.primary, textDecorationLine: "underline" }}>
+                                        Privacy Policy
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => Linking.openURL("https://imotara.com/terms")}>
+                                    <Text style={{ fontSize: 11, color: colors.primary, textDecorationLine: "underline" }}>
+                                        Terms of Use
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
                     </ScrollView>
                 )}
             </View>
