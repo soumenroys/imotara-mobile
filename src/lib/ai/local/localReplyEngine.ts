@@ -2565,13 +2565,15 @@ export function buildLocalReply(
     const shouldInsertWisdom = isEmotionalSignal && !isEnglishLang && !isCorrection && !isVagueReply && !quoteLine;
     const nativeWisdomLine = shouldInsertWisdom ? buildNativeWisdom(signal, language, seed, true) : null;
 
-    // P2 — Cultural emotion vocabulary (~1 in 8 emotional turns, all languages).
+    // P2 — Cultural emotion vocabulary (~1 in 8 emotional turns, English only).
     // Bit-window >>>13 avoids collision with quote >>>11, wisdom >>>15, story >>>7, myth >>>9.
+    // English-only: intro sentences are in English; non-English users get nativeWisdomEngine instead.
     // Only fires when no other cultural content (quote/wisdom) is already on this turn.
     // Excludes angry/okay signals and sessions with fewer than 2 turns — too early to introduce.
     const culturalVocabTurnCheck = (seed >>> 13) % 8 === 0;
     const shouldInsertCulturalVocab =
       isEmotionalSignal &&
+      isEnglishLang &&
       !isCorrection && !isVagueReply &&
       !quoteLine && !nativeWisdomLine &&
       culturalVocabTurnCheck &&
