@@ -38,7 +38,7 @@ afterEvaluate {
             }.singleFile
 
             if (mappingFile != null && mappingFile.exists() && aabFile != null && aabFile.exists()) {
-                println "Embedding R8 mapping (${mappingFile}) into AAB (${aabFile})..."
+                println "Embedding R8 mapping (\${mappingFile}) into AAB (\${aabFile})..."
                 project.exec {
                     commandLine 'sh', '-c',
                         'TMP=$(mktemp -d) && ' +
@@ -49,7 +49,7 @@ afterEvaluate {
                 }
                 println "Done: mapping embedded."
             } else {
-                println "Skipping mapping embed — mappingFile=${mappingFile} aab=${aabFile}"
+                println "Skipping mapping embed — mappingFile=\${mappingFile} aab=\${aabFile}"
             }
         }
     }
