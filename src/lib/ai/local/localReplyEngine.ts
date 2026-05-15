@@ -3,6 +3,7 @@ import { buildMicroStory } from "./storyEngine";
 import { buildMythologyStory } from "./mythologyEngine";
 import { buildOfflineQuote } from "./quotesEngine";
 import { buildNativeWisdom } from "./nativeWisdomEngine";
+import { getCulturalEmotionWord } from "./culturalEmotionVocab";
 import type { ToneContextPayload } from "../../../api/aiClient";
 import {
     BN_SAD_REGEX, BN_STRESS_REGEX,
@@ -2564,6 +2565,22 @@ export function buildLocalReply(
     const shouldInsertWisdom = isEmotionalSignal && !isEnglishLang && !isCorrection && !isVagueReply && !quoteLine;
     const nativeWisdomLine = shouldInsertWisdom ? buildNativeWisdom(signal, language, seed, true) : null;
 
+    // P2 — Cultural emotion vocabulary (~1 in 8 emotional turns, all languages).
+    // Bit-window >>>13 avoids collision with quote >>>11, wisdom >>>15, story >>>7, myth >>>9.
+    // Only fires when no other cultural content (quote/wisdom) is already on this turn.
+    // Excludes angry/okay signals and sessions with fewer than 2 turns — too early to introduce.
+    const culturalVocabTurnCheck = (seed >>> 13) % 8 === 0;
+    const shouldInsertCulturalVocab =
+      isEmotionalSignal &&
+      !isCorrection && !isVagueReply &&
+      !quoteLine && !nativeWisdomLine &&
+      culturalVocabTurnCheck &&
+      sessionTurn >= 2;
+    const culturalVocabWord = shouldInsertCulturalVocab
+      ? getCulturalEmotionWord(signal, language, seed)
+      : null;
+    const culturalVocabLine = culturalVocabWord ? culturalVocabWord.intro : null;
+
         // ── Assemble ──────────────────────────────────────────────────────────────
 
     const openers =
@@ -2867,8 +2884,9 @@ export function buildLocalReply(
     const mythPart = mythLine ? " " + mythLine : "";
     const quotePart = quoteLine ? " " + quoteLine : "";
     const wisdomPart = nativeWisdomLine ? " " + nativeWisdomLine : "";
+    const culturalVocabPart = culturalVocabLine ? " " + culturalVocabLine : "";
     const extraPart = suppressExtras ? "" : (extra ? " " + extra : "");
-    const finalMsg = dedupeAdjacentSentences(`${base}${bridgePart}${storyPart}${mythPart}${quotePart}${wisdomPart}${extraPart}${topicHint}`.trim());
+    const finalMsg = dedupeAdjacentSentences(`${base}${bridgePart}${storyPart}${mythPart}${quotePart}${wisdomPart}${culturalVocabPart}${extraPart}${topicHint}`.trim());
 
     // Age-aware closing
     const ageClosersByLang: Record<string, Partial<Record<string, string>>> = {
