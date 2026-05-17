@@ -15,7 +15,7 @@ import {
     Alert,
     Linking,
 } from "react-native";
-import { useIAP } from "expo-iap";
+import { useIAP, getAvailablePurchases } from "expo-iap";
 import type { Purchase, Product, ProductSubscription } from "expo-iap";
 import { useColors } from "../../theme/ThemeContext";
 import { useAuth } from "../../auth/AuthContext";
@@ -109,6 +109,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
     const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const [period, setPeriod] = useState<PlanPeriod>("monthly");
     const [purchasing, setPurchasing] = useState<string | null>(null);
+    const [restoring, setRestoring] = useState(false);
     const [signingIn, setSigningIn] = useState(false);
     const [userEmail, setUserEmail] = useState<string | undefined>();
     const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null); // null = loading
@@ -395,6 +396,58 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
         else handleAndroidPurchase(tokenId);
     };
 
+    // ── Restore purchases ──────────────────────────────────────────────────────
+    // expo-iap's restorePurchases() skips onPurchaseSuccess (alsoPublishToEventListenerIOS: false).
+    // We fetch available purchases directly and run each through our verification backend.
+    const handleRestore = async () => {
+        if (restoring) return;
+        setRestoring(true);
+        try {
+            const available = await getAvailablePurchases({ onlyIncludeActiveItemsIOS: true });
+            const subs = available.filter((p) => {
+                const id = iosSkuToProductId(p.productId ?? "");
+                return id && !id.startsWith("tokens_");
+            });
+            if (subs.length === 0) {
+                Alert.alert("Nothing to restore", "No active subscriptions found for this Apple ID.");
+                return;
+            }
+            let restored = 0;
+            for (const purchase of subs) {
+                const productId = iosSkuToProductId(purchase.productId ?? "");
+                if (!productId) continue;
+                let { data: { session } } = await supabase.auth.getSession();
+                if (!session?.access_token) {
+                    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                    session = refreshed;
+                }
+                if (!session?.access_token) {
+                    Alert.alert("Sign in required", "Please sign in to restore your purchases.");
+                    return;
+                }
+                const iosTransactionId = (purchase as any).transactionId ?? purchase.id;
+                const res = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+                    body: JSON.stringify({ productId, transactionId: iosTransactionId }),
+                    signal: AbortSignal.timeout(35_000),
+                });
+                if (res.ok) restored++;
+            }
+            if (restored > 0) {
+                try { await onPurchaseComplete(); } catch { /* best-effort */ }
+                onClose();
+                Alert.alert("Restored!", "Your subscription has been activated.");
+            } else {
+                Alert.alert("Restore failed", "Could not verify your subscription. Please try again.");
+            }
+        } catch {
+            Alert.alert("Restore failed", "Could not reach the server. Please try again.");
+        } finally {
+            setRestoring(false);
+        }
+    };
+
     // ── Render ─────────────────────────────────────────────────────────────────
     const plansForPeriod = PLAN_DEFS.filter((p) => p.period === period);
     const iosLoading = Platform.OS === "ios" && !connected;
@@ -554,14 +607,18 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                         </View>
 
                         {/* iOS: Restore purchases (App Store guideline requirement) */}
-                        {Platform.OS === "ios" && restorePurchases && (
+                        {Platform.OS === "ios" && (
                             <TouchableOpacity
-                                onPress={() => restorePurchases()}
+                                onPress={handleRestore}
+                                disabled={restoring}
                                 style={{ alignItems: "center", paddingVertical: 8 }}
                             >
-                                <Text style={{ fontSize: 12, color: colors.textSecondary, textDecorationLine: "underline" }}>
-                                    Restore previous purchases
-                                </Text>
+                                {restoring
+                                    ? <ActivityIndicator size="small" color={colors.textSecondary} />
+                                    : <Text style={{ fontSize: 12, color: colors.textSecondary, textDecorationLine: "underline" }}>
+                                        Restore previous purchases
+                                    </Text>
+                                }
                             </TouchableOpacity>
                         )}
 
