@@ -3514,6 +3514,8 @@ export default function ChatScreen() {
   const isSendDisabled =
     input.trim().length === 0 || isTyping || isSendingRef.current;
 
+  const isPad = Platform.OS === "ios" && Platform.isPad;
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -3522,6 +3524,8 @@ export default function ChatScreen() {
       enabled={!(Platform.OS === "ios" && Platform.isPad)}
     >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
+      {/* iPad: constrain content to a centered column so the UI doesn't span the full iPad width */}
+      <View style={isPad ? { flex: 1, maxWidth: 700, width: "100%", alignSelf: "center" } : { flex: 1 }}>
       {/* Offline / unsynced indicator */}
       {!isOnline ? (
         <View style={{ backgroundColor: "rgba(202,138,4,0.92)", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
@@ -4786,6 +4790,7 @@ export default function ChatScreen() {
 
       {/* Error / info toast — non-intrusive, auto-dismisses */}
       <Toast ref={toastRef} />
+      </View>{/* end iPad centering wrapper */}
     </View>
     </KeyboardAvoidingView>
   );

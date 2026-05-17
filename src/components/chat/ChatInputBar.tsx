@@ -2,7 +2,7 @@
 // Bottom input area for ChatScreen — text field, mic button, send button.
 
 import React from "react";
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { ColorPalette } from "../../theme/colors";
 
@@ -36,17 +36,24 @@ export function ChatInputBar({
   firstTimeTip,
 }: Props) {
   const paddingBottom = 8;
+  const isPad = Platform.OS === "ios" && Platform.isPad;
   return (
     <View
       style={{
         borderTopWidth: 1,
         borderTopColor: colors.border,
-        paddingHorizontal: 12,
-        paddingTop: 8,
-        paddingBottom,
         backgroundColor: "rgba(15, 23, 42, 0.98)",
       }}
     >
+      {/* iPad: center content in a max-width column so input doesn't span the full iPad width */}
+      <View
+        style={{
+          paddingHorizontal: 12,
+          paddingTop: 8,
+          paddingBottom,
+          ...(isPad ? { maxWidth: 700, alignSelf: "center", width: "100%" } : {}),
+        }}
+      >
       {firstTimeTip ? (
         <Text
           style={{
@@ -176,6 +183,7 @@ export function ChatInputBar({
           <Text style={{ color: "#fff", fontWeight: "700" }}>Send</Text>
         </TouchableOpacity>
       </View>
+      </View>{/* end iPad centering wrapper */}
     </View>
   );
 }
