@@ -31,6 +31,7 @@ import {
     type PlanDef,
     type ProductId,
 } from "../../payments/upgradePlans";
+import type { PurchaseIOS } from "expo-iap";
 
 type Props = {
     visible: boolean;
@@ -172,6 +173,10 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                         return;
                     }
 
+                    // PurchaseIOS.transactionId is the StoreKit 2 numeric transaction ID
+                    // (e.g. "2000000123456789") that Apple's Server API expects.
+                    // purchase.id is a generic PurchaseCommon field — not the same thing on iOS.
+                    const iosTransactionId = (purchase as PurchaseIOS).transactionId ?? purchase.id;
                     const verifyRes = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
                         method: "POST",
                         headers: {
@@ -180,17 +185,17 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                         },
                         body: JSON.stringify({
                             productId,
-                            // purchase.id is the StoreKit 2 transaction identifier (e.g. "2000000123456789").
-                            // purchase.productId is the SKU — wrong field for Apple's transaction lookup API.
-                            transactionId: purchase.id,
+                            transactionId: iosTransactionId,
                         }),
+                        signal: AbortSignal.timeout(35_000),
                     });
                     if (!verifyRes.ok) {
                         // Don't finish — Apple will re-deliver on next launch so the user
                         // gets another verification attempt.
+                        const errBody = await verifyRes.json().catch(() => ({})) as { error?: string };
                         Alert.alert(
                             "Verification failed",
-                            "Your purchase was recorded by Apple but we couldn't activate it. Re-open the app to retry, or tap 'Restore previous purchases'.",
+                            `${errBody.error ?? "Unknown error"}. Re-open the app to retry, or tap 'Restore previous purchases'.`,
                         );
                         return;
                     }
