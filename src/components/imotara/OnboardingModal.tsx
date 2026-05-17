@@ -231,7 +231,7 @@ function makeStyles(colors: ColorPalette) {
       paddingHorizontal: 24,
       paddingTop: 60,
       paddingBottom: 20,
-      ...(Platform.OS === "ios" && Platform.isPad ? { maxWidth: 600, alignSelf: "center", width: "100%" } : {}),
+      ...(Platform.OS === "ios" && Platform.isPad ? { maxWidth: 600, alignSelf: "center" as const, width: "100%" as const } : {}),
     } as const,
     dotsRow: {
       flexDirection: "row" as const,
