@@ -35,6 +35,12 @@ export default function IOSTipJar() {
         finishTransaction,
     } = useIAP({
         onPurchaseSuccess: async (purchase: Purchase) => {
+            // expo-iap broadcasts every purchase to all active useIAP hooks.
+            // Only handle tip products here; subscriptions/tokens are handled by UpgradeSheet.
+            const pid = purchase.productId ?? "";
+            const isTip = IOS_TIP_SKUS.some((sku) => pid === sku || pid.endsWith(`.${sku}`));
+            if (!isTip) return;
+
             try {
                 await finishTransaction({ purchase, isConsumable: true });
                 Alert.alert(

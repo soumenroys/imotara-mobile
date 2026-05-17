@@ -155,54 +155,57 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
             let serverVerified = false;
             try {
                 const productId = iosSkuToProductId(purchase.productId ?? "");
-                const isTokenPack = productId?.startsWith("tokens_") ?? false;
 
-                if (productId) {
-                    // Require a valid session to call the verification endpoint.
-                    // Mirror the Android pattern: try refresh before giving up.
-                    let { data: { session } } = await supabase.auth.getSession();
-                    if (!session?.access_token) {
-                        const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-                        session = refreshed;
-                    }
-                    if (!session?.access_token) {
-                        // No auth — leave the transaction pending so Apple re-delivers it on
-                        // next app launch, where the user can sign in and try again.
-                        Alert.alert(
-                            "Sign in required",
-                            "Please sign in and re-open the app to activate your purchase. Your payment is safe.",
-                        );
-                        return;
-                    }
+                // expo-iap broadcasts every purchase to all active useIAP hooks.
+                // Return early for products not owned by this sheet (e.g. tip jar).
+                if (!productId) return;
 
-                    // PurchaseIOS.transactionId is the StoreKit 2 numeric transaction ID
-                    // (e.g. "2000000123456789") that Apple's Server API expects.
-                    // purchase.id is a generic PurchaseCommon field — not the same thing on iOS.
-                    const iosTransactionId = (purchase as PurchaseIOS).transactionId ?? purchase.id;
-                    const verifyRes = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            Authorization: `Bearer ${session.access_token}`,
-                        },
-                        body: JSON.stringify({
-                            productId,
-                            transactionId: iosTransactionId,
-                        }),
-                        signal: AbortSignal.timeout(35_000),
-                    });
-                    if (!verifyRes.ok) {
-                        // Don't finish — Apple will re-deliver on next launch so the user
-                        // gets another verification attempt.
-                        const errBody = await verifyRes.json().catch(() => ({})) as { error?: string };
-                        Alert.alert(
-                            "Verification failed",
-                            `${errBody.error ?? "Unknown error"}. Re-open the app to retry, or tap 'Restore previous purchases'.`,
-                        );
-                        return;
-                    }
-                    serverVerified = true;
+                const isTokenPack = productId.startsWith("tokens_");
+
+                // Require a valid session to call the verification endpoint.
+                // Mirror the Android pattern: try refresh before giving up.
+                let { data: { session } } = await supabase.auth.getSession();
+                if (!session?.access_token) {
+                    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                    session = refreshed;
                 }
+                if (!session?.access_token) {
+                    // No auth — leave the transaction pending so Apple re-delivers it on
+                    // next app launch, where the user can sign in and try again.
+                    Alert.alert(
+                        "Sign in required",
+                        "Please sign in and re-open the app to activate your purchase. Your payment is safe.",
+                    );
+                    return;
+                }
+
+                // PurchaseIOS.transactionId is the StoreKit 2 numeric transaction ID
+                // (e.g. "2000000123456789") that Apple's Server API expects.
+                // purchase.id is a generic PurchaseCommon field — not the same thing on iOS.
+                const iosTransactionId = (purchase as PurchaseIOS).transactionId ?? purchase.id;
+                const verifyRes = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${session.access_token}`,
+                    },
+                    body: JSON.stringify({
+                        productId,
+                        transactionId: iosTransactionId,
+                    }),
+                    signal: AbortSignal.timeout(35_000),
+                });
+                if (!verifyRes.ok) {
+                    // Don't finish — Apple will re-deliver on next launch so the user
+                    // gets another verification attempt.
+                    const errBody = await verifyRes.json().catch(() => ({})) as { error?: string };
+                    Alert.alert(
+                        "Verification failed",
+                        `${errBody.error ?? "Unknown error"}. Re-open the app to retry, or tap 'Restore previous purchases'.`,
+                    );
+                    return;
+                }
+                serverVerified = true;
 
                 // Best-effort finish — ignore if StoreKit already finalized this transaction.
                 try {
