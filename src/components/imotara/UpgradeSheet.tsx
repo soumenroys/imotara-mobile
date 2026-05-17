@@ -151,6 +151,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
         restorePurchases,
     } = useIAP({
         onPurchaseSuccess: async (purchase: Purchase) => {
+            let serverVerified = false;
             try {
                 const productId = iosSkuToProductId(purchase.productId ?? "");
                 const isTokenPack = productId?.startsWith("tokens_") ?? false;
@@ -199,22 +200,33 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                         );
                         return;
                     }
+                    serverVerified = true;
                 }
 
-                // Only finish the transaction after successful server verification.
-                await finishTransaction({ purchase, isConsumable: isTokenPack });
+                // Best-effort finish — ignore if StoreKit already finalized this transaction.
+                try {
+                    await finishTransaction({ purchase, isConsumable: isTokenPack });
+                } catch { /* safe to ignore — transaction may already be finalized */ }
+
                 // onPurchaseComplete refreshes local license state — non-critical if it fails.
                 // License is already granted server-side at this point.
                 try { await onPurchaseComplete(); } catch { /* best-effort */ }
                 onClose();
-                Alert.alert("Thank you!", "Your plan has been upgraded. Enjoy Imotara Plus/Pro!");
+                Alert.alert("Thank you! 💙", "Your plan has been upgraded. Enjoy Imotara!");
             } catch {
-                // An error escaped after server verification succeeded — the license is granted
-                // but the UI didn't reflect it. Tell the user to restart to pick up the new plan.
-                Alert.alert(
-                    "Purchase complete",
-                    "Your payment was received. Please restart the app to activate your new plan.",
-                );
+                if (serverVerified) {
+                    // License was granted server-side but UI update failed — safe to tell user.
+                    Alert.alert(
+                        "Purchase complete",
+                        "Your payment was received. Please restart the app to activate your new plan.",
+                    );
+                } else {
+                    // Error before or during verification — don't claim payment was received.
+                    Alert.alert(
+                        "Verification failed",
+                        "Could not reach the server. Re-open the app to retry, or tap 'Restore previous purchases'.",
+                    );
+                }
             } finally {
                 setPurchasing(null);
             }
