@@ -607,6 +607,40 @@ export default function SettingsScreen() {
     const [sectionPrivacy, setSectionPrivacy] = React.useState(false);
     const [sectionSupport, setSectionSupport] = React.useState(true);
 
+    // A-5: Storage summary (loaded once when component mounts)
+    const [storageSummary, setStorageSummary] = React.useState<{
+        emotionCount: number;
+        totalKB: number;
+    } | null>(null);
+
+    React.useEffect(() => {
+        (async () => {
+            try {
+                const emotionRaw = await AsyncStorage.getItem("imotara:history:v1").catch(() => null);
+                const emotionArr: unknown[] = (() => {
+                    try { return JSON.parse(emotionRaw ?? "[]"); } catch { return []; }
+                })();
+                // Approximate total KB from the main stored blobs
+                const keys = [
+                    "imotara:history:v1",
+                    "imotara_settings_v1",
+                    "imotara.challenge30.v1",
+                ];
+                let totalBytes = 0;
+                for (const k of keys) {
+                    const v = await AsyncStorage.getItem(k).catch(() => null);
+                    if (v) totalBytes += v.length;
+                }
+                setStorageSummary({
+                    emotionCount: emotionArr.length,
+                    totalKB: Math.round(totalBytes / 1024),
+                });
+            } catch {
+                // non-fatal
+            }
+        })();
+    }, []);
+
     function toggleSection(setter: React.Dispatch<React.SetStateAction<boolean>>) {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setter((v) => !v);
@@ -2653,6 +2687,45 @@ export default function SettingsScreen() {
                 <AccordionHeader title="Privacy & Data" open={sectionPrivacy} onPress={() => toggleSection(setSectionPrivacy)} />
                 {sectionPrivacy && (
                 <View>
+
+                {/* A-5: Data on this device summary */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 8 }}>
+                        Data on this device
+                    </Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
+                        {[
+                            { label: "Chat messages", value: messageCount },
+                            { label: "Emotion entries", value: storageSummary?.emotionCount ?? "—" },
+                            { label: "Storage used", value: storageSummary ? `~${storageSummary.totalKB} KB` : "—" },
+                        ].map((item) => (
+                            <View
+                                key={item.label}
+                                style={{
+                                    flex: 1,
+                                    minWidth: 90,
+                                    borderRadius: 12,
+                                    borderWidth: 1,
+                                    borderColor: colors.border,
+                                    backgroundColor: "rgba(15,23,42,0.6)",
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 8,
+                                    alignItems: "center",
+                                }}
+                            >
+                                <Text style={{ fontSize: 18, fontWeight: "700", color: colors.textPrimary }}>
+                                    {item.value}
+                                </Text>
+                                <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2, textAlign: "center" }}>
+                                    {item.label}
+                                </Text>
+                            </View>
+                        ))}
+                    </View>
+                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                        Stored only on this device unless you sync.
+                    </Text>
+                </AppSurface>
 
                 {/* Local history card */}
                 <AppSurface style={{ marginBottom: 16 }}>
