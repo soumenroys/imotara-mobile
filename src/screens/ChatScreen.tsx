@@ -1518,6 +1518,8 @@ export default function ChatScreen() {
   // Feature discovery cards — one per session, after 3+ user messages
   const navigation = useNavigation<any>();
   const [discoveryCard, setDiscoveryCard] = useState<DiscoveryCardId | null>(null);
+  // L-2: post-session tone reflection card
+  const [sessionToneCardDismissed, setSessionToneCardDismissed] = useState(false);
   const discoveryShownThisSession = useRef(false);
   useEffect(() => {
     const userCount = messages.filter((m) => m.from === "user").length;
@@ -4358,6 +4360,43 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </Animated.View>
       )}
+
+      {/* L-2: Post-session tone reflection card */}
+      {!isTyping &&
+        !sessionToneCardDismissed &&
+        messages.filter((m) => m.from === "user").length >= 3 && (() => {
+          const MOOD_EMOJI: Record<string, string> = {
+            happy: "😄", joy: "😄", grateful: "🙏", hopeful: "💚",
+            sad: "💙", sadness: "💙", grief: "💜", loss: "💜",
+            anxious: "😰", anxiety: "😰", stressed: "💛",
+            angry: "❤️", anger: "❤️", confused: "🟣", lonely: "🫂", neutral: "💭",
+          };
+          const recentMoods = messages.filter((m) => m.from === "user" && m.moodHint).slice(-5);
+          const dominant = recentMoods.length > 0 ? (recentMoods[recentMoods.length - 1].moodHint ?? "neutral") : "neutral";
+          const emoji = MOOD_EMOJI[dominant.toLowerCase()] ?? "💭";
+          const emotionLabel = dominant.charAt(0).toUpperCase() + dominant.slice(1);
+          return (
+            <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.25)", backgroundColor: "rgba(99,102,241,0.09)", paddingHorizontal: 12, paddingVertical: 10 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <Text style={{ fontSize: 9, fontWeight: "700", color: "rgba(165,180,252,0.7)", textTransform: "uppercase", letterSpacing: 0.8 }}>Tone Reflection</Text>
+                <TouchableOpacity onPress={() => setSessionToneCardDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={{ fontSize: 14, color: "rgba(165,180,252,0.4)" }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <Text style={{ fontSize: 16 }}>{emoji}</Text>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#a5b4fc" }}>{emotionLabel}</Text>
+              </View>
+              <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 18 }}>
+                You've been sharing openly. Take a moment to reflect on what came up for you.
+              </Text>
+              <TouchableOpacity onPress={() => navigation.navigate("Trends")} style={{ marginTop: 6 }}>
+                <Text style={{ fontSize: 11, color: "#818cf8", textDecorationLine: "underline" }}>Reflect on this →</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })()
+      }
 
       {/* P4 — Unsent Letter mode banner */}
       {unsentLetterSetup && (

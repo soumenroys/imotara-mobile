@@ -287,6 +287,8 @@ export default function SettingsScreen() {
     const {
         emotionInsightsEnabled,
         setEmotionInsightsEnabled,
+        teenMode,
+        setTeenMode,
         lastSyncAt,
         lastSyncStatus,
         setLastSyncAt,
@@ -1352,6 +1354,47 @@ export default function SettingsScreen() {
                     >
                         This toggle does not send any extra data to the cloud yet. It
                         is a design placeholder for future AI-powered insights.
+                    </Text>
+                </AppSurface>
+
+                {/* Teen Insights Mode card */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View
+                        style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: 6,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 14,
+                                color: colors.textPrimary,
+                                fontWeight: "500",
+                            }}
+                        >
+                            Teen Insights Mode
+                        </Text>
+                        <Switch
+                            value={teenMode}
+                            onValueChange={setTeenMode}
+                            trackColor={{
+                                false: "#4b5563",
+                                true: "#7c3aed",
+                            }}
+                            thumbColor={"#f9fafb"}
+                        />
+                    </View>
+
+                    <Text
+                        style={{
+                            fontSize: 13,
+                            color: colors.textSecondary,
+                            marginBottom: 4,
+                        }}
+                    >
+                        Shows age-appropriate reflections with peer-supportive language and enhanced safety filters.
                     </Text>
                 </AppSurface>
 

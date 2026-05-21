@@ -109,6 +109,10 @@ type SettingsContextValue = {
      */
     chatLinkKey: string;
     setChatLinkKey: (value: string) => void;
+
+    /** Shows age-appropriate reflections with peer-supportive language. */
+    teenMode: boolean;
+    setTeenMode: (value: boolean) => void;
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -199,6 +203,7 @@ function normalizeToneContext(value: ToneContextPayload): ToneContextPayload {
 export function SettingsProvider({ children }: { children: ReactNode }) {
     // Keep your original defaults (non-breaking)
     const [emotionInsightsEnabled, _setEmotionInsightsEnabled] = useState(true);
+    const [teenMode, _setTeenMode] = useState(false);
 
     // Phase 2.4: History list preference (default: hide assistant replies)
     const [showAssistantRepliesInHistory, _setShowAssistantRepliesInHistory] =
@@ -355,6 +360,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             );
                         }
 
+                        if ("teenMode" in parsed) {
+                            _setTeenMode(safeBool((parsed as any).teenMode, false));
+                        }
+
                         if ("showAssistantRepliesInHistory" in parsed) {
                             _setShowAssistantRepliesInHistory(
                                 safeBool((parsed as any).showAssistantRepliesInHistory, false)
@@ -478,6 +487,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
         const payload = {
             emotionInsightsEnabled,
+            teenMode,
             showAssistantRepliesInHistory,
             autoSyncDelaySeconds,
             lastSyncAt,
@@ -500,6 +510,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }, [
         hydrated,
         emotionInsightsEnabled,
+        teenMode,
         showAssistantRepliesInHistory,
         autoSyncDelaySeconds,
         lastSyncAt,
@@ -513,6 +524,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // ---- Wrapped setters (non-breaking; same signatures) ----
     const setEmotionInsightsEnabled = (value: boolean) => {
         _setEmotionInsightsEnabled(!!value);
+    };
+
+    const setTeenMode = (value: boolean) => {
+        _setTeenMode(!!value);
     };
 
     const setShowAssistantRepliesInHistory = (value: boolean) => {
@@ -615,6 +630,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 resetLocalUserScopeId,
                 chatLinkKey,
                 setChatLinkKey,
+                teenMode,
+                setTeenMode,
             }}
         >
             {children}
