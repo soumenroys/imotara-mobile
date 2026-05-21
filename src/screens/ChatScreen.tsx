@@ -1421,6 +1421,9 @@ export default function ChatScreen() {
   const [unsentLetterVisible, setUnsentLetterVisible] = useState(false);
   const [unsentLetterSetup, setUnsentLetterSetup] = useState<UnsentLetterSetup | null>(null);
 
+  // NF-2 — Grief & Loss dedicated space
+  const [griefMode, setGriefMode] = useState(false);
+
   // UX-3 — contextual unsent-letter hint (relationship keywords detected)
   const UNSENT_TRIED_KEY = "imotara.unsent_letter.tried.v1";
   const [showUnsentHint, setShowUnsentHint] = useState(false);
@@ -2584,8 +2587,12 @@ export default function ChatScreen() {
               .join("\n\n") || undefined;
 
           // P4 — Unsent Letter: prepend role-play context so AI responds in recipient's voice
+          // NF-2 — Grief & Loss: prepend grief-aware system context
+          const griefSystemPrompt = `You are holding a dedicated Grief & Loss space. The user has chosen to open this space intentionally. Your role is to be fully present with their grief — not to fix, reframe, or rush toward healing. DO NOT say "they are in a better place", "time heals", "at least...", or any forward-looking reassurance unless the user explicitly asks for it. DO: sit in the weight of the loss with them. DO: name what was lost if they've shared it. DO: acknowledge the specific, irreplaceable nature of who or what they've lost. Speak slowly, softly, and with care. This is sacred ground.`;
           const aiMessage = unsentLetterSetup
             ? `${buildUnsentLetterSystemPrompt(unsentLetterSetup)}\n\nThe user's letter:\n${trimmed}`
+            : griefMode
+            ? `${griefSystemPrompt}\n\n${trimmed}`
             : trimmed;
 
           // 1) Try cloud if allowed by Analysis Mode AND device is online
@@ -4411,6 +4418,19 @@ export default function ChatScreen() {
         </View>
       )}
 
+      {/* NF-2 — Grief & Loss space banner */}
+      {griefMode && (
+        <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 12, borderWidth: 1, borderColor: "rgba(251,113,133,0.3)", backgroundColor: "rgba(251,113,133,0.08)", paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Ionicons name="heart-outline" size={13} color="#fda4af" />
+          <Text style={{ flex: 1, fontSize: 12, color: "#fda4af" }}>
+            Grief &amp; Loss space — Imotara will hold this with you, without rushing.
+          </Text>
+          <TouchableOpacity onPress={() => setGriefMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close-outline" size={16} color="rgba(253,164,175,0.6)" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Trial countdown banner */}
       {showTrialBanner && licenseExpiresAt && (() => {
         const daysLeft = Math.ceil((new Date(licenseExpiresAt).getTime() - Date.now()) / 86_400_000);
@@ -4788,6 +4808,18 @@ export default function ChatScreen() {
             >
               <Ionicons name="pencil-outline" size={17} color={unsentLetterSetup ? "#a78bfa" : colors.textSecondary} />
               <Text style={{ color: unsentLetterSetup ? "#a78bfa" : colors.textPrimary, fontSize: 14 }}>Unsent letter</Text>
+            </TouchableOpacity>
+
+            {/* NF-2 — Grief & Loss space */}
+            <TouchableOpacity
+              onPress={() => {
+                setShowHeaderMenu(false);
+                setGriefMode((v) => !v);
+              }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+            >
+              <Ionicons name="heart-outline" size={17} color={griefMode ? "#fda4af" : colors.textSecondary} />
+              <Text style={{ color: griefMode ? "#fda4af" : colors.textPrimary, fontSize: 14 }}>{griefMode ? "Exit grief & loss space" : "Grief & loss space"}</Text>
             </TouchableOpacity>
 
             {/* Clear chat */}

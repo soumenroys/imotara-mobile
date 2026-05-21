@@ -1006,6 +1006,154 @@ function computeStreak(activeDays: Set<string>): number {
   return streak;
 }
 
+// ── EN-4: 30-Day Reflection Challenge ────────────────────────────────────────
+const CHALLENGE_KEY_MOBILE = "imotara.challenge30.v1";
+const CHALLENGE_PROMPTS_MOBILE: string[] = [
+  "Write about one thing that made you feel alive this week.",
+  "Describe a moment when you felt truly understood.",
+  "What emotion do you avoid most — and why?",
+  "Write about a person who shaped how you see yourself.",
+  "What does 'home' feel like emotionally?",
+  "Describe a small joy you noticed today.",
+  "What are you holding onto that might be time to release?",
+  "Write about a time you surprised yourself.",
+  "What does your inner critic say — and what does it need?",
+  "Describe a feeling you haven't had words for until now.",
+  "What do you wish someone had told you during a hard time?",
+  "Write about a relationship that changed you.",
+  "What are you most grateful for that you rarely say out loud?",
+  "Describe a moment when silence felt comforting.",
+  "What does 'enough' feel like to you?",
+  "Write about a fear quietly guiding your decisions.",
+  "When did you last feel proud of yourself just for trying?",
+  "What part of your story do you still need to make peace with?",
+  "Describe a time asking for help was hard — and what happened.",
+  "What does rest feel like versus escape for you?",
+  "Write about a boundary you set — or wish you had.",
+  "What do you keep returning to in your thoughts?",
+  "Describe a version of yourself you've outgrown.",
+  "What is one thing your body has been trying to tell you?",
+  "Write about a moment of deep connection with something larger than yourself.",
+  "What would you tell your younger self about a hard time?",
+  "Describe the shape of your loneliness, if any.",
+  "What are you learning about yourself through difficulty?",
+  "Write about one thing you want to feel more of.",
+  "What would it mean to be gentle with yourself today?",
+];
+
+type ChallengeStateMobile = { startDate: string; completedDays: number[] };
+
+async function loadChallengeMobile(): Promise<ChallengeStateMobile> {
+  try {
+    const raw = await AsyncStorage.getItem(CHALLENGE_KEY_MOBILE);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p?.startDate && Array.isArray(p.completedDays)) return p;
+    }
+  } catch {}
+  return { startDate: new Date().toISOString().slice(0, 10), completedDays: [] };
+}
+
+async function saveChallengeMobile(state: ChallengeStateMobile) {
+  try { await AsyncStorage.setItem(CHALLENGE_KEY_MOBILE, JSON.stringify(state)); } catch {}
+}
+
+function getChallengeDayMobile(startDate: string): number {
+  const start = new Date(startDate).setHours(0, 0, 0, 0);
+  const today = new Date().setHours(0, 0, 0, 0);
+  return Math.floor((today - start) / 86_400_000);
+}
+
+function ChallengeWidget({ colors }: { colors: any }) {
+  const [challenge, setChallenge] = useState<ChallengeStateMobile | null>(null);
+
+  useEffect(() => {
+    loadChallengeMobile().then(setChallenge);
+  }, []);
+
+  async function startChallenge() {
+    const next: ChallengeStateMobile = { startDate: new Date().toISOString().slice(0, 10), completedDays: [] };
+    await saveChallengeMobile(next);
+    setChallenge(next);
+  }
+
+  async function markToday() {
+    if (!challenge) return;
+    const day = getChallengeDayMobile(challenge.startDate);
+    if (challenge.completedDays.includes(day)) return;
+    const next = { ...challenge, completedDays: [...challenge.completedDays, day] };
+    await saveChallengeMobile(next);
+    setChallenge(next);
+  }
+
+  if (!challenge) return null;
+
+  const dayIndex = getChallengeDayMobile(challenge.startDate);
+  const currentDay = Math.min(dayIndex, 29);
+  const isComplete = dayIndex >= 30;
+  const todayDone = challenge.completedDays.includes(dayIndex);
+  const totalDone = challenge.completedDays.length;
+  const prompt = CHALLENGE_PROMPTS_MOBILE[currentDay] ?? CHALLENGE_PROMPTS_MOBILE[29];
+
+  return (
+    <View style={{ borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 14, marginBottom: 12 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <View>
+          <Text style={{ fontSize: 9, fontWeight: "700", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 2 }}>30-Day Challenge</Text>
+          <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary }}>
+            {isComplete ? "Challenge complete 🎉" : `Day ${currentDay + 1} of 30`}
+          </Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={{ fontSize: 11, color: colors.textSecondary }}>{totalDone}/30</Text>
+          <TouchableOpacity onPress={startChallenge}>
+            <Text style={{ fontSize: 10, color: colors.textSecondary, textDecorationLine: "underline" }}>Restart</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Progress dots */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+        {Array.from({ length: 30 }, (_, i) => {
+          const done = challenge.completedDays.includes(i);
+          const isToday = i === dayIndex && dayIndex < 30;
+          const isFuture = i > dayIndex;
+          return (
+            <View
+              key={i}
+              style={{
+                width: 12, height: 12, borderRadius: 6,
+                backgroundColor: done ? "#10b981" : isToday ? "#6366f1" : isFuture ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.15)",
+                borderWidth: isToday ? 1.5 : 0,
+                borderColor: isToday ? "rgba(99,102,241,0.5)" : "transparent",
+              }}
+            />
+          );
+        })}
+      </View>
+
+      {!isComplete && (
+        <>
+          <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 18, fontStyle: "italic", marginBottom: 10 }}>
+            &ldquo;{prompt}&rdquo;
+          </Text>
+          {!todayDone ? (
+            <TouchableOpacity
+              onPress={markToday}
+              style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.35)", backgroundColor: "rgba(16,185,129,0.1)" }}
+            >
+              <Ionicons name="checkmark-outline" size={13} color="#6ee7b7" />
+              <Text style={{ fontSize: 11, fontWeight: "600", color: "#6ee7b7" }}>Mark today done</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={{ fontSize: 11, color: "#6ee7b7" }}>✓ Today&apos;s reflection marked complete</Text>
+          )}
+        </>
+      )}
+    </View>
+  );
+}
+
 export default function TrendsScreen() {
   const colors = useColors();
   const navigation = useNavigation<any>();
@@ -1227,6 +1375,7 @@ export default function TrendsScreen() {
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor="#38bdf8" colors={["#38bdf8"]} />}
       >
         <FeelSection colors={colors} onCheckin={handleCheckin} />
+        <ChallengeWidget colors={colors} />
         <View style={{ alignItems: "center", paddingTop: 24 }}>
           <Ionicons name="stats-chart-outline" size={32} color={colors.textSecondary} style={{ marginBottom: 16 }} />
           <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, textAlign: "center", marginBottom: 8 }}>
@@ -1789,6 +1938,9 @@ export default function TrendsScreen() {
           </View>
         );
       })()}
+
+      {/* EN-4: 30-Day Reflection Challenge */}
+      <ChallengeWidget colors={colors} />
 
       {/* Daily Journal */}
       <JournalSection colors={colors} topEmotion={topEmotion as EmotionBucket | undefined} />

@@ -23,6 +23,7 @@ import {
     Linking,
     LayoutAnimation,
     Image,
+    Share,
 } from "react-native";
 
 import { useHistoryStore } from "../state/HistoryContext";
@@ -546,6 +547,57 @@ export default function SettingsScreen() {
         setNewMemoryText("");
         setAddingMemory(false);
     };
+
+    // NF-3: Family snapshot share
+    const [familySnapUrl, setFamilySnapUrl] = React.useState<string | null>(null);
+
+    async function generateFamilySnapshotMobile() {
+        try {
+            const EMOTION_MAP: Record<string, string> = {
+                joy: "joy", happiness: "joy", happy: "joy", hopeful: "hopeful",
+                sadness: "sadness", sad: "sadness", grief: "grief",
+                anxiety: "anxiety", anxious: "anxiety", stressed: "stressed",
+                anger: "anger", angry: "anger", fear: "fear", neutral: "neutral",
+            };
+            const history: any[] = store.history ?? [];
+            const now = Date.now();
+            const week: string[] = Array.from({ length: 7 }, (_, i) => {
+                const dayStart = now - (6 - i) * 86_400_000;
+                const dayEnd = dayStart + 86_400_000;
+                const dayMsgs = history.filter((m: any) => m.timestamp >= dayStart && m.timestamp < dayEnd && m.from === "user");
+                const withEmotion = dayMsgs.find((m: any) => m.emotion || m.moodHint);
+                const raw = withEmotion?.emotion ?? withEmotion?.moodHint ?? "neutral";
+                return EMOTION_MAP[raw.toLowerCase()] ?? "neutral";
+            });
+            const freq: Record<string, number> = {};
+            for (const e of week) freq[e] = (freq[e] ?? 0) + 1;
+            const dominant = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "neutral";
+            const challengeRaw = await AsyncStorage.getItem("imotara.challenge30.v1").catch(() => null);
+            const challengeData = challengeRaw ? JSON.parse(challengeRaw) : {};
+            const reflectionDays = Array.isArray(challengeData.completedDays) ? challengeData.completedDays.filter((d: number) => d < 7).length : 0;
+            const snap = {
+                displayName: (toneContext?.user?.name ?? ""),
+                week,
+                dominant,
+                reflectionDays,
+                generatedAt: new Date().toISOString().slice(0, 10),
+            };
+            const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(snap))));
+            const url = `https://imotaraapp.vercel.app/family/view?snap=${encoded}`;
+            setFamilySnapUrl(url);
+            return url;
+        } catch {
+            return null;
+        }
+    }
+
+    async function shareFamilySnapshot() {
+        const url = familySnapUrl ?? await generateFamilySnapshotMobile();
+        if (!url) return;
+        try {
+            await Share.share({ message: `My mood snapshot this week: ${url}`, url });
+        } catch { /* user cancelled */ }
+    }
 
     // ── Accordion section open/closed state ─────────────────────────────────
     const [showUpgradeSheet, setShowUpgradeSheet] = React.useState(false);
@@ -1396,6 +1448,28 @@ export default function SettingsScreen() {
                     >
                         Shows age-appropriate reflections with peer-supportive language and enhanced safety filters.
                     </Text>
+                </AppSurface>
+
+                {/* NF-3: Family Snapshot card */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Family Snapshot
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
+                        Share a private link showing your week&apos;s emotional tone with family. Encoded locally — nothing is sent to a server.
+                    </Text>
+                    <TouchableOpacity
+                        onPress={shareFamilySnapshot}
+                        style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.35)", backgroundColor: "rgba(16,185,129,0.1)" }}
+                    >
+                        <Ionicons name="share-outline" size={15} color="#6ee7b7" />
+                        <Text style={{ fontSize: 12, fontWeight: "600", color: "#6ee7b7" }}>Share my snapshot</Text>
+                    </TouchableOpacity>
+                    {familySnapUrl && (
+                        <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 8 }} numberOfLines={2}>
+                            {familySnapUrl}
+                        </Text>
+                    )}
                 </AppSurface>
 
                 </View>
