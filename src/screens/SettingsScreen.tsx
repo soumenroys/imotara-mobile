@@ -582,7 +582,7 @@ export default function SettingsScreen() {
                 reflectionDays,
                 generatedAt: new Date().toISOString().slice(0, 10),
             };
-            const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(snap))));
+            const encoded = btoa(encodeURIComponent(JSON.stringify(snap)));
             const url = `https://imotaraapp.vercel.app/family/view?snap=${encoded}`;
             setFamilySnapUrl(url);
             return url;
