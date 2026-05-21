@@ -30,7 +30,7 @@ import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import { useAuth } from "../auth/AuthContext";
-import { useTheme } from "../theme/ThemeContext";
+import { useTheme, ACCENT_COLORS, type Accent, type FontSize } from "../theme/ThemeContext";
 import {
     scheduleCheckInReminder,
     cancelCheckInReminder,
@@ -310,7 +310,7 @@ export default function SettingsScreen() {
         refreshLicense,
     } = useSettings();
 
-    const { themeMode, toggleTheme, isDark, colors } = useTheme();
+    const { themeMode, toggleTheme, isDark, colors, accent, setAccent, fontSize, setFontSize } = useTheme();
 
     const messageCount = (history as HistoryRecord[]).length;
 
@@ -1507,6 +1507,72 @@ export default function SettingsScreen() {
                                 Switch to {isDark ? "Light" : "Dark"}
                             </Text>
                         </TouchableOpacity>
+                    </View>
+                </AppSurface>
+
+                {/* Accent colour */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 8 }}>
+                        Accent colour
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 12, flexWrap: "wrap" }}>
+                        {(Object.entries(ACCENT_COLORS) as [Accent, string][]).map(([key, hex]) => (
+                            <TouchableOpacity
+                                key={key}
+                                onPress={() => setAccent(key)}
+                                style={{
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: 16,
+                                    backgroundColor: hex,
+                                    borderWidth: accent === key ? 3 : 1.5,
+                                    borderColor: accent === key ? colors.textPrimary : "transparent",
+                                    shadowColor: hex,
+                                    shadowOpacity: accent === key ? 0.7 : 0,
+                                    shadowRadius: 6,
+                                    elevation: accent === key ? 4 : 0,
+                                }}
+                            />
+                        ))}
+                    </View>
+                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 6, textTransform: "capitalize" }}>
+                        {accent}
+                    </Text>
+                </AppSurface>
+
+                {/* Text size */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 8 }}>
+                        Text size
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                        {(["sm", "md", "lg"] as FontSize[]).map((sz) => {
+                            const labels: Record<FontSize, string> = { sm: "S", md: "M", lg: "L" };
+                            const active = fontSize === sz;
+                            return (
+                                <TouchableOpacity
+                                    key={sz}
+                                    onPress={() => setFontSize(sz)}
+                                    style={{
+                                        flex: 1,
+                                        paddingVertical: 10,
+                                        borderRadius: 12,
+                                        alignItems: "center",
+                                        borderWidth: 1.5,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? `${colors.primary}22` : "transparent",
+                                    }}
+                                >
+                                    <Text style={{
+                                        fontSize: sz === "sm" ? 13 : sz === "lg" ? 18 : 15,
+                                        color: active ? colors.primary : colors.textSecondary,
+                                        fontWeight: active ? "700" : "400",
+                                    }}>
+                                        {labels[sz]}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
                     </View>
                 </AppSurface>
 
