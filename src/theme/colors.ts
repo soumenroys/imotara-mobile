@@ -5,13 +5,15 @@
 export type ColorPalette = typeof DARK;
 
 export const DARK = {
-    background: "rgba(3, 6, 23, 1)",
-    surfaceSoft: "rgba(30, 41, 59, 0.7)",
-    surface: "rgba(15, 23, 42, 0.9)",
+    background: "rgba(19, 14, 23, 1)",
+    surfaceSoft: "rgba(24, 15, 30, 0.7)",
+    surface: "rgba(24, 15, 30, 0.9)",
     border: "rgba(148, 163, 184, 0.25)",
     textPrimary: "rgba(241, 245, 249, 1)",
     textSecondary: "rgba(148, 163, 184, 0.9)",
     primary: "rgba(56, 189, 248, 1)",
+    primaryTint: "rgba(56, 189, 248, 0.15)",
+    primaryBorder: "rgba(56, 189, 248, 0.27)",
 
     emotionSad: "rgba(37, 99, 235, 0.20)",
     emotionAnxious: "rgba(234, 179, 8, 0.22)",
@@ -29,6 +31,8 @@ export const LIGHT: ColorPalette = {
     textPrimary: "rgba(15, 23, 42, 1)",
     textSecondary: "rgba(71, 85, 105, 0.9)",
     primary: "rgba(14, 165, 233, 1)",
+    primaryTint: "rgba(14, 165, 233, 0.12)",
+    primaryBorder: "rgba(14, 165, 233, 0.25)",
 
     emotionSad: "rgba(37, 99, 235, 0.14)",
     emotionAnxious: "rgba(202, 138, 4, 0.16)",

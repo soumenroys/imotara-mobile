@@ -94,7 +94,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const colors = useMemo<ColorPalette>(() => {
         const base = themeMode === "dark" ? DARK : LIGHT;
         const primary = ACCENT_COLORS[accent];
-        return { ...base, primary };
+        const primaryTint = primary.replace(", 1)", ", 0.15)");
+        const primaryBorder = primary.replace(", 1)", ", 0.27)");
+        return { ...base, primary, primaryTint, primaryBorder };
     }, [themeMode, accent]);
 
     return (

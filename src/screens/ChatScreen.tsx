@@ -22,11 +22,21 @@ import {
   ActivityIndicator,
 } from "react-native";
 
-// Haptic helpers (Vibration API — no native deps needed)
+// Haptic helpers (Vibration API — intensity read from AsyncStorage at runtime)
+let _hapticIntensity: "off" | "light" | "strong" = "light";
 const haptic = {
-  tap: () => { try { Vibration.vibrate(10); } catch {} },
-  receive: () => { try { Vibration.vibrate([0, 8, 40, 8]); } catch {} },
-  error: () => { try { Vibration.vibrate([0, 30, 60, 30]); } catch {} },
+  tap: () => {
+    if (_hapticIntensity === "off") return;
+    try { Vibration.vibrate(_hapticIntensity === "strong" ? 20 : 10); } catch {}
+  },
+  receive: () => {
+    if (_hapticIntensity === "off") return;
+    try { Vibration.vibrate(_hapticIntensity === "strong" ? [0, 15, 60, 15] : [0, 8, 40, 8]); } catch {}
+  },
+  error: () => {
+    if (_hapticIntensity === "off") return;
+    try { Vibration.vibrate(_hapticIntensity === "strong" ? [0, 50, 80, 50] : [0, 30, 60, 30]); } catch {}
+  },
 };
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
@@ -65,6 +75,7 @@ import { DiscoveryCard, DISCOVERY_CARDS_KEY, CARD_ORDER, getNextCard, type Disco
 import { OpenLoopCard } from "../components/chat/OpenLoopCard";
 import { CompanionInsightCard } from "../components/imotara/CompanionInsightCard";
 import { UnsentLetterModal, buildUnsentLetterSystemPrompt, type UnsentLetterSetup } from "../components/imotara/UnsentLetterModal";
+import UpgradeSheet from "../components/imotara/UpgradeSheet";
 import {
   detectAndUpdateOpenLoops,
   dismissLoop,
@@ -173,6 +184,7 @@ type ChatMessage = {
   meta?: {
     compatibility?: any;
   };
+  isQuotaNotice?: boolean;
 };
 
 // Phase 2.2.2 — local followUp de-dupe (best-effort, avoids immediate repeats)
@@ -925,6 +937,9 @@ type MessageBubbleProps = {
   reactions: Map<string, string>;
   speakingMessageId: string | null;
   companionAvatarSource?: any;
+  showTimestamps?: boolean;
+  reactionsSet?: "default" | "minimal" | "extended";
+  crisisThreshold?: "sensitive" | "standard" | "conservative";
   onLongPress: (msg: ChatMessage) => void;
   onDismissCrisisCard: (id: string) => void;
   onRetry: (messageId: string, prevUserText: string) => void;
@@ -948,6 +963,9 @@ function MessageBubble({
   reactions,
   speakingMessageId,
   companionAvatarSource,
+  showTimestamps = false,
+  reactionsSet = "default",
+  crisisThreshold = "standard",
   onLongPress,
   onDismissCrisisCard,
   onRetry,
@@ -1094,9 +1112,11 @@ function MessageBubble({
         </Text>
       ) : null}
 
-      <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4, opacity: 0.85 }}>
-        {new Date(message.timestamp).toLocaleTimeString()}
-      </Text>
+      {showTimestamps && (
+        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4, opacity: 0.85 }}>
+          {new Date(message.timestamp).toLocaleTimeString()}
+        </Text>
+      )}
 
       {DEBUG_UI_ENABLED && message.meta?.compatibility && (
         <View style={{
@@ -1192,14 +1212,21 @@ function MessageBubble({
         const activeReaction = reactions.get(message.id);
         const isSpeaking = speakingMessageId === message.id;
         const isBookmarked = bookmarks.has(message.id);
-        const REACTION_OPTIONS: { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string }[] = [
+        const ALL_REACTION_OPTIONS: { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string }[] = [
           { icon: "heart", color: "#ef4444" },
           { icon: "sad-outline", color: "#60a5fa" },
           { icon: "happy-outline", color: "#fbbf24" },
           { icon: "thumbs-up", color: "#4ade80" },
           { icon: "hand-left", color: "#a78bfa" },
           { icon: "flame", color: "#fb923c" },
+          { icon: "star", color: "#f59e0b" },
+          { icon: "leaf", color: "#34d399" },
         ];
+        const REACTION_OPTIONS = reactionsSet === "minimal"
+          ? ALL_REACTION_OPTIONS.slice(0, 3)
+          : reactionsSet === "extended"
+          ? ALL_REACTION_OPTIONS
+          : ALL_REACTION_OPTIONS.slice(0, 6);
         const activeOption = REACTION_OPTIONS.find((r) => r.icon === activeReaction);
         return (
           <View style={{ marginLeft: 4, marginBottom: 6, gap: 4 }}>
@@ -1284,7 +1311,8 @@ function MessageBubble({
         const prevMsg = messages[index - 1];
         if (!prevMsg || prevMsg.from !== "user") return null;
         const tier = detectMobileCrisisTier(prevMsg.text);
-        if (tier === 0) return null;
+        const minTier: CrisisTier = crisisThreshold === "sensitive" ? 1 : crisisThreshold === "conservative" ? 2 : 1;
+        if (tier === 0 || tier < minTier) return null;
         if (dismissedCrisisCards.has(message.id)) return null;
 
         if (tier === 1) {
@@ -1451,6 +1479,50 @@ export default function ChatScreen() {
   } | null>(null);
   const insightCheckedRef = useRef(false);
 
+  // Tier 3 settings loaded on mount
+  const [voiceMaxDurationMs, setVoiceMaxDurationMs] = useState(60_000);
+  const [voiceQuality, setVoiceQuality] = useState<"high" | "low">("high");
+  const [voiceCloudTranscription, setVoiceCloudTranscription] = useState(true);
+  const [apiTimeoutMs, setApiTimeoutMs] = useState(20_000);
+  const [statusPollMs, setStatusPollMs] = useState(15_000);
+  const [chatReactionsSet, setChatReactionsSet] = useState<"default" | "minimal" | "extended">("default");
+  const [chatTypingSpeed, setChatTypingSpeed] = useState<"slow" | "normal" | "fast">("normal");
+  const [contentGuardSensitivity, setContentGuardSensitivity] = useState<"strict" | "standard" | "relaxed">("standard");
+  const [crisisThresholdSetting, setCrisisThresholdSetting] = useState<"sensitive" | "standard" | "conservative">("standard");
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [dur, qual, cloud, timeout, poll, intensity, reactSet, typSpeed, guard, crisis] = await Promise.all([
+          AsyncStorage.getItem("imotara.voice.maxDuration.v1"),
+          AsyncStorage.getItem("imotara.voice.quality.v1"),
+          AsyncStorage.getItem("imotara.voice.cloudTranscription.v1"),
+          AsyncStorage.getItem("imotara.api.timeout.v1"),
+          AsyncStorage.getItem("imotara.status.pollInterval.v1"),
+          AsyncStorage.getItem("imotara.haptic.intensity.v1"),
+          AsyncStorage.getItem("imotara.reactions.set.v1"),
+          AsyncStorage.getItem("imotara.typing.speed.v1"),
+          AsyncStorage.getItem("imotara.content.guard.v1"),
+          AsyncStorage.getItem("imotara.crisis.threshold.v1"),
+        ]);
+        const durSecs = parseInt(dur ?? "60", 10);
+        if (isFinite(durSecs) && durSecs > 0) setVoiceMaxDurationMs(durSecs * 1000);
+        if (qual === "low" || qual === "high") setVoiceQuality(qual);
+        setVoiceCloudTranscription(cloud !== "0");
+        const timeoutSecs = parseInt(timeout ?? "20", 10);
+        if (isFinite(timeoutSecs) && timeoutSecs > 0) setApiTimeoutMs(timeoutSecs * 1000);
+        const pollSecs = parseInt(poll ?? "15", 10);
+        if (isFinite(pollSecs) && pollSecs > 0) setStatusPollMs(pollSecs * 1000);
+        if (intensity === "off" || intensity === "light" || intensity === "strong") _hapticIntensity = intensity;
+        if (reactSet === "minimal" || reactSet === "default" || reactSet === "extended") setChatReactionsSet(reactSet as "default" | "minimal" | "extended");
+        if (typSpeed === "slow" || typSpeed === "normal" || typSpeed === "fast") setChatTypingSpeed(typSpeed as "slow" | "normal" | "fast");
+        if (guard === "strict" || guard === "standard" || guard === "relaxed") setContentGuardSensitivity(guard as "strict" | "standard" | "relaxed");
+        if (crisis === "sensitive" || crisis === "standard" || crisis === "conservative") setCrisisThresholdSetting(crisis as "sensitive" | "standard" | "conservative");
+      } catch { /* non-fatal */ }
+    };
+    void load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Voice input
   const voiceInput = useVoiceInput(
     (text) => {
@@ -1473,6 +1545,7 @@ export default function ChatScreen() {
       );
     },
     process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL,
+    { maxDurationMs: voiceMaxDurationMs, quality: voiceQuality, cloudTranscription: voiceCloudTranscription },
   );
 
   // Message reactions — messageId → emoji
@@ -1640,6 +1713,8 @@ export default function ChatScreen() {
   // Trial countdown banner — shown once per day when ≤14 days remain
   const TRIAL_BANNER_DISMISSED_KEY = "imotara.trial.bannerDismissed.v1";
   const [showTrialBanner, setShowTrialBanner] = useState(false);
+  const [quotaCardShown, setQuotaCardShown] = useState(false);
+  const [showUpgradeSheet, setShowUpgradeSheet] = useState(false);
   useEffect(() => {
     if (!licenseExpiresAt || cloudSyncAllowed) return;
     const msLeft = new Date(licenseExpiresAt).getTime() - Date.now();
@@ -1647,7 +1722,7 @@ export default function ChatScreen() {
     if (daysLeft <= 0 || daysLeft > 14) return;
     AsyncStorage.getItem(TRIAL_BANNER_DISMISSED_KEY).then((dismissed) => {
       const today = new Date().toISOString().slice(0, 10);
-      if (dismissed !== today) setShowTrialBanner(true);
+      if (dismissed !== "never" && dismissed !== today) setShowTrialBanner(true);
     }).catch(() => { });
   }, [licenseExpiresAt, cloudSyncAllowed]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1656,6 +1731,12 @@ export default function ChatScreen() {
     const today = new Date().toISOString().slice(0, 10);
     AsyncStorage.setItem(TRIAL_BANNER_DISMISSED_KEY, today).catch(() => { });
   }
+
+  // C-3: Show timestamps toggle (reads setting from AsyncStorage)
+  const [showMsgTimestamps, setShowMsgTimestamps] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem("imotara.chat.showTimestamps.v1").then((v) => setShowMsgTimestamps(v === "1")).catch(() => {});
+  }, []);
 
   // ── Auth: get Supabase session token for mobile API calls ──────────────────
   const { accessToken } = useAuth();
@@ -1836,7 +1917,7 @@ export default function ChatScreen() {
     void reason;
   };
 
-  const isOnline = useOnlineStatus();
+  const isOnline = useOnlineStatus(statusPollMs);
 
   // NEW: app lifecycle handling (prevents stuck typing on background/foreground)
   useAppLifecycle({
@@ -1958,6 +2039,16 @@ export default function ChatScreen() {
 
     return colors.primary;
   }, [lastSyncAt, lastSyncStatus]);
+
+  // Banner priority queue — max 1 Tier-2 banner visible at once
+  const activeTier2Banner = useMemo((): "returnGreeting" | "dailyCheckin" | "trialCountdown" | "milestoneLoop" | "collectivePulse" | null => {
+    if (showReturnGreeting) return "returnGreeting";
+    if (showDailyCheckin && intakeStep === 0) return "dailyCheckin";
+    if (showTrialBanner && licenseExpiresAt) return "trialCountdown";
+    if (milestoneLoop) return "milestoneLoop";
+    if (collectivePulse && !pulseDismissed) return "collectivePulse";
+    return null;
+  }, [showReturnGreeting, showDailyCheckin, intakeStep, showTrialBanner, licenseExpiresAt, milestoneLoop, collectivePulse, pulseDismissed]);
 
   useEffect(() => {
     if (!isTyping) {
@@ -2500,7 +2591,8 @@ export default function ChatScreen() {
       (async () => {
         try {
           // ── Adult content safety gate ─────────────────────────
-          if (detectAdultContent(trimmed)) {
+          // "relaxed" skips the check to reduce false positives on mature-but-safe topics
+          if (contentGuardSensitivity !== "relaxed" && detectAdultContent(trimmed)) {
             const lang = toneContext?.user?.preferredLang ?? "en";
             const userAge = toneContext?.user?.ageRange ?? undefined;
             const safetyTs = Date.now();
@@ -2668,6 +2760,8 @@ export default function ChatScreen() {
 
                 // ✅ Mobile auth: Supabase JWT → server resolves real user → pinnedRecall
                 accessToken: accessToken || undefined,
+
+                timeoutMs: apiTimeoutMs,
               })
             : { ok: false, replyText: "" };
 
@@ -2689,8 +2783,9 @@ export default function ChatScreen() {
           const cloudFailed =
             cloudAttempted &&
             !(remote?.ok && String(remote?.replyText || "").trim().length > 0);
+          const cloudQuotaHit = cloudFailed && remote?.errorMessage === "quota_exceeded";
 
-          if (cloudFailed && isOnline) {
+          if (cloudFailed && isOnline && !cloudQuotaHit) {
             toastRef.current?.show("Cloud reply failed — using offline mode instead.", "error");
           }
 
@@ -2984,7 +3079,18 @@ export default function ChatScreen() {
 
           setTypingStatus("responding");
           haptic.receive();
-          setMessages((prev) => [...prev, botMessage]);
+          const extraMessages: ChatMessage[] = [];
+          if (cloudQuotaHit && !quotaCardShown) {
+            setQuotaCardShown(true);
+            extraMessages.push({
+              id: `quota-notice-${Date.now()}`,
+              from: "bot",
+              text: "",
+              timestamp: botTimestamp - 1,
+              isQuotaNotice: true,
+            });
+          }
+          setMessages((prev) => [...prev, ...extraMessages, botMessage]);
           smoothScrollToBottom(scrollViewRef);
         } catch (error) {
           debugWarn("Imotara mobile AI error:", error);
@@ -3290,7 +3396,7 @@ export default function ChatScreen() {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: "rgba(15, 23, 42, 0.92)",
+            backgroundColor: "rgba(24, 15, 30, 0.92)",
             paddingHorizontal: 16,
             paddingTop: 10,
             paddingBottom: 20,
@@ -3514,9 +3620,9 @@ export default function ChatScreen() {
   }, [isTyping, typingStatus, formattedTypingDots]);
 
   const typingBubbleBg = useMemo(() => {
-    if (!isTyping) return "rgba(15, 23, 42, 0.9)";
+    if (!isTyping) return "rgba(24, 15, 30, 0.9)";
     if (latestMoodHint) return getMoodTintForHint(latestMoodHint, colors);
-    return "rgba(15, 23, 42, 0.9)";
+    return "rgba(24, 15, 30, 0.9)";
   }, [isTyping, latestMoodHint]);
 
   // ✅ 80/20: disable Send while typing or in-flight
@@ -3553,7 +3659,7 @@ export default function ChatScreen() {
           paddingBottom: 2,
           borderBottomWidth: 0.5,
           borderBottomColor: colors.border,
-          backgroundColor: "rgba(15, 23, 42, 0.96)",
+          backgroundColor: colors.surface,
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -3584,33 +3690,7 @@ export default function ChatScreen() {
               Imotara
             </Text>
 
-            {/* AI mode badge */}
-            <View
-              style={{
-                marginLeft: 8,
-                paddingHorizontal: 7,
-                paddingVertical: 2,
-                borderRadius: 999,
-                backgroundColor: analysisMode === "local"
-                  ? "rgba(139, 92, 246, 0.18)"
-                  : "rgba(59, 130, 246, 0.18)",
-                borderWidth: 1,
-                borderColor: analysisMode === "local"
-                  ? "rgba(139, 92, 246, 0.45)"
-                  : "rgba(59, 130, 246, 0.45)",
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 10,
-                  fontWeight: "600",
-                  color: analysisMode === "local" ? "#a78bfa" : "#60a5fa",
-                  letterSpacing: 0.3,
-                }}
-              >
-                {analysisMode === "local" ? "LOCAL" : "CLOUD"}
-              </Text>
-            </View>
+{/* AI mode badge moved to ⋯ overflow menu — technical label not needed in default header */}
           </View>
 
           {/* Buttons section — 3 items max to prevent header overflow */}
@@ -3716,7 +3796,7 @@ export default function ChatScreen() {
             paddingVertical: 6,
             borderTopWidth: 1,
             borderTopColor: colors.border,
-            backgroundColor: "rgba(15, 23, 42, 0.7)",
+            backgroundColor: "rgba(24, 15, 30, 0.7)",
             gap: 8,
           }}
         >
@@ -3805,7 +3885,23 @@ export default function ChatScreen() {
           ref={scrollViewRef}
           data={showBookmarksOnly ? messages.filter((m) => bookmarks.has(m.id)) : messages}
           keyExtractor={(item) => item.id}
-          renderItem={({ item: message, index }) => (
+          renderItem={({ item: message, index }) => message.isQuotaNotice ? (
+            <View style={{ marginHorizontal: 16, marginVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: "rgba(139,92,246,0.30)", backgroundColor: "#1e1028", padding: 16 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <Text style={{ fontSize: 16 }}>✨</Text>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: "#e4e4f0" }}>I've used my 20 AI replies for today</Text>
+              </View>
+              <Text style={{ fontSize: 12, color: "#9ca3af", lineHeight: 18, marginBottom: 12 }}>
+                I'm still here. My responses now come from on-device mode — a little simpler, but present.
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowUpgradeSheet(true)}
+                style={{ alignSelf: "flex-start", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: "#7c3aed" }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#ffffff" }}>Upgrade for unlimited replies →</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
             <MessageBubble
               message={message}
               index={index}
@@ -3838,6 +3934,9 @@ export default function ChatScreen() {
               onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); }}
               onBookmark={handleToggleBookmark}
               onReact={addReaction}
+              showTimestamps={showMsgTimestamps}
+              reactionsSet={chatReactionsSet}
+              crisisThreshold={crisisThresholdSetting}
             />
           )}
           contentContainerStyle={{
@@ -3950,7 +4049,7 @@ export default function ChatScreen() {
           )}
 
           {/* Return greeting — shown after >24h absence */}
-          {showReturnGreeting && (
+          {activeTier2Banner === "returnGreeting" && (
             <View style={{ marginBottom: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.35)", backgroundColor: "rgba(99,102,241,0.08)" }}>
               <Text style={{ fontSize: 13, color: colors.textPrimary }}>
                 Welcome back 👋
@@ -3968,7 +4067,7 @@ export default function ChatScreen() {
                 paddingHorizontal: 12,
                 paddingVertical: 8,
                 borderRadius: 12,
-                backgroundColor: "rgba(15, 23, 42, 0.9)",
+                backgroundColor: "rgba(24, 15, 30, 0.9)",
                 borderWidth: 1,
                 borderColor: colors.border,
               }}
@@ -4007,7 +4106,7 @@ export default function ChatScreen() {
                 paddingHorizontal: 12,
                 paddingVertical: 8,
                 borderRadius: 12,
-                backgroundColor: "rgba(15, 23, 42, 0.9)",
+                backgroundColor: "rgba(24, 15, 30, 0.9)",
                 borderWidth: 1,
                 borderColor: colors.border,
               }}
@@ -4049,7 +4148,7 @@ export default function ChatScreen() {
                     paddingVertical: 8,
                     borderWidth: 1,
                     borderColor: colors.border,
-                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                    backgroundColor: "rgba(24, 15, 30, 0.9)",
                   }}
                 >
                   <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
@@ -4070,7 +4169,7 @@ export default function ChatScreen() {
                     paddingVertical: 8,
                     borderWidth: 1,
                     borderColor: colors.border,
-                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                    backgroundColor: "rgba(24, 15, 30, 0.9)",
                   }}
                 >
                   <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
@@ -4094,7 +4193,7 @@ export default function ChatScreen() {
                     paddingVertical: 8,
                     borderWidth: 1,
                     borderColor: colors.border,
-                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                    backgroundColor: "rgba(24, 15, 30, 0.9)",
                   }}
                 >
                   <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
@@ -4110,7 +4209,7 @@ export default function ChatScreen() {
                   paddingHorizontal: 12,
                   paddingVertical: 10,
                   borderRadius: 12,
-                  backgroundColor: "rgba(15, 23, 42, 0.9)",
+                  backgroundColor: "rgba(24, 15, 30, 0.9)",
                   borderWidth: 1,
                   borderColor: colors.border,
                 }}
@@ -4218,7 +4317,7 @@ export default function ChatScreen() {
                     paddingHorizontal: 12,
                     paddingVertical: 10,
                     borderRadius: 12,
-                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                    backgroundColor: "rgba(24, 15, 30, 0.9)",
                     borderWidth: 1,
                     borderColor: colors.border,
                   }}
@@ -4286,15 +4385,15 @@ export default function ChatScreen() {
                       ],
                     }}
                   >
-                    <ImotaraTypingIndicator />
+                    <ImotaraTypingIndicator speed={chatTypingSpeed} />
                   </Animated.View>
                 )}
                 {showIntake && (
-                  <View style={{ marginHorizontal: 12, marginTop: 8, marginBottom: 6, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.3)", backgroundColor: "rgba(15,23,42,0.85)", padding: 14 }}>
-                    <Text style={{ fontSize: 10, fontWeight: "700", color: "rgba(165,180,252,0.7)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6 }}>
+                  <View style={{ marginHorizontal: 12, marginTop: 8, marginBottom: 6, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.3)", backgroundColor: colors.surface, padding: 14 }}>
+                    <Text style={{ fontSize: 10, fontWeight: "700", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6 }}>
                       {intakeStep === 1 ? "Step 1 of 3" : intakeStep === 2 ? "Step 2 of 3" : "Step 3 of 3"}
                     </Text>
-                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#e2e8f0", marginBottom: 10 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, marginBottom: 10 }}>
                       {intakeStep === 1 ? "How are you feeling right now?" : intakeStep === 2 ? "What brings you here today?" : "What would feel most helpful?"}
                     </Text>
                     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
@@ -4323,7 +4422,7 @@ export default function ChatScreen() {
                           }}
                           style={{ borderRadius: 999, borderWidth: 1, borderColor: "rgba(99,102,241,0.4)", backgroundColor: "rgba(99,102,241,0.12)", paddingHorizontal: 12, paddingVertical: 5 }}
                         >
-                          <Text style={{ fontSize: 11, color: "#a5b4fc", fontWeight: "500" }}>{chip}</Text>
+                          <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "500" }}>{chip}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -4432,7 +4531,7 @@ export default function ChatScreen() {
       )}
 
       {/* Trial countdown banner */}
-      {showTrialBanner && licenseExpiresAt && (() => {
+      {activeTier2Banner === "trialCountdown" && licenseExpiresAt && (() => {
         const daysLeft = Math.ceil((new Date(licenseExpiresAt).getTime() - Date.now()) / 86_400_000);
         if (daysLeft <= 0) return null;
         return (
@@ -4452,6 +4551,12 @@ export default function ChatScreen() {
               <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>
                 After your trial, Imotara keeps working with on-device replies.
               </Text>
+              <TouchableOpacity
+                onPress={() => setShowUpgradeSheet(true)}
+                style={{ marginTop: 8, alignSelf: "flex-start", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: "rgba(245,158,11,0.20)", borderWidth: 1, borderColor: "rgba(245,158,11,0.40)" }}
+              >
+                <Text style={{ color: "#fcd34d", fontSize: 12, fontWeight: "600" }}>Upgrade →</Text>
+              </TouchableOpacity>
             </View>
             <TouchableOpacity onPress={dismissTrialBanner} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Text style={{ color: colors.textSecondary, fontSize: 16, lineHeight: 18 }}>✕</Text>
@@ -4472,7 +4577,7 @@ export default function ChatScreen() {
       )}
 
       {/* NF-5 — Anonymous Collective Pulse */}
-      {collectivePulse && !pulseDismissed && (
+      {activeTier2Banner === "collectivePulse" && collectivePulse && (
         <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.2)", backgroundColor: "rgba(30,27,75,0.5)", paddingHorizontal: 14, paddingVertical: 10 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={{ flex: 1, fontSize: 12, color: "rgba(196,181,253,0.85)", lineHeight: 18 }}>
@@ -4486,7 +4591,7 @@ export default function ChatScreen() {
       )}
 
       {/* NF-1 — Emotional Milestone Celebration */}
-      {milestoneLoop && (
+      {activeTier2Banner === "milestoneLoop" && milestoneLoop && (
         <View style={{ marginHorizontal: 16, marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: "rgba(52,211,153,0.3)", backgroundColor: "rgba(6,78,59,0.35)", padding: 14 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
             <View style={{ flex: 1 }}>
@@ -4542,13 +4647,13 @@ export default function ChatScreen() {
       )}
 
       {/* EN-3 — Daily micro check-in pulse (once per day, not during first-chat intake arc) */}
-      {showDailyCheckin && intakeStep === 0 && (
+      {activeTier2Banner === "dailyCheckin" && (
         <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 14, borderWidth: 1, borderColor: "rgba(56,189,248,0.2)", backgroundColor: "rgba(12,74,110,0.2)", paddingHorizontal: 12, paddingVertical: 10 }}>
-          <Text style={{ fontSize: 11.5, fontWeight: "600", color: "rgba(186,230,253,0.85)", marginBottom: 8 }}>How are you feeling today?</Text>
+          <Text style={{ fontSize: 11.5, fontWeight: "600", color: "rgba(186,230,253,0.85)", marginBottom: 8 }}>How are you right now?</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
             {([
-              { emoji: "😔", label: "Heavy" }, { emoji: "😟", label: "Anxious" }, { emoji: "😐", label: "Okay" },
-              { emoji: "🙂", label: "Good" }, { emoji: "😊", label: "Grateful" }, { emoji: "⚡", label: "Energized" },
+              { emoji: "😔", label: "Heavy" }, { emoji: "😟", label: "Unsettled" }, { emoji: "😶", label: "Somewhere here" },
+              { emoji: "🌱", label: "Okay" }, { emoji: "🙂", label: "Good" }, { emoji: "✨", label: "Bright" },
             ] as const).map(({ emoji, label }) => (
               <TouchableOpacity
                 key={label}
@@ -4754,6 +4859,14 @@ export default function ChatScreen() {
               overflow: "hidden",
             }}
           >
+            {/* AI mode status (read-only, moved from header) */}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}>
+              <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: analysisMode === "local" ? "#a78bfa" : "#60a5fa" }} />
+              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                {analysisMode === "local" ? "On-device mode — replies stay on your phone" : "Cloud AI mode active"}
+              </Text>
+            </View>
+
             {/* Search */}
             {messages.length > 0 && (
               <TouchableOpacity
@@ -4858,6 +4971,12 @@ export default function ChatScreen() {
 
       {/* Non-intrusive sign-in prompt — appears after first message, one-time only */}
       <SignInPrompt messageCount={messages.length} />
+
+      <UpgradeSheet
+        visible={showUpgradeSheet}
+        onClose={() => setShowUpgradeSheet(false)}
+        onPurchaseComplete={async () => { setShowUpgradeSheet(false); }}
+      />
 
       {/* Error / info toast — non-intrusive, auto-dismisses */}
       <Toast ref={toastRef} />

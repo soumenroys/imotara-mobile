@@ -42,7 +42,7 @@ export function ChatInputBar({
       style={{
         borderTopWidth: 1,
         borderTopColor: colors.border,
-        backgroundColor: "rgba(15, 23, 42, 0.98)",
+        backgroundColor: colors.surface,
       }}
     >
       {/* iPad: center content in a max-width column so input doesn't span the full iPad width */}
@@ -58,7 +58,7 @@ export function ChatInputBar({
         <Text
           style={{
             fontSize: 11,
-            color: "rgba(148, 163, 184, 0.75)",
+            color: colors.textSecondary,
             textAlign: "center",
             marginBottom: 6,
             fontStyle: "italic",
@@ -90,7 +90,7 @@ export function ChatInputBar({
             borderRadius: 999,
             borderWidth: 1,
             borderColor: colors.border,
-            backgroundColor: "rgba(15, 23, 42, 1)",
+            backgroundColor: colors.surfaceSoft,
             paddingHorizontal: 12,
             paddingVertical: 6,
             minHeight: 40,

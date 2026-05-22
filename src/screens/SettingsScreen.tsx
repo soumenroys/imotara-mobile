@@ -36,8 +36,11 @@ import {
     cancelCheckInReminder,
     isCheckInReminderEnabled,
     getSavedReminderTime,
+    getSavedNotifPrefs,
+    saveNotifPrefs,
     DEFAULT_HOUR,
     DEFAULT_MINUTE,
+    DEFAULT_INACTIVITY_HOURS,
 } from "../notifications/checkInReminder";
 import {
     loadMemories,
@@ -178,7 +181,7 @@ function AvatarSlider({
                                 overflow: "hidden",
                                 borderWidth: 1,
                                 borderColor: "rgba(255,255,255,0.1)",
-                                backgroundColor: "rgba(0,0,0,0.2)",
+                                backgroundColor: colors.surfaceSoft,
                             }}
                         >
                             <Image
@@ -408,11 +411,24 @@ export default function SettingsScreen() {
     const [reminderLoading, setReminderLoading] = React.useState(false);
     const [reminderHour, setReminderHour] = React.useState(DEFAULT_HOUR);
     const [reminderMinute, setReminderMinute] = React.useState(DEFAULT_MINUTE);
+    // N-3: notification sound + badge
+    const [notifSound, setNotifSound] = React.useState(false);
+    const [notifBadge, setNotifBadge] = React.useState(false);
+    // N-2: inactivity threshold
+    const [inactivityHours, setInactivityHours] = React.useState(DEFAULT_INACTIVITY_HOURS);
+    const INACTIVITY_OPTIONS = [24, 48, 72, 168] as const;
+    const inactivityLabel = (h: number) => h === 168 ? "7 days" : h === 24 ? "1 day" : `${h} hours`;
+
     React.useEffect(() => {
         isCheckInReminderEnabled().then(setReminderEnabled).catch(() => {});
         getSavedReminderTime().then(({ hour, minute }) => {
             setReminderHour(hour);
             setReminderMinute(minute);
+        }).catch(() => {});
+        getSavedNotifPrefs().then(({ sound, badge, inactivityHours: ih }) => {
+            setNotifSound(sound);
+            setNotifBadge(badge);
+            setInactivityHours(ih);
         }).catch(() => {});
     }, []);
 
@@ -421,7 +437,7 @@ export default function SettingsScreen() {
         setReminderLoading(true);
         try {
             if (value) {
-                const ok = await scheduleCheckInReminder(reminderHour, reminderMinute);
+                const ok = await scheduleCheckInReminder(reminderHour, reminderMinute, notifSound, notifBadge);
                 if (!mountedRef.current) return;
                 if (ok) {
                     setReminderEnabled(true);
@@ -450,8 +466,29 @@ export default function SettingsScreen() {
         setReminderHour(hour);
         setReminderMinute(minute);
         if (reminderEnabled) {
-            await scheduleCheckInReminder(hour, minute).catch(() => {});
+            await scheduleCheckInReminder(hour, minute, notifSound, notifBadge).catch(() => {});
         }
+    };
+
+    const handleNotifSoundToggle = async (value: boolean) => {
+        setNotifSound(value);
+        await saveNotifPrefs({ sound: value });
+        if (reminderEnabled) {
+            await scheduleCheckInReminder(reminderHour, reminderMinute, value, notifBadge).catch(() => {});
+        }
+    };
+
+    const handleNotifBadgeToggle = async (value: boolean) => {
+        setNotifBadge(value);
+        await saveNotifPrefs({ badge: value });
+        if (reminderEnabled) {
+            await scheduleCheckInReminder(reminderHour, reminderMinute, notifSound, value).catch(() => {});
+        }
+    };
+
+    const handleInactivityChange = async (hours: number) => {
+        setInactivityHours(hours);
+        await saveNotifPrefs({ inactivityHours: hours });
     };
 
     // Emotional fingerprint — computed from history, memoized
@@ -606,6 +643,7 @@ export default function SettingsScreen() {
     const [sectionCompanion, setSectionCompanion] = React.useState(false);
     const [sectionPrivacy, setSectionPrivacy] = React.useState(false);
     const [sectionSupport, setSectionSupport] = React.useState(true);
+    const [sectionAdvancedMobile, setSectionAdvancedMobile] = React.useState(false);
 
     // A-5: Storage summary (loaded once when component mounts)
     const [storageSummary, setStorageSummary] = React.useState<{
@@ -640,6 +678,276 @@ export default function SettingsScreen() {
             }
         })();
     }, []);
+
+    // C-3: Show timestamps toggle (mobile)
+    const SHOW_TIMESTAMPS_KEY = "imotara.chat.showTimestamps.v1";
+    const [showChatTimestamps, setShowChatTimestamps] = React.useState(false);
+    React.useEffect(() => {
+        AsyncStorage.getItem(SHOW_TIMESTAMPS_KEY).then((v) => setShowChatTimestamps(v === "1")).catch(() => {});
+    }, []);
+    const handleShowTimestampsToggle = async (val: boolean) => {
+        setShowChatTimestamps(val);
+        await AsyncStorage.setItem(SHOW_TIMESTAMPS_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    // M-2: Auto-cleanup (mobile)
+    const AUTO_CLEANUP_KEY = "imotara.history.autoCleanupDays.v1";
+    const [autoCleanupDays, setAutoCleanupDays] = React.useState(0);
+    const AUTO_CLEANUP_OPTIONS = [0, 30, 60, 90] as const;
+    React.useEffect(() => {
+        AsyncStorage.getItem(AUTO_CLEANUP_KEY).then((v) => {
+            const n = parseInt(v ?? "0", 10);
+            setAutoCleanupDays(isFinite(n) ? n : 0);
+        }).catch(() => {});
+    }, []);
+    const handleAutoCleanupChange = async (days: number) => {
+        setAutoCleanupDays(days);
+        await AsyncStorage.setItem(AUTO_CLEANUP_KEY, String(days)).catch(() => {});
+        if (days > 0) {
+            try {
+                const raw = await AsyncStorage.getItem("imotara:history:v1").catch(() => null);
+                if (!raw) return;
+                const arr: { timestamp?: number }[] = JSON.parse(raw);
+                const cutoff = Date.now() - days * 86_400_000;
+                const kept = arr.filter((r) => (r.timestamp ?? Date.now()) >= cutoff);
+                await AsyncStorage.setItem("imotara:history:v1", JSON.stringify(kept)).catch(() => {});
+            } catch { /* non-fatal */ }
+        }
+    };
+
+    // O-1: Feature discovery reset
+    const [discoveryResetMsg, setDiscoveryResetMsg] = React.useState<string | null>(null);
+    const handleDiscoveryReset = async () => {
+        await AsyncStorage.removeItem("imotara.discovery.v1").catch(() => {});
+        setDiscoveryResetMsg("Discovery cards reset — they will reappear in your next Chat session.");
+    };
+
+    // O-2: Restart onboarding
+    const ONBOARDING_DONE_KEY = "imotara.onboarding.done.v1";
+    const [onboardingResetMsg, setOnboardingResetMsg] = React.useState<string | null>(null);
+    const handleRestartOnboarding = () => {
+        Alert.alert(
+            "Restart onboarding?",
+            "Onboarding will appear next time you open the app. Your data, history, and settings are not affected.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Restart", style: "destructive",
+                    onPress: async () => {
+                        await AsyncStorage.removeItem(ONBOARDING_DONE_KEY).catch(() => {});
+                        setOnboardingResetMsg("Onboarding will appear next time you open Imotara.");
+                    },
+                },
+            ]
+        );
+    };
+
+    // H-2: Haptic intensity
+    const HAPTIC_INTENSITY_KEY = "imotara.haptic.intensity.v1";
+    const [hapticIntensity, setHapticIntensity] = React.useState<"off" | "light" | "strong">("light");
+    React.useEffect(() => {
+        AsyncStorage.getItem(HAPTIC_INTENSITY_KEY).then((v) => {
+            if (v === "off" || v === "light" || v === "strong") setHapticIntensity(v);
+        }).catch(() => {});
+    }, []);
+    const handleHapticIntensityChange = async (val: "off" | "light" | "strong") => {
+        setHapticIntensity(val);
+        await AsyncStorage.setItem(HAPTIC_INTENSITY_KEY, val).catch(() => {});
+    };
+
+    // V-1: Voice max duration
+    const VOICE_MAX_DURATION_KEY = "imotara.voice.maxDuration.v1";
+    const [voiceMaxDuration, setVoiceMaxDuration] = React.useState(60);
+    const VOICE_DURATION_OPTIONS = [30, 60, 120, 300] as const;
+    React.useEffect(() => {
+        AsyncStorage.getItem(VOICE_MAX_DURATION_KEY).then((v) => {
+            const n = parseInt(v ?? "60", 10);
+            setVoiceMaxDuration(isFinite(n) ? n : 60);
+        }).catch(() => {});
+    }, []);
+    const handleVoiceDurationChange = async (secs: number) => {
+        setVoiceMaxDuration(secs);
+        await AsyncStorage.setItem(VOICE_MAX_DURATION_KEY, String(secs)).catch(() => {});
+    };
+    const voiceDurationLabel = (s: number) => s < 60 ? `${s}s` : `${s / 60} min`;
+
+    // V-2: Recording quality
+    const VOICE_QUALITY_KEY = "imotara.voice.quality.v1";
+    const [voiceQuality, setVoiceQuality] = React.useState<"high" | "low">("high");
+    React.useEffect(() => {
+        AsyncStorage.getItem(VOICE_QUALITY_KEY).then((v) => {
+            if (v === "low" || v === "high") setVoiceQuality(v);
+        }).catch(() => {});
+    }, []);
+    const handleVoiceQualityChange = async (val: "high" | "low") => {
+        setVoiceQuality(val);
+        await AsyncStorage.setItem(VOICE_QUALITY_KEY, val).catch(() => {});
+    };
+
+    // V-3: Cloud transcription toggle
+    const VOICE_CLOUD_KEY = "imotara.voice.cloudTranscription.v1";
+    const [voiceCloudTranscription, setVoiceCloudTranscription] = React.useState(true);
+    React.useEffect(() => {
+        AsyncStorage.getItem(VOICE_CLOUD_KEY).then((v) => {
+            setVoiceCloudTranscription(v !== "0");
+        }).catch(() => {});
+    }, []);
+    const handleVoiceCloudToggle = async (val: boolean) => {
+        setVoiceCloudTranscription(val);
+        await AsyncStorage.setItem(VOICE_CLOUD_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    // M-1: Memory max items
+    const MEMORY_MAX_ITEMS_KEY = "imotara.memory.maxItems.v1";
+    const [memoryMaxItems, setMemoryMaxItems] = React.useState(12);
+    const MEMORY_MAX_OPTIONS = [6, 12, 20, 30] as const;
+    React.useEffect(() => {
+        AsyncStorage.getItem(MEMORY_MAX_ITEMS_KEY).then((v) => {
+            const n = parseInt(v ?? "12", 10);
+            setMemoryMaxItems(isFinite(n) ? n : 12);
+        }).catch(() => {});
+    }, []);
+    const handleMemoryMaxItemsChange = async (n: number) => {
+        setMemoryMaxItems(n);
+        await AsyncStorage.setItem(MEMORY_MAX_ITEMS_KEY, String(n)).catch(() => {});
+    };
+
+    // M-3: Online status poll interval
+    const STATUS_POLL_KEY = "imotara.status.pollInterval.v1";
+    const [statusPollInterval, setStatusPollInterval] = React.useState(15);
+    const STATUS_POLL_OPTIONS = [10, 15, 30, 60] as const;
+    React.useEffect(() => {
+        AsyncStorage.getItem(STATUS_POLL_KEY).then((v) => {
+            const n = parseInt(v ?? "15", 10);
+            setStatusPollInterval(isFinite(n) ? n : 15);
+        }).catch(() => {});
+    }, []);
+    const handleStatusPollChange = async (secs: number) => {
+        setStatusPollInterval(secs);
+        await AsyncStorage.setItem(STATUS_POLL_KEY, String(secs)).catch(() => {});
+    };
+
+    // G-1: Emotional arc cadence
+    const ARC_CADENCE_KEY = "imotara.arc.cadenceDays.v1";
+    const [arcCadenceDays, setArcCadenceDays] = React.useState(30);
+    const CADENCE_OPTIONS = [7, 14, 30, 60] as const;
+    React.useEffect(() => {
+        AsyncStorage.getItem(ARC_CADENCE_KEY).then((v) => {
+            const n = parseInt(v ?? "30", 10);
+            setArcCadenceDays(isFinite(n) ? n : 30);
+        }).catch(() => {});
+    }, []);
+    const handleArcCadenceChange = async (days: number) => {
+        setArcCadenceDays(days);
+        await AsyncStorage.setItem(ARC_CADENCE_KEY, String(days)).catch(() => {});
+    };
+
+    // G-2: Companion letter cadence
+    const LETTER_CADENCE_KEY = "imotara.letter.cadenceDays.v1";
+    const [letterCadenceDays, setLetterCadenceDays] = React.useState(30);
+    React.useEffect(() => {
+        AsyncStorage.getItem(LETTER_CADENCE_KEY).then((v) => {
+            const n = parseInt(v ?? "30", 10);
+            setLetterCadenceDays(isFinite(n) ? n : 30);
+        }).catch(() => {});
+    }, []);
+    const handleLetterCadenceChange = async (days: number) => {
+        setLetterCadenceDays(days);
+        await AsyncStorage.setItem(LETTER_CADENCE_KEY, String(days)).catch(() => {});
+    };
+
+    // G-3: Open-loop thresholds
+    const OPENLOOP_MIN_THREADS_KEY = "imotara.openloop.minThreads.v1";
+    const OPENLOOP_MIN_AGE_KEY = "imotara.openloop.minAgeDays.v1";
+    const [openLoopMinThreads, setOpenLoopMinThreads] = React.useState(3);
+    const [openLoopMinAgeDays, setOpenLoopMinAgeDays] = React.useState(14);
+    const OPENLOOP_THREAD_OPTIONS = [2, 3, 5] as const;
+    const OPENLOOP_AGE_OPTIONS = [7, 14, 21, 30] as const;
+    React.useEffect(() => {
+        AsyncStorage.getItem(OPENLOOP_MIN_THREADS_KEY).then((v) => {
+            const n = parseInt(v ?? "3", 10);
+            setOpenLoopMinThreads(isFinite(n) ? n : 3);
+        }).catch(() => {});
+        AsyncStorage.getItem(OPENLOOP_MIN_AGE_KEY).then((v) => {
+            const n = parseInt(v ?? "14", 10);
+            setOpenLoopMinAgeDays(isFinite(n) ? n : 14);
+        }).catch(() => {});
+    }, []);
+    const handleOpenLoopThreadsChange = async (n: number) => {
+        setOpenLoopMinThreads(n);
+        await AsyncStorage.setItem(OPENLOOP_MIN_THREADS_KEY, String(n)).catch(() => {});
+    };
+    const handleOpenLoopAgeChange = async (days: number) => {
+        setOpenLoopMinAgeDays(days);
+        await AsyncStorage.setItem(OPENLOOP_MIN_AGE_KEY, String(days)).catch(() => {});
+    };
+
+    // C-1: Typing indicator speed
+    const TYPING_SPEED_KEY = "imotara.typing.speed.v1";
+    const [typingSpeed, setTypingSpeed] = React.useState<"slow" | "normal" | "fast">("normal");
+    React.useEffect(() => {
+        AsyncStorage.getItem(TYPING_SPEED_KEY).then((v) => {
+            if (v === "slow" || v === "normal" || v === "fast") setTypingSpeed(v);
+        }).catch(() => {});
+    }, []);
+    const handleTypingSpeedChange = async (val: "slow" | "normal" | "fast") => {
+        setTypingSpeed(val);
+        await AsyncStorage.setItem(TYPING_SPEED_KEY, val).catch(() => {});
+    };
+
+    // U-2: Reaction icon set
+    const REACTIONS_SET_KEY = "imotara.reactions.set.v1";
+    const [reactionsSet, setReactionsSet] = React.useState<"default" | "minimal" | "extended">("default");
+    React.useEffect(() => {
+        AsyncStorage.getItem(REACTIONS_SET_KEY).then((v) => {
+            if (v === "minimal" || v === "default" || v === "extended") setReactionsSet(v as "default" | "minimal" | "extended");
+        }).catch(() => {});
+    }, []);
+    const handleReactionsSetChange = async (val: "default" | "minimal" | "extended") => {
+        setReactionsSet(val);
+        await AsyncStorage.setItem(REACTIONS_SET_KEY, val).catch(() => {});
+    };
+
+    // P-1: Adult content guard sensitivity
+    const CONTENT_GUARD_KEY = "imotara.content.guard.v1";
+    const [contentGuard, setContentGuard] = React.useState<"strict" | "standard" | "relaxed">("standard");
+    React.useEffect(() => {
+        AsyncStorage.getItem(CONTENT_GUARD_KEY).then((v) => {
+            if (v === "strict" || v === "standard" || v === "relaxed") setContentGuard(v as "strict" | "standard" | "relaxed");
+        }).catch(() => {});
+    }, []);
+    const handleContentGuardChange = async (val: "strict" | "standard" | "relaxed") => {
+        setContentGuard(val);
+        await AsyncStorage.setItem(CONTENT_GUARD_KEY, val).catch(() => {});
+    };
+
+    // P-2: Crisis detection threshold
+    const CRISIS_THRESHOLD_KEY = "imotara.crisis.threshold.v1";
+    const [crisisThreshold, setCrisisThreshold] = React.useState<"sensitive" | "standard" | "conservative">("standard");
+    React.useEffect(() => {
+        AsyncStorage.getItem(CRISIS_THRESHOLD_KEY).then((v) => {
+            if (v === "sensitive" || v === "standard" || v === "conservative") setCrisisThreshold(v as "sensitive" | "standard" | "conservative");
+        }).catch(() => {});
+    }, []);
+    const handleCrisisThresholdChange = async (val: "sensitive" | "standard" | "conservative") => {
+        setCrisisThreshold(val);
+        await AsyncStorage.setItem(CRISIS_THRESHOLD_KEY, val).catch(() => {});
+    };
+
+    // M-6: API timeout
+    const API_TIMEOUT_KEY = "imotara.api.timeout.v1";
+    const [apiTimeoutSecs, setApiTimeoutSecs] = React.useState(20);
+    const API_TIMEOUT_OPTIONS = [10, 20, 30, 60] as const;
+    React.useEffect(() => {
+        AsyncStorage.getItem(API_TIMEOUT_KEY).then((v) => {
+            const n = parseInt(v ?? "20", 10);
+            setApiTimeoutSecs(isFinite(n) ? n : 20);
+        }).catch(() => {});
+    }, []);
+    const handleApiTimeoutChange = async (secs: number) => {
+        setApiTimeoutSecs(secs);
+        await AsyncStorage.setItem(API_TIMEOUT_KEY, String(secs)).catch(() => {});
+    };
 
     function toggleSection(setter: React.Dispatch<React.SetStateAction<boolean>>) {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -1032,6 +1340,45 @@ export default function SettingsScreen() {
         ? new Date(lastSyncAt).toLocaleString()
         : "Not synced yet";
 
+    function SettingRow({ label, description, children }: { label: string; description?: string; children?: React.ReactNode }) {
+        return (
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 44 }}>
+                <View style={{ flex: 1, marginRight: 12 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>{label}</Text>
+                    {description ? <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{description}</Text> : null}
+                </View>
+                {children}
+            </View>
+        );
+    }
+
+    function SettingPillGroup<T extends string>({ options, value, onChange }: { options: readonly { label: string; value: T }[]; value: T; onChange: (v: T) => void }) {
+        return (
+            <View style={{ flexDirection: "row", gap: 10 }}>
+                {options.map((opt) => {
+                    const active = value === opt.value;
+                    return (
+                        <TouchableOpacity
+                            key={opt.value}
+                            onPress={() => onChange(opt.value)}
+                            style={{
+                                flex: 1, paddingVertical: 10, borderRadius: 12,
+                                alignItems: "center", justifyContent: "center", borderWidth: 1.5,
+                                minHeight: 44,
+                                borderColor: active ? colors.primary : colors.border,
+                                backgroundColor: active ? colors.primaryTint : "transparent",
+                            }}
+                        >
+                            <Text style={{ fontSize: 13, color: active ? colors.primary : colors.textSecondary, fontWeight: active ? "700" : "400" }}>
+                                {opt.label}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        );
+    }
+
     function AccordionHeader({ title, open, onPress }: { title: string; open: boolean; onPress: () => void }) {
         return (
             <TouchableOpacity
@@ -1163,8 +1510,8 @@ export default function SettingsScreen() {
                     </TouchableOpacity>
                 </View>
 
-                {/* ── Support section ── */}
-                <AccordionHeader title="Support" open={sectionSupport} onPress={() => toggleSection(setSectionSupport)} />
+                {/* ── Plan & support section ── */}
+                <AccordionHeader title="Plan & support" open={sectionSupport} onPress={() => toggleSection(setSectionSupport)} />
                 {sectionSupport && (
                 <View>
 
@@ -1188,7 +1535,7 @@ export default function SettingsScreen() {
                             borderColor: "rgba(99,102,241,0.4)",
                         }}
                     >
-                        <Text style={{ fontSize: 13, fontWeight: "700", color: "#a5b4fc" }}>
+                        <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primary }}>
                             View plans →
                         </Text>
                     </TouchableOpacity>
@@ -1270,8 +1617,8 @@ export default function SettingsScreen() {
                 </View>
                 )}
 
-                {/* ── Account section ── */}
-                <AccordionHeader title="Account" open={sectionAccount} onPress={() => toggleSection(setSectionAccount)} />
+                {/* ── Your plan section (merged into Plan & support below) ── */}
+                <AccordionHeader title="Your plan" open={sectionAccount} onPress={() => toggleSection(setSectionAccount)} />
                 {sectionAccount && (
                 <View>
 
@@ -1365,7 +1712,7 @@ export default function SettingsScreen() {
                                                     : colors.border,
                                                 backgroundColor: active
                                                     ? "rgba(56, 189, 248, 0.18)"
-                                                    : "rgba(15, 23, 42, 0.9)",
+                                                    : colors.surface,
                                                 marginRight: 8,
                                                 marginBottom: 8,
                                             }}
@@ -1412,7 +1759,7 @@ export default function SettingsScreen() {
                             value={emotionInsightsEnabled}
                             onValueChange={setEmotionInsightsEnabled}
                             trackColor={{
-                                false: "#4b5563",
+                                false: isDark ? "#4b5563" : "#94a3b8",
                                 true: colors.primary,
                             }}
                             thumbColor={"#f9fafb"}
@@ -1443,76 +1790,181 @@ export default function SettingsScreen() {
                     </Text>
                 </AppSurface>
 
-                {/* Teen Insights Mode card */}
-                <AppSurface style={{ marginBottom: 16 }}>
-                    <View
-                        style={{
-                            flexDirection: "row",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            marginBottom: 6,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 14,
-                                color: colors.textPrimary,
-                                fontWeight: "500",
-                            }}
-                        >
-                            Teen Insights Mode
-                        </Text>
-                        <Switch
-                            value={teenMode}
-                            onValueChange={setTeenMode}
-                            trackColor={{
-                                false: "#4b5563",
-                                true: "#7c3aed",
-                            }}
-                            thumbColor={"#f9fafb"}
-                        />
-                    </View>
-
-                    <Text
-                        style={{
-                            fontSize: 13,
-                            color: colors.textSecondary,
-                            marginBottom: 4,
-                        }}
-                    >
-                        Shows age-appropriate reflections with peer-supportive language and enhanced safety filters.
-                    </Text>
-                </AppSurface>
-
-                {/* NF-3: Family Snapshot card */}
-                <AppSurface style={{ marginBottom: 16 }}>
-                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
-                        Family Snapshot
-                    </Text>
-                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
-                        Share a private link showing your week&apos;s emotional tone with family. Encoded locally — nothing is sent to a server.
-                    </Text>
-                    <TouchableOpacity
-                        onPress={shareFamilySnapshot}
-                        style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.35)", backgroundColor: "rgba(16,185,129,0.1)" }}
-                    >
-                        <Ionicons name="share-outline" size={15} color="#6ee7b7" />
-                        <Text style={{ fontSize: 12, fontWeight: "600", color: "#6ee7b7" }}>Share my snapshot</Text>
-                    </TouchableOpacity>
-                    {familySnapUrl && (
-                        <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 8 }} numberOfLines={2}>
-                            {familySnapUrl}
-                        </Text>
-                    )}
-                </AppSurface>
-
                 </View>
                 )}
 
-                {/* ── Appearance section ── */}
-                <AccordionHeader title="Appearance" open={sectionAppearance} onPress={() => toggleSection(setSectionAppearance)} />
+                {/* ── Experience section ── */}
+                <AccordionHeader title="Experience" open={sectionAppearance} onPress={() => toggleSection(setSectionAppearance)} />
                 {sectionAppearance && (
                 <View>
+                {/* Daily check-in reminder */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: reminderEnabled ? 12 : 0 }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
+                                Daily check-in reminder
+                            </Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                                {reminderEnabled
+                                    ? `Reminds you at ${String(reminderHour).padStart(2, "0")}:${String(reminderMinute).padStart(2, "0")} every day`
+                                    : "Get a gentle nudge to reflect daily"}
+                            </Text>
+                        </View>
+                        <Switch
+                            value={reminderEnabled}
+                            onValueChange={handleReminderToggle}
+                            disabled={reminderLoading}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+
+                    {reminderEnabled && (
+                        <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 8 }}>
+                                Reminder time
+                            </Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                                {/* Hour stepper */}
+                                <View style={{ alignItems: "center", gap: 4 }}>
+                                    <Text style={{ fontSize: 10, color: colors.textSecondary }}>Hour</Text>
+                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                        <TouchableOpacity
+                                            onPress={() => handleReminderTimeChange((reminderHour + 23) % 24, reminderMinute)}
+                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
+                                        >
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>−</Text>
+                                        </TouchableOpacity>
+                                        <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, minWidth: 24, textAlign: "center" }}>
+                                            {String(reminderHour).padStart(2, "0")}
+                                        </Text>
+                                        <TouchableOpacity
+                                            onPress={() => handleReminderTimeChange((reminderHour + 1) % 24, reminderMinute)}
+                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
+                                        >
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>+</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                                <Text style={{ fontSize: 20, fontWeight: "700", color: colors.textSecondary, marginTop: 14 }}>:</Text>
+                                {/* Minute stepper */}
+                                <View style={{ alignItems: "center", gap: 4 }}>
+                                    <Text style={{ fontSize: 10, color: colors.textSecondary }}>Minute</Text>
+                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                        <TouchableOpacity
+                                            onPress={() => handleReminderTimeChange(reminderHour, (reminderMinute + 45) % 60)}
+                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
+                                        >
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>−</Text>
+                                        </TouchableOpacity>
+                                        <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, minWidth: 24, textAlign: "center" }}>
+                                            {String(reminderMinute).padStart(2, "0")}
+                                        </Text>
+                                        <TouchableOpacity
+                                            onPress={() => handleReminderTimeChange(reminderHour, (reminderMinute + 15) % 60)}
+                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
+                                        >
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>+</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                                <View style={{ flex: 1, alignItems: "flex-end", marginTop: 14 }}>
+                                    <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: "right", lineHeight: 14 }}>
+                                        Minutes step{"\n"}by 15
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* N-3: Sound + badge toggles */}
+                    {reminderEnabled && (
+                        <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, marginTop: 10, gap: 10 }}>
+                            <SettingRow label="Play sound" description="Play a sound when the reminder fires">
+                                <Switch value={notifSound} onValueChange={handleNotifSoundToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                            </SettingRow>
+                            <SettingRow label="Show badge" description="Show a badge on the app icon">
+                                <Switch value={notifBadge} onValueChange={handleNotifBadgeToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                            </SettingRow>
+                            {/* N-2: Inactivity threshold */}
+                            <View>
+                                <Text style={{ fontSize: 13, color: colors.textPrimary, marginBottom: 6 }}>Nudge if silent for</Text>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                    {INACTIVITY_OPTIONS.map((h) => (
+                                        <TouchableOpacity
+                                            key={h}
+                                            onPress={() => handleInactivityChange(h)}
+                                            style={{
+                                                paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
+                                                borderColor: inactivityHours === h ? colors.primary : colors.border,
+                                                backgroundColor: inactivityHours === h ? colors.primaryTint : "transparent",
+                                            }}
+                                        >
+                                            <Text style={{ fontSize: 12, color: inactivityHours === h ? colors.primary : colors.textSecondary }}>
+                                                {inactivityLabel(h)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        </View>
+                    )}
+                </AppSurface>
+
+
+                {/* V-1 + V-2 + V-3 + M-1 + M-3: Voice & memory settings */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 14 }}>
+                        Voice input
+                    </Text>
+
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>Max recording duration</Text>
+                    <View style={{ flexDirection: "row", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+                        {(VOICE_DURATION_OPTIONS as readonly number[]).map((secs) => {
+                            const active = voiceMaxDuration === secs;
+                            return (
+                                <TouchableOpacity
+                                    key={secs}
+                                    onPress={() => handleVoiceDurationChange(secs)}
+                                    style={{
+                                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, color: active ? colors.primary : colors.textSecondary }}>{voiceDurationLabel(secs)}</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>Recording quality</Text>
+                    <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+                        {(["high", "low"] as const).map((val) => {
+                            const active = voiceQuality === val;
+                            return (
+                                <TouchableOpacity
+                                    key={val}
+                                    onPress={() => handleVoiceQualityChange(val)}
+                                    style={{
+                                        paddingHorizontal: 20, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, color: active ? colors.primary : colors.textSecondary }}>
+                                        {val === "high" ? "High" : "Low"}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    <SettingRow label="Cloud transcription" description="Send recording to server to convert to text">
+                        <Switch value={voiceCloudTranscription} onValueChange={handleVoiceCloudToggle} />
+                    </SettingRow>
+                </AppSurface>
+
 
                 <AppSurface style={{ marginBottom: 16 }}>
                     <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 6 }}>
@@ -1594,7 +2046,7 @@ export default function SettingsScreen() {
                                         alignItems: "center",
                                         borderWidth: 1.5,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active ? `${colors.primary}22` : "transparent",
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
                                     }}
                                 >
                                     <Text style={{
@@ -1610,413 +2062,52 @@ export default function SettingsScreen() {
                     </View>
                 </AppSurface>
 
+                {/* H-2: Haptic intensity */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 8 }}>
+                        Haptic intensity
+                    </Text>
+                    <SettingPillGroup
+                        options={[{ label: "Off", value: "off" }, { label: "Light", value: "light" }, { label: "Strong", value: "strong" }] as const}
+                        value={hapticIntensity}
+                        onChange={handleHapticIntensityChange}
+                    />
+                </AppSurface>
+
+                {/* C-1: Typing indicator speed */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 8 }}>
+                        Typing indicator speed
+                    </Text>
+                    <SettingPillGroup
+                        options={[{ label: "Slow", value: "slow" }, { label: "Normal", value: "normal" }, { label: "Fast", value: "fast" }] as const}
+                        value={typingSpeed}
+                        onChange={handleTypingSpeedChange}
+                    />
+                </AppSurface>
+
+                {/* U-2: Reaction icon set */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Reaction set
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        Icons available when reacting to messages
+                    </Text>
+                    <SettingPillGroup
+                        options={[{ label: "Minimal", value: "minimal" }, { label: "Default", value: "default" }, { label: "Extended", value: "extended" }] as const}
+                        value={reactionsSet}
+                        onChange={handleReactionsSetChange}
+                    />
+                </AppSurface>
+
                 </View>
                 )}
 
-                {/* ── Companion section ── */}
-                <AccordionHeader title="Companion" open={sectionCompanion} onPress={() => toggleSection(setSectionCompanion)} />
+                {/* ── Your companion section ── */}
+                <AccordionHeader title="Your companion" open={sectionCompanion} onPress={() => toggleSection(setSectionCompanion)} />
                 {sectionCompanion && (
                 <View>
-
-                {/* Daily check-in reminder */}
-                <AppSurface style={{ marginBottom: 16 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: reminderEnabled ? 12 : 0 }}>
-                        <View style={{ flex: 1, marginRight: 12 }}>
-                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
-                                Daily check-in reminder
-                            </Text>
-                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                                {reminderEnabled
-                                    ? `Reminds you at ${String(reminderHour).padStart(2, "0")}:${String(reminderMinute).padStart(2, "0")} every day`
-                                    : "Get a gentle nudge to reflect daily"}
-                            </Text>
-                        </View>
-                        <Switch
-                            value={reminderEnabled}
-                            onValueChange={handleReminderToggle}
-                            disabled={reminderLoading}
-                            trackColor={{ false: colors.border, true: colors.primary }}
-                            thumbColor="#ffffff"
-                        />
-                    </View>
-
-                    {reminderEnabled && (
-                        <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
-                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 8 }}>
-                                Reminder time
-                            </Text>
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                                {/* Hour stepper */}
-                                <View style={{ alignItems: "center", gap: 4 }}>
-                                    <Text style={{ fontSize: 10, color: colors.textSecondary }}>Hour</Text>
-                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                                        <TouchableOpacity
-                                            onPress={() => handleReminderTimeChange((reminderHour + 23) % 24, reminderMinute)}
-                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
-                                        >
-                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>−</Text>
-                                        </TouchableOpacity>
-                                        <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, minWidth: 24, textAlign: "center" }}>
-                                            {String(reminderHour).padStart(2, "0")}
-                                        </Text>
-                                        <TouchableOpacity
-                                            onPress={() => handleReminderTimeChange((reminderHour + 1) % 24, reminderMinute)}
-                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
-                                        >
-                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>+</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                                <Text style={{ fontSize: 20, fontWeight: "700", color: colors.textSecondary, marginTop: 14 }}>:</Text>
-                                {/* Minute stepper */}
-                                <View style={{ alignItems: "center", gap: 4 }}>
-                                    <Text style={{ fontSize: 10, color: colors.textSecondary }}>Minute</Text>
-                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                                        <TouchableOpacity
-                                            onPress={() => handleReminderTimeChange(reminderHour, (reminderMinute + 45) % 60)}
-                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
-                                        >
-                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>−</Text>
-                                        </TouchableOpacity>
-                                        <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, minWidth: 24, textAlign: "center" }}>
-                                            {String(reminderMinute).padStart(2, "0")}
-                                        </Text>
-                                        <TouchableOpacity
-                                            onPress={() => handleReminderTimeChange(reminderHour, (reminderMinute + 15) % 60)}
-                                            style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
-                                        >
-                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>+</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                                <View style={{ flex: 1, alignItems: "flex-end", marginTop: 14 }}>
-                                    <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: "right", lineHeight: 14 }}>
-                                        Minutes step{"\n"}by 15
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-                    )}
-                </AppSurface>
-
-                {/* Emotional fingerprint */}
-                {emotionalFingerprint && (
-                    <AppSurface style={{ marginBottom: 16 }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                            <View>
-                                <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Your emotional fingerprint</Text>
-                                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                                    {emotionalFingerprint.totalRecords} moments tracked · last 30 days
-                                </Text>
-                            </View>
-                            {emotionalFingerprint.trend && (
-                                <View style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: emotionalFingerprint.trend === "lighter" ? "rgba(52,211,153,0.4)" : emotionalFingerprint.trend === "heavier" ? "rgba(251,146,60,0.4)" : colors.border, backgroundColor: emotionalFingerprint.trend === "lighter" ? "rgba(52,211,153,0.08)" : emotionalFingerprint.trend === "heavier" ? "rgba(251,146,60,0.08)" : "transparent" }}>
-                                    <Text style={{ fontSize: 10, color: emotionalFingerprint.trend === "lighter" ? "#34d399" : emotionalFingerprint.trend === "heavier" ? "#fb923c" : colors.textSecondary }}>
-                                        {emotionalFingerprint.trend === "lighter" ? "Easing ↓" : emotionalFingerprint.trend === "heavier" ? "Intensifying ↑" : "Steady →"}
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-                        {emotionalFingerprint.topEmotions.map(({ emotion, pct }) => (
-                            <View key={emotion} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                                <Text style={{ width: 64, fontSize: 11, color: colors.textSecondary }}>
-                                    {emotion.charAt(0).toUpperCase() + emotion.slice(1)}
-                                </Text>
-                                <View style={{ flex: 1, height: 4, borderRadius: 999, backgroundColor: colors.border }}>
-                                    <View style={{ width: `${pct}%`, height: 4, borderRadius: 999, backgroundColor: colors.primary }} />
-                                </View>
-                                <Text style={{ width: 28, fontSize: 10, color: colors.textSecondary, textAlign: "right" }}>{pct}%</Text>
-                            </View>
-                        ))}
-                    </AppSurface>
-                )}
-
-                {/* Companion memory */}
-                <AppSurface style={{ marginBottom: 16 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: memories.length > 0 ? 10 : 0 }}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
-                                Companion memory
-                            </Text>
-                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                                {memories.length === 0
-                                    ? "Nothing stored yet — Imotara will learn from your conversations."
-                                    : `${memories.length} thing${memories.length !== 1 ? "s" : ""} remembered`}
-                            </Text>
-                        </View>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                            <TouchableOpacity onPress={() => { setAddingMemory(true); setNewMemoryText(""); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>+ Add</Text>
-                            </TouchableOpacity>
-                            {memories.length > 0 && (
-                                <TouchableOpacity onPress={handleClearMemories} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                    <Text style={{ fontSize: 12, color: "rgba(248,113,113,0.9)", fontWeight: "600" }}>Clear</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    </View>
-                    {addingMemory && (
-                        <View style={{ paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border, gap: 6 }}>
-                            <TextInput
-                                value={newMemoryText}
-                                onChangeText={setNewMemoryText}
-                                autoFocus
-                                placeholder="E.g. I have anxiety around social situations"
-                                placeholderTextColor={colors.textSecondary}
-                                multiline
-                                returnKeyType="default"
-                                maxLength={MEMORY_MAX_LENGTH}
-                                onFocus={() => setMemoryInputFocused(true)}
-                                onBlur={() => setMemoryInputFocused(false)}
-                                style={{ fontSize: 12, color: colors.textPrimary, borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, minHeight: 40 }}
-                            />
-                            {(memoryInputFocused || newMemoryText.length > MEMORY_MAX_LENGTH * 0.8) && (
-                                <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: "right", marginTop: -2 }}>
-                                    {newMemoryText.length}/{MEMORY_MAX_LENGTH}
-                                </Text>
-                            )}
-                            <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
-                                <TouchableOpacity onPress={() => setAddingMemory(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity onPress={handleAddMemory} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                    <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Save</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    )}
-                    {memories.map((m) => (
-                        <View
-                            key={m.id}
-                            style={{
-                                paddingVertical: 6,
-                                borderTopWidth: 1,
-                                borderTopColor: colors.border,
-                            }}
-                        >
-                            {editingMemoryId === m.id ? (
-                                <View style={{ gap: 6 }}>
-                                    <TextInput
-                                        value={editingMemoryText}
-                                        onChangeText={setEditingMemoryText}
-                                        autoFocus
-                                        multiline
-                                        returnKeyType="default"
-                                        maxLength={MEMORY_MAX_LENGTH}
-                                        onFocus={() => setEditMemoryInputFocused(true)}
-                                        onBlur={() => setEditMemoryInputFocused(false)}
-                                        style={{ fontSize: 12, color: colors.textPrimary, borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, minHeight: 40 }}
-                                    />
-                                    {(editMemoryInputFocused || editingMemoryText.length > MEMORY_MAX_LENGTH * 0.8) && (
-                                        <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: "right", marginTop: -2 }}>
-                                            {editingMemoryText.length}/{MEMORY_MAX_LENGTH}
-                                        </Text>
-                                    )}
-                                    <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
-                                        <TouchableOpacity onPress={() => setEditingMemoryId(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                            <Text style={{ fontSize: 11, color: colors.textSecondary }}>Cancel</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity onPress={() => handleSaveEditMemory(m.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Save</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            ) : (
-                                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                                    <Text style={{ fontSize: 11, color: colors.primary, marginTop: 1 }}>●</Text>
-                                    <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>{m.text}</Text>
-                                    <TouchableOpacity
-                                        onPress={() => handleStartEditMemory(m)}
-                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                        style={{ marginRight: 8 }}
-                                    >
-                                        <Text style={{ fontSize: 11, color: colors.primary }}>Edit</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        onPress={() => handleRemoveMemory(m.id)}
-                                        disabled={deletingMemoryId === m.id}
-                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                    >
-                                        <Text style={{ fontSize: 11, color: deletingMemoryId === m.id ? colors.textSecondary : "rgba(248,113,113,0.8)" }}>
-                                            {deletingMemoryId === m.id ? "…" : "Forget"}
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                        </View>
-                    ))}
-                </AppSurface>
-
-                {/* ✅ Analysis Mode (Local / Cloud / Auto) */}
-                <AppSurface style={{ marginBottom: 16 }}>
-                    <Text
-                        style={{
-                            fontSize: 14,
-                            color: colors.textPrimary,
-                            marginBottom: 6,
-                            fontWeight: "500",
-                        }}
-                    >
-                        Analysis Mode
-                    </Text>
-
-                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}>
-                        Choose how Imotara replies are generated.
-                    </Text>
-
-                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                        {(
-                            [
-                                { id: "auto", label: "Auto" },
-                                { id: "cloud", label: "Cloud" },
-                                { id: "local", label: "Local" },
-                            ] as const
-                        ).map((opt) => {
-                            const active = analysisMode === opt.id;
-                            const cloudLocked = opt.id === "cloud" && !canCloudSync;
-
-                            return (
-                                <TouchableOpacity
-                                    key={opt.id}
-                                    disabled={cloudLocked}
-                                    onPress={() => {
-                                        if (cloudLocked) {
-                                            Alert.alert(
-                                                "Cloud mode unavailable",
-                                                cloudGateReason || "Cloud mode is available with Premium."
-                                            );
-                                            return;
-                                        }
-                                        setAnalysisMode(opt.id);
-                                    }}
-                                    style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
-                                        borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active
-                                            ? "rgba(56, 189, 248, 0.18)"
-                                            : "rgba(15, 23, 42, 0.9)",
-                                        marginRight: 8,
-                                        marginBottom: 8,
-                                        opacity: cloudLocked ? 0.45 : 1,
-                                    }}
-                                >
-                                    <Text
-                                        style={{
-                                            fontSize: 12,
-                                            fontWeight: "700",
-                                            color: active ? colors.textPrimary : colors.textSecondary,
-                                        }}
-                                    >
-                                        {opt.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-
-                    </View>
-
-                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
-                        Auto: tries cloud, falls back to local. Cloud: always uses cloud.
-                        Local: device-only, nothing is sent externally.{"\n"}
-                        When cloud is used, your message text is sent to OpenAI (ChatGPT) to generate a reply, with Google (Gemini) as a fallback. No account info, device ID, or personal data is attached. OpenAI's and Google's privacy policies apply to data processed by their APIs. Local mode keeps everything on-device — nothing is sent externally.
-                    </Text>
-
-                    {!canCloudSync ? (
-                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 8 }}>
-                            Cloud is currently unavailable:{" "}
-                            {cloudGateReason || "Cloud mode is available with Premium."}
-                        </Text>
-                    ) : null}
-
-                </AppSurface>
-
-                {/* ✅ Cross-device Link Key (optional) */}
-                <AppSurface style={{ marginBottom: 16 }}>
-                    <Text
-                        style={{
-                            fontSize: 14,
-                            color: colors.textPrimary,
-                            marginBottom: 6,
-                            fontWeight: "500",
-                        }}
-                    >
-                        Link this device (optional)
-                    </Text>
-
-                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}>
-                        Enter the same Link Key on Web + Mobile to see the same remote chat history.
-                        Treat it like a private password.
-                    </Text>
-
-                    <TextInput
-                        value={chatLinkKey}
-                        onChangeText={(t) => {
-                            setChatLinkKey(t);
-                            setChatLinkStatus(null);
-                        }}
-                        placeholder="Link Key (e.g., soumen-sync-1)"
-                        placeholderTextColor={colors.textSecondary}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        style={{
-                            borderWidth: 1,
-                            borderColor: colors.border,
-                            borderRadius: 12,
-                            paddingHorizontal: 12,
-                            paddingVertical: 10,
-                            color: colors.textPrimary,
-                            backgroundColor: colors.surfaceSoft,
-                            marginBottom: 10,
-                        }}
-                    />
-
-                    <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
-                        <TouchableOpacity
-                            onPress={saveChatLinkKey}
-                            style={{
-                                paddingHorizontal: 12,
-                                paddingVertical: 10,
-                                borderRadius: 12,
-                                borderWidth: 1,
-                                borderColor: colors.border,
-                                backgroundColor: colors.surface,
-                            }}
-                        >
-                            <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "600" }}>
-                                Save
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={clearChatLinkKey}
-                            style={{
-                                paddingHorizontal: 12,
-                                paddingVertical: 10,
-                                borderRadius: 12,
-                                borderWidth: 1,
-                                borderColor: colors.border,
-                                backgroundColor: colors.surfaceSoft,
-                            }}
-                        >
-                            <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "600" }}>
-                                Clear
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {chatLinkStatus ? (
-                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 10 }}>
-                            {chatLinkStatus}
-                        </Text>
-                    ) : null}
-
-                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 10 }}>
-                        Tip: Use a short phrase with no spaces. Example: soumen-sync-1
-                    </Text>
-                </AppSurface>
 
                 {/* ✅ Personal Info */}
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -2093,7 +2184,7 @@ export default function SettingsScreen() {
                                         borderRadius: 999,
                                         borderWidth: 1,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : "rgba(15, 23, 42, 0.9)",
+                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : colors.surface,
                                         marginRight: 8,
                                         marginBottom: 8,
                                     }}
@@ -2136,7 +2227,7 @@ export default function SettingsScreen() {
                                         borderRadius: 999,
                                         borderWidth: 1,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : "rgba(15, 23, 42, 0.9)",
+                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : colors.surface,
                                         marginRight: 8,
                                         marginBottom: 8,
                                     }}
@@ -2236,7 +2327,7 @@ export default function SettingsScreen() {
                                         borderRadius: 999,
                                         borderWidth: 1,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : "rgba(15, 23, 42, 0.9)",
+                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : colors.surface,
                                         marginRight: 8,
                                         marginBottom: 8,
                                     }}
@@ -2283,7 +2374,7 @@ export default function SettingsScreen() {
                                     },
                                 })
                             }
-                            trackColor={{ false: "#4b5563", true: colors.primary }}
+                            trackColor={{ false: isDark ? "#4b5563" : "#94a3b8", true: colors.primary }}
                             thumbColor={"#f9fafb"}
                         />
                     </View>
@@ -2365,7 +2456,7 @@ export default function SettingsScreen() {
                                         borderColor: active ? colors.primary : colors.border,
                                         backgroundColor: active
                                             ? "rgba(56, 189, 248, 0.18)"
-                                            : "rgba(15, 23, 42, 0.9)",
+                                            : colors.surface,
                                         marginRight: 8,
                                         marginBottom: 8,
                                         opacity: toneContext?.companion?.enabled ? 1 : 0.5,
@@ -2430,7 +2521,7 @@ export default function SettingsScreen() {
                                         borderColor: active ? colors.primary : colors.border,
                                         backgroundColor: active
                                             ? "rgba(56, 189, 248, 0.18)"
-                                            : "rgba(15, 23, 42, 0.9)",
+                                            : colors.surface,
                                         marginRight: 8,
                                         marginBottom: 8,
                                         opacity: toneContext?.companion?.enabled ? 1 : 0.5,
@@ -2558,7 +2649,7 @@ export default function SettingsScreen() {
                                         borderColor: active ? colors.primary : colors.border,
                                         backgroundColor: active
                                             ? "rgba(56, 189, 248, 0.18)"
-                                            : "rgba(15, 23, 42, 0.9)",
+                                            : colors.surface,
                                         marginRight: 8,
                                         marginBottom: 8,
                                         opacity: toneContext?.companion?.enabled ? 1 : 0.5,
@@ -2657,7 +2748,7 @@ export default function SettingsScreen() {
                                         borderRadius: 999,
                                         borderWidth: 1,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : "rgba(15, 23, 42, 0.9)",
+                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : colors.surface,
                                         marginRight: 8,
                                         marginBottom: 8,
                                         opacity: toneContext?.companion?.enabled ? 1 : 0.5,
@@ -2680,13 +2771,322 @@ export default function SettingsScreen() {
                     )}
                 </AppSurface>
 
+                {/* G-1: Emotional arc cadence */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Emotional arc cadence
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        How often your emotional journey narrative is generated
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+                        {(CADENCE_OPTIONS as readonly number[]).map((days) => {
+                            const active = arcCadenceDays === days;
+                            const label = days === 7 ? "1 week" : days === 14 ? "2 weeks" : days === 30 ? "Monthly" : "2 months";
+                            return (
+                                <TouchableOpacity
+                                    key={days}
+                                    onPress={() => handleArcCadenceChange(days)}
+                                    style={{
+                                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, color: active ? colors.primary : colors.textSecondary }}>{label}</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </AppSurface>
+
+                {/* G-2: Companion letter cadence */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Companion letter cadence
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        How often your companion writes you a personal letter
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+                        {(CADENCE_OPTIONS as readonly number[]).map((days) => {
+                            const active = letterCadenceDays === days;
+                            const label = days === 7 ? "1 week" : days === 14 ? "2 weeks" : days === 30 ? "Monthly" : "2 months";
+                            return (
+                                <TouchableOpacity
+                                    key={days}
+                                    onPress={() => handleLetterCadenceChange(days)}
+                                    style={{
+                                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, color: active ? colors.primary : colors.textSecondary }}>{label}</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </AppSurface>
+
+                {/* G-3: Open-loop thresholds */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Open-loop detection
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        Minimum conversations before a recurring theme is surfaced
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>Conversations</Text>
+                    <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+                        {(OPENLOOP_THREAD_OPTIONS as readonly number[]).map((n) => {
+                            const active = openLoopMinThreads === n;
+                            return (
+                                <TouchableOpacity
+                                    key={n}
+                                    onPress={() => handleOpenLoopThreadsChange(n)}
+                                    style={{
+                                        paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, color: active ? colors.primary : colors.textSecondary }}>{n}</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>Minimum age</Text>
+                    <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+                        {(OPENLOOP_AGE_OPTIONS as readonly number[]).map((days) => {
+                            const active = openLoopMinAgeDays === days;
+                            const label = days === 7 ? "7 days" : days === 14 ? "14 days" : days === 21 ? "21 days" : "30 days";
+                            return (
+                                <TouchableOpacity
+                                    key={days}
+                                    onPress={() => handleOpenLoopAgeChange(days)}
+                                    style={{
+                                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, color: active ? colors.primary : colors.textSecondary }}>{label}</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </AppSurface>
+
+
+                {/* M-1: Memory max items */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Memory limit
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        Maximum number of facts your companion remembers about you
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                        {(MEMORY_MAX_OPTIONS as readonly number[]).map((n) => {
+                            const active = memoryMaxItems === n;
+                            return (
+                                <TouchableOpacity
+                                    key={n}
+                                    onPress={() => handleMemoryMaxItemsChange(n)}
+                                    style={{
+                                        flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: "center", borderWidth: 1.5,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 13, color: active ? colors.primary : colors.textSecondary, fontWeight: active ? "700" : "400" }}>{n}</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </AppSurface>
+
                 </View>
                 )}
 
-                {/* ── Privacy & Data section ── */}
-                <AccordionHeader title="Privacy & Data" open={sectionPrivacy} onPress={() => toggleSection(setSectionPrivacy)} />
+                {/* ── Privacy & safety section ── */}
+                <AccordionHeader title="Privacy & safety" open={sectionPrivacy} onPress={() => toggleSection(setSectionPrivacy)} />
                 {sectionPrivacy && (
                 <View>
+
+                {/* ✅ Analysis Mode (Local / Cloud / Auto) */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Analysis Mode
+                    </Text>
+
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}>
+                        Choose how Imotara replies are generated.
+                    </Text>
+
+                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                        {(
+                            [
+                                { id: "auto", label: "Auto" },
+                                { id: "cloud", label: "Cloud" },
+                                { id: "local", label: "Local" },
+                            ] as const
+                        ).map((opt) => {
+                            const active = analysisMode === opt.id;
+                            const cloudLocked = opt.id === "cloud" && !canCloudSync;
+
+                            return (
+                                <TouchableOpacity
+                                    key={opt.id}
+                                    disabled={cloudLocked}
+                                    onPress={() => {
+                                        if (cloudLocked) {
+                                            Alert.alert(
+                                                "Cloud mode unavailable",
+                                                cloudGateReason || "Cloud mode is available with Premium."
+                                            );
+                                            return;
+                                        }
+                                        setAnalysisMode(opt.id);
+                                    }}
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active
+                                            ? "rgba(56, 189, 248, 0.18)"
+                                            : colors.surface,
+                                        marginRight: 8,
+                                        marginBottom: 8,
+                                        opacity: cloudLocked ? 0.45 : 1,
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontSize: 12,
+                                            fontWeight: "700",
+                                            color: active ? colors.textPrimary : colors.textSecondary,
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+
+                    </View>
+
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
+                        Auto: tries cloud, falls back to local. Cloud: always uses cloud.
+                        Local: device-only, nothing is sent externally.{"\n"}
+                        When cloud is used, your message text is sent to OpenAI (ChatGPT) to generate a reply, with Google (Gemini) as a fallback. No account info, device ID, or personal data is attached. OpenAI's and Google's privacy policies apply to data processed by their APIs. Local mode keeps everything on-device — nothing is sent externally.
+                    </Text>
+
+                    {!canCloudSync ? (
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 8 }}>
+                            Cloud is currently unavailable:{" "}
+                            {cloudGateReason || "Cloud mode is available with Premium."}
+                        </Text>
+                    ) : null}
+
+                </AppSurface>
+
+
+                {/* ✅ Cross-device Link Key (optional) */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                            marginBottom: 6,
+                            fontWeight: "500",
+                        }}
+                    >
+                        Link this device (optional)
+                    </Text>
+
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}>
+                        Enter the same Link Key on Web + Mobile to see the same remote chat history.
+                        Treat it like a private password.
+                    </Text>
+
+                    <TextInput
+                        value={chatLinkKey}
+                        onChangeText={(t) => {
+                            setChatLinkKey(t);
+                            setChatLinkStatus(null);
+                        }}
+                        placeholder="Link Key (e.g., soumen-sync-1)"
+                        placeholderTextColor={colors.textSecondary}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        style={{
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            borderRadius: 12,
+                            paddingHorizontal: 12,
+                            paddingVertical: 10,
+                            color: colors.textPrimary,
+                            backgroundColor: colors.surfaceSoft,
+                            marginBottom: 10,
+                        }}
+                    />
+
+                    <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+                        <TouchableOpacity
+                            onPress={saveChatLinkKey}
+                            style={{
+                                paddingHorizontal: 12,
+                                paddingVertical: 10,
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                                backgroundColor: colors.surface,
+                            }}
+                        >
+                            <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "600" }}>
+                                Save
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            onPress={clearChatLinkKey}
+                            style={{
+                                paddingHorizontal: 12,
+                                paddingVertical: 10,
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                                backgroundColor: colors.surfaceSoft,
+                            }}
+                        >
+                            <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "600" }}>
+                                Clear
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {chatLinkStatus ? (
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 10 }}>
+                            {chatLinkStatus}
+                        </Text>
+                    ) : null}
+
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 10 }}>
+                        Tip: Use a short phrase with no spaces. Example: soumen-sync-1
+                    </Text>
+                </AppSurface>
+
 
                 {/* A-5: Data on this device summary */}
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -2707,7 +3107,7 @@ export default function SettingsScreen() {
                                     borderRadius: 12,
                                     borderWidth: 1,
                                     borderColor: colors.border,
-                                    backgroundColor: "rgba(15,23,42,0.6)",
+                                    backgroundColor: colors.surfaceSoft,
                                     paddingHorizontal: 10,
                                     paddingVertical: 8,
                                     alignItems: "center",
@@ -2808,7 +3208,7 @@ export default function SettingsScreen() {
                                     borderRadius: 999,
                                     borderWidth: 1,
                                     borderColor: colors.border,
-                                    backgroundColor: "rgba(15, 23, 42, 0.9)",
+                                    backgroundColor: colors.surface,
                                 }}
                             >
                                 <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textSecondary }}>
@@ -2882,7 +3282,7 @@ export default function SettingsScreen() {
                                             : colors.border,
                                         backgroundColor: isActive
                                             ? "rgba(56, 189, 248, 0.18)"
-                                            : "rgba(15, 23, 42, 0.9)",
+                                            : colors.surface,
                                         marginRight: index < 2 ? 8 : 0,
                                     }}
                                 >
@@ -3056,6 +3456,291 @@ export default function SettingsScreen() {
                     </View>
                 </AppSurface>
 
+                {/* P-1: Adult content guard */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Content safety sensitivity
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        How strictly explicit content is filtered. Strict catches more edge cases; Relaxed reduces false positives on mature topics.
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                        {(["strict", "standard", "relaxed"] as const).map((val) => {
+                            const active = contentGuard === val;
+                            const labels = { strict: "Strict", standard: "Standard", relaxed: "Relaxed" };
+                            return (
+                                <TouchableOpacity
+                                    key={val}
+                                    onPress={() => handleContentGuardChange(val)}
+                                    style={{
+                                        flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: "center", borderWidth: 1.5,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 13, color: active ? colors.primary : colors.textSecondary, fontWeight: active ? "700" : "400" }}>
+                                        {labels[val]}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </AppSurface>
+
+                {/* P-2: Crisis detection threshold */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Crisis detection sensitivity
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        How quickly crisis signals trigger the safety response. Sensitive catches more; Conservative reduces alerts on metaphorical language.
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                        {(["sensitive", "standard", "conservative"] as const).map((val) => {
+                            const active = crisisThreshold === val;
+                            const labels = { sensitive: "Sensitive", standard: "Standard", conservative: "Conservative" };
+                            return (
+                                <TouchableOpacity
+                                    key={val}
+                                    onPress={() => handleCrisisThresholdChange(val)}
+                                    style={{
+                                        flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: "center", borderWidth: 1.5,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, color: active ? colors.primary : colors.textSecondary, fontWeight: active ? "700" : "400" }}>
+                                        {labels[val]}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </AppSurface>
+
+
+                </View>
+                )}
+
+                {/* ── Advanced section ── */}
+                <AccordionHeader title="Advanced" open={sectionAdvancedMobile} onPress={() => toggleSection(setSectionAdvancedMobile)} />
+                {sectionAdvancedMobile && (
+                <View>
+
+                {/* Emotional fingerprint */}
+                {emotionalFingerprint && (
+                    <AppSurface style={{ marginBottom: 16 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                            <View>
+                                <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Your emotional fingerprint</Text>
+                                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                                    {emotionalFingerprint.totalRecords} moments tracked · last 30 days
+                                </Text>
+                            </View>
+                            {emotionalFingerprint.trend && (
+                                <View style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: emotionalFingerprint.trend === "lighter" ? "rgba(52,211,153,0.4)" : emotionalFingerprint.trend === "heavier" ? "rgba(251,146,60,0.4)" : colors.border, backgroundColor: emotionalFingerprint.trend === "lighter" ? "rgba(52,211,153,0.08)" : emotionalFingerprint.trend === "heavier" ? "rgba(251,146,60,0.08)" : "transparent" }}>
+                                    <Text style={{ fontSize: 10, color: emotionalFingerprint.trend === "lighter" ? "#34d399" : emotionalFingerprint.trend === "heavier" ? "#fb923c" : colors.textSecondary }}>
+                                        {emotionalFingerprint.trend === "lighter" ? "Easing ↓" : emotionalFingerprint.trend === "heavier" ? "Intensifying ↑" : "Steady →"}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                        {emotionalFingerprint.topEmotions.map(({ emotion, pct }) => (
+                            <View key={emotion} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                <Text style={{ width: 64, fontSize: 11, color: colors.textSecondary }}>
+                                    {emotion.charAt(0).toUpperCase() + emotion.slice(1)}
+                                </Text>
+                                <View style={{ flex: 1, height: 4, borderRadius: 999, backgroundColor: colors.border }}>
+                                    <View style={{ width: `${pct}%`, height: 4, borderRadius: 999, backgroundColor: colors.primary }} />
+                                </View>
+                                <Text style={{ width: 28, fontSize: 10, color: colors.textSecondary, textAlign: "right" }}>{pct}%</Text>
+                            </View>
+                        ))}
+                    </AppSurface>
+                )}
+
+
+                {/* Companion memory */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: memories.length > 0 ? 10 : 0 }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
+                                Companion memory
+                            </Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                                {memories.length === 0
+                                    ? "Nothing stored yet — Imotara will learn from your conversations."
+                                    : `${memories.length} thing${memories.length !== 1 ? "s" : ""} remembered`}
+                            </Text>
+                        </View>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                            <TouchableOpacity onPress={() => { setAddingMemory(true); setNewMemoryText(""); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>+ Add</Text>
+                            </TouchableOpacity>
+                            {memories.length > 0 && (
+                                <TouchableOpacity onPress={handleClearMemories} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                    <Text style={{ fontSize: 12, color: "rgba(248,113,113,0.9)", fontWeight: "600" }}>Clear</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    </View>
+                    {addingMemory && (
+                        <View style={{ paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border, gap: 6 }}>
+                            <TextInput
+                                value={newMemoryText}
+                                onChangeText={setNewMemoryText}
+                                autoFocus
+                                placeholder="E.g. I have anxiety around social situations"
+                                placeholderTextColor={colors.textSecondary}
+                                multiline
+                                returnKeyType="default"
+                                maxLength={MEMORY_MAX_LENGTH}
+                                onFocus={() => setMemoryInputFocused(true)}
+                                onBlur={() => setMemoryInputFocused(false)}
+                                style={{ fontSize: 12, color: colors.textPrimary, borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, minHeight: 40 }}
+                            />
+                            {(memoryInputFocused || newMemoryText.length > MEMORY_MAX_LENGTH * 0.8) && (
+                                <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: "right", marginTop: -2 }}>
+                                    {newMemoryText.length}/{MEMORY_MAX_LENGTH}
+                                </Text>
+                            )}
+                            <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
+                                <TouchableOpacity onPress={() => setAddingMemory(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={handleAddMemory} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                    <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Save</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
+                    {memories.map((m) => (
+                        <View
+                            key={m.id}
+                            style={{
+                                paddingVertical: 6,
+                                borderTopWidth: 1,
+                                borderTopColor: colors.border,
+                            }}
+                        >
+                            {editingMemoryId === m.id ? (
+                                <View style={{ gap: 6 }}>
+                                    <TextInput
+                                        value={editingMemoryText}
+                                        onChangeText={setEditingMemoryText}
+                                        autoFocus
+                                        multiline
+                                        returnKeyType="default"
+                                        maxLength={MEMORY_MAX_LENGTH}
+                                        onFocus={() => setEditMemoryInputFocused(true)}
+                                        onBlur={() => setEditMemoryInputFocused(false)}
+                                        style={{ fontSize: 12, color: colors.textPrimary, borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, minHeight: 40 }}
+                                    />
+                                    {(editMemoryInputFocused || editingMemoryText.length > MEMORY_MAX_LENGTH * 0.8) && (
+                                        <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: "right", marginTop: -2 }}>
+                                            {editingMemoryText.length}/{MEMORY_MAX_LENGTH}
+                                        </Text>
+                                    )}
+                                    <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
+                                        <TouchableOpacity onPress={() => setEditingMemoryId(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                            <Text style={{ fontSize: 11, color: colors.textSecondary }}>Cancel</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => handleSaveEditMemory(m.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Save</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            ) : (
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                    <Text style={{ fontSize: 11, color: colors.primary, marginTop: 1 }}>●</Text>
+                                    <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>{m.text}</Text>
+                                    <TouchableOpacity
+                                        onPress={() => handleStartEditMemory(m)}
+                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                        style={{ marginRight: 8 }}
+                                    >
+                                        <Text style={{ fontSize: 11, color: colors.primary }}>Edit</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => handleRemoveMemory(m.id)}
+                                        disabled={deletingMemoryId === m.id}
+                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                    >
+                                        <Text style={{ fontSize: 11, color: deletingMemoryId === m.id ? colors.textSecondary : "rgba(248,113,113,0.8)" }}>
+                                            {deletingMemoryId === m.id ? "…" : "Forget"}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </View>
+                    ))}
+                </AppSurface>
+
+
+                {/* Teen Insights Mode card */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View
+                        style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: 6,
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontSize: 14,
+                                color: colors.textPrimary,
+                                fontWeight: "500",
+                            }}
+                        >
+                            Teen Insights Mode
+                        </Text>
+                        <Switch
+                            value={teenMode}
+                            onValueChange={setTeenMode}
+                            trackColor={{
+                                false: isDark ? "#4b5563" : "#94a3b8",
+                                true: "#7c3aed",
+                            }}
+                            thumbColor={"#f9fafb"}
+                        />
+                    </View>
+
+                    <Text
+                        style={{
+                            fontSize: 13,
+                            color: colors.textSecondary,
+                            marginBottom: 4,
+                        }}
+                    >
+                        Shows age-appropriate reflections with peer-supportive language and enhanced safety filters.
+                    </Text>
+                </AppSurface>
+
+                {/* NF-3: Family Snapshot card */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Family Snapshot
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
+                        Share a private link showing your week&apos;s emotional tone with family. Encoded locally — nothing is sent to a server.
+                    </Text>
+                    <TouchableOpacity
+                        onPress={shareFamilySnapshot}
+                        style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.35)", backgroundColor: "rgba(16,185,129,0.1)" }}
+                    >
+                        <Ionicons name="share-outline" size={15} color="#6ee7b7" />
+                        <Text style={{ fontSize: 12, fontWeight: "600", color: "#6ee7b7" }}>Share my snapshot</Text>
+                    </TouchableOpacity>
+                    {familySnapUrl && (
+                        <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 8 }} numberOfLines={2}>
+                            {familySnapUrl}
+                        </Text>
+                    )}
+                </AppSurface>
+
+
                 {/* Feedback / Report Issue */}
                 <AppSurface style={{ marginBottom: 16 }}>
                     <Text
@@ -3140,6 +3825,133 @@ export default function SettingsScreen() {
                             {feedbackStatus}
                         </Text>
                     ) : null}
+                </AppSurface>
+
+                {/* O-1: Feature discovery reset */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>Feature discovery cards</Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>Cards that introduce Trends, Offline mode, Companion, and more. Reset to see them again.</Text>
+                    <TouchableOpacity
+                        onPress={handleDiscoveryReset}
+                        style={{ alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}
+                    >
+                        <Text style={{ fontSize: 13, fontWeight: "500", color: colors.textPrimary }}>Reset discovery cards</Text>
+                    </TouchableOpacity>
+                    {discoveryResetMsg && (
+                        <Text style={{ fontSize: 12, color: colors.primary, marginTop: 8 }}>{discoveryResetMsg}</Text>
+                    )}
+                </AppSurface>
+
+                {/* C-3: Show timestamps toggle */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Show message timestamps</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Display time sent on each chat bubble</Text>
+                        </View>
+                        <Switch
+                            value={showChatTimestamps}
+                            onValueChange={handleShowTimestampsToggle}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+                </AppSurface>
+
+                {/* M-2: Auto-cleanup history */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>Auto-delete old history</Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 12 }}>Automatically remove emotion records older than:</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                        {AUTO_CLEANUP_OPTIONS.map((d) => (
+                            <TouchableOpacity
+                                key={d}
+                                onPress={() => handleAutoCleanupChange(d)}
+                                style={{
+                                    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
+                                    borderColor: autoCleanupDays === d ? colors.primary : colors.border,
+                                    backgroundColor: autoCleanupDays === d ? colors.primaryTint : "transparent",
+                                }}
+                            >
+                                <Text style={{ fontSize: 12, color: autoCleanupDays === d ? colors.primary : colors.textSecondary }}>
+                                    {d === 0 ? "Never" : `${d} days`}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </AppSurface>
+
+                {/* O-2: Restart onboarding */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>Restart onboarding</Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 12 }}>Show the onboarding walkthrough again next time you open Imotara. Your data is not affected.</Text>
+                    <TouchableOpacity
+                        onPress={handleRestartOnboarding}
+                        style={{ alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}
+                    >
+                        <Text style={{ fontSize: 13, fontWeight: "500", color: colors.textPrimary }}>Restart onboarding</Text>
+                    </TouchableOpacity>
+                    {onboardingResetMsg && (
+                        <Text style={{ fontSize: 12, color: colors.primary, marginTop: 8 }}>{onboardingResetMsg}</Text>
+                    )}
+                </AppSurface>
+
+
+                {/* M-3: Online status poll interval */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Connectivity check interval
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        How often the app checks for an active connection. Lower = faster detection, higher = less battery use.
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                        {(STATUS_POLL_OPTIONS as readonly number[]).map((secs) => {
+                            const active = statusPollInterval === secs;
+                            const label = secs < 60 ? `${secs}s` : "60s";
+                            return (
+                                <TouchableOpacity
+                                    key={secs}
+                                    onPress={() => handleStatusPollChange(secs)}
+                                    style={{
+                                        flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: "center", borderWidth: 1.5,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 13, color: active ? colors.primary : colors.textSecondary, fontWeight: active ? "700" : "400" }}>{label}</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </AppSurface>
+
+                {/* M-6: API timeout */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        AI response timeout
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        How long to wait for a cloud AI response before falling back to local mode
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                        {(API_TIMEOUT_OPTIONS as readonly number[]).map((secs) => {
+                            const active = apiTimeoutSecs === secs;
+                            return (
+                                <TouchableOpacity
+                                    key={secs}
+                                    onPress={() => handleApiTimeoutChange(secs)}
+                                    style={{
+                                        flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: "center", borderWidth: 1.5,
+                                        borderColor: active ? colors.primary : colors.border,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 13, color: active ? colors.primary : colors.textSecondary, fontWeight: active ? "700" : "400" }}>{secs}s</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
                 </AppSurface>
 
                 {/* Delete Account */}
@@ -3240,7 +4052,7 @@ export default function SettingsScreen() {
                             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 8 }}>
                                 <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
                                 <Text style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>Admin Tools</Text>
-                                <View style={{ marginLeft: "auto", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: `${colors.primary}22`, borderWidth: 1, borderColor: `${colors.primary}44` }}>
+                                <View style={{ marginLeft: "auto", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.primaryTint, borderWidth: 1, borderColor: colors.primaryBorder }}>
                                     <Text style={{ fontSize: 10, fontWeight: "700", color: colors.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>{prettyTier(licenseTier)}</Text>
                                 </View>
                             </View>
