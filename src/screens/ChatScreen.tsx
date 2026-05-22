@@ -1491,10 +1491,11 @@ export default function ChatScreen() {
   const [crisisThresholdSetting, setCrisisThresholdSetting] = useState<"sensitive" | "standard" | "conservative">("standard");
   const [ttsRate, setTtsRate] = useState(0.95);
   const [ttsPitch, setTtsPitch] = useState(1.0);
+  const [voiceConfirm, setVoiceConfirm] = useState(false);
   useEffect(() => {
     const load = async () => {
       try {
-        const [dur, qual, cloud, timeout, poll, intensity, reactSet, typSpeed, guard, crisis, ttsR, ttsP] = await Promise.all([
+        const [dur, qual, cloud, timeout, poll, intensity, reactSet, typSpeed, guard, crisis, ttsR, ttsP, vConfirm] = await Promise.all([
           AsyncStorage.getItem("imotara.voice.maxDuration.v1"),
           AsyncStorage.getItem("imotara.voice.quality.v1"),
           AsyncStorage.getItem("imotara.voice.cloudTranscription.v1"),
@@ -1507,6 +1508,7 @@ export default function ChatScreen() {
           AsyncStorage.getItem("imotara.crisis.threshold.v1"),
           AsyncStorage.getItem("imotara.tts.rate.v1"),
           AsyncStorage.getItem("imotara.tts.pitch.v1"),
+          AsyncStorage.getItem("imotara.voice.confirmTranscription.v1"),
         ]);
         const durSecs = parseInt(dur ?? "60", 10);
         if (isFinite(durSecs) && durSecs > 0) setVoiceMaxDurationMs(durSecs * 1000);
@@ -1525,6 +1527,7 @@ export default function ChatScreen() {
         const p = parseFloat(ttsP ?? "1.0");
         if (isFinite(r)) setTtsRate(r);
         if (isFinite(p)) setTtsPitch(p);
+        setVoiceConfirm(vConfirm === "1");
       } catch { /* non-fatal */ }
     };
     void load();
@@ -1532,25 +1535,30 @@ export default function ChatScreen() {
   }, []);
 
   // Voice input
+  const voiceConfirmRef = React.useRef(voiceConfirm);
+  React.useEffect(() => { voiceConfirmRef.current = voiceConfirm; }, [voiceConfirm]);
+
   const voiceInput = useVoiceInput(
     (text) => {
-      Alert.alert(
-        "Use this transcription?",
-        text,
-        [
-          { text: "Discard", style: "destructive" },
-          {
-            text: "Use",
-            onPress: () => {
-              const newText = latestInputRef.current
-                ? `${latestInputRef.current} ${text}`
-                : text;
-              latestInputRef.current = newText;
-              setInput(newText);
-            },
-          },
-        ],
-      );
+      const insertText = () => {
+        const newText = latestInputRef.current
+          ? `${latestInputRef.current} ${text}`
+          : text;
+        latestInputRef.current = newText;
+        setInput(newText);
+      };
+      if (voiceConfirmRef.current) {
+        Alert.alert(
+          "Use this transcription?",
+          text,
+          [
+            { text: "Discard", style: "destructive" },
+            { text: "Use", onPress: insertText },
+          ],
+        );
+      } else {
+        insertText();
+      }
     },
     process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL,
     { maxDurationMs: voiceMaxDurationMs, quality: voiceQuality, cloudTranscription: voiceCloudTranscription },
@@ -4075,7 +4083,7 @@ export default function ChatScreen() {
                 paddingHorizontal: 12,
                 paddingVertical: 8,
                 borderRadius: 12,
-                backgroundColor: "rgba(24, 15, 30, 0.9)",
+                backgroundColor: colors.surface,
                 borderWidth: 1,
                 borderColor: colors.border,
               }}

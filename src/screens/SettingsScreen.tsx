@@ -797,6 +797,19 @@ export default function SettingsScreen() {
         await AsyncStorage.setItem(VOICE_CLOUD_KEY, val ? "1" : "0").catch(() => {});
     };
 
+    // V-4: Voice transcription confirmation
+    const VOICE_CONFIRM_KEY = "imotara.voice.confirmTranscription.v1";
+    const [voiceConfirm, setVoiceConfirm] = React.useState(false);
+    React.useEffect(() => {
+        AsyncStorage.getItem(VOICE_CONFIRM_KEY).then((v) => {
+            setVoiceConfirm(v === "1");
+        }).catch(() => {});
+    }, []);
+    const handleVoiceConfirmToggle = async (val: boolean) => {
+        setVoiceConfirm(val);
+        await AsyncStorage.setItem(VOICE_CONFIRM_KEY, val ? "1" : "0").catch(() => {});
+    };
+
     // T-1: TTS rate + pitch
     const TTS_RATE_KEY = "imotara.tts.rate.v1";
     const TTS_PITCH_KEY = "imotara.tts.pitch.v1";
@@ -1988,6 +2001,10 @@ export default function SettingsScreen() {
 
                     <SettingRow label="Cloud transcription" description="Send recording to server to convert to text">
                         <Switch value={voiceCloudTranscription} onValueChange={handleVoiceCloudToggle} />
+                    </SettingRow>
+
+                    <SettingRow label="Ask before using" description="Show confirmation before inserting voice text into chat">
+                        <Switch value={voiceConfirm} onValueChange={handleVoiceConfirmToggle} />
                     </SettingRow>
                 </AppSurface>
 
