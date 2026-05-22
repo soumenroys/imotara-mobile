@@ -32,7 +32,7 @@ async function checkOnline(): Promise<boolean> {
     }
 }
 
-export function useOnlineStatus(): boolean {
+export function useOnlineStatus(pollIntervalMs: number = POLL_INTERVAL_MS): boolean {
     const [isOnline, setIsOnline] = useState(true);
     const mountedRef = useRef(true);
 
@@ -46,7 +46,7 @@ export function useOnlineStatus(): boolean {
 
         run();
 
-        const interval = setInterval(run, POLL_INTERVAL_MS);
+        const interval = setInterval(run, pollIntervalMs);
 
         const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
             if (state === "active") void run();
@@ -57,7 +57,7 @@ export function useOnlineStatus(): boolean {
             clearInterval(interval);
             sub.remove();
         };
-    }, []);
+    }, [pollIntervalMs]);
 
     return isOnline;
 }

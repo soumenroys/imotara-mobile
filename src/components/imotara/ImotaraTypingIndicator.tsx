@@ -5,12 +5,13 @@ import AppSurface from "../ui/AppSurface";
 
 export type ImotaraTypingIndicatorProps = {
     isUser?: boolean;
+    speed?: "slow" | "normal" | "fast";
 };
 
 const DOT_SIZE = 6;
-const DELAYS = [0, 150, 300];
+const BASE_DELAYS = [0, 150, 300];
 
-function AnimatedDot({ delay }: { delay: number }) {
+function AnimatedDot({ delay, duration }: { delay: number; duration: number }) {
     const anim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -19,20 +20,20 @@ function AnimatedDot({ delay }: { delay: number }) {
                 Animated.delay(delay),
                 Animated.timing(anim, {
                     toValue: -5,
-                    duration: 300,
+                    duration,
                     useNativeDriver: true,
                 }),
                 Animated.timing(anim, {
                     toValue: 0,
-                    duration: 300,
+                    duration,
                     useNativeDriver: true,
                 }),
-                Animated.delay(600 - delay),
+                Animated.delay(duration * 2 - delay),
             ]),
         );
         loop.start();
         return () => loop.stop();
-    }, [anim, delay]);
+    }, [anim, delay, duration]);
 
     return (
         <Animated.View
@@ -43,15 +44,19 @@ function AnimatedDot({ delay }: { delay: number }) {
 
 export const ImotaraTypingIndicator: React.FC<ImotaraTypingIndicatorProps> = ({
     isUser = false,
+    speed = "normal",
 }) => {
     const containerAlignment = isUser ? styles.userAlign : styles.botAlign;
+    const duration = speed === "slow" ? 500 : speed === "fast" ? 180 : 300;
+    const delayStep = speed === "slow" ? 220 : speed === "fast" ? 80 : 150;
+    const delays = BASE_DELAYS.map((_, i) => i * delayStep);
 
     return (
         <View style={[styles.row, containerAlignment]}>
             <AppSurface style={[styles.bubble, isUser ? styles.userBubble : styles.botBubble]}>
                 <View style={styles.dotsRow}>
-                    {DELAYS.map((delay, i) => (
-                        <AnimatedDot key={i} delay={delay} />
+                    {delays.map((delay, i) => (
+                        <AnimatedDot key={i} delay={delay} duration={duration} />
                     ))}
                 </View>
             </AppSurface>

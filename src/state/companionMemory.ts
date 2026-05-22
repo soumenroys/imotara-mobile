@@ -14,7 +14,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY         = "imotara.companion.memories.v2";
 const LEGACY_KEY  = "imotara.companion.memories.v1";
-const MAX_ITEMS   = 12;
+const MEMORY_MAX_ITEMS_KEY = "imotara.memory.maxItems.v1";
+const DEFAULT_MAX_ITEMS = 12;
+
+async function getMaxItems(): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(MEMORY_MAX_ITEMS_KEY);
+    const n = parseInt(raw ?? "12", 10);
+    return isFinite(n) && n > 0 ? n : DEFAULT_MAX_ITEMS;
+  } catch {
+    return DEFAULT_MAX_ITEMS;
+  }
+}
 
 export type MemoryItem = {
     id: string;
@@ -32,7 +43,8 @@ async function migrateFromAsyncStorage(): Promise<MemoryItem[]> {
         const parsed = JSON.parse(raw);
         const items: MemoryItem[] = Array.isArray(parsed) ? parsed : [];
         if (items.length > 0) {
-            await SecureStore.setItemAsync(KEY, JSON.stringify(items.slice(0, MAX_ITEMS)));
+            const maxItems = await getMaxItems();
+            await SecureStore.setItemAsync(KEY, JSON.stringify(items.slice(0, maxItems)));
             await AsyncStorage.removeItem(LEGACY_KEY);
         }
         return items;
@@ -56,7 +68,8 @@ export async function loadMemories(): Promise<MemoryItem[]> {
 }
 
 export async function saveMemories(items: MemoryItem[]): Promise<void> {
-    await SecureStore.setItemAsync(KEY, JSON.stringify(items.slice(0, MAX_ITEMS)));
+    const maxItems = await getMaxItems();
+    await SecureStore.setItemAsync(KEY, JSON.stringify(items.slice(0, maxItems)));
 }
 
 export async function clearMemories(): Promise<void> {

@@ -15,7 +15,7 @@ export type UseVoiceInputResult = {
     durationMs: number;
 };
 
-const MAX_DURATION_MS = 60_000;
+const DEFAULT_MAX_DURATION_MS = 60_000;
 
 function openAppSettings() {
     if (Platform.OS === "ios") {
@@ -25,10 +25,20 @@ function openAppSettings() {
     }
 }
 
+export type VoiceInputOptions = {
+    maxDurationMs?: number;
+    quality?: "high" | "low";
+    cloudTranscription?: boolean;
+};
+
 export function useVoiceInput(
     onTranscript: (text: string) => void,
     apiBaseUrl?: string,
+    opts?: VoiceInputOptions,
 ): UseVoiceInputResult {
+    const maxDurationMs = opts?.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
+    const quality = opts?.quality ?? "high";
+    const cloudTranscription = opts?.cloudTranscription ?? true;
     const [state, setState] = useState<VoiceInputState>("idle");
     const [durationMs, setDurationMs] = useState(0);
     const recordingRef = useRef<Audio.Recording | null>(null);
@@ -57,7 +67,7 @@ export function useVoiceInput(
             if (!uri) throw new Error("No recording URI");
 
             let transcript = "";
-            if (apiBaseUrl) {
+            if (apiBaseUrl && cloudTranscription) {
                 try {
                     const form = new FormData();
                     form.append("file", {
@@ -125,9 +135,10 @@ export function useVoiceInput(
                 playsInSilentModeIOS: true,
             });
 
-            const { recording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY,
-            );
+            const preset = quality === "low"
+                ? Audio.RecordingOptionsPresets.LOW_QUALITY
+                : Audio.RecordingOptionsPresets.HIGH_QUALITY;
+            const { recording } = await Audio.Recording.createAsync(preset);
             recordingRef.current = recording;
             startTsRef.current = Date.now();
             setDurationMs(0);
@@ -136,7 +147,7 @@ export function useVoiceInput(
             timerRef.current = setInterval(() => {
                 const elapsed = Date.now() - startTsRef.current;
                 setDurationMs(elapsed);
-                if (elapsed >= MAX_DURATION_MS) {
+                if (elapsed >= maxDurationMs) {
                     void stopRecording();
                 }
             }, 500);

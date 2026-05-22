@@ -8,7 +8,18 @@ import { callImotaraAI } from "../../api/aiClient";
 
 const LAST_LETTER_KEY = "imotara.companion_letter.last_at.v1";
 const LETTER_KEY = "imotara.companion_letter.v1";
-const INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+const LETTER_CADENCE_KEY = "imotara.letter.cadenceDays.v1";
+const DEFAULT_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function getIntervalMs(): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(LETTER_CADENCE_KEY);
+    const days = parseInt(raw ?? "30", 10);
+    return isFinite(days) && days > 0 ? days * 24 * 60 * 60 * 1000 : DEFAULT_INTERVAL_MS;
+  } catch {
+    return DEFAULT_INTERVAL_MS;
+  }
+}
 
 export type CompanionLetter = {
   id: string;
@@ -37,7 +48,8 @@ export async function isLetterDue(): Promise<boolean> {
   try {
     const raw = await AsyncStorage.getItem(LAST_LETTER_KEY);
     if (!raw) return true;
-    return Date.now() - Number(raw) >= INTERVAL_MS;
+    const intervalMs = await getIntervalMs();
+    return Date.now() - Number(raw) >= intervalMs;
   } catch {
     return false;
   }
@@ -57,7 +69,7 @@ export function getConversationDepth(
   return { level: 0, toneHint: "Write with warmth and curiosity — this is an early connection, still learning who they are. Be gentle and welcoming." };
 }
 
-function extractRecentThemes(history: HistoryItem[], cutoffMs = INTERVAL_MS): string[] {
+function extractRecentThemes(history: HistoryItem[], cutoffMs = DEFAULT_INTERVAL_MS): string[] {
   const cutoff = Date.now() - cutoffMs;
   const keywords: Record<string, number> = {};
   const themeWords = [

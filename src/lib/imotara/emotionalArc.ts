@@ -8,7 +8,18 @@ import { callImotaraAI } from "../../api/aiClient";
 
 const LAST_ARC_KEY = "imotara.emotional_arc.last_at.v1";
 const ARC_KEY = "imotara.emotional_arc.v1";
-const INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+const ARC_CADENCE_KEY = "imotara.arc.cadenceDays.v1";
+const DEFAULT_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function getIntervalMs(): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(ARC_CADENCE_KEY);
+    const days = parseInt(raw ?? "30", 10);
+    return isFinite(days) && days > 0 ? days * 24 * 60 * 60 * 1000 : DEFAULT_INTERVAL_MS;
+  } catch {
+    return DEFAULT_INTERVAL_MS;
+  }
+}
 
 export type EmotionalArc = {
   id: string;
@@ -37,7 +48,8 @@ export async function isArcDue(): Promise<boolean> {
   try {
     const raw = await AsyncStorage.getItem(LAST_ARC_KEY);
     if (!raw) return true;
-    return Date.now() - Number(raw) >= INTERVAL_MS;
+    const intervalMs = await getIntervalMs();
+    return Date.now() - Number(raw) >= intervalMs;
   } catch {
     return false;
   }
@@ -45,7 +57,7 @@ export async function isArcDue(): Promise<boolean> {
 
 function buildArcContext(
   history: HistoryItem[],
-  cutoffMs = INTERVAL_MS
+  cutoffMs = DEFAULT_INTERVAL_MS
 ): { emotionProgression: string[]; milestones: string[]; messageCount: number } {
   const cutoff = Date.now() - cutoffMs;
   const positiveWords = ["better", "good", "happy", "grateful", "hopeful", "proud", "calm", "peace", "progress", "healed", "resolved"];

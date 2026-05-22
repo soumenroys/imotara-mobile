@@ -11,9 +11,13 @@ const CHECKIN_ENABLED_KEY = "imotara.checkin.enabled";
 const CHECKIN_HOUR_KEY = "imotara.checkin.hour";
 const CHECKIN_MINUTE_KEY = "imotara.checkin.minute";
 const INACTIVITY_NOTIF_ID_KEY = "imotara.checkin.inactivity.id";
+const CHECKIN_SOUND_KEY = "imotara.checkin.sound";
+const CHECKIN_BADGE_KEY = "imotara.checkin.badge";
+const INACTIVITY_HOURS_KEY = "imotara.checkin.inactivity.hours";
 
 export const DEFAULT_HOUR = 20;
 export const DEFAULT_MINUTE = 0;
+export const DEFAULT_INACTIVITY_HOURS = 48;
 
 export async function getSavedReminderTime(): Promise<{ hour: number; minute: number }> {
     try {
@@ -26,6 +30,33 @@ export async function getSavedReminderTime(): Promise<{ hour: number; minute: nu
     } catch {
         return { hour: DEFAULT_HOUR, minute: DEFAULT_MINUTE };
     }
+}
+
+export async function getSavedNotifPrefs(): Promise<{ sound: boolean; badge: boolean; inactivityHours: number }> {
+    try {
+        const [s, b, ih] = await Promise.all([
+            AsyncStorage.getItem(CHECKIN_SOUND_KEY),
+            AsyncStorage.getItem(CHECKIN_BADGE_KEY),
+            AsyncStorage.getItem(INACTIVITY_HOURS_KEY),
+        ]);
+        return {
+            sound: s === "1",
+            badge: b === "1",
+            inactivityHours: ih != null ? parseInt(ih, 10) : DEFAULT_INACTIVITY_HOURS,
+        };
+    } catch {
+        return { sound: false, badge: false, inactivityHours: DEFAULT_INACTIVITY_HOURS };
+    }
+}
+
+export async function saveNotifPrefs(prefs: { sound?: boolean; badge?: boolean; inactivityHours?: number }): Promise<void> {
+    try {
+        const ops: Promise<void>[] = [];
+        if (prefs.sound !== undefined) ops.push(AsyncStorage.setItem(CHECKIN_SOUND_KEY, prefs.sound ? "1" : "0"));
+        if (prefs.badge !== undefined) ops.push(AsyncStorage.setItem(CHECKIN_BADGE_KEY, prefs.badge ? "1" : "0"));
+        if (prefs.inactivityHours !== undefined) ops.push(AsyncStorage.setItem(INACTIVITY_HOURS_KEY, String(prefs.inactivityHours)));
+        await Promise.all(ops);
+    } catch { /* non-fatal */ }
 }
 
 /** Returns the expo-notifications module or null if not available (Expo Go). */
@@ -56,6 +87,8 @@ export async function requestNotificationPermission(): Promise<boolean> {
 export async function scheduleCheckInReminder(
     hour = DEFAULT_HOUR,
     minute = DEFAULT_MINUTE,
+    sound = false,
+    badge = false,
 ): Promise<boolean> {
     const Notifications = getNotifications();
     if (!Notifications) return false;
@@ -66,14 +99,13 @@ export async function scheduleCheckInReminder(
     await cancelCheckInReminder();
 
     try {
-        // Set the handler (safe to call multiple times)
         Notifications.setNotificationHandler({
             handleNotification: async () => ({
                 shouldShowAlert: true,
                 shouldShowBanner: true,
                 shouldShowList: true,
-                shouldPlaySound: false,
-                shouldSetBadge: false,
+                shouldPlaySound: sound,
+                shouldSetBadge: badge,
             }),
         });
 
@@ -94,6 +126,7 @@ export async function scheduleCheckInReminder(
         await AsyncStorage.setItem(CHECKIN_ENABLED_KEY, "1");
         await AsyncStorage.setItem(CHECKIN_HOUR_KEY, String(hour));
         await AsyncStorage.setItem(CHECKIN_MINUTE_KEY, String(minute));
+        await saveNotifPrefs({ sound, badge });
         return true;
     } catch {
         return false;
@@ -101,10 +134,8 @@ export async function scheduleCheckInReminder(
 }
 
 /**
- * Schedules a one-time "we miss you" nudge 48 h after the user's last activity.
- * Call this from the app's background task or on app foreground whenever the
- * daily reminder is enabled and the user hasn't chatted recently.
- * Safe to call multiple times — cancels any previous inactivity notification first.
+ * Schedules a one-time "we miss you" nudge after the configured inactivity period.
+ * Reads inactivityHours from saved prefs (default 48h).
  */
 export async function scheduleInactivityReminder(lastActivityTs: number): Promise<void> {
     const Notifications = getNotifications();
@@ -123,16 +154,17 @@ export async function scheduleInactivityReminder(lastActivityTs: number): Promis
         await AsyncStorage.removeItem(INACTIVITY_NOTIF_ID_KEY);
     }
 
+    const { inactivityHours } = await getSavedNotifPrefs();
+    const thresholdMs = inactivityHours * 60 * 60 * 1000;
     const silentFor = Date.now() - lastActivityTs;
-    const TWO_DAYS_MS = 48 * 60 * 60 * 1000;
-    if (silentFor >= TWO_DAYS_MS) return; // already overdue — skip, daily reminder covers it
+    if (silentFor >= thresholdMs) return; // already overdue — skip, daily reminder covers it
 
-    const fireInMs = TWO_DAYS_MS - silentFor;
+    const fireInMs = thresholdMs - silentFor;
     try {
         const id = await Notifications.scheduleNotificationAsync({
             content: {
                 title: "Imotara misses you 💙",
-                body: "It's been a couple of days. How are you feeling? A moment of sharing can lighten the load.",
+                body: "It's been a while. How are you feeling? A moment of sharing can lighten the load.",
                 data: { type: "inactivity" },
             },
             trigger: {

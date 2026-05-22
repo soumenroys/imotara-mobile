@@ -6,8 +6,27 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { HistoryItem } from "../../state/HistoryContext";
 
 const LOOPS_KEY = "imotara.open_loops.v1";
-const MIN_THREADS = 3;
-const MIN_AGE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+const OPENLOOP_MIN_THREADS_KEY = "imotara.openloop.minThreads.v1";
+const OPENLOOP_MIN_AGE_KEY = "imotara.openloop.minAgeDays.v1";
+const DEFAULT_MIN_THREADS = 3;
+const DEFAULT_MIN_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+async function getOpenLoopThresholds(): Promise<{ minThreads: number; minAgeMs: number }> {
+  try {
+    const [t, a] = await Promise.all([
+      AsyncStorage.getItem(OPENLOOP_MIN_THREADS_KEY),
+      AsyncStorage.getItem(OPENLOOP_MIN_AGE_KEY),
+    ]);
+    const minThreads = parseInt(t ?? "3", 10);
+    const minAgeDays = parseInt(a ?? "14", 10);
+    return {
+      minThreads: isFinite(minThreads) ? minThreads : DEFAULT_MIN_THREADS,
+      minAgeMs: isFinite(minAgeDays) ? minAgeDays * 24 * 60 * 60 * 1000 : DEFAULT_MIN_AGE_MS,
+    };
+  } catch {
+    return { minThreads: DEFAULT_MIN_THREADS, minAgeMs: DEFAULT_MIN_AGE_MS };
+  }
+}
 
 export type OpenLoopStatus = "active" | "dismissed" | "deferred" | "closed";
 
@@ -104,6 +123,7 @@ export async function detectAndUpdateOpenLoops(
   history: HistoryItem[]
 ): Promise<OpenLoop[]> {
   const now = Date.now();
+  const { minThreads, minAgeMs } = await getOpenLoopThresholds();
   const userMessages = history.filter((h) => h.from === "user" && h.text?.trim());
 
   // Group user messages by thread
@@ -138,9 +158,9 @@ export async function detectAndUpdateOpenLoops(
 
     const prev = existingByKey.get(themeKey);
     const thresholdMet =
-      matchingThreadIds.length >= MIN_THREADS &&
+      matchingThreadIds.length >= minThreads &&
       firstSeenAt !== Infinity &&
-      now - firstSeenAt >= MIN_AGE_MS;
+      now - firstSeenAt >= minAgeMs;
 
     if (!thresholdMet) {
       if (prev) updated.push(prev);
