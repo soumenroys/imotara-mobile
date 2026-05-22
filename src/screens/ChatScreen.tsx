@@ -1489,10 +1489,12 @@ export default function ChatScreen() {
   const [chatTypingSpeed, setChatTypingSpeed] = useState<"slow" | "normal" | "fast">("normal");
   const [contentGuardSensitivity, setContentGuardSensitivity] = useState<"strict" | "standard" | "relaxed">("standard");
   const [crisisThresholdSetting, setCrisisThresholdSetting] = useState<"sensitive" | "standard" | "conservative">("standard");
+  const [ttsRate, setTtsRate] = useState(0.95);
+  const [ttsPitch, setTtsPitch] = useState(1.0);
   useEffect(() => {
     const load = async () => {
       try {
-        const [dur, qual, cloud, timeout, poll, intensity, reactSet, typSpeed, guard, crisis] = await Promise.all([
+        const [dur, qual, cloud, timeout, poll, intensity, reactSet, typSpeed, guard, crisis, ttsR, ttsP] = await Promise.all([
           AsyncStorage.getItem("imotara.voice.maxDuration.v1"),
           AsyncStorage.getItem("imotara.voice.quality.v1"),
           AsyncStorage.getItem("imotara.voice.cloudTranscription.v1"),
@@ -1503,6 +1505,8 @@ export default function ChatScreen() {
           AsyncStorage.getItem("imotara.typing.speed.v1"),
           AsyncStorage.getItem("imotara.content.guard.v1"),
           AsyncStorage.getItem("imotara.crisis.threshold.v1"),
+          AsyncStorage.getItem("imotara.tts.rate.v1"),
+          AsyncStorage.getItem("imotara.tts.pitch.v1"),
         ]);
         const durSecs = parseInt(dur ?? "60", 10);
         if (isFinite(durSecs) && durSecs > 0) setVoiceMaxDurationMs(durSecs * 1000);
@@ -1517,6 +1521,10 @@ export default function ChatScreen() {
         if (typSpeed === "slow" || typSpeed === "normal" || typSpeed === "fast") setChatTypingSpeed(typSpeed as "slow" | "normal" | "fast");
         if (guard === "strict" || guard === "standard" || guard === "relaxed") setContentGuardSensitivity(guard as "strict" | "standard" | "relaxed");
         if (crisis === "sensitive" || crisis === "standard" || crisis === "conservative") setCrisisThresholdSetting(crisis as "sensitive" | "standard" | "conservative");
+        const r = parseFloat(ttsR ?? "0.95");
+        const p = parseFloat(ttsP ?? "1.0");
+        if (isFinite(r)) setTtsRate(r);
+        if (isFinite(p)) setTtsPitch(p);
       } catch { /* non-fatal */ }
     };
     void load();
@@ -3478,7 +3486,7 @@ export default function ChatScreen() {
                 setSpeakingMessageId(null);
               } else {
                 setSpeakingMessageId(id);
-                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null));
+                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null), ttsRate, ttsPitch);
               }
               setActionMessage(null);
             }}
@@ -3929,7 +3937,7 @@ export default function ChatScreen() {
                   : toneContext?.user?.gender as string | undefined;
                 const lang = toneContext?.user?.preferredLang ?? "en";
                 setSpeakingMessageId(id);
-                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null));
+                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null), ttsRate, ttsPitch);
               }}
               onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); }}
               onBookmark={handleToggleBookmark}

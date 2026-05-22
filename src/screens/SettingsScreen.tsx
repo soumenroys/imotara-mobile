@@ -797,6 +797,32 @@ export default function SettingsScreen() {
         await AsyncStorage.setItem(VOICE_CLOUD_KEY, val ? "1" : "0").catch(() => {});
     };
 
+    // T-1: TTS rate + pitch
+    const TTS_RATE_KEY = "imotara.tts.rate.v1";
+    const TTS_PITCH_KEY = "imotara.tts.pitch.v1";
+    const [ttsRate, setTtsRate] = React.useState(0.95);
+    const [ttsPitch, setTtsPitch] = React.useState(1.0);
+    React.useEffect(() => {
+        AsyncStorage.getItem(TTS_RATE_KEY).then((v) => {
+            const r = parseFloat(v ?? "0.95");
+            if (isFinite(r)) setTtsRate(r);
+        }).catch(() => {});
+        AsyncStorage.getItem(TTS_PITCH_KEY).then((v) => {
+            const p = parseFloat(v ?? "1.0");
+            if (isFinite(p)) setTtsPitch(p);
+        }).catch(() => {});
+    }, []);
+    const handleTtsRateChange = async (val: number) => {
+        const clamped = Math.round(val * 20) / 20; // snap to 0.05 steps
+        setTtsRate(clamped);
+        await AsyncStorage.setItem(TTS_RATE_KEY, String(clamped)).catch(() => {});
+    };
+    const handleTtsPitchChange = async (val: number) => {
+        const clamped = Math.round(val * 20) / 20;
+        setTtsPitch(clamped);
+        await AsyncStorage.setItem(TTS_PITCH_KEY, String(clamped)).catch(() => {});
+    };
+
     // M-1: Memory max items
     const MEMORY_MAX_ITEMS_KEY = "imotara.memory.maxItems.v1";
     const [memoryMaxItems, setMemoryMaxItems] = React.useState(12);
@@ -2697,6 +2723,62 @@ export default function SettingsScreen() {
                             {voicePreviewId === "settings-comp-preview" ? "⏹ Stop preview" : "🔊 Preview companion voice"}
                         </Text>
                     </TouchableOpacity>
+
+                    {/* T-1: TTS speed + pitch */}
+                    <View style={{ marginBottom: 14 }}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary }}>Voice speed</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary }}>{ttsRate.toFixed(2)}×</Text>
+                        </View>
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                            {([0.5, 0.75, 0.95, 1.1, 1.25, 1.5] as const).map((v) => (
+                                <TouchableOpacity
+                                    key={v}
+                                    onPress={() => handleTtsRateChange(v)}
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: Math.abs(ttsRate - v) < 0.01 ? colors.primary : colors.border,
+                                        backgroundColor: Math.abs(ttsRate - v) < 0.01 ? colors.primaryTint : "transparent",
+                                        minHeight: 44,
+                                        justifyContent: "center",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, color: Math.abs(ttsRate - v) < 0.01 ? colors.primary : colors.textSecondary }}>
+                                        {v}×
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 12, marginBottom: 4 }}>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary }}>Voice pitch</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary }}>{ttsPitch.toFixed(2)}</Text>
+                        </View>
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                            {([0.75, 0.9, 1.0, 1.1, 1.25] as const).map((v) => (
+                                <TouchableOpacity
+                                    key={v}
+                                    onPress={() => handleTtsPitchChange(v)}
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: Math.abs(ttsPitch - v) < 0.01 ? colors.primary : colors.border,
+                                        backgroundColor: Math.abs(ttsPitch - v) < 0.01 ? colors.primaryTint : "transparent",
+                                        minHeight: 44,
+                                        justifyContent: "center",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 12, color: Math.abs(ttsPitch - v) < 0.01 ? colors.primary : colors.textSecondary }}>
+                                        {v}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
 
                     {/* Avatar appearance */}
                     <AvatarSlider

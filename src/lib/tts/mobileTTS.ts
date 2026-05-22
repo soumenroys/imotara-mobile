@@ -113,7 +113,7 @@ async function stopAll(): Promise<void> {
     _speakingId = null;
 }
 
-async function playSound(uri: string, onDone?: () => void): Promise<void> {
+async function playSound(uri: string, onDone?: () => void, rate = 0.95): Promise<void> {
     await Audio.setAudioModeAsync({
         allowsRecordingIOS:         false,
         playsInSilentModeIOS:       true,
@@ -122,7 +122,7 @@ async function playSound(uri: string, onDone?: () => void): Promise<void> {
     });
     const { sound } = await Audio.Sound.createAsync(
         { uri },
-        { shouldPlay: true, rate: 0.95, volume: 1.0 },
+        { shouldPlay: true, rate: isFinite(rate) ? rate : 0.95, volume: 1.0 },
     );
     _soundObject = sound;
     sound.setOnPlaybackStatusUpdate((status) => {
@@ -149,6 +149,8 @@ export async function speakMessage(
     gender: string | undefined,
     lang: string = "en",
     onDone?: () => void,
+    rate = 0.95,
+    pitch = 1.0,
 ): Promise<void> {
     const isSpeaking = await Speech.isSpeakingAsync();
     if (isSpeaking || _soundObject) {
@@ -175,14 +177,14 @@ export async function speakMessage(
         await FileSystem.writeAsStringAsync(tmpPath, base64, {
             encoding: FileSystem.EncodingType.Base64,
         });
-        await playSound(tmpPath, onDone);
+        await playSound(tmpPath, onDone, rate);
     } catch (err) {
         console.warn("[mobileTTS] Azure TTS failed, falling back to native:", err);
         // Offline fallback — gender not honored but at least something plays
         Speech.speak(text, {
             language: toBCP47(lang),
-            pitch:    1.0,
-            rate:     0.95,
+            pitch:    isFinite(pitch) ? pitch : 1.0,
+            rate:     isFinite(rate) ? rate : 0.95,
             onDone:  () => { _speakingId = null; onDone?.(); },
             onError: () => { _speakingId = null; onDone?.(); },
         });
