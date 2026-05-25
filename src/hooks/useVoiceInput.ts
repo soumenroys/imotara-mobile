@@ -154,8 +154,20 @@ export function useVoiceInput(
 
             return true;
         } catch {
-            setState("error");
-            Alert.alert("Voice input error", "Could not start recording. Please try again.");
+            const { granted } = await Audio.getPermissionsAsync().catch(() => ({ granted: false, canAskAgain: false }));
+            if (!granted) {
+                Alert.alert(
+                    "Microphone access blocked",
+                    "Imotara needs microphone access to use voice input. Please enable it in Settings.",
+                    [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Open Settings", onPress: openAppSettings },
+                    ],
+                );
+            } else {
+                setState("error");
+                Alert.alert("Voice input error", "Could not start recording. Please try again.");
+            }
             return false;
         }
     }, [stopRecording]);
