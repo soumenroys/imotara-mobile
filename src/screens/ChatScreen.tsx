@@ -1721,6 +1721,8 @@ export default function ChatScreen() {
 
     // ✅ Web parity: stable user scope → sent as threadId + userId to /api/respond
     localUserScopeId,
+
+    refreshLicense,
   } = useSettings();
 
   // UX-2 — companion avatar for chat bubbles
@@ -4999,7 +5001,10 @@ export default function ChatScreen() {
       <UpgradeSheet
         visible={showUpgradeSheet}
         onClose={() => setShowUpgradeSheet(false)}
-        onPurchaseComplete={async () => { setShowUpgradeSheet(false); }}
+        onPurchaseComplete={async () => {
+          setShowUpgradeSheet(false);
+          await refreshLicense().catch(() => {});
+        }}
       />
 
       {/* Error / info toast — non-intrusive, auto-dismisses */}

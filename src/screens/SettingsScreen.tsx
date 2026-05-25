@@ -310,6 +310,7 @@ export default function SettingsScreen() {
         chatLinkKey,
         setChatLinkKey,
 
+        licenseExpiresAt,
         refreshLicense,
     } = useSettings();
 
@@ -1686,17 +1687,17 @@ export default function SettingsScreen() {
                         </Text>
                     </Text>
 
-                    <Text
-                        style={{
-                            fontSize: 12,
-                            color: colors.textSecondary,
-                            marginTop: 6,
-                        }}
-                    >
-                        Billing is not enabled yet. This plan flag is used
-                        only to prepare feature gating (e.g., cloud sync / history depth)
-                        for a future release.
-                    </Text>
+                    {licenseExpiresAt ? (
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
+                            {new Date(licenseExpiresAt).getTime() > Date.now()
+                                ? `Renews ${new Date(licenseExpiresAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
+                                : `Expired ${new Date(licenseExpiresAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`}
+                        </Text>
+                    ) : String(licenseTier ?? "FREE").toUpperCase() === "FREE" ? (
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
+                            Upgrade to unlock unlimited AI chat, 90-day history, and all companion tones.
+                        </Text>
+                    ) : null}
 
                     {!canCloudSync && (
                         <Text
