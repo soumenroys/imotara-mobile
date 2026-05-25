@@ -61,22 +61,22 @@ export const PLAN_DEFS: PlanDef[] = [
     {
         id: "plus_monthly", tier: "plus", period: "monthly",
         priceInr: 99, paise: 9_900,
-        features: ["Unlimited AI chat", "Cloud sync across devices", "90-day history", "All companion tones"],
+        features: ["Unlimited replies", "Cloud sync across devices", "90-day history", "All companion tones"],
     },
     {
         id: "plus_annual", tier: "plus", period: "annual",
         priceInr: 699, paise: 69_900, monthlyPriceInr: 58, savingsPct: 41,
-        features: ["Unlimited AI chat", "Cloud sync across devices", "90-day history", "All companion tones"],
+        features: ["Unlimited replies", "Cloud sync across devices", "90-day history", "All companion tones"],
     },
     {
         id: "pro_monthly", tier: "pro", period: "monthly",
         priceInr: 149, paise: 14_900,
-        features: ["Everything in Plus", "Priority AI responses", "Mood trends & insights", "Export conversations"],
+        features: ["Everything in Plus", "Priority responses", "Mood trends & insights", "Export conversations"],
     },
     {
         id: "pro_annual", tier: "pro", period: "annual",
         priceInr: 1_299, paise: 129_900, monthlyPriceInr: 108, savingsPct: 27,
-        features: ["Everything in Plus", "Priority AI responses", "Mood trends & insights", "Export conversations"],
+        features: ["Everything in Plus", "Priority responses", "Mood trends & insights", "Export conversations"],
     },
 ];
 

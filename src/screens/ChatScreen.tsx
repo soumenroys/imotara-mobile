@@ -4998,15 +4998,17 @@ export default function ChatScreen() {
       {/* Non-intrusive sign-in prompt — appears after first message, one-time only */}
       <SignInPrompt messageCount={messages.length} />
 
-      <UpgradeSheet
-        visible={showUpgradeSheet}
-        onClose={() => setShowUpgradeSheet(false)}
-        currentTier={licenseTier ?? null}
-        onPurchaseComplete={async () => {
-          setShowUpgradeSheet(false);
-          await refreshLicense().catch(() => {});
-        }}
-      />
+      {showUpgradeSheet && (
+        <UpgradeSheet
+          visible={true}
+          onClose={() => setShowUpgradeSheet(false)}
+          currentTier={licenseTier ?? null}
+          onPurchaseComplete={async () => {
+            setShowUpgradeSheet(false);
+            await refreshLicense().catch(() => {});
+          }}
+        />
+      )}
 
       {/* Error / info toast — non-intrusive, auto-dismisses */}
       <Toast ref={toastRef} />

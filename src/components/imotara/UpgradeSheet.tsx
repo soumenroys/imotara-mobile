@@ -42,27 +42,34 @@ type Props = {
 
 // ── Android: full Razorpay purchase flow ──────────────────────────────────────
 
+// Wraps a fetch with a manual AbortController timeout.
+// AbortSignal.timeout() is not available on Hermes (Android/iOS JS engine).
+function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
 async function doAndroidPurchase(
     productId: ProductId,
+    accessToken: string,
     userEmail: string | undefined,
 ): Promise<{ ok: boolean; error?: string }> {
-    let { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-        // Session missing or expired — attempt a silent refresh before giving up
-        const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-        session = refreshed;
-    }
-    if (!session?.access_token) return { ok: false, error: "sign_in_required" };
-
     const headers = {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
     };
 
-    const orderRes = await fetch(buildApiUrl("/api/license/order-intent"), {
-        method: "POST", headers,
-        body: JSON.stringify({ productId }),
-    });
+    let orderRes: Response;
+    try {
+        orderRes = await fetchWithTimeout(
+            buildApiUrl("/api/license/order-intent"),
+            { method: "POST", headers, body: JSON.stringify({ productId }) },
+            20_000,
+        );
+    } catch {
+        return { ok: false, error: "Network error creating order. Check your connection." };
+    }
     const orderData = await orderRes.json();
     if (!orderData.ok || !orderData.razorpay) {
         return { ok: false, error: orderData.error ?? "Could not create order" };
@@ -95,10 +102,16 @@ async function doAndroidPurchase(
     const paymentId = paymentData?.razorpay_payment_id;
     if (!paymentId) return { ok: false, error: "Payment ID missing" };
 
-    const verifyRes = await fetch(buildApiUrl("/api/license/verify-payment"), {
-        method: "POST", headers,
-        body: JSON.stringify({ paymentId, productId }),
-    });
+    let verifyRes: Response;
+    try {
+        verifyRes = await fetchWithTimeout(
+            buildApiUrl("/api/license/verify-payment"),
+            { method: "POST", headers, body: JSON.stringify({ paymentId, productId }) },
+            35_000,
+        );
+    } catch {
+        return { ok: false, error: "Network error verifying payment. Tap 'Restore previous purchases' if your payment was taken." };
+    }
     const verifyData = await verifyRes.json();
     return verifyData.ok ? { ok: true } : { ok: false, error: verifyData.error ?? "Verification failed" };
 }
@@ -118,8 +131,18 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     // Ref mirrors isSignedIn so stale closures (e.g. the onSuccess callback captured
     // in promptSignIn before sign-in) always read the latest value via .current.
     const isSignedInRef = useRef<boolean | null>(null);
+    // Caches the access token so onPurchaseSuccess never calls getSession() on the
+    // hot path — Supabase's lock manager blocks concurrent getSession/refreshSession
+    // calls, which would cause the spinner to hang indefinitely.
+    const accessTokenRef = useRef<string | null>(null);
+    const purchaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Single gate: once any purchase outcome is handled, all further events are ignored
+    const purchaseOutcomeHandledRef = useRef(false);
+    const isRestoringRef = useRef(false);
+    const handleRestoreRef = useRef<() => Promise<void>>(async () => {});
 
     useEffect(() => {
+        purchaseOutcomeHandledRef.current = false;
         async function checkSession() {
             let { data: { session } } = await supabase.auth.getSession();
             if (!session?.access_token) {
@@ -129,6 +152,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
             setUserEmail(session?.user?.email);
             setIsSignedIn(!!session?.access_token);
             isSignedInRef.current = !!session?.access_token;
+            accessTokenRef.current = session?.access_token ?? null;
         }
         checkSession();
     }, [visible]);
@@ -138,6 +162,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setIsSignedIn(!!session?.access_token);
             isSignedInRef.current = !!session?.access_token;
+            accessTokenRef.current = session?.access_token ?? null;
             setUserEmail(session?.user?.email);
         });
         return () => subscription.unsubscribe();
@@ -154,26 +179,44 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         restorePurchases,
     } = useIAP({
         onPurchaseSuccess: async (purchase: Purchase) => {
+            console.log("[IAP] onPurchaseSuccess:", purchase.productId, "gate=", purchaseOutcomeHandledRef.current);
+            // Gate check first — whichever callback fires first (success or error) claims the gate.
+            if (purchaseOutcomeHandledRef.current) return;
+            purchaseOutcomeHandledRef.current = true;
+            // Do NOT clear purchaseTimeoutRef here — keep it as last-resort safety net.
+            // It will be cleared in finally once verification finishes or fails.
+
             let serverVerified = false;
             try {
                 const productId = iosSkuToProductId(purchase.productId ?? "");
-
-                // expo-iap broadcasts every purchase to all active useIAP hooks.
-                // Return early for products not owned by this sheet (e.g. tip jar).
                 if (!productId) return;
 
                 const isTokenPack = productId.startsWith("tokens_");
 
-                // Require a valid session to call the verification endpoint.
-                // Mirror the Android pattern: try refresh before giving up.
-                let { data: { session } } = await supabase.auth.getSession();
-                if (!session?.access_token) {
-                    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-                    session = refreshed;
+                // Use the cached access token — avoids calling getSession() on the hot
+                // path, which can block on Supabase's internal lock if checkSession() is
+                // concurrently running a refreshSession() network call.
+                let accessToken = accessTokenRef.current;
+
+                // If the ref is still null the component just mounted — do a single timed
+                // getSession() attempt (10 s) before giving up.
+                if (!accessToken) {
+                    console.log("[IAP] accessToken not cached yet — attempting timed getSession");
+                    try {
+                        const result = await Promise.race([
+                            supabase.auth.getSession(),
+                            new Promise<never>((_, reject) =>
+                                setTimeout(() => reject(new Error("session_timeout")), 10_000)),
+                        ]);
+                        accessToken = result.data.session?.access_token ?? null;
+                        if (accessToken) accessTokenRef.current = accessToken;
+                    } catch (e) {
+                        console.log("[IAP] getSession timeout/error:", String(e));
+                    }
                 }
-                if (!session?.access_token) {
-                    // No auth — leave the transaction pending so Apple re-delivers it on
-                    // next app launch, where the user can sign in and try again.
+
+                if (!accessToken) {
+                    console.log("[IAP] no session — showing sign in required");
                     Alert.alert(
                         "Sign in required",
                         "Please sign in and re-open the app to activate your purchase. Your payment is safe.",
@@ -181,25 +224,28 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                     return;
                 }
 
-                // PurchaseIOS.transactionId is the StoreKit 2 numeric transaction ID
-                // (e.g. "2000000123456789") that Apple's Server API expects.
-                // purchase.id is a generic PurchaseCommon field — not the same thing on iOS.
+                console.log("[IAP] session: true user:", userEmail ?? "unknown");
                 const iosTransactionId = (purchase as PurchaseIOS).transactionId ?? purchase.id;
-                const verifyRes = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${session.access_token}`,
-                    },
-                    body: JSON.stringify({
-                        productId,
-                        transactionId: iosTransactionId,
-                    }),
-                    signal: AbortSignal.timeout(35_000),
-                });
+                console.log("[IAP] verifying transactionId:", iosTransactionId);
+                // AbortSignal.timeout() is not available on Hermes — use AbortController manually.
+                const verifyAbort = new AbortController();
+                const verifyAbortTimer = setTimeout(() => verifyAbort.abort(), 35_000);
+                let verifyRes: Response;
+                try {
+                    verifyRes = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${accessToken}`,
+                        },
+                        body: JSON.stringify({ productId, transactionId: iosTransactionId }),
+                        signal: verifyAbort.signal,
+                    });
+                } finally {
+                    clearTimeout(verifyAbortTimer);
+                }
+                console.log("[IAP] verify response status:", verifyRes.status);
                 if (!verifyRes.ok) {
-                    // Don't finish — Apple will re-deliver on next launch so the user
-                    // gets another verification attempt.
                     const errBody = await verifyRes.json().catch(() => ({})) as { error?: string };
                     Alert.alert(
                         "Verification failed",
@@ -209,39 +255,58 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                 }
                 serverVerified = true;
 
-                // Best-effort finish — ignore if StoreKit already finalized this transaction.
                 try {
                     await finishTransaction({ purchase, isConsumable: isTokenPack });
                 } catch { /* safe to ignore — transaction may already be finalized */ }
 
-                // onPurchaseComplete refreshes local license state — non-critical if it fails.
-                // License is already granted server-side at this point.
                 try { await onPurchaseComplete(); } catch { /* best-effort */ }
                 const tierName = isTokenPack ? "credits" : (productId.includes("pro") ? "Pro" : "Plus");
                 setPurchaseSuccess({ tierName, isTokenPack });
-            } catch {
+            } catch (err) {
+                console.log("[IAP] onPurchaseSuccess catch:", String(err));
                 if (serverVerified) {
-                    // License was granted server-side but UI update failed — safe to tell user.
                     Alert.alert(
                         "Purchase complete",
                         "Your payment was received. Please restart the app to activate your new plan.",
                     );
                 } else {
-                    // Error before or during verification — don't claim payment was received.
                     Alert.alert(
                         "Verification failed",
                         "Could not reach the server. Re-open the app to retry, or tap 'Restore previous purchases'.",
                     );
                 }
             } finally {
+                // Clear the safety-net timeout and spinner together.
+                if (purchaseTimeoutRef.current) { clearTimeout(purchaseTimeoutRef.current); purchaseTimeoutRef.current = null; }
                 setPurchasing(null);
             }
         },
         onPurchaseError: (error) => {
+            const code = (error as any).code ?? "";
+            const msg = (error as any).message ?? "";
+            console.log("[IAP] onPurchaseError:", code, msg, "gate=", purchaseOutcomeHandledRef.current);
+            // Gate check FIRST — if onPurchaseSuccess already claimed the gate, return
+            // immediately without clearing the spinner (success handler owns it now).
+            if (purchaseOutcomeHandledRef.current) return;
+            purchaseOutcomeHandledRef.current = true;
+            // We own the gate: clear timeout and spinner
+            if (purchaseTimeoutRef.current) { clearTimeout(purchaseTimeoutRef.current); purchaseTimeoutRef.current = null; }
             setPurchasing(null);
-            if ((error as any).code !== "E_USER_CANCELLED") {
-                Alert.alert("Purchase failed", error.message ?? "Please try again.");
+            if (code === "E_USER_CANCELLED") return;
+
+            const isAlreadyOwned =
+                code === "E_ALREADY_OWNED" ||
+                msg.toLowerCase().includes("already owned") ||
+                msg.toLowerCase().includes("already purchased");
+            if (isAlreadyOwned) {
+                Alert.alert(
+                    "Already subscribed",
+                    "This plan is already active on your Apple account. Tap 'Restore previous purchases' below to link it to your profile.",
+                    [{ text: "OK" }],
+                );
+                return;
             }
+            Alert.alert("Purchase failed", msg || "Please try again.");
         },
     });
 
@@ -348,16 +413,49 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     };
 
     const handleIosPurchase = async (sku: string, type: "subs" | "in-app") => {
+        console.log("[IAP] handleIosPurchase:", sku, "purchasing=", purchasing, "signingIn=", signingIn, "signedIn=", isSignedInRef.current);
         if (purchasing || signingIn) return;
         if (isSignedInRef.current === false) {
             promptSignIn(() => handleIosPurchase(sku, type));
             return;
         }
+        purchaseOutcomeHandledRef.current = false;
         setPurchasing(sku);
+        // Safety net: if onPurchaseSuccess never fires (Sandbox delay, iOS beta quirk),
+        // clear the spinner after 40s and direct the user to Restore.
+        purchaseTimeoutRef.current = setTimeout(() => {
+            setPurchasing(null);
+            Alert.alert(
+                "Taking longer than expected",
+                "Your purchase may have been received. Tap 'Restore previous purchases' below to activate your plan.",
+            );
+        }, 40_000);
         try {
             await requestPurchase({ type, request: { apple: { sku } } });
-        } catch {
+        } catch (err: any) {
+            if (purchaseTimeoutRef.current) { clearTimeout(purchaseTimeoutRef.current); purchaseTimeoutRef.current = null; }
             setPurchasing(null);
+            const errCode = (err as any)?.code ?? "";
+            const errMsg  = String((err as any)?.message ?? "");
+            console.log("[IAP] requestPurchase catch:", errCode, errMsg, "gate=", purchaseOutcomeHandledRef.current);
+            // onPurchaseError fires as a separate event for the same failure.
+            // Only show a dialog here if that callback hasn't already handled it.
+            if (!purchaseOutcomeHandledRef.current && errCode !== "E_USER_CANCELLED") {
+                purchaseOutcomeHandledRef.current = true;
+                const isAlreadyOwned =
+                    errCode === "E_ALREADY_OWNED" ||
+                    errMsg.toLowerCase().includes("already owned") ||
+                    errMsg.toLowerCase().includes("already purchased");
+                if (isAlreadyOwned) {
+                    Alert.alert(
+                        "Already subscribed",
+                        "This plan is already active on your Apple account. Tap 'Restore previous purchases' below to link it to your profile.",
+                        [{ text: "OK" }],
+                    );
+                } else if (errMsg) {
+                    Alert.alert("Purchase failed", errMsg);
+                }
+            }
         }
     };
 
@@ -368,17 +466,19 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
             promptSignIn(() => handleAndroidPurchase(productId));
             return;
         }
+        const token = accessTokenRef.current;
+        if (!token) {
+            // Session not cached yet (component just mounted) — prompt sign-in
+            promptSignIn(() => handleAndroidPurchase(productId));
+            return;
+        }
         setPurchasing(productId);
         try {
-            const result = await doAndroidPurchase(productId, userEmail);
+            const result = await doAndroidPurchase(productId, token, userEmail);
             if (result.ok) {
                 await onPurchaseComplete();
                 onClose();
                 Alert.alert("Thank you!", "Your plan has been upgraded. Enjoy Imotara Plus/Pro!");
-            } else if (result.error === "sign_in_required") {
-                setIsSignedIn(false);
-                isSignedInRef.current = false;
-                promptSignIn(() => handleAndroidPurchase(productId));
             } else if (result.error !== "cancelled") {
                 Alert.alert("Payment failed", result.error ?? "Please try again.");
             }
@@ -405,7 +505,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     // expo-iap's restorePurchases() skips onPurchaseSuccess (alsoPublishToEventListenerIOS: false).
     // We fetch available purchases directly and run each through our verification backend.
     const handleRestore = async () => {
-        if (restoring) return;
+        if (isRestoringRef.current) return;
+        isRestoringRef.current = true;
         setRestoring(true);
         try {
             const available = await getAvailablePurchases({ onlyIncludeActiveItemsIOS: true });
@@ -431,12 +532,19 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                     return;
                 }
                 const iosTransactionId = (purchase as any).transactionId ?? purchase.id;
-                const res = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-                    body: JSON.stringify({ productId, transactionId: iosTransactionId }),
-                    signal: AbortSignal.timeout(35_000),
-                });
+                const restoreAbort = new AbortController();
+                const restoreAbortTimer = setTimeout(() => restoreAbort.abort(), 35_000);
+                let res: Response;
+                try {
+                    res = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+                        body: JSON.stringify({ productId, transactionId: iosTransactionId }),
+                        signal: restoreAbort.signal,
+                    });
+                } finally {
+                    clearTimeout(restoreAbortTimer);
+                }
                 if (res.ok) restored++;
             }
             if (restored > 0) {
@@ -449,9 +557,13 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         } catch {
             Alert.alert("Restore failed", "Could not reach the server. Please try again.");
         } finally {
+            isRestoringRef.current = false;
             setRestoring(false);
         }
     };
+
+    // Keep ref current so onPurchaseError (captured inside useIAP) can call it
+    handleRestoreRef.current = handleRestore;
 
     // ── Render ─────────────────────────────────────────────────────────────────
     const plansForPeriod = PLAN_DEFS.filter((p) => p.period === period);
@@ -465,9 +577,19 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                     flexDirection: "row", alignItems: "center",
                     justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 24, paddingBottom: 8,
                 }}>
-                    <Text style={{ fontSize: 20, fontWeight: "700", color: colors.textPrimary }}>
-                        Upgrade Imotara
-                    </Text>
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 20, fontWeight: "700", color: colors.textPrimary }}>
+                            Upgrade Imotara
+                        </Text>
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>
+                            Current plan:{" "}
+                            <Text style={{ fontWeight: "600", color: colors.textPrimary }}>
+                                {currentTier
+                                    ? currentTier.charAt(0).toUpperCase() + currentTier.slice(1).toLowerCase()
+                                    : "Free"}
+                            </Text>
+                        </Text>
+                    </View>
                     <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                         <Text style={{ fontSize: 26, color: colors.textSecondary, lineHeight: 28 }}>×</Text>
                     </TouchableOpacity>
@@ -481,8 +603,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                         </Text>
                         <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: "center", lineHeight: 22, marginBottom: 32 }}>
                             {purchaseSuccess.isTokenPack
-                                ? "Your AI credits have been added to your account."
-                                : `Welcome to ${purchaseSuccess.tierName}. Enjoy unlimited AI chat and everything that comes with it.`}
+                                ? "Your credits have been added to your account."
+                                : `Welcome to ${purchaseSuccess.tierName}. Enjoy unlimited replies and everything that comes with it.`}
                         </Text>
                         <TouchableOpacity
                             onPress={() => { setPurchaseSuccess(null); onClose(); }}
@@ -600,7 +722,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
 
                         {/* Token packs */}
                         <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, marginBottom: 12 }}>
-                            Top up with AI credits
+                            Top up with message credits
                         </Text>
                         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 28 }}>
                             {TOKEN_PACK_DEFS.map((pack) => {

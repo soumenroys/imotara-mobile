@@ -1561,7 +1561,7 @@ export default function SettingsScreen() {
                         Upgrade your plan
                     </Text>
                     <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
-                        Remove the daily AI limit, extend history to 90 days, or top up with message credits.
+                        Unlock unlimited replies, 90-day history, all companion tones, and more.
                     </Text>
                     <TouchableOpacity
                         onPress={() => setShowUpgradeSheet(true)}
@@ -4184,22 +4184,24 @@ export default function SettingsScreen() {
             </ScrollView>
 
             <HowItWorksModal visible={showHowItWorks} onClose={() => setShowHowItWorks(false)} />
-            <UpgradeSheet
-                visible={showUpgradeSheet}
-                onClose={() => setShowUpgradeSheet(false)}
-                currentTier={licenseTier ?? null}
-                onPurchaseComplete={async () => {
-                    await refreshLicense();
-                    // refreshLicense writes the new tier to AsyncStorage but doesn't update
-                    // HistoryContext's licenseTier state — read it back and sync so the
-                    // tier label in Settings refreshes immediately without an app restart.
-                    const raw = await AsyncStorage.getItem("imotara_license_tier_v1").catch(() => null);
-                    const VALID: LicenseTier[] = ["FREE", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"];
-                    if (raw && VALID.includes(raw as LicenseTier) && setLicenseTier) {
-                        setLicenseTier(raw as LicenseTier);
-                    }
-                }}
-            />
+            {showUpgradeSheet && (
+                <UpgradeSheet
+                    visible={true}
+                    onClose={() => setShowUpgradeSheet(false)}
+                    currentTier={licenseTier ?? null}
+                    onPurchaseComplete={async () => {
+                        await refreshLicense();
+                        // refreshLicense writes the new tier to AsyncStorage but doesn't update
+                        // HistoryContext's licenseTier state — read it back and sync so the
+                        // tier label in Settings refreshes immediately without an app restart.
+                        const raw = await AsyncStorage.getItem("imotara_license_tier_v1").catch(() => null);
+                        const VALID: LicenseTier[] = ["FREE", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"];
+                        if (raw && VALID.includes(raw as LicenseTier) && setLicenseTier) {
+                            setLicenseTier(raw as LicenseTier);
+                        }
+                    }}
+                />
+            )}
         </KeyboardAvoidingView>
     );
 }
