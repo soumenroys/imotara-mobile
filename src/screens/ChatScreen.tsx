@@ -1705,6 +1705,7 @@ export default function ChatScreen() {
     syncNow,
     pauseAutoSync,
     resumeAutoSync,
+    licenseTier,
   } = store;
 
   const {
@@ -1749,8 +1750,7 @@ export default function ChatScreen() {
 
   function dismissTrialBanner() {
     setShowTrialBanner(false);
-    const today = new Date().toISOString().slice(0, 10);
-    AsyncStorage.setItem(TRIAL_BANNER_DISMISSED_KEY, today).catch(() => { });
+    AsyncStorage.setItem(TRIAL_BANNER_DISMISSED_KEY, "never").catch(() => { });
   }
 
   // C-3: Show timestamps toggle (reads setting from AsyncStorage)
@@ -5001,6 +5001,7 @@ export default function ChatScreen() {
       <UpgradeSheet
         visible={showUpgradeSheet}
         onClose={() => setShowUpgradeSheet(false)}
+        currentTier={licenseTier ?? null}
         onPurchaseComplete={async () => {
           setShowUpgradeSheet(false);
           await refreshLicense().catch(() => {});

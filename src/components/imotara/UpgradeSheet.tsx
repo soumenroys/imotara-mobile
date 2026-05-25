@@ -37,6 +37,7 @@ type Props = {
     visible: boolean;
     onClose: () => void;
     onPurchaseComplete: () => Promise<void>;
+    currentTier?: string | null;
 };
 
 // ── Android: full Razorpay purchase flow ──────────────────────────────────────
@@ -104,7 +105,7 @@ async function doAndroidPurchase(
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: Props) {
+export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, currentTier }: Props) {
     const colors = useColors();
     const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const [period, setPeriod] = useState<PlanPeriod>("monthly");
@@ -113,6 +114,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
     const [signingIn, setSigningIn] = useState(false);
     const [userEmail, setUserEmail] = useState<string | undefined>();
     const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null); // null = loading
+    const [purchaseSuccess, setPurchaseSuccess] = useState<{ tierName: string; isTokenPack: boolean } | null>(null);
     // Ref mirrors isSignedIn so stale closures (e.g. the onSuccess callback captured
     // in promptSignIn before sign-in) always read the latest value via .current.
     const isSignedInRef = useRef<boolean | null>(null);
@@ -215,8 +217,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                 // onPurchaseComplete refreshes local license state — non-critical if it fails.
                 // License is already granted server-side at this point.
                 try { await onPurchaseComplete(); } catch { /* best-effort */ }
-                onClose();
-                Alert.alert("Thank you! 💙", "Your plan has been upgraded. Enjoy Imotara!");
+                const tierName = isTokenPack ? "credits" : (productId.includes("pro") ? "Pro" : "Plus");
+                setPurchaseSuccess({ tierName, isTokenPack });
             } catch {
                 if (serverVerified) {
                     // License was granted server-side but UI update failed — safe to tell user.
@@ -471,7 +473,25 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                     </TouchableOpacity>
                 </View>
 
-                {iosLoading ? (
+                {purchaseSuccess ? (
+                    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32 }}>
+                        <Text style={{ fontSize: 52, marginBottom: 16 }}>💙</Text>
+                        <Text style={{ fontSize: 22, fontWeight: "700", color: colors.textPrimary, marginBottom: 8, textAlign: "center" }}>
+                            {purchaseSuccess.isTokenPack ? "Credits added!" : "You're all set!"}
+                        </Text>
+                        <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: "center", lineHeight: 22, marginBottom: 32 }}>
+                            {purchaseSuccess.isTokenPack
+                                ? "Your AI credits have been added to your account."
+                                : `Welcome to ${purchaseSuccess.tierName}. Enjoy unlimited AI chat and everything that comes with it.`}
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => { setPurchaseSuccess(null); onClose(); }}
+                            style={{ paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.primary }}
+                        >
+                            <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>Back to chat</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : iosLoading ? (
                     <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
                         <ActivityIndicator size="large" color={colors.primary} />
                         <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 12 }}>
@@ -515,14 +535,23 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete }: P
                                     ? iosPrice(sku, plan.priceInr)
                                     : `₹${plan.priceInr}`;
 
+                                const isCurrent = currentTier && plan.tier.toUpperCase() === String(currentTier).toUpperCase();
                                 return (
                                     <View key={plan.id} style={{
                                         flex: 1, borderRadius: 16, padding: 16,
                                         borderWidth: isPro ? 1.5 : 1,
-                                        borderColor: isPro ? "#6366f1" : "rgba(255,255,255,0.12)",
+                                        borderColor: isCurrent ? colors.primary : isPro ? "#6366f1" : "rgba(255,255,255,0.12)",
                                         backgroundColor: isPro ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.04)",
                                     }}>
-                                        {isPro && (
+                                        {isCurrent ? (
+                                            <View style={{
+                                                backgroundColor: colors.primary, borderRadius: 6,
+                                                paddingHorizontal: 8, paddingVertical: 2,
+                                                alignSelf: "flex-start", marginBottom: 8,
+                                            }}>
+                                                <Text style={{ fontSize: 10, fontWeight: "700", color: "#fff" }}>YOUR PLAN</Text>
+                                            </View>
+                                        ) : isPro && (
                                             <View style={{
                                                 backgroundColor: "#6366f1", borderRadius: 6,
                                                 paddingHorizontal: 8, paddingVertical: 2,

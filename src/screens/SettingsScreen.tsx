@@ -4187,6 +4187,7 @@ export default function SettingsScreen() {
             <UpgradeSheet
                 visible={showUpgradeSheet}
                 onClose={() => setShowUpgradeSheet(false)}
+                currentTier={licenseTier ?? null}
                 onPurchaseComplete={async () => {
                     await refreshLicense();
                     // refreshLicense writes the new tier to AsyncStorage but doesn't update
