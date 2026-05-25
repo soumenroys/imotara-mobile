@@ -29,6 +29,7 @@ export type VoiceInputOptions = {
     maxDurationMs?: number;
     quality?: "high" | "low";
     cloudTranscription?: boolean;
+    lang?: string;
 };
 
 export function useVoiceInput(
@@ -39,6 +40,8 @@ export function useVoiceInput(
     const maxDurationMs = opts?.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
     const quality = opts?.quality ?? "high";
     const cloudTranscription = opts?.cloudTranscription ?? true;
+    const langRef = useRef(opts?.lang ?? "en");
+    useEffect(() => { langRef.current = opts?.lang ?? "en"; }, [opts?.lang]);
     const [state, setState] = useState<VoiceInputState>("idle");
     const [durationMs, setDurationMs] = useState(0);
     const recordingRef = useRef<Audio.Recording | null>(null);
@@ -75,6 +78,7 @@ export function useVoiceInput(
                         name: "voice.m4a",
                         type: "audio/m4a",
                     } as any);
+                    form.append("lang", langRef.current);
                     const res = await fetch(`${apiBaseUrl}/api/voice/transcribe`, {
                         method: "POST",
                         body: form,

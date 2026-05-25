@@ -1538,6 +1538,9 @@ export default function ChatScreen() {
   const voiceConfirmRef = React.useRef(voiceConfirm);
   React.useEffect(() => { voiceConfirmRef.current = voiceConfirm; }, [voiceConfirm]);
 
+  // voiceLangRef is set to the user's preferredLang once toneContext loads (see effect below)
+  const voiceLangRef = React.useRef("en");
+
   const voiceInput = useVoiceInput(
     (text) => {
       const insertText = () => {
@@ -1561,7 +1564,7 @@ export default function ChatScreen() {
       }
     },
     process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL,
-    { maxDurationMs: voiceMaxDurationMs, quality: voiceQuality, cloudTranscription: voiceCloudTranscription },
+    { maxDurationMs: voiceMaxDurationMs, quality: voiceQuality, cloudTranscription: voiceCloudTranscription, lang: voiceLangRef.current },
   );
 
   // Message reactions — messageId → emoji
@@ -1775,6 +1778,11 @@ export default function ChatScreen() {
       } catch {}
     })();
   }, [history.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep voiceLangRef in sync with toneContext so transcription uses the correct language
+  React.useEffect(() => {
+    voiceLangRef.current = toneContext?.user?.preferredLang ?? "en";
+  }, [toneContext?.user?.preferredLang]);
 
   // P3/P5 — Companion insight effect (needs history, toneContext, accessToken)
   useEffect(() => {
