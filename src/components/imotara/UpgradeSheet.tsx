@@ -179,6 +179,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         restorePurchases,
     } = useIAP({
         onPurchaseSuccess: async (purchase: Purchase) => {
+            // expo-iap connects to Google Play on physical Android devices — ignore all events there.
+            if (Platform.OS !== "ios") return;
             console.log("[IAP] onPurchaseSuccess:", purchase.productId, "gate=", purchaseOutcomeHandledRef.current);
             // Gate check first — whichever callback fires first (success or error) claims the gate.
             if (purchaseOutcomeHandledRef.current) return;
@@ -282,6 +284,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
             }
         },
         onPurchaseError: (error) => {
+            if (Platform.OS !== "ios") return;
             const code = (error as any).code ?? "";
             const msg = (error as any).message ?? "";
             console.log("[IAP] onPurchaseError:", code, msg, "gate=", purchaseOutcomeHandledRef.current);
@@ -476,9 +479,10 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         try {
             const result = await doAndroidPurchase(productId, token, userEmail);
             if (result.ok) {
-                await onPurchaseComplete();
-                onClose();
-                Alert.alert("Thank you!", "Your plan has been upgraded. Enjoy Imotara Plus/Pro!");
+                try { await onPurchaseComplete(); } catch { /* best-effort */ }
+                const isTokenPack = productId.startsWith("tokens_");
+                const tierName = isTokenPack ? "credits" : (productId.includes("pro") ? "Pro" : "Plus");
+                setPurchaseSuccess({ tierName, isTokenPack });
             } else if (result.error !== "cancelled") {
                 Alert.alert("Payment failed", result.error ?? "Please try again.");
             }
