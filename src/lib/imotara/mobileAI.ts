@@ -69,8 +69,8 @@ export async function runMobileAI(
         if (result) return result;
     } catch { /* fall through to retry */ }
 
-    // One retry after 2s — handles transient network spikes without going straight to local
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // One retry after a short delay — handles transient network spikes without going straight to local
+    await new Promise(resolve => setTimeout(resolve, 500));
     try {
         const result = await tryRemote(userText, toneContext);
         if (result) return result;

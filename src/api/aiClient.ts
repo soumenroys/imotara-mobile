@@ -517,9 +517,8 @@ export async function callImotaraAI(
       );
 
       if (chatRes.ok) {
-        const chatRawText = await chatRes.text().catch(() => "");
         let chatData: any = null;
-        try { chatData = chatRawText ? JSON.parse(chatRawText) : {}; } catch { /* fall through */ }
+        try { chatData = await chatRes.json(); } catch { /* fall through */ }
 
         const chatReplyText = String(chatData?.text ?? "").trim();
 
