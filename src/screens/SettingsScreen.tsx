@@ -291,6 +291,10 @@ export default function SettingsScreen() {
     const {
         emotionInsightsEnabled,
         setEmotionInsightsEnabled,
+        companionPanelEnabled,
+        setCompanionPanelEnabled,
+        planPanelEnabled,
+        setPlanPanelEnabled,
         teenMode,
         setTeenMode,
         lastSyncAt,
@@ -645,6 +649,22 @@ export default function SettingsScreen() {
     const [sectionPrivacy, setSectionPrivacy] = React.useState(false);
     const [sectionSupport, setSectionSupport] = React.useState(true);
     const [sectionAdvancedMobile, setSectionAdvancedMobile] = React.useState(false);
+    const [sectionMindset, setSectionMindset] = React.useState(false);
+
+    // ── Mindset Analysis Toggles ─────────────────────────────────────────────
+    const MINDSET_PREFS_KEY = "imotara:mindset.analysis.prefs.v1";
+    type MindsetPrefs = { today: boolean; week7: boolean; days30: boolean; allTime: boolean };
+    const [mindsetPrefs, setMindsetPrefs] = React.useState<MindsetPrefs>({ today: false, week7: false, days30: false, allTime: false });
+    React.useEffect(() => {
+        AsyncStorage.getItem(MINDSET_PREFS_KEY).then((raw) => {
+            if (raw) setMindsetPrefs((p) => ({ ...p, ...JSON.parse(raw) }));
+        }).catch(() => {});
+    }, []);
+    const handleMindsetToggle = async (key: keyof MindsetPrefs) => {
+        const next = { ...mindsetPrefs, [key]: !mindsetPrefs[key] };
+        setMindsetPrefs(next);
+        await AsyncStorage.setItem(MINDSET_PREFS_KEY, JSON.stringify(next)).catch(() => {});
+    };
 
     // A-5: Storage summary (loaded once when component mounts)
     const [storageSummary, setStorageSummary] = React.useState<{
@@ -799,6 +819,16 @@ export default function SettingsScreen() {
     };
 
     // V-4: Voice transcription confirmation
+    const HANDSFREE_KEY = "imotara:handsfree.v1";
+    const [handsfree, setHandsfree] = React.useState(false);
+    React.useEffect(() => {
+        AsyncStorage.getItem(HANDSFREE_KEY).then((v) => setHandsfree(v === "1")).catch(() => {});
+    }, []);
+    const handleHandsfreeToggle = async (val: boolean) => {
+        setHandsfree(val);
+        await AsyncStorage.setItem(HANDSFREE_KEY, val ? "1" : "0").catch(() => {});
+    };
+
     const VOICE_CONFIRM_KEY = "imotara.voice.confirmTranscription.v1";
     const [voiceConfirm, setVoiceConfirm] = React.useState(false);
     React.useEffect(() => {
@@ -1695,7 +1725,7 @@ export default function SettingsScreen() {
                         </Text>
                     ) : String(licenseTier ?? "FREE").toUpperCase() === "FREE" ? (
                         <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
-                            Upgrade to unlock unlimited AI chat, 90-day history, and all companion tones.
+                            Upgrade to unlock unlimited chat, 90-day history, and all companion tones.
                         </Text>
                     ) : null}
 
@@ -1826,7 +1856,7 @@ export default function SettingsScreen() {
                         }}
                     >
                         This toggle does not send any extra data to the cloud yet. It
-                        is a design placeholder for future AI-powered insights.
+                        is a design placeholder for future intelligent insights.
                     </Text>
                 </AppSurface>
 
@@ -1837,6 +1867,52 @@ export default function SettingsScreen() {
                 <AccordionHeader title="Experience" open={sectionAppearance} onPress={() => toggleSection(setSectionAppearance)} />
                 {sectionAppearance && (
                 <View>
+                {/* Quick panel swipe gestures */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "600", marginBottom: 2 }}>
+                        Quick panels
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 12 }}>
+                        Swipe gestures in the chat screen that open side panels.
+                    </Text>
+
+                    {/* Companion panel toggle */}
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "500" }}>
+                                Swipe right — Your Companion
+                            </Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                                Swipe left→right in chat to open your companion settings
+                            </Text>
+                        </View>
+                        <Switch
+                            value={companionPanelEnabled}
+                            onValueChange={setCompanionPanelEnabled}
+                            trackColor={{ false: isDark ? "#4b5563" : "#94a3b8", true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+
+                    {/* Plan & Support panel toggle */}
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "500" }}>
+                                Swipe left — Plan & Support
+                            </Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                                Swipe right→left in chat to open plan and support
+                            </Text>
+                        </View>
+                        <Switch
+                            value={planPanelEnabled}
+                            onValueChange={setPlanPanelEnabled}
+                            trackColor={{ false: isDark ? "#4b5563" : "#94a3b8", true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+                </AppSurface>
+
                 {/* Daily check-in reminder */}
                 <AppSurface style={{ marginBottom: 16 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: reminderEnabled ? 12 : 0 }}>
@@ -2007,6 +2083,16 @@ export default function SettingsScreen() {
                     <SettingRow label="Ask before using" description="Show confirmation before inserting voice text into chat">
                         <Switch value={voiceConfirm} onValueChange={handleVoiceConfirmToggle} />
                     </SettingRow>
+
+                    <View style={{ marginTop: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(124,58,237,0.35)", backgroundColor: "rgba(124,58,237,0.08)", paddingHorizontal: 12, paddingVertical: 12 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                            <View style={{ flex: 1, marginRight: 12 }}>
+                                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textPrimary }}>Hands-free conversation</Text>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Speak → Imotara types, replies, and reads aloud automatically</Text>
+                            </View>
+                            <Switch value={handsfree} onValueChange={handleHandsfreeToggle} trackColor={{ false: "rgba(148,163,184,0.3)", true: "rgba(124,58,237,0.8)" }} thumbColor="#fff" />
+                        </View>
+                    </View>
                 </AppSurface>
 
 
@@ -3622,6 +3708,59 @@ export default function SettingsScreen() {
                 </View>
                 )}
 
+                {/* ── Mindset Analysis section ── */}
+                <AccordionHeader title="Mindset Analysis" open={sectionMindset} onPress={() => toggleSection(setSectionMindset)} />
+                {sectionMindset && (
+                <View>
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Mindset Analysis
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14 }}>
+                        Choose which time windows appear as psychological summaries on your History page.
+                    </Text>
+                    {([
+                        { key: "today",   label: "Today's mindset analysis",      desc: "A psychological snapshot of today's conversations." },
+                        { key: "week7",   label: "Last 7 days mindset analysis",  desc: "A 7-day emotional pattern overview." },
+                        { key: "days30",  label: "Last 30 days mindset analysis", desc: "A 30-day mood trend summary." },
+                        { key: "allTime", label: "All time mindset analysis",     desc: "A complete overview since you started." },
+                    ] as { key: keyof MindsetPrefs; label: string; desc: string }[]).map(({ key, label, desc }, idx, arr) => (
+                        <View
+                            key={key}
+                            style={{
+                                flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                                paddingVertical: 12,
+                                borderTopWidth: idx === 0 ? 0 : 0.5,
+                                borderTopColor: "rgba(255,255,255,0.08)",
+                            }}
+                        >
+                            <View style={{ flex: 1, marginRight: 12 }}>
+                                <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "500" }}>{label}</Text>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>{desc}</Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => handleMindsetToggle(key)}
+                                activeOpacity={0.8}
+                                style={{
+                                    width: 44, height: 26, borderRadius: 13,
+                                    backgroundColor: mindsetPrefs[key] ? "#7c3aed" : "rgba(148,163,184,0.25)",
+                                    justifyContent: "center",
+                                    paddingHorizontal: 2,
+                                }}
+                            >
+                                <View style={{
+                                    width: 22, height: 22, borderRadius: 11,
+                                    backgroundColor: "#fff",
+                                    transform: [{ translateX: mindsetPrefs[key] ? 18 : 0 }],
+                                    shadowColor: "#000", shadowOpacity: 0.15, shadowOffset: { width: 0, height: 1 }, shadowRadius: 2,
+                                }} />
+                            </TouchableOpacity>
+                        </View>
+                    ))}
+                </AppSurface>
+                </View>
+                )}
+
                 {/* ── Advanced section ── */}
                 <AccordionHeader title="Advanced" open={sectionAdvancedMobile} onPress={() => toggleSection(setSectionAdvancedMobile)} />
                 {sectionAdvancedMobile && (
@@ -4029,10 +4168,10 @@ export default function SettingsScreen() {
                 {/* M-6: API timeout */}
                 <AppSurface style={{ marginBottom: 16 }}>
                     <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
-                        AI response timeout
+                        Response timeout
                     </Text>
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
-                        How long to wait for a cloud AI response before falling back to local mode
+                        How long to wait for a cloud response before falling back to on-device mode
                     </Text>
                     <View style={{ flexDirection: "row", gap: 10 }}>
                         {(API_TIMEOUT_OPTIONS as readonly number[]).map((secs) => {

@@ -1,8 +1,10 @@
 // src/screens/HistoryScreen.tsx
 import React from "react";
 import { View, Text, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, RefreshControl, Animated, PanResponder, Share } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { buildApiUrl } from "../config/api";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
@@ -364,6 +366,96 @@ export default function HistoryScreen() {
     const scrollRef = React.useRef<FlatList>(null);
     const [showScrollToLatest, setShowScrollToLatest] = React.useState(false);
     const [showScrollToTop, setShowScrollToTop] = React.useState(false);
+
+    // ── Mindset Analysis ─────────────────────────────────────────────────────
+    const MINDSET_PREFS_KEY = "imotara:mindset.analysis.prefs.v1";
+    type MindsetPrefs = { today: boolean; week7: boolean; days30: boolean; allTime: boolean };
+    type MindsetResult = { dominant: string; breakdown: [string, number][]; total: number; avgIntensity: number; intensityLabel: string } | null;
+    const MINDSET_EMOTION_ICON: Record<string, string> = {
+        joy: "😊", happy: "😊", happiness: "😊", sad: "😔", sadness: "😔", lonely: "🌧️",
+        angry: "😤", anger: "😤", stressed: "😰", stress: "😰",
+        anxious: "😟", anxiety: "😟", fear: "😟",
+        neutral: "😐", hopeful: "🌱", hope: "🌱", gratitude: "🙏", confused: "🤔",
+    };
+    const [mindsetPrefs, setMindsetPrefs] = React.useState<MindsetPrefs>({ today: false, week7: false, days30: false, allTime: false });
+    const [mindsetAnalyses, setMindsetAnalyses] = React.useState<Record<string, MindsetResult>>({});
+    const [expandedCapsules, setExpandedCapsules] = React.useState<Record<string, boolean>>({});
+    const [capsuleInsights, setCapsuleInsights] = React.useState<Record<string, { analysis: string; advice: string } | "loading" | "error">>({});
+
+    function computeMindset(items: any[], fromMs: number, toMs: number): MindsetResult {
+        // Mobile HistoryItem uses `timestamp` (no createdAt) and from: "user" | "bot"
+        const filtered = items.filter((r: any) =>
+            r.from === "user" &&
+            (r.timestamp ?? 0) >= fromMs &&
+            (r.timestamp ?? 0) <= toMs
+        );
+        if (filtered.length === 0) return null;
+        const freq: Record<string, number> = {};
+        const intensities: number[] = [];
+        for (const r of filtered) {
+            const e = (r.emotion?.trim().toLowerCase()) || "neutral";
+            freq[e] = (freq[e] ?? 0) + 1;
+            if (typeof r.intensity === "number" && r.intensity > 0) intensities.push(r.intensity);
+        }
+        const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]) as [string, number][];
+        const avg = intensities.length ? intensities.reduce((a, b) => a + b, 0) / intensities.length : 0;
+        return {
+            dominant: sorted[0]?.[0] ?? "neutral",
+            breakdown: sorted.slice(0, 4),
+            total: filtered.length,
+            avgIntensity: avg,
+            intensityLabel: avg >= 0.65 ? "Intense" : avg >= 0.35 ? "Moderate" : "Calm",
+        };
+    }
+
+    // Reload prefs every time this screen is focused (handles tab/stack navigation
+    // that keeps the screen mounted — useFocusEffect re-fires on each focus).
+    useFocusEffect(
+        React.useCallback(() => {
+            AsyncStorage.getItem(MINDSET_PREFS_KEY).then((raw) => {
+                if (raw) setMindsetPrefs({ today: false, week7: false, days30: false, allTime: false, ...JSON.parse(raw) });
+            }).catch(() => {});
+        }, [])
+    );
+
+    // Recompute analyses whenever prefs or history changes
+    React.useEffect(() => {
+        const now = Date.now();
+        const todayStart = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+        const results: Record<string, MindsetResult> = {};
+        if (mindsetPrefs.today)   results.today   = computeMindset(history, todayStart, now);
+        if (mindsetPrefs.week7)   results.week7   = computeMindset(history, now - 7 * 86_400_000, now);
+        if (mindsetPrefs.days30)  results.days30  = computeMindset(history, now - 30 * 86_400_000, now);
+        if (mindsetPrefs.allTime) results.allTime = computeMindset(history, 0, now);
+        setMindsetAnalyses(results);
+    }, [mindsetPrefs, history]);
+
+    const handleCapsuleToggle = React.useCallback((key: keyof MindsetPrefs) => {
+        const nowExpanded = !(expandedCapsules[key] ?? false);
+        setExpandedCapsules((v) => ({ ...v, [key]: nowExpanded }));
+        if (!nowExpanded) return;
+        if (capsuleInsights[key] && capsuleInsights[key] !== "error") return;
+        const now = Date.now();
+        const todayStart = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+        const fromMs = key === "today" ? todayStart : key === "week7" ? now - 7 * 86_400_000 : key === "days30" ? now - 30 * 86_400_000 : 0;
+        const periodLabel = key === "today" ? "today" : key === "week7" ? "the last 7 days" : key === "days30" ? "the last 30 days" : "all time";
+        const msgs = history
+            .filter((r: any) => r.from === "user" && (r.timestamp ?? 0) >= fromMs && (r.timestamp ?? 0) <= now && typeof r.text === "string" && r.text.trim())
+            .map((r: any) => r.text.trim() as string);
+        if (msgs.length === 0) {
+            setCapsuleInsights((v) => ({ ...v, [key]: { analysis: "", advice: "" } }));
+            return;
+        }
+        setCapsuleInsights((v) => ({ ...v, [key]: "loading" }));
+        fetch(buildApiUrl("/api/mindset-analysis"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: msgs, period: periodLabel }),
+        })
+            .then((r) => r.json())
+            .then((data: any) => setCapsuleInsights((v) => ({ ...v, [key]: { analysis: data.analysis ?? "", advice: data.advice ?? "" } })))
+            .catch(() => setCapsuleInsights((v) => ({ ...v, [key]: "error" })));
+    }, [expandedCapsules, capsuleInsights, history]);
 
     // ✅ QA hardening: prevent state updates after leaving screen
     const mountedRef = React.useRef(true);
@@ -1230,6 +1322,114 @@ export default function HistoryScreen() {
                                         style={{ alignSelf: "flex-start", marginBottom: 16, opacity: isLoadingRemote || !canCloudSync ? 0.7 : 1 }}
                                     />
                                 )}
+                                {/* Mindset Analysis Capsules */}
+                                {(mindsetPrefs.today || mindsetPrefs.week7 || mindsetPrefs.days30 || mindsetPrefs.allTime) && (
+                                    <View style={{ marginTop: 12, marginBottom: 4 }}>
+                                        <Text style={{ fontSize: 10, fontWeight: "600", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+                                            Mindset Analysis
+                                        </Text>
+                                        {([
+                                            { key: "today",   label: "Today's Mindset",  icon: "🌅" },
+                                            { key: "week7",   label: "Last 7 Days",      icon: "📅" },
+                                            { key: "days30",  label: "Last 30 Days",     icon: "🗓️" },
+                                            { key: "allTime", label: "All Time",         icon: "✦" },
+                                        ] as { key: keyof MindsetPrefs; label: string; icon: string }[])
+                                            .filter(({ key }) => mindsetPrefs[key])
+                                            .map(({ key, label, icon }) => {
+                                                const analysis = mindsetAnalyses[key];
+                                                const isExpanded = expandedCapsules[key] ?? false;
+                                                const dominantEmoji = analysis ? (MINDSET_EMOTION_ICON[analysis.dominant] ?? "💭") : null;
+                                                return (
+                                                    <View key={key} style={{ borderRadius: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", backgroundColor: colors.surface, marginBottom: 8, overflow: "hidden" }}>
+                                                        <TouchableOpacity
+                                                            activeOpacity={0.8}
+                                                            onPress={() => handleCapsuleToggle(key)}
+                                                            style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 12 }}
+                                                        >
+                                                            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                                                                <Text style={{ fontSize: 18 }}>{icon}</Text>
+                                                                <View style={{ flex: 1 }}>
+                                                                    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textPrimary }}>{label}</Text>
+                                                                    {analysis ? (
+                                                                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 1 }} numberOfLines={1}>
+                                                                            {dominantEmoji} {analysis.dominant}  ·  {analysis.total} moment{analysis.total !== 1 ? "s" : ""}  ·  {analysis.intensityLabel}
+                                                                        </Text>
+                                                                    ) : (
+                                                                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 1 }}>No conversations in this period</Text>
+                                                                    )}
+                                                                </View>
+                                                            </View>
+                                                            <Text style={{ fontSize: 14, color: colors.textSecondary, transform: [{ rotate: isExpanded ? "180deg" : "0deg" }] }}>▾</Text>
+                                                        </TouchableOpacity>
+
+                                                        {isExpanded && analysis && (
+                                                            <View style={{ borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", paddingHorizontal: 14, paddingBottom: 14, paddingTop: 12 }}>
+                                                                {/* Dominant */}
+                                                                <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                                                                    <Text style={{ fontSize: 28 }}>{dominantEmoji}</Text>
+                                                                    <View>
+                                                                        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, textTransform: "capitalize" }}>Mostly {analysis.dominant}</Text>
+                                                                        <Text style={{ fontSize: 11, color: colors.textSecondary }}>Dominant emotional state</Text>
+                                                                    </View>
+                                                                </View>
+                                                                {/* Breakdown bars */}
+                                                                <View style={{ gap: 8, marginBottom: 12 }}>
+                                                                    {analysis.breakdown.map(([emotion, count]) => {
+                                                                        const pct = analysis.total > 0 ? Math.round((count / analysis.total) * 100) : 0;
+                                                                        const emojiIcon = MINDSET_EMOTION_ICON[emotion] ?? "💭";
+                                                                        return (
+                                                                            <View key={emotion} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                                                                <Text style={{ fontSize: 11, color: colors.textSecondary, width: 80, textTransform: "capitalize" }} numberOfLines={1}>{emojiIcon} {emotion}</Text>
+                                                                                <View style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: "rgba(148,163,184,0.15)", overflow: "hidden" }}>
+                                                                                    <View style={{ width: `${pct}%`, height: 6, borderRadius: 3, backgroundColor: "rgba(124,58,237,0.6)" }} />
+                                                                                </View>
+                                                                                <Text style={{ fontSize: 11, color: colors.textSecondary, width: 20, textAlign: "right" }}>{count}</Text>
+                                                                            </View>
+                                                                        );
+                                                                    })}
+                                                                </View>
+                                                                {/* Footer */}
+                                                                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 10 }}>
+                                                                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>{analysis.total} moment{analysis.total !== 1 ? "s" : ""} analysed</Text>
+                                                                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>·</Text>
+                                                                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>Avg intensity: {analysis.intensityLabel}</Text>
+                                                                </View>
+                                                                {/* Psychological Insight */}
+                                                                {(() => {
+                                                                    const insight = capsuleInsights[key];
+                                                                    if (insight === "loading") return (
+                                                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 10, marginTop: 4 }}>
+                                                                            <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 1.5, borderColor: "rgba(124,58,237,0.6)", borderTopColor: "rgba(124,58,237,0.2)" }} />
+                                                                            <Text style={{ fontSize: 11, color: colors.textSecondary }}>Generating insight…</Text>
+                                                                        </View>
+                                                                    );
+                                                                    if (insight === "error") return (
+                                                                        <Text style={{ fontSize: 11, color: colors.textSecondary, borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 10, marginTop: 4 }}>Could not generate insight right now.</Text>
+                                                                    );
+                                                                    if (insight && (insight.analysis || insight.advice)) return (
+                                                                        <View style={{ borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 12, marginTop: 4, gap: 8 }}>
+                                                                            <Text style={{ fontSize: 10, fontWeight: "600", color: "rgba(167,139,250,0.9)", textTransform: "uppercase", letterSpacing: 1 }}>Psychological Insight</Text>
+                                                                            {!!insight.analysis && (
+                                                                                <Text style={{ fontSize: 13, color: colors.textPrimary, lineHeight: 19 }}>{insight.analysis}</Text>
+                                                                            )}
+                                                                            {!!insight.advice && (
+                                                                                <View style={{ borderRadius: 12, backgroundColor: "rgba(124,58,237,0.1)", borderWidth: 0.5, borderColor: "rgba(167,139,250,0.25)", padding: 12, gap: 4 }}>
+                                                                                    <Text style={{ fontSize: 10, fontWeight: "600", color: "rgba(167,139,250,0.9)", textTransform: "uppercase", letterSpacing: 1 }}>Guidance</Text>
+                                                                                    <Text style={{ fontSize: 13, color: colors.textPrimary, lineHeight: 19 }}>{insight.advice}</Text>
+                                                                                </View>
+                                                                            )}
+                                                                        </View>
+                                                                    );
+                                                                    return null;
+                                                                })()}
+                                                            </View>
+                                                        )}
+                                                    </View>
+                                                );
+                                            })}
+                                    </View>
+                                )}
+
                                 {isEmpty && (
                                     <View style={{ marginTop: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, padding: 16 }}>
                                         <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, marginBottom: 6 }}>Your story starts here ✨</Text>

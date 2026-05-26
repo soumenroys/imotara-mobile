@@ -20,6 +20,7 @@ import {
   Platform,
   useWindowDimensions,
   ActivityIndicator,
+  PanResponder,
 } from "react-native";
 
 // Haptic helpers (Vibration API — intensity read from AsyncStorage at runtime)
@@ -45,7 +46,7 @@ import { resolveAvatarImage } from "../assets/avatarImages";
 
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
-import { useColors } from "../theme/ThemeContext";
+import { useColors, useTheme } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
 import { callImotaraAI } from "../api/aiClient";
 import { useAuth } from "../auth/AuthContext";
@@ -85,9 +86,12 @@ import {
   getLoopPrompt,
   type OpenLoop,
 } from "../lib/imotara/openLoops";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { ImotaraTypingIndicator } from "../components/imotara/ImotaraTypingIndicator";
 import { Toast, type ToastHandle } from "../components/ui/Toast";
+import { CompanionQuickPanel } from "../components/imotara/CompanionQuickPanel";
+import { PlanSupportQuickPanel } from "../components/imotara/PlanSupportQuickPanel";
+import { scheduleInactivityReminder } from "../notifications/checkInReminder";
 import type { ReflectionSeed } from "../lib/reflectionSeedContract";
 import {
   buildLocalReply,
@@ -937,6 +941,7 @@ type MessageBubbleProps = {
   reactions: Map<string, string>;
   speakingMessageId: string | null;
   companionAvatarSource?: any;
+  companionName?: string;
   showTimestamps?: boolean;
   reactionsSet?: "default" | "minimal" | "extended";
   crisisThreshold?: "sensitive" | "standard" | "conservative";
@@ -963,6 +968,7 @@ function MessageBubble({
   reactions,
   speakingMessageId,
   companionAvatarSource,
+  companionName,
   showTimestamps = false,
   reactionsSet = "default",
   crisisThreshold = "standard",
@@ -1073,7 +1079,7 @@ function MessageBubble({
   const bubbleContent = (
     <>
       <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textPrimary, opacity: 0.75, marginBottom: 2 }}>
-        {isUser ? "You" : `Imotara${message.source === "local" ? " (offline)" : ""}`}
+        {isUser ? "You" : `${companionName || "Imotara"}${message.source === "local" ? " (offline)" : ""}`}
       </Text>
 
       {!isUser
@@ -1186,7 +1192,7 @@ function MessageBubble({
         <Pressable
           onLongPress={message.isPending ? undefined : () => onLongPress(message)}
           delayLongPress={250}
-          accessibilityLabel={`${isUser ? "You" : "Imotara"}: ${message.text}`}
+          accessibilityLabel={`${isUser ? "You" : (companionName || "Imotara")}: ${message.text}`}
           accessibilityRole="text"
           style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: Math.min(screenWidth * (isUser ? 0.76 : 0.75), 480), marginBottom: 10, paddingHorizontal: 1, marginRight: isUser ? 2 : 0 }}
         >
@@ -1238,7 +1244,7 @@ function MessageBubble({
                 backgroundColor: message.source === "cloud" ? "rgba(56,189,248,0.10)" : "rgba(148,163,184,0.10)",
               }}>
                 <Text style={{ fontSize: 10, fontWeight: "600", color: message.source === "cloud" ? "#7dd3fc" : colors.textSecondary }}>
-                  {message.source === "cloud" ? "Cloud AI" : "Local"}
+                  {message.source === "cloud" ? "Cloud" : "Local"}
                 </Text>
               </View>
 
@@ -1390,7 +1396,50 @@ function MessageBubble({
 
 export default function ChatScreen() {
   const colors = useColors();
+  const { isDark, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
+
+  // Companion quick panel — opened by swiping right from the left edge strip
+  const [companionPanelVisible, setCompanionPanelVisible] = useState(false);
+  const companionPanelVisibleRef = useRef(false);
+  useEffect(() => { companionPanelVisibleRef.current = companionPanelVisible; }, [companionPanelVisible]);
+
+  const [planPanelVisible, setPlanPanelVisible] = useState(false);
+  const planPanelVisibleRef = useRef(false);
+  useEffect(() => { planPanelVisibleRef.current = planPanelVisible; }, [planPanelVisible]);
+
+  // Enabled-flag refs initialised here; synced to settings after useSettings() below
+  const companionPanelEnabledRef = useRef(true);
+  const planPanelEnabledRef = useRef(true);
+
+  // Track which direction triggered the capture so onPanResponderGrant knows what to open
+  const swipeDirectionRef = useRef<"left" | "right" | null>(null);
+
+  // Capture-phase PanResponder — fires top-down before FlatList can claim any gesture.
+  // Right swipe (dx > 20) → Companion panel (if enabled). Left swipe (dx < -20) → Plan & Support panel (if enabled).
+  const edgeSwipeResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponderCapture: (_, gs) => {
+        if (companionPanelVisibleRef.current || planPanelVisibleRef.current) return false;
+        const horiz = Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5;
+        if (!horiz) return false;
+        if (gs.dx > 20 && companionPanelEnabledRef.current)  { swipeDirectionRef.current = "right"; return true; }
+        if (gs.dx < -20 && planPanelEnabledRef.current)      { swipeDirectionRef.current = "left";  return true; }
+        return false;
+      },
+      onPanResponderGrant: () => {
+        if (swipeDirectionRef.current === "right" && !companionPanelVisibleRef.current) {
+          setCompanionPanelVisible(true);
+        } else if (swipeDirectionRef.current === "left" && !planPanelVisibleRef.current) {
+          setPlanPanelVisible(true);
+        }
+        swipeDirectionRef.current = null;
+      },
+      onPanResponderMove: () => {},
+      onPanResponderRelease: () => {},
+    })
+  ).current;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -1528,11 +1577,25 @@ export default function ChatScreen() {
         if (isFinite(r)) setTtsRate(r);
         if (isFinite(p)) setTtsPitch(p);
         setVoiceConfirm(vConfirm === "1");
+        const hf = await AsyncStorage.getItem("imotara:handsfree.v1");
+        setHandsfree(hf === "1");
+        handsfreeRef.current = hf === "1";
       } catch { /* non-fatal */ }
     };
     void load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Hands-free mode
+  const [handsfree, setHandsfree] = useState(false);
+  const handsfreeRef = React.useRef(false);
+  useFocusEffect(React.useCallback(() => {
+    AsyncStorage.getItem("imotara:handsfree.v1").then((v) => {
+      const val = v === "1";
+      setHandsfree(val);
+      handsfreeRef.current = val;
+    }).catch(() => {});
+  }, []));
 
   // Voice input
   const voiceConfirmRef = React.useRef(voiceConfirm);
@@ -1543,6 +1606,11 @@ export default function ChatScreen() {
 
   const voiceInput = useVoiceInput(
     (text) => {
+      // Hands-free: skip draft entirely, send immediately
+      if (handsfreeRef.current) {
+        setTimeout(() => handleSend(text), 80);
+        return;
+      }
       const insertText = () => {
         const newText = latestInputRef.current
           ? `${latestInputRef.current} ${text}`
@@ -1710,10 +1778,14 @@ export default function ChatScreen() {
 
   const {
     emotionInsightsEnabled,
+    setEmotionInsightsEnabled,
+    companionPanelEnabled,
+    planPanelEnabled,
     lastSyncAt,
     lastSyncStatus,
     analysisMode,
     toneContext,
+    setToneContext,
     cloudSyncAllowed,
     licenseExpiresAt,
 
@@ -1725,6 +1797,12 @@ export default function ChatScreen() {
 
     refreshLicense,
   } = useSettings();
+
+  // Keep panel-enabled refs in sync with settings (refs are read inside the PanResponder closure)
+  useEffect(() => { companionPanelEnabledRef.current = companionPanelEnabled; }, [companionPanelEnabled]);
+  useEffect(() => { planPanelEnabledRef.current = planPanelEnabled; }, [planPanelEnabled]);
+
+  const effectiveCompanionName = toneContext?.companion?.name?.trim() || "Imotara";
 
   // UX-2 — companion avatar for chat bubbles
   const companionAvatarSource = resolveAvatarImage(
@@ -1953,6 +2031,12 @@ export default function ChatScreen() {
       if (isTyping || isSendingRef.current) {
         resetTypingState("background");
       }
+      // Schedule inactivity nudge in the user's preferred language
+      const lastUserMsg = [...messages].reverse().find((m) => m.from === "user");
+      const lastActivityTs = lastUserMsg?.timestamp ?? Date.now();
+      const lastContext = lastUserMsg?.text?.trim() || undefined;
+      const notifLang = toneContext?.user?.preferredLang || undefined;
+      scheduleInactivityReminder(lastActivityTs, lastContext, notifLang).catch(() => {});
     },
     onForeground: () => {
       // If we come back and a typing cycle has been hanging too long, reset.
@@ -2448,7 +2532,7 @@ export default function ChatScreen() {
       return;
     }
     const lines = messages.map((m) => {
-      const who = m.from === "user" ? "You" : "Imotara";
+      const who = m.from === "user" ? "You" : effectiveCompanionName;
       const time = new Date(m.timestamp).toLocaleString();
       return `[${time}] ${who}: ${m.text}`;
     });
@@ -3118,6 +3202,12 @@ export default function ChatScreen() {
           }
           setMessages((prev) => [...prev, ...extraMessages, botMessage]);
           smoothScrollToBottom(scrollViewRef);
+          if (handsfreeRef.current && botMessage.text) {
+            const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
+            const l = toneContext?.user?.preferredLang ?? "en";
+            setSpeakingMessageId(botMessage.id);
+            speakMessage(botMessage.id, botMessage.text, g, l, () => setSpeakingMessageId(null), ttsRate, ttsPitch);
+          }
         } catch (error) {
           debugWarn("Imotara mobile AI error:", error);
 
@@ -3210,6 +3300,12 @@ export default function ChatScreen() {
           haptic.receive();
           setMessages((prev) => [...prev, botMessage]);
           smoothScrollToBottom(scrollViewRef);
+          if (handsfreeRef.current && botMessage.text) {
+            const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
+            const l = toneContext?.user?.preferredLang ?? "en";
+            setSpeakingMessageId(botMessage.id);
+            speakMessage(botMessage.id, botMessage.text, g, l, () => setSpeakingMessageId(null), ttsRate, ttsPitch);
+          }
         } finally {
           if (!mountedRef.current) return;
 
@@ -3317,7 +3413,7 @@ export default function ChatScreen() {
       } else if (level === 1) {
         greetText = `${timeGreet} We've been talking for a while now — I'm glad you're here. How are you today?`;
       } else {
-        greetText = `${timeGreet} I'm Imotara, and I'm here with you. How are you feeling right now?`;
+        greetText = `${timeGreet} I'm ${effectiveCompanionName}, and I'm here with you. How are you feeling right now?`;
       }
     } else {
       // Returning session — check time gap and last emotion
@@ -3640,9 +3736,9 @@ export default function ChatScreen() {
   const typingStatusText = useMemo(() => {
     if (!isTyping) return "";
     if (typingStatus === "thinking") {
-      return `Imotara is thinking about your feelings${formattedTypingDots}`;
+      return `${effectiveCompanionName} is thinking about your feelings${formattedTypingDots}`;
     }
-    return `Imotara is typing${formattedTypingDots}`;
+    return `${effectiveCompanionName} is typing${formattedTypingDots}`;
   }, [isTyping, typingStatus, formattedTypingDots]);
 
   const typingBubbleBg = useMemo(() => {
@@ -3664,7 +3760,7 @@ export default function ChatScreen() {
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       enabled={!(Platform.OS === "ios" && Platform.isPad)}
     >
-    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
+    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }} {...edgeSwipeResponder.panHandlers}>
       {/* iPad: constrain content to a centered column so the UI doesn't span the full iPad width */}
       <View style={isPad ? { flex: 1, maxWidth: 700, width: "100%", alignSelf: "center" } : { flex: 1 }}>
       {/* Offline / unsynced indicator */}
@@ -3673,7 +3769,7 @@ export default function ChatScreen() {
           <Text style={{ fontSize: 12, color: "#fff", fontWeight: "600" }}>
             {hasUnsynced
               ? `📡 Offline — ${history.filter((h: any) => !h.isSynced).length} message${history.filter((h: any) => !h.isSynced).length !== 1 ? "s" : ""} queued`
-              : "You're offline — Imotara will reply using on-device AI"}
+              : "You're offline — Imotara will reply using on-device mode"}
           </Text>
         </View>
       ) : null}
@@ -3713,7 +3809,7 @@ export default function ChatScreen() {
               }}
               numberOfLines={1}
             >
-              Imotara
+              {effectiveCompanionName}
             </Text>
 
 {/* AI mode badge moved to ⋯ overflow menu — technical label not needed in default header */}
@@ -3915,7 +4011,7 @@ export default function ChatScreen() {
             <View style={{ marginHorizontal: 16, marginVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: "rgba(139,92,246,0.30)", backgroundColor: "#1e1028", padding: 16 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Text style={{ fontSize: 16 }}>✨</Text>
-                <Text style={{ fontSize: 13, fontWeight: "600", color: "#e4e4f0" }}>I've used my 20 AI replies for today</Text>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: "#e4e4f0" }}>I've used my 20 replies for today</Text>
               </View>
               <Text style={{ fontSize: 12, color: "#9ca3af", lineHeight: 18, marginBottom: 12 }}>
                 I'm still here. My responses now come from on-device mode — a little simpler, but present.
@@ -3941,6 +4037,7 @@ export default function ChatScreen() {
               reactions={reactions}
               speakingMessageId={speakingMessageId}
               companionAvatarSource={companionAvatarSource}
+              companionName={toneContext?.companion?.name?.trim() || undefined}
               onLongPress={setActionMessage}
               onDismissCrisisCard={dismissCrisisCard}
               onRetry={(messageId, prevUserText) => {
@@ -4877,19 +4974,19 @@ export default function ChatScreen() {
             style={{
               marginTop: insets.top + 52,
               marginRight: 12,
-              backgroundColor: "#1e293b",
+              backgroundColor: colors.surface,
               borderRadius: 14,
               borderWidth: 0.5,
-              borderColor: "rgba(255,255,255,0.1)",
+              borderColor: colors.border,
               minWidth: 220,
               overflow: "hidden",
             }}
           >
             {/* AI mode status (read-only, moved from header) */}
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: colors.border }}>
               <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: analysisMode === "local" ? "#a78bfa" : "#60a5fa" }} />
               <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-                {analysisMode === "local" ? "On-device mode — replies stay on your phone" : "Cloud AI mode active"}
+                {analysisMode === "local" ? "On-device mode — replies stay on your phone" : "Cloud mode active"}
               </Text>
             </View>
 
@@ -4904,7 +5001,7 @@ export default function ChatScreen() {
                   });
                   setTimeout(() => searchInputRef.current?.focus(), 120);
                 }}
-                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: colors.border }}
               >
                 <Ionicons name={showSearch ? "search" : "search-outline"} size={17} color={showSearch ? colors.primary : colors.textSecondary} />
                 <Text style={{ color: showSearch ? colors.primary : colors.textPrimary, fontSize: 14 }}>
@@ -4917,7 +5014,7 @@ export default function ChatScreen() {
             {bookmarks.size > 0 && (
               <TouchableOpacity
                 onPress={() => { setShowHeaderMenu(false); setShowBookmarksOnly((v) => !v); }}
-                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: colors.border }}
               >
                 <Ionicons name={showBookmarksOnly ? "star" : "star-outline"} size={17} color={showBookmarksOnly ? "#fde68a" : colors.textSecondary} />
                 <Text style={{ color: showBookmarksOnly ? "#fde68a" : colors.textPrimary, fontSize: 14 }}>
@@ -4929,7 +5026,7 @@ export default function ChatScreen() {
             {/* Breathing exercise */}
             <TouchableOpacity
               onPress={() => { setShowHeaderMenu(false); setBreathingVisible(true); }}
-              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: colors.border }}
             >
               <Ionicons name="pulse-outline" size={17} color={colors.textSecondary} />
               <Text style={{ color: colors.textPrimary, fontSize: 14 }}>Breathing exercise</Text>
@@ -4943,7 +5040,7 @@ export default function ChatScreen() {
                 AsyncStorage.setItem(UNSENT_TRIED_KEY, "1").catch(() => {});
                 setShowUnsentHint(false);
               }}
-              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: colors.border }}
             >
               <Ionicons name="pencil-outline" size={17} color={unsentLetterSetup ? "#a78bfa" : colors.textSecondary} />
               <Text style={{ color: unsentLetterSetup ? "#a78bfa" : colors.textPrimary, fontSize: 14 }}>Unsent letter</Text>
@@ -4955,10 +5052,19 @@ export default function ChatScreen() {
                 setShowHeaderMenu(false);
                 setGriefMode((v) => !v);
               }}
-              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: colors.border }}
             >
               <Ionicons name="heart-outline" size={17} color={griefMode ? "#fda4af" : colors.textSecondary} />
               <Text style={{ color: griefMode ? "#fda4af" : colors.textPrimary, fontSize: 14 }}>{griefMode ? "Exit grief & loss space" : "Grief & loss space"}</Text>
+            </TouchableOpacity>
+
+            {/* Dark / Light mode toggle */}
+            <TouchableOpacity
+              onPress={() => { setShowHeaderMenu(false); toggleTheme(); }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: colors.border }}
+            >
+              <Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={17} color={colors.textSecondary} />
+              <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{isDark ? "Switch to light mode" : "Switch to dark mode"}</Text>
             </TouchableOpacity>
 
             {/* Clear chat */}
@@ -5013,6 +5119,25 @@ export default function ChatScreen() {
       {/* Error / info toast — non-intrusive, auto-dismisses */}
       <Toast ref={toastRef} />
       </View>{/* end iPad centering wrapper */}
+
+      {/* Companion quick panel — swipe right to open, swipe left or tap backdrop to close */}
+      <CompanionQuickPanel
+        visible={companionPanelVisible}
+        onClose={() => setCompanionPanelVisible(false)}
+        toneContext={toneContext}
+        setToneContext={setToneContext}
+      />
+
+      {/* Plan & Support quick panel — swipe left to open, swipe right or tap backdrop to close */}
+      <PlanSupportQuickPanel
+        visible={planPanelVisible}
+        onClose={() => setPlanPanelVisible(false)}
+        licenseTier={licenseTier}
+        licenseExpiresAt={licenseExpiresAt}
+        emotionInsightsEnabled={emotionInsightsEnabled}
+        setEmotionInsightsEnabled={setEmotionInsightsEnabled}
+        refreshLicense={refreshLicense}
+      />
     </View>
     </KeyboardAvoidingView>
   );
