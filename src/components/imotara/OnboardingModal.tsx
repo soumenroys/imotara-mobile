@@ -55,13 +55,13 @@ const MODES: { value: AnalysisMode; label: string; description: string; icon: st
   {
     value: "auto",
     label: "Smart (recommended)",
-    description: "Tries cloud AI first for deeper responses, falls back to device if unavailable. When cloud is used, your message is sent to OpenAI (openai.com) to generate a reply.",
+    description: "Tries cloud mode first for deeper responses, falls back to device if unavailable. When cloud is used, your message is sent to OpenAI (openai.com) to generate a reply.",
     icon: "\u26A1",
   },
   {
     value: "cloud",
     label: "Cloud",
-    description: "Always uses cloud AI for the deepest responses. Your message is sent to OpenAI (openai.com) to generate a reply.",
+    description: "Always uses cloud mode for the deepest responses. Your message is sent to OpenAI (openai.com) to generate a reply.",
     icon: "\u2601\uFE0F",
   },
 ];
@@ -145,7 +145,7 @@ export function OnboardingModal({ visible, onComplete }: Props) {
       <Text style={styles.stepLabel}>Step 3 of 3</Text>
       <Text style={styles.heading}>How private do you want to be?</Text>
       <Text style={styles.subheading}>
-        Imotara is local-first by design. You choose how AI responses are generated.
+        Imotara is local-first by design. You choose how responses are generated.
       </Text>
       {MODES.map((m) => (
         <TouchableOpacity
@@ -169,7 +169,7 @@ export function OnboardingModal({ visible, onComplete }: Props) {
         </TouchableOpacity>
       ))}
       <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 12, lineHeight: 16, opacity: 0.7 }}>
-        When cloud AI is used, only your chat message is sent to OpenAI (openai.com) to generate a reply. No account info, name, or device data is attached. You can change this anytime in Settings.
+        When cloud mode is used, only your chat message is sent to OpenAI (openai.com) to generate a reply. No account info, name, or device data is attached. You can change this anytime in Settings.
       </Text>
     </View>,
   ];

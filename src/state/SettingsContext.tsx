@@ -20,6 +20,12 @@ type SettingsContextValue = {
     emotionInsightsEnabled: boolean;
     setEmotionInsightsEnabled: (value: boolean) => void;
 
+    // Quick-panel swipe gestures in Chat screen
+    companionPanelEnabled: boolean;
+    setCompanionPanelEnabled: (value: boolean) => void;
+    planPanelEnabled: boolean;
+    setPlanPanelEnabled: (value: boolean) => void;
+
     // Phase 2.4: History list preference (UI-only)
     showAssistantRepliesInHistory: boolean;
     setShowAssistantRepliesInHistory: (value: boolean) => void;
@@ -203,6 +209,8 @@ function normalizeToneContext(value: ToneContextPayload): ToneContextPayload {
 export function SettingsProvider({ children }: { children: ReactNode }) {
     // Keep your original defaults (non-breaking)
     const [emotionInsightsEnabled, _setEmotionInsightsEnabled] = useState(true);
+    const [companionPanelEnabled, _setCompanionPanelEnabled] = useState(true);
+    const [planPanelEnabled, _setPlanPanelEnabled] = useState(true);
     const [teenMode, _setTeenMode] = useState(false);
 
     // Phase 2.4: History list preference (default: hide assistant replies)
@@ -360,6 +368,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             );
                         }
 
+                        if ("companionPanelEnabled" in parsed) {
+                            _setCompanionPanelEnabled(safeBool((parsed as any).companionPanelEnabled, true));
+                        }
+
+                        if ("planPanelEnabled" in parsed) {
+                            _setPlanPanelEnabled(safeBool((parsed as any).planPanelEnabled, true));
+                        }
+
                         if ("teenMode" in parsed) {
                             _setTeenMode(safeBool((parsed as any).teenMode, false));
                         }
@@ -487,6 +503,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
         const payload = {
             emotionInsightsEnabled,
+            companionPanelEnabled,
+            planPanelEnabled,
             teenMode,
             showAssistantRepliesInHistory,
             autoSyncDelaySeconds,
@@ -510,6 +528,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }, [
         hydrated,
         emotionInsightsEnabled,
+        companionPanelEnabled,
+        planPanelEnabled,
         teenMode,
         showAssistantRepliesInHistory,
         autoSyncDelaySeconds,
@@ -524,6 +544,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // ---- Wrapped setters (non-breaking; same signatures) ----
     const setEmotionInsightsEnabled = (value: boolean) => {
         _setEmotionInsightsEnabled(!!value);
+    };
+
+    const setCompanionPanelEnabled = (value: boolean) => {
+        _setCompanionPanelEnabled(!!value);
+    };
+
+    const setPlanPanelEnabled = (value: boolean) => {
+        _setPlanPanelEnabled(!!value);
     };
 
     const setTeenMode = (value: boolean) => {
@@ -609,6 +637,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             value={{
                 emotionInsightsEnabled,
                 setEmotionInsightsEnabled,
+                companionPanelEnabled,
+                setCompanionPanelEnabled,
+                planPanelEnabled,
+                setPlanPanelEnabled,
                 showAssistantRepliesInHistory,
                 setShowAssistantRepliesInHistory,
                 lastSyncAt,

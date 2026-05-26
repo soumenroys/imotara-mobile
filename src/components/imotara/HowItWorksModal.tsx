@@ -32,7 +32,7 @@ const STEPS: Step[] = [
     icon: "cloud-outline",
     iconColor: "rgba(56,189,248,1)",
     title: "Works everywhere",
-    body: "When online, Imotara uses AI to craft thoughtful replies. Even without internet, local mode keeps your conversations going — no interruptions, no blank screens.",
+    body: "When online, Imotara crafts thoughtful, personalised replies. Even without internet, local mode keeps your conversations going — no interruptions, no blank screens.",
   },
   {
     icon: "person-circle-outline",
