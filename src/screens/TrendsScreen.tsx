@@ -82,13 +82,13 @@ function FeelSection({
                 alignItems: "center",
                 gap: 6,
                 paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderRadius: 999,
-                borderWidth: 1,
+                paddingVertical: 9,
+                borderRadius: 12,
+                borderWidth: 1.5, minHeight: 40,
                 borderColor: isActive ? EMOTION_META[btn.bucket].color : colors.border,
                 backgroundColor: isActive
                   ? EMOTION_META[btn.bucket].color.replace(/[\d.]+\)$/, "0.18)")
-                  : colors.surface,
+                  : "transparent",
               }}
             >
               <Ionicons name={btn.icon as any} size={16} color={isActive ? "#fff" : EMOTION_META[btn.bucket].iconColor} />
@@ -619,9 +619,9 @@ function FutureLetterSection({ colors }: { colors: ReturnType<typeof useColors> 
                 key={d}
                 onPress={() => setDays(d)}
                 style={{
-                  borderRadius: 999, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4,
+                  borderRadius: 12, borderWidth: 1.5, paddingHorizontal: 14, paddingVertical: 9, minHeight: 40,
                   borderColor: days === d ? colors.primary : colors.border,
-                  backgroundColor: days === d ? `${colors.primary}22` : colors.surfaceSoft,
+                  backgroundColor: days === d ? colors.primaryTint : "transparent",
                 }}
               >
                 <Text style={{ fontSize: 11, color: days === d ? colors.primary : colors.textSecondary }}>
@@ -1183,6 +1183,32 @@ export default function TrendsScreen() {
     finally { setIsRefreshing(false); }
   }, [isRefreshing, store]);
 
+  const [moodChartEnabled, setMoodChartEnabled] = useState(true);
+  useEffect(() => { AsyncStorage.getItem("imotara.mood.chart.show.v1").then((v) => setMoodChartEnabled(v !== "0")).catch(() => {}); }, []);
+
+  const [challengeShow, setChallengeShow] = useState(true);
+  useEffect(() => { AsyncStorage.getItem("imotara.challenge.show.v1").then((v) => setChallengeShow(v !== "0")).catch(() => {}); }, []);
+
+  const [journalShow, setJournalShow] = useState(true);
+  useEffect(() => { AsyncStorage.getItem("imotara.journal.show.v1").then((v) => setJournalShow(v !== "0")).catch(() => {}); }, []);
+
+  // Reflection journal streak — consecutive days with a journal entry (mirrors web Grow page)
+  const [journalStreak, setJournalStreak] = useState(0);
+  useEffect(() => {
+    loadJournal().then((entries) => {
+      if (entries.length === 0) return;
+      const days = new Set(entries.map((e) => new Date(e.createdAt).toISOString().slice(0, 10)));
+      let s = 0;
+      const today = new Date();
+      for (let i = 0; i <= 365; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        if (days.has(d.toISOString().slice(0, 10))) { s++; } else if (i === 0) { /* grace: skip today if not written yet */ } else { break; }
+      }
+      setJournalStreak(s);
+    }).catch(() => {});
+  }, []);
+
   const [yearReview, setYearReview] = useState<YearReview | null>(null);
   const [yearReviewLoading, setYearReviewLoading] = useState(false);
   const [yearReviewExpanded, setYearReviewExpanded] = useState(false);
@@ -1375,7 +1401,7 @@ export default function TrendsScreen() {
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor="#38bdf8" colors={["#38bdf8"]} />}
       >
         <FeelSection colors={colors} onCheckin={handleCheckin} />
-        <ChallengeWidget colors={colors} />
+        {challengeShow && <ChallengeWidget colors={colors} />}
         <View style={{ alignItems: "center", paddingTop: 24 }}>
           <Ionicons name="stats-chart-outline" size={32} color={colors.textSecondary} style={{ marginBottom: 16 }} />
           <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, textAlign: "center", marginBottom: 8 }}>
@@ -1432,6 +1458,27 @@ export default function TrendsScreen() {
           </Text>
         </View>
       </View>
+
+      {/* Reflection journal streak */}
+      {journalStreak > 0 && (
+        <View style={{
+          borderRadius: 14, borderWidth: 1,
+          borderColor: journalStreak >= 3 ? "rgba(52,211,153,0.4)" : colors.border,
+          backgroundColor: journalStreak >= 3 ? "rgba(6,95,70,0.15)" : colors.surface,
+          paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14,
+          flexDirection: "row", alignItems: "center", gap: 12,
+        }}>
+          <Text style={{ fontSize: 28 }}>{journalStreak >= 7 ? "📖🔥" : journalStreak >= 3 ? "📖⚡" : "📖"}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: "700", color: journalStreak >= 3 ? "#34d399" : colors.textPrimary }}>
+              {journalStreak}-day journal streak
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+              {journalStreak >= 7 ? "Exceptional — you've built a real reflection habit!" : journalStreak >= 3 ? "Great consistency in your reflections!" : "Write today to extend your streak"}
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* EN-5: Social Proof Benchmarking */}
       {socialProof && (
@@ -1760,6 +1807,7 @@ export default function TrendsScreen() {
       })()}
 
       {/* 30-day mood line chart */}
+      {moodChartEnabled && (
       <View style={{ marginTop: 28 }}>
         <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textSecondary, marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>
           30-Day Mood Trend
@@ -1771,6 +1819,7 @@ export default function TrendsScreen() {
           <MoodLineChart data={moodTrend30} colors={colors} />
         </View>
       </View>
+      )}
 
       {/* 12-week mood heatmap */}
       <View style={{ marginTop: 28 }}>
@@ -1940,10 +1989,10 @@ export default function TrendsScreen() {
       })()}
 
       {/* EN-4: 30-Day Reflection Challenge */}
-      <ChallengeWidget colors={colors} />
+      {challengeShow && <ChallengeWidget colors={colors} />}
 
       {/* Daily Journal */}
-      <JournalSection colors={colors} topEmotion={topEmotion as EmotionBucket | undefined} />
+      {journalShow && <JournalSection colors={colors} topEmotion={topEmotion as EmotionBucket | undefined} />}
 
       {/* Future Letters */}
       <FutureLetterSection colors={colors} />

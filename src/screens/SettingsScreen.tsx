@@ -24,6 +24,7 @@ import {
     LayoutAnimation,
     Image,
     Share,
+    Modal,
 } from "react-native";
 
 import { useHistoryStore } from "../state/HistoryContext";
@@ -335,6 +336,14 @@ export default function SettingsScreen() {
 
     // ✅ TS-safe reason: only exists when enabled === false
     const cloudGateReason = !cloudGate.enabled ? cloudGate.reason : undefined;
+
+    // ── Feature gates (Plus / Pro tier controls) ──────────────────────────────
+    const ttsAdvancedGate     = gate("TTS_ADVANCED",      licenseTier);
+    const searchModeGate      = gate("SEARCH_MODE",       licenseTier);
+    const replyCadenceGate    = gate("REPLY_CADENCE",     licenseTier);
+    const companionLetterGate = gate("COMPANION_LETTER",  licenseTier);
+    const growthArcGate       = gate("GROWTH_ARC",        licenseTier);
+    // ─────────────────────────────────────────────────────────────────────────
 
     // ✅ QA hardening: avoid setState after leaving screen
     const mountedRef = React.useRef(true);
@@ -652,6 +661,11 @@ export default function SettingsScreen() {
     const [sectionMindset, setSectionMindset] = React.useState(false);
 
     // ── Mindset Analysis Toggles ─────────────────────────────────────────────
+    const MOOD_CHART_KEY = "imotara.mood.chart.show.v1";
+    const [moodChartEnabled, setMoodChartEnabled] = React.useState(true);
+    React.useEffect(() => { AsyncStorage.getItem(MOOD_CHART_KEY).then((v) => setMoodChartEnabled(v !== "0")).catch(() => {}); }, []);
+    const handleMoodChartToggle = async (val: boolean) => { setMoodChartEnabled(val); await AsyncStorage.setItem(MOOD_CHART_KEY, val ? "1" : "0").catch(() => {}); };
+
     const MINDSET_PREFS_KEY = "imotara:mindset.analysis.prefs.v1";
     type MindsetPrefs = { today: boolean; week7: boolean; days30: boolean; allTime: boolean };
     const [mindsetPrefs, setMindsetPrefs] = React.useState<MindsetPrefs>({ today: false, week7: false, days30: false, allTime: false });
@@ -739,7 +753,11 @@ export default function SettingsScreen() {
     // O-1: Feature discovery reset
     const [discoveryResetMsg, setDiscoveryResetMsg] = React.useState<string | null>(null);
     const handleDiscoveryReset = async () => {
-        await AsyncStorage.removeItem("imotara.discovery.v1").catch(() => {});
+        // Both keys cleared for migration compatibility (old key: imotara.discovery.v1)
+        await Promise.all([
+            AsyncStorage.removeItem("imotara.onboarding.discovery.v1").catch(() => {}),
+            AsyncStorage.removeItem("imotara.discovery.v1").catch(() => {}),
+        ]);
         setDiscoveryResetMsg("Discovery cards reset — they will reappear in your next Chat session.");
     };
 
@@ -775,6 +793,12 @@ export default function SettingsScreen() {
         setHapticIntensity(val);
         await AsyncStorage.setItem(HAPTIC_INTENSITY_KEY, val).catch(() => {});
     };
+
+    // Reduced motion
+    const REDUCED_MOTION_KEY = "imotara.reduced.motion.v1";
+    const [reducedMotion, setReducedMotion] = React.useState(false);
+    React.useEffect(() => { AsyncStorage.getItem(REDUCED_MOTION_KEY).then((v) => setReducedMotion(v === "1")).catch(() => {}); }, []);
+    const handleReducedMotionToggle = async (val: boolean) => { setReducedMotion(val); await AsyncStorage.setItem(REDUCED_MOTION_KEY, val ? "1" : "0").catch(() => {}); };
 
     // V-1: Voice max duration
     const VOICE_MAX_DURATION_KEY = "imotara.voice.maxDuration.v1";
@@ -897,6 +921,101 @@ export default function SettingsScreen() {
         await AsyncStorage.setItem(STATUS_POLL_KEY, String(secs)).catch(() => {});
     };
 
+    // Chat behaviour toggles
+    const SEARCH_MODE_KEY = "imotara.search.mode.v1";
+    const [searchMode, setSearchMode] = React.useState<"fuzzy" | "exact">("fuzzy");
+    React.useEffect(() => { AsyncStorage.getItem(SEARCH_MODE_KEY).then((v) => setSearchMode(v === "exact" ? "exact" : "fuzzy")).catch(() => {}); }, []);
+    const handleSearchModeToggle = async (val: boolean) => {
+        const mode: "fuzzy" | "exact" = val ? "exact" : "fuzzy";
+        setSearchMode(mode);
+        await AsyncStorage.setItem(SEARCH_MODE_KEY, mode).catch(() => {});
+    };
+
+    const GROW_NUDGE_PERM_KEY = "imotara.grow.nudge.perm.v1";
+    const [growNudgePerm, setGrowNudgePerm] = React.useState(false);
+    React.useEffect(() => {
+        AsyncStorage.getItem(GROW_NUDGE_PERM_KEY).then((v) => setGrowNudgePerm(v === "1")).catch(() => {});
+    }, []);
+    const handleGrowNudgePermToggle = async (val: boolean) => {
+        setGrowNudgePerm(val);
+        await AsyncStorage.setItem(GROW_NUDGE_PERM_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    const SENTIMENT_CHIPS_KEY = "imotara.sentiment.chips.enabled.v1";
+    const [sentimentChipsEnabled, setSentimentChipsEnabled] = React.useState(true);
+    React.useEffect(() => {
+        AsyncStorage.getItem(SENTIMENT_CHIPS_KEY).then((v) => setSentimentChipsEnabled(v !== "0")).catch(() => {});
+    }, []);
+    const handleSentimentChipsToggle = async (val: boolean) => {
+        setSentimentChipsEnabled(val);
+        await AsyncStorage.setItem(SENTIMENT_CHIPS_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    const WEEKLY_RECAP_KEY = "imotara.weekly.recap.enabled.v1";
+    const [weeklyRecapEnabled, setWeeklyRecapEnabled] = React.useState(true);
+    React.useEffect(() => {
+        AsyncStorage.getItem(WEEKLY_RECAP_KEY).then((v) => setWeeklyRecapEnabled(v !== "0")).catch(() => {});
+    }, []);
+    const handleWeeklyRecapToggle = async (val: boolean) => {
+        setWeeklyRecapEnabled(val);
+        await AsyncStorage.setItem(WEEKLY_RECAP_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    const MESSAGE_UNDO_KEY = "imotara.undo.enabled.v1";
+    const [undoEnabled, setUndoEnabled] = React.useState(true);
+    React.useEffect(() => {
+        AsyncStorage.getItem(MESSAGE_UNDO_KEY).then((v) => setUndoEnabled(v === "1")).catch(() => {});
+    }, []);
+    const handleUndoEnabledToggle = async (val: boolean) => {
+        setUndoEnabled(val);
+        await AsyncStorage.setItem(MESSAGE_UNDO_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    const DAILY_CHECKIN_SHOW_KEY = "imotara.daily.checkin.show.v1";
+    const [dailyCheckinShow, setDailyCheckinShow] = React.useState(true);
+    React.useEffect(() => { AsyncStorage.getItem(DAILY_CHECKIN_SHOW_KEY).then((v) => setDailyCheckinShow(v !== "0")).catch(() => {}); }, []);
+    const handleDailyCheckinShowToggle = async (val: boolean) => { setDailyCheckinShow(val); await AsyncStorage.setItem(DAILY_CHECKIN_SHOW_KEY, val ? "1" : "0").catch(() => {}); };
+
+    const COLLECTIVE_PULSE_SHOW_KEY = "imotara.collective.pulse.show.v1";
+    const [collectivePulseShow, setCollectivePulseShow] = React.useState(true);
+    React.useEffect(() => { AsyncStorage.getItem(COLLECTIVE_PULSE_SHOW_KEY).then((v) => setCollectivePulseShow(v !== "0")).catch(() => {}); }, []);
+    const handleCollectivePulseShowToggle = async (val: boolean) => { setCollectivePulseShow(val); await AsyncStorage.setItem(COLLECTIVE_PULSE_SHOW_KEY, val ? "1" : "0").catch(() => {}); };
+
+    const TONE_REFLECTION_SHOW_KEY = "imotara.tone.reflection.show.v1";
+    const [toneReflectionShow, setToneReflectionShow] = React.useState(true);
+    React.useEffect(() => { AsyncStorage.getItem(TONE_REFLECTION_SHOW_KEY).then((v) => setToneReflectionShow(v !== "0")).catch(() => {}); }, []);
+    const handleToneReflectionShowToggle = async (val: boolean) => { setToneReflectionShow(val); await AsyncStorage.setItem(TONE_REFLECTION_SHOW_KEY, val ? "1" : "0").catch(() => {}); };
+
+    const RETURN_GREETING_SHOW_KEY = "imotara.return.greeting.show.v1";
+    const [returnGreetingShow, setReturnGreetingShow] = React.useState(true);
+    React.useEffect(() => { AsyncStorage.getItem(RETURN_GREETING_SHOW_KEY).then((v) => setReturnGreetingShow(v !== "0")).catch(() => {}); }, []);
+    const handleReturnGreetingShowToggle = async (val: boolean) => { setReturnGreetingShow(val); await AsyncStorage.setItem(RETURN_GREETING_SHOW_KEY, val ? "1" : "0").catch(() => {}); };
+    const RETURN_GREETING_HOURS_KEY = "imotara.return.greeting.hours.v1";
+    const RETURN_GREETING_HOUR_OPTIONS = [6, 12, 24, 48] as const;
+    const [returnGreetingHours, setReturnGreetingHours] = React.useState(24);
+    React.useEffect(() => { AsyncStorage.getItem(RETURN_GREETING_HOURS_KEY).then((v) => { const n = parseInt(v ?? "24", 10); if (RETURN_GREETING_HOUR_OPTIONS.includes(n as 6 | 12 | 24 | 48)) setReturnGreetingHours(n); }).catch(() => {}); }, []);
+    const handleReturnGreetingHoursChange = async (h: number) => { setReturnGreetingHours(h); await AsyncStorage.setItem(RETURN_GREETING_HOURS_KEY, String(h)).catch(() => {}); };
+
+    const MOOD_GLIMPSE_SHOW_KEY = "imotara.mood.glimpse.show.v1";
+    const [moodGlimpseShow, setMoodGlimpseShow] = React.useState(true);
+    React.useEffect(() => { AsyncStorage.getItem(MOOD_GLIMPSE_SHOW_KEY).then((v) => setMoodGlimpseShow(v !== "0")).catch(() => {}); }, []);
+    const handleMoodGlimpseShowToggle = async (val: boolean) => { setMoodGlimpseShow(val); await AsyncStorage.setItem(MOOD_GLIMPSE_SHOW_KEY, val ? "1" : "0").catch(() => {}); };
+
+    const MILESTONE_SHOW_KEY = "imotara.milestone.show.v1";
+    const [milestoneShow, setMilestoneShow] = React.useState(true);
+    React.useEffect(() => { AsyncStorage.getItem(MILESTONE_SHOW_KEY).then((v) => setMilestoneShow(v !== "0")).catch(() => {}); }, []);
+    const handleMilestoneShowToggle = async (val: boolean) => { setMilestoneShow(val); await AsyncStorage.setItem(MILESTONE_SHOW_KEY, val ? "1" : "0").catch(() => {}); };
+
+    const UNSENT_HINT_SHOW_KEY = "imotara.unsent.hint.show.v1";
+    const [unsentHintShow, setUnsentHintShow] = React.useState(true);
+    React.useEffect(() => { AsyncStorage.getItem(UNSENT_HINT_SHOW_KEY).then((v) => setUnsentHintShow(v !== "0")).catch(() => {}); }, []);
+    const handleUnsentHintShowToggle = async (val: boolean) => { setUnsentHintShow(val); await AsyncStorage.setItem(UNSENT_HINT_SHOW_KEY, val ? "1" : "0").catch(() => {}); };
+
+    const TRIAL_BANNER_SHOW_KEY = "imotara.trial.banner.show.v1";
+    const [trialBannerShow, setTrialBannerShow] = React.useState(true);
+    React.useEffect(() => { AsyncStorage.getItem(TRIAL_BANNER_SHOW_KEY).then((v) => setTrialBannerShow(v !== "0")).catch(() => {}); }, []);
+    const handleTrialBannerShowToggle = async (val: boolean) => { setTrialBannerShow(val); await AsyncStorage.setItem(TRIAL_BANNER_SHOW_KEY, val ? "1" : "0").catch(() => {}); };
+
     // G-1: Emotional arc cadence
     const ARC_CADENCE_KEY = "imotara.arc.cadenceDays.v1";
     const [arcCadenceDays, setArcCadenceDays] = React.useState(30);
@@ -1004,6 +1123,31 @@ export default function SettingsScreen() {
         await AsyncStorage.setItem(CRISIS_THRESHOLD_KEY, val).catch(() => {});
     };
 
+    // P-3: Crisis country override
+    const CRISIS_COUNTRY_KEY = "imotara.crisis.country.v1";
+    const CRISIS_COUNTRIES = [
+        { code: "auto", label: "Auto-detect" },
+        { code: "IN", label: "India" }, { code: "US", label: "United States" },
+        { code: "GB", label: "United Kingdom" }, { code: "AU", label: "Australia" },
+        { code: "CA", label: "Canada" }, { code: "JP", label: "Japan" },
+        { code: "KR", label: "South Korea" }, { code: "SG", label: "Singapore" },
+        { code: "MY", label: "Malaysia" }, { code: "PH", label: "Philippines" },
+        { code: "LK", label: "Sri Lanka" }, { code: "PK", label: "Pakistan" },
+        { code: "BD", label: "Bangladesh" }, { code: "NZ", label: "New Zealand" },
+        { code: "IE", label: "Ireland" }, { code: "DE", label: "Germany" },
+        { code: "FR", label: "France" }, { code: "NL", label: "Netherlands" },
+    ];
+    const [crisisCountry, setCrisisCountry] = React.useState("auto");
+    const [showCrisisCountryModal, setShowCrisisCountryModal] = React.useState(false);
+    React.useEffect(() => {
+        AsyncStorage.getItem(CRISIS_COUNTRY_KEY).then((v) => { if (v) setCrisisCountry(v); }).catch(() => {});
+    }, []);
+    const handleCrisisCountryChange = async (code: string) => {
+        setCrisisCountry(code);
+        setShowCrisisCountryModal(false);
+        await AsyncStorage.setItem(CRISIS_COUNTRY_KEY, code).catch(() => {});
+    };
+
     // M-6: API timeout
     const API_TIMEOUT_KEY = "imotara.api.timeout.v1";
     const [apiTimeoutSecs, setApiTimeoutSecs] = React.useState(20);
@@ -1017,6 +1161,115 @@ export default function SettingsScreen() {
     const handleApiTimeoutChange = async (secs: number) => {
         setApiTimeoutSecs(secs);
         await AsyncStorage.setItem(API_TIMEOUT_KEY, String(secs)).catch(() => {});
+    };
+
+    // ─── S-1: Breathing default pattern ─────────────────────────────────────
+    const BREATHING_PATTERN_KEY = "imotara.breathing.defaultPattern.v1";
+    const BREATHING_PATTERN_LABELS = ["Box (4-4-4-4)", "4-7-8 Calming", "Simple (4-0-6-0)"] as const;
+    const [breathingDefaultPattern, setBreathingDefaultPattern] = React.useState(0);
+    React.useEffect(() => {
+        AsyncStorage.getItem(BREATHING_PATTERN_KEY).then((v) => {
+            const n = parseInt(v ?? "0", 10);
+            setBreathingDefaultPattern([0, 1, 2].includes(n) ? n : 0);
+        }).catch(() => {});
+    }, []);
+    const handleBreathingPatternChange = async (idx: number) => {
+        setBreathingDefaultPattern(idx);
+        await AsyncStorage.setItem(BREATHING_PATTERN_KEY, String(idx)).catch(() => {});
+    };
+
+    // ─── S-5: Companion memory auto-capture ─────────────────────────────────
+    const MEMORY_CAPTURE_KEY = "imotara.memory.capture.enabled.v1";
+    const [memoryCaptureEnabled, setMemoryCaptureEnabled] = React.useState(true);
+    React.useEffect(() => {
+        AsyncStorage.getItem(MEMORY_CAPTURE_KEY).then((v) => setMemoryCaptureEnabled(v !== "0")).catch(() => {});
+    }, []);
+    const handleMemoryCaptureToggle = async (val: boolean) => {
+        setMemoryCaptureEnabled(val);
+        await AsyncStorage.setItem(MEMORY_CAPTURE_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    // ─── S-7: TTS auto-read new assistant messages ───────────────────────────
+    const TTS_AUTO_READ_KEY = "imotara.tts.autoRead.v1";
+    const [ttsAutoRead, setTtsAutoRead] = React.useState(false);
+    React.useEffect(() => {
+        AsyncStorage.getItem(TTS_AUTO_READ_KEY).then((v) => setTtsAutoRead(v === "1")).catch(() => {});
+    }, []);
+    const handleTtsAutoReadToggle = async (val: boolean) => {
+        setTtsAutoRead(val);
+        await AsyncStorage.setItem(TTS_AUTO_READ_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    // ─── S-4: 30-day challenge show/hide ────────────────────────────────────
+    const CHALLENGE_SHOW_KEY = "imotara.challenge.show.v1";
+    const [challengeShow, setChallengeShow] = React.useState(true);
+    React.useEffect(() => {
+        AsyncStorage.getItem(CHALLENGE_SHOW_KEY).then((v) => setChallengeShow(v !== "0")).catch(() => {});
+    }, []);
+    const handleChallengeShowToggle = async (val: boolean) => {
+        setChallengeShow(val);
+        await AsyncStorage.setItem(CHALLENGE_SHOW_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    // ─── S-8: Reflection journal settings ───────────────────────────────────
+    const JOURNAL_SHOW_KEY = "imotara.journal.show.v1";
+    const JOURNAL_MAX_KEY = "imotara.journal.maxEntries.v1";
+    const JOURNAL_AUTO_DELETE_KEY = "imotara.journal.autoDeleteDays.v1";
+    const JOURNAL_MAX_OPTIONS = [50, 100, 200, 0] as const;
+    const JOURNAL_DELETE_OPTIONS = [0, 30, 60, 90] as const;
+    const [journalShow, setJournalShow] = React.useState(true);
+    const [journalMaxEntries, setJournalMaxEntries] = React.useState(100);
+    const [journalAutoDeleteDays, setJournalAutoDeleteDays] = React.useState(0);
+    React.useEffect(() => {
+        AsyncStorage.getItem(JOURNAL_SHOW_KEY).then((v) => setJournalShow(v !== "0")).catch(() => {});
+        AsyncStorage.getItem(JOURNAL_MAX_KEY).then((v) => { const n = parseInt(v ?? "100", 10); if (isFinite(n)) setJournalMaxEntries(n); }).catch(() => {});
+        AsyncStorage.getItem(JOURNAL_AUTO_DELETE_KEY).then((v) => { const n = parseInt(v ?? "0", 10); if (isFinite(n)) setJournalAutoDeleteDays(n); }).catch(() => {});
+    }, []);
+    const handleJournalShowToggle = async (val: boolean) => {
+        setJournalShow(val);
+        await AsyncStorage.setItem(JOURNAL_SHOW_KEY, val ? "1" : "0").catch(() => {});
+    };
+    const handleJournalMaxChange = async (n: number) => {
+        setJournalMaxEntries(n);
+        await AsyncStorage.setItem(JOURNAL_MAX_KEY, String(n)).catch(() => {});
+    };
+    const handleJournalAutoDeleteChange = async (days: number) => {
+        setJournalAutoDeleteDays(days);
+        await AsyncStorage.setItem(JOURNAL_AUTO_DELETE_KEY, String(days)).catch(() => {});
+    };
+
+    // ─── S-3: On This Day show/hide ─────────────────────────────────────────
+    const OTD_SHOW_KEY = "imotara.history.otd.show.v1";
+    const [otdShow, setOtdShow] = React.useState(true);
+    React.useEffect(() => {
+        AsyncStorage.getItem(OTD_SHOW_KEY).then((v) => setOtdShow(v !== "0")).catch(() => {});
+    }, []);
+    const handleOtdShowToggle = async (val: boolean) => {
+        setOtdShow(val);
+        await AsyncStorage.setItem(OTD_SHOW_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    // ─── S-9: Emotional fingerprint show/hide ────────────────────────────────
+    const FINGERPRINT_SHOW_KEY = "imotara.fingerprint.show.v1";
+    const [fingerprintShow, setFingerprintShow] = React.useState(true);
+    React.useEffect(() => {
+        AsyncStorage.getItem(FINGERPRINT_SHOW_KEY).then((v) => setFingerprintShow(v !== "0")).catch(() => {});
+    }, []);
+    const handleFingerprintShowToggle = async (val: boolean) => {
+        setFingerprintShow(val);
+        await AsyncStorage.setItem(FINGERPRINT_SHOW_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    // ─── S-6: Chat thread auto-cleanup ──────────────────────────────────────
+    const CHAT_CLEANUP_KEY = "imotara.chat.cleanupDays.v1";
+    const CHAT_CLEANUP_OPTIONS = [0, 30, 60, 90] as const;
+    const [chatCleanupDays, setChatCleanupDays] = React.useState(0);
+    React.useEffect(() => {
+        AsyncStorage.getItem(CHAT_CLEANUP_KEY).then((v) => { const n = parseInt(v ?? "0", 10); if (isFinite(n)) setChatCleanupDays(n); }).catch(() => {});
+    }, []);
+    const handleChatCleanupChange = async (days: number) => {
+        setChatCleanupDays(days);
+        await AsyncStorage.setItem(CHAT_CLEANUP_KEY, String(days)).catch(() => {});
     };
 
     function toggleSection(setter: React.Dispatch<React.SetStateAction<boolean>>) {
@@ -1093,6 +1346,84 @@ export default function SettingsScreen() {
             }
         } catch (e) {
             Alert.alert("Export failed", "Could not export your data. Please try again.");
+        }
+    };
+
+    const handleExportDataCSV = async () => {
+        try {
+            const header = "id,from,text,emotion,intensity,timestamp,isSynced";
+            const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+            const rows = history.map((item: HistoryRecord) =>
+                [item.id, item.from, item.text, item.emotion ?? "", item.intensity ?? "", item.timestamp ?? "", item.isSynced ? "true" : "false"]
+                    .map(escape).join(",")
+            );
+            const csv = [header, ...rows].join("\n");
+            const fileName = `imotara-export-${new Date().toISOString().slice(0, 10)}.csv`;
+            const fileUri = FileSystem.cacheDirectory + fileName;
+            await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(fileUri, { mimeType: "text/csv", dialogTitle: "Export Imotara data (CSV)" });
+            } else {
+                Alert.alert("Export unavailable", "Sharing is not available on this device.");
+            }
+        } catch {
+            Alert.alert("Export failed", "Could not export your data. Please try again.");
+        }
+    };
+
+    const handleClearRemoteData = () => {
+        Alert.alert(
+            "Clear remote data?",
+            "This will delete all your synced conversations from the server. Local data on this device is not affected.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete remote data",
+                    style: "destructive",
+                    onPress: async () => {
+                        if (!accessToken) { Alert.alert("Not signed in", "Sign in to delete remote data."); return; }
+                        try {
+                            const base = getApiBaseUrl();
+                            const res = await fetch(`${base}/api/history`, {
+                                method: "DELETE",
+                                headers: { Authorization: `Bearer ${accessToken}` },
+                            });
+                            if (res.ok) {
+                                Alert.alert("Done", "Remote data has been deleted.");
+                            } else {
+                                Alert.alert("Error", "Could not delete remote data. Please try again.");
+                            }
+                        } catch {
+                            Alert.alert("Error", "Could not reach the server. Please try again.");
+                        }
+                    },
+                },
+            ],
+        );
+    };
+
+    const handleExportJournal = async () => {
+        try {
+            const raw = await AsyncStorage.getItem("imotara.journal.v1");
+            const entries: any[] = raw ? JSON.parse(raw) : [];
+            if (entries.length === 0) { Alert.alert("No journal entries", "Write your first journal entry before exporting."); return; }
+            const lines = entries.map((e: any) => {
+                const date = e.createdAt ? new Date(e.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "";
+                return `[${date}] ${e.emotion ? `(${e.emotion}) ` : ""}${e.text ?? ""}`;
+            });
+            const content = `Imotara Journal Export\nExported: ${new Date().toISOString()}\n${"─".repeat(40)}\n\n${lines.join("\n\n")}`;
+            const fileName = `imotara-journal-${new Date().toISOString().slice(0, 10)}.txt`;
+            const fileUri = FileSystem.cacheDirectory + fileName;
+            await FileSystem.writeAsStringAsync(fileUri, content, { encoding: FileSystem.EncodingType.UTF8 });
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(fileUri, { mimeType: "text/plain", dialogTitle: "Export Journal" });
+            } else {
+                Alert.alert("Export unavailable", "Sharing is not available on this device.");
+            }
+        } catch {
+            Alert.alert("Export failed", "Could not export your journal. Please try again.");
         }
     };
 
@@ -1654,10 +1985,11 @@ export default function SettingsScreen() {
                                     }
                                     disabled={busyRef.current.donate}
                                     style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5,
+                                        minHeight: 40,
                                         borderColor: colors.primary,
                                         backgroundColor: "rgba(56, 189, 248, 0.12)",
                                         marginRight: 8,
@@ -1773,16 +2105,17 @@ export default function SettingsScreen() {
                                             key={tier}
                                             onPress={() => setTierSafe(tier)}
                                             style={{
-                                                paddingHorizontal: 12,
-                                                paddingVertical: 6,
-                                                borderRadius: 999,
-                                                borderWidth: 1,
+                                                paddingHorizontal: 14,
+                                                paddingVertical: 9,
+                                                borderRadius: 12,
+                                                borderWidth: 1.5,
+                                                minHeight: 40,
                                                 borderColor: active
                                                     ? colors.primary
                                                     : colors.border,
                                                 backgroundColor: active
-                                                    ? "rgba(56, 189, 248, 0.18)"
-                                                    : colors.surface,
+                                                    ? colors.primaryTint
+                                                    : "transparent",
                                                 marginRight: 8,
                                                 marginBottom: 8,
                                             }}
@@ -1828,11 +2161,8 @@ export default function SettingsScreen() {
                         <Switch
                             value={emotionInsightsEnabled}
                             onValueChange={setEmotionInsightsEnabled}
-                            trackColor={{
-                                false: isDark ? "#4b5563" : "#94a3b8",
-                                true: colors.primary,
-                            }}
-                            thumbColor={"#f9fafb"}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
                         />
                     </View>
 
@@ -1889,7 +2219,7 @@ export default function SettingsScreen() {
                         <Switch
                             value={companionPanelEnabled}
                             onValueChange={setCompanionPanelEnabled}
-                            trackColor={{ false: isDark ? "#4b5563" : "#94a3b8", true: colors.primary }}
+                            trackColor={{ false: colors.border, true: colors.primary }}
                             thumbColor="#ffffff"
                         />
                     </View>
@@ -1907,7 +2237,7 @@ export default function SettingsScreen() {
                         <Switch
                             value={planPanelEnabled}
                             onValueChange={setPlanPanelEnabled}
-                            trackColor={{ false: isDark ? "#4b5563" : "#94a3b8", true: colors.primary }}
+                            trackColor={{ false: colors.border, true: colors.primary }}
                             thumbColor="#ffffff"
                         />
                     </View>
@@ -2011,7 +2341,7 @@ export default function SettingsScreen() {
                                             key={h}
                                             onPress={() => handleInactivityChange(h)}
                                             style={{
-                                                paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
+                                                paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40,
                                                 borderColor: inactivityHours === h ? colors.primary : colors.border,
                                                 backgroundColor: inactivityHours === h ? colors.primaryTint : "transparent",
                                             }}
@@ -2043,7 +2373,7 @@ export default function SettingsScreen() {
                                     key={secs}
                                     onPress={() => handleVoiceDurationChange(secs)}
                                     style={{
-                                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
                                         backgroundColor: active ? colors.primaryTint : "transparent",
                                     }}
@@ -2063,7 +2393,7 @@ export default function SettingsScreen() {
                                     key={val}
                                     onPress={() => handleVoiceQualityChange(val)}
                                     style={{
-                                        paddingHorizontal: 20, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
                                         backgroundColor: active ? colors.primaryTint : "transparent",
                                     }}
@@ -2090,7 +2420,7 @@ export default function SettingsScreen() {
                                 <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textPrimary }}>Hands-free conversation</Text>
                                 <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Speak → Imotara types, replies, and reads aloud automatically</Text>
                             </View>
-                            <Switch value={handsfree} onValueChange={handleHandsfreeToggle} trackColor={{ false: "rgba(148,163,184,0.3)", true: "rgba(124,58,237,0.8)" }} thumbColor="#fff" />
+                            <Switch value={handsfree} onValueChange={handleHandsfreeToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
                         </View>
                     </View>
                 </AppSurface>
@@ -2204,7 +2534,15 @@ export default function SettingsScreen() {
                     />
                 </AppSurface>
 
-                {/* C-1: Typing indicator speed */}
+                {/* Reduced motion */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <SettingRow label="Reduced motion" description="Disable animations and transitions in the app">
+                        <Switch value={reducedMotion} onValueChange={handleReducedMotionToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                    </SettingRow>
+                </AppSurface>
+
+                {/* C-1: Typing indicator speed — gated: Plus+ (REPLY_CADENCE) */}
+                {replyCadenceGate.enabled ? (
                 <AppSurface style={{ marginBottom: 16 }}>
                     <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 8 }}>
                         Typing indicator speed
@@ -2215,6 +2553,17 @@ export default function SettingsScreen() {
                         onChange={handleTypingSpeedChange}
                     />
                 </AppSurface>
+                ) : (
+                <AppSurface style={{ marginBottom: 16, opacity: 0.5 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Typing indicator speed</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Available on Plus and above</Text>
+                        </View>
+                        <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Plus+</Text>
+                    </View>
+                </AppSurface>
+                )}
 
                 {/* U-2: Reaction icon set */}
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -2229,6 +2578,201 @@ export default function SettingsScreen() {
                         value={reactionsSet}
                         onChange={handleReactionsSetChange}
                     />
+                </AppSurface>
+
+                {/* Chat behaviour toggles */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "600", marginBottom: 12 }}>
+                        Chat behaviour
+                    </Text>
+
+                    <SettingRow label="Hide Grow nudge" description="Permanently hide the Grow feature suggestion in Chat">
+                        <Switch value={growNudgePerm} onValueChange={handleGrowNudgePermToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                    </SettingRow>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Sentiment seed chips" description="Show quick-tap mood hints above the message input">
+                            <Switch value={sentimentChipsEnabled} onValueChange={handleSentimentChipsToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Weekly mood recap" description="Show the weekly mood summary banner in Chat">
+                            <Switch value={weeklyRecapEnabled} onValueChange={handleWeeklyRecapToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Message undo (5s)" description="Allow undoing a sent message within 5 seconds of sending">
+                            <Switch value={undoEnabled} onValueChange={handleUndoEnabledToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Daily check-in" description="Show the 'How are you right now?' banner once per day">
+                            <Switch value={dailyCheckinShow} onValueChange={handleDailyCheckinShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Collective pulse" description="Show anonymous community mood snapshot in Chat">
+                            <Switch value={collectivePulseShow} onValueChange={handleCollectivePulseShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Tone reflection card" description="Show session tone summary after 3+ messages">
+                            <Switch value={toneReflectionShow} onValueChange={handleToneReflectionShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Return greeting" description="Show a welcome-back card after being away">
+                            <Switch value={returnGreetingShow} onValueChange={handleReturnGreetingShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                        {returnGreetingShow && (
+                            <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6 }}>Show after absence of</Text>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                    {RETURN_GREETING_HOUR_OPTIONS.map((h) => (
+                                        <TouchableOpacity
+                                            key={h}
+                                            onPress={() => handleReturnGreetingHoursChange(h)}
+                                            style={{
+                                                paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12,
+                                                borderWidth: 1.5, minHeight: 40,
+                                                borderColor: returnGreetingHours === h ? colors.primary : colors.border,
+                                                backgroundColor: returnGreetingHours === h ? colors.primaryTint : "transparent",
+                                            }}
+                                        >
+                                            <Text style={{ fontSize: 12, color: returnGreetingHours === h ? colors.primary : colors.textSecondary }}>
+                                                {h === 24 ? "24 h" : h === 48 ? "48 h" : `${h} h`}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Mood glimpse" description="Show latest detected mood at the top of Chat">
+                            <Switch value={moodGlimpseShow} onValueChange={handleMoodGlimpseShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Milestone celebration" description="Show a card when you resolve a recurring emotional theme">
+                            <Switch value={milestoneShow} onValueChange={handleMilestoneShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Unsent Letter hint" description="Show contextual hint to try the Unsent Letter feature">
+                            <Switch value={unsentHintShow} onValueChange={handleUnsentHintShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Trial countdown banner" description="Show remaining trial days banner in Chat">
+                            <Switch value={trialBannerShow} onValueChange={handleTrialBannerShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    {/* Search mode — gated: Plus+ (SEARCH_MODE) */}
+                    {searchModeGate.enabled ? (
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Exact history search" description="Match the exact phrase instead of individual words">
+                            <Switch value={searchMode === "exact"} onValueChange={handleSearchModeToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+                    ) : (
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8, opacity: 0.5 }}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 13, color: colors.textPrimary }}>Exact history search</Text>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Available on Plus and above</Text>
+                            </View>
+                            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Plus+</Text>
+                        </View>
+                    </View>
+                    )}
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Companion memory auto-capture" description="Automatically save key facts from conversations to companion memory">
+                            <Switch value={memoryCaptureEnabled} onValueChange={handleMemoryCaptureToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Auto-read assistant replies" description="Automatically read out new assistant messages using text-to-speech">
+                            <Switch value={ttsAutoRead} onValueChange={handleTtsAutoReadToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+                </AppSurface>
+
+                {/* Grow & Wellbeing */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "600", marginBottom: 12 }}>
+                        Grow &amp; Wellbeing
+                    </Text>
+
+                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6 }}>Default breathing pattern</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+                        {BREATHING_PATTERN_LABELS.map((label, idx) => (
+                            <TouchableOpacity
+                                key={idx}
+                                onPress={() => handleBreathingPatternChange(idx)}
+                                style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40, borderColor: breathingDefaultPattern === idx ? colors.primary : colors.border, backgroundColor: breathingDefaultPattern === idx ? colors.primaryTint : "transparent" }}
+                            >
+                                <Text style={{ fontSize: 12, color: breathingDefaultPattern === idx ? colors.primary : colors.textSecondary }}>{label}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}>
+                        <SettingRow label="30-day challenge widget" description="Show the 30-day emotional wellness challenge on the Grow screen">
+                            <Switch value={challengeShow} onValueChange={handleChallengeShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Reflection journal" description="Show the reflection journal section on the Grow screen">
+                            <Switch value={journalShow} onValueChange={handleJournalShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                        {journalShow && (
+                            <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6 }}>Max journal entries</Text>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                                    {(JOURNAL_MAX_OPTIONS as readonly number[]).map((n) => (
+                                        <TouchableOpacity key={n} onPress={() => handleJournalMaxChange(n)} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40, borderColor: journalMaxEntries === n ? colors.primary : colors.border, backgroundColor: journalMaxEntries === n ? colors.primaryTint : "transparent" }}>
+                                            <Text style={{ fontSize: 12, color: journalMaxEntries === n ? colors.primary : colors.textSecondary }}>{n === 0 ? "Unlimited" : String(n)}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6 }}>Auto-delete entries after</Text>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                    {(JOURNAL_DELETE_OPTIONS as readonly number[]).map((d) => (
+                                        <TouchableOpacity key={d} onPress={() => handleJournalAutoDeleteChange(d)} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40, borderColor: journalAutoDeleteDays === d ? colors.primary : colors.border, backgroundColor: journalAutoDeleteDays === d ? colors.primaryTint : "transparent" }}>
+                                            <Text style={{ fontSize: 12, color: journalAutoDeleteDays === d ? colors.primary : colors.textSecondary }}>{d === 0 ? "Never" : `${d} days`}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="On This Day card" description="Show past entries from this date in history">
+                            <Switch value={otdShow} onValueChange={handleOtdShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
+
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 8 }}>
+                        <SettingRow label="Emotional fingerprint" description="Show your unique emotional pattern analysis in Trends">
+                            <Switch value={fingerprintShow} onValueChange={handleFingerprintShowToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
                 </AppSurface>
 
                 </View>
@@ -2309,12 +2853,13 @@ export default function SettingsScreen() {
                                         })
                                     }
                                     style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5,
+                                        minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : colors.surface,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
                                         marginRight: 8,
                                         marginBottom: 8,
                                     }}
@@ -2352,12 +2897,13 @@ export default function SettingsScreen() {
                                         })
                                     }
                                     style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5,
+                                        minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : colors.surface,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
                                         marginRight: 8,
                                         marginBottom: 8,
                                     }}
@@ -2452,12 +2998,13 @@ export default function SettingsScreen() {
                                         })
                                     }
                                     style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5,
+                                        minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : colors.surface,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
                                         marginRight: 8,
                                         marginBottom: 8,
                                     }}
@@ -2504,8 +3051,8 @@ export default function SettingsScreen() {
                                     },
                                 })
                             }
-                            trackColor={{ false: isDark ? "#4b5563" : "#94a3b8", true: colors.primary }}
-                            thumbColor={"#f9fafb"}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
                         />
                     </View>
 
@@ -2579,14 +3126,13 @@ export default function SettingsScreen() {
                                     }
                                     disabled={!toneContext?.companion?.enabled}
                                     style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5,
+                                        minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active
-                                            ? "rgba(56, 189, 248, 0.18)"
-                                            : colors.surface,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
                                         marginRight: 8,
                                         marginBottom: 8,
                                         opacity: toneContext?.companion?.enabled ? 1 : 0.5,
@@ -2644,14 +3190,13 @@ export default function SettingsScreen() {
                                     }
                                     disabled={!toneContext?.companion?.enabled}
                                     style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5,
+                                        minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active
-                                            ? "rgba(56, 189, 248, 0.18)"
-                                            : colors.surface,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
                                         marginRight: 8,
                                         marginBottom: 8,
                                         opacity: toneContext?.companion?.enabled ? 1 : 0.5,
@@ -2772,14 +3317,13 @@ export default function SettingsScreen() {
                                     }
                                     disabled={!toneContext?.companion?.enabled}
                                     style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5,
+                                        minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active
-                                            ? "rgba(56, 189, 248, 0.18)"
-                                            : colors.surface,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
                                         marginRight: 8,
                                         marginBottom: 8,
                                         opacity: toneContext?.companion?.enabled ? 1 : 0.5,
@@ -2828,7 +3372,8 @@ export default function SettingsScreen() {
                         </Text>
                     </TouchableOpacity>
 
-                    {/* T-1: TTS speed + pitch */}
+                    {/* T-1: TTS speed + pitch — gated: Plus+ (TTS_ADVANCED) */}
+                    {ttsAdvancedGate.enabled ? (
                     <View style={{ marginBottom: 14 }}>
                         <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
                             <Text style={{ fontSize: 12, color: colors.textSecondary }}>Voice speed</Text>
@@ -2840,13 +3385,13 @@ export default function SettingsScreen() {
                                     key={v}
                                     onPress={() => handleTtsRateChange(v)}
                                     style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5,
+                                        minHeight: 44,
                                         borderColor: Math.abs(ttsRate - v) < 0.01 ? colors.primary : colors.border,
                                         backgroundColor: Math.abs(ttsRate - v) < 0.01 ? colors.primaryTint : "transparent",
-                                        minHeight: 44,
                                         justifyContent: "center",
                                     }}
                                 >
@@ -2866,13 +3411,13 @@ export default function SettingsScreen() {
                                     key={v}
                                     onPress={() => handleTtsPitchChange(v)}
                                     style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5,
+                                        minHeight: 44,
                                         borderColor: Math.abs(ttsPitch - v) < 0.01 ? colors.primary : colors.border,
                                         backgroundColor: Math.abs(ttsPitch - v) < 0.01 ? colors.primaryTint : "transparent",
-                                        minHeight: 44,
                                         justifyContent: "center",
                                     }}
                                 >
@@ -2883,6 +3428,15 @@ export default function SettingsScreen() {
                             ))}
                         </View>
                     </View>
+                    ) : (
+                    <View style={{ marginBottom: 14, opacity: 0.5, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "500" }}>Voice speed &amp; pitch</Text>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>{!ttsAdvancedGate.enabled ? ttsAdvancedGate.reason : ""}</Text>
+                        </View>
+                        <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Plus+</Text>
+                    </View>
+                    )}
 
                     {/* Avatar appearance */}
                     <AvatarSlider
@@ -2929,12 +3483,13 @@ export default function SettingsScreen() {
                                     }
                                     disabled={!toneContext?.companion?.enabled}
                                     style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5,
+                                        minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active ? "rgba(56, 189, 248, 0.18)" : colors.surface,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
                                         marginRight: 8,
                                         marginBottom: 8,
                                         opacity: toneContext?.companion?.enabled ? 1 : 0.5,
@@ -2957,11 +3512,17 @@ export default function SettingsScreen() {
                     )}
                 </AppSurface>
 
-                {/* G-1: Emotional arc cadence */}
+                {/* G-1: Emotional arc cadence — gated: Pro+ (GROWTH_ARC) */}
+                {growthArcGate.enabled ? (
                 <AppSurface style={{ marginBottom: 16 }}>
-                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
-                        Emotional arc cadence
-                    </Text>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
+                            Emotional arc cadence
+                        </Text>
+                        {!growthArcGate.enabled && (
+                            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Pro+</Text>
+                        )}
+                    </View>
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
                         How often your emotional journey narrative is generated
                     </Text>
@@ -2974,7 +3535,7 @@ export default function SettingsScreen() {
                                     key={days}
                                     onPress={() => handleArcCadenceChange(days)}
                                     style={{
-                                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
                                         backgroundColor: active ? colors.primaryTint : "transparent",
                                     }}
@@ -2985,12 +3546,29 @@ export default function SettingsScreen() {
                         })}
                     </View>
                 </AppSurface>
+                ) : (
+                <AppSurface style={{ marginBottom: 16, opacity: 0.5 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Emotional arc cadence</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{!growthArcGate.enabled ? growthArcGate.reason : ""}</Text>
+                        </View>
+                        <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Pro+</Text>
+                    </View>
+                </AppSurface>
+                )}
 
-                {/* G-2: Companion letter cadence */}
+                {/* G-2: Companion letter cadence — gated: Pro+ (COMPANION_LETTER) */}
+                {companionLetterGate.enabled ? (
                 <AppSurface style={{ marginBottom: 16 }}>
-                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
-                        Companion letter cadence
-                    </Text>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
+                            Companion letter cadence
+                        </Text>
+                        {!companionLetterGate.enabled && (
+                            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Pro+</Text>
+                        )}
+                    </View>
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
                         How often your companion writes you a personal letter
                     </Text>
@@ -3003,7 +3581,7 @@ export default function SettingsScreen() {
                                     key={days}
                                     onPress={() => handleLetterCadenceChange(days)}
                                     style={{
-                                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
                                         backgroundColor: active ? colors.primaryTint : "transparent",
                                     }}
@@ -3014,6 +3592,17 @@ export default function SettingsScreen() {
                         })}
                     </View>
                 </AppSurface>
+                ) : (
+                <AppSurface style={{ marginBottom: 16, opacity: 0.5 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Companion letter cadence</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{!companionLetterGate.enabled ? companionLetterGate.reason : ""}</Text>
+                        </View>
+                        <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Pro+</Text>
+                    </View>
+                </AppSurface>
+                )}
 
                 {/* G-3: Open-loop thresholds */}
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -3032,7 +3621,7 @@ export default function SettingsScreen() {
                                     key={n}
                                     onPress={() => handleOpenLoopThreadsChange(n)}
                                     style={{
-                                        paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
                                         backgroundColor: active ? colors.primaryTint : "transparent",
                                     }}
@@ -3052,7 +3641,7 @@ export default function SettingsScreen() {
                                     key={days}
                                     onPress={() => handleOpenLoopAgeChange(days)}
                                     style={{
-                                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+                                        paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
                                         backgroundColor: active ? colors.primaryTint : "transparent",
                                     }}
@@ -3144,14 +3733,13 @@ export default function SettingsScreen() {
                                         setAnalysisMode(opt.id);
                                     }}
                                     style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5,
+                                        minHeight: 40,
                                         borderColor: active ? colors.primary : colors.border,
-                                        backgroundColor: active
-                                            ? "rgba(56, 189, 248, 0.18)"
-                                            : colors.surface,
+                                        backgroundColor: active ? colors.primaryTint : "transparent",
                                         marginRight: 8,
                                         marginBottom: 8,
                                         opacity: cloudLocked ? 0.45 : 1,
@@ -3348,18 +3936,38 @@ export default function SettingsScreen() {
                         {unsyncedCount > 0 ? ` · Unsynced: ${unsyncedCount}` : ""}
                     </Text>
 
-                    <AppButton
-                        title="Export Data (JSON)"
-                        onPress={handleExportData}
-                        style={{ alignSelf: "flex-start", borderRadius: 999, marginBottom: 8 }}
-                    />
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                        <AppButton
+                            title="Export JSON"
+                            onPress={handleExportData}
+                            style={{ alignSelf: "flex-start", borderRadius: 999 }}
+                        />
+                        <AppButton
+                            title="Export CSV"
+                            onPress={handleExportDataCSV}
+                            style={{ alignSelf: "flex-start", borderRadius: 999 }}
+                        />
+                        <AppButton
+                            title="Export Journal"
+                            onPress={handleExportJournal}
+                            style={{ alignSelf: "flex-start", borderRadius: 999 }}
+                        />
+                    </View>
 
-                    <AppButton
-                        title="Clear Local History"
-                        onPress={handleClearHistory}
-                        variant="destructive"
-                        style={{ alignSelf: "flex-start", borderRadius: 999 }}
-                    />
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                        <AppButton
+                            title="Clear Local History"
+                            onPress={handleClearHistory}
+                            variant="destructive"
+                            style={{ alignSelf: "flex-start", borderRadius: 999 }}
+                        />
+                        <AppButton
+                            title="Clear Remote Data"
+                            onPress={handleClearRemoteData}
+                            variant="destructive"
+                            style={{ alignSelf: "flex-start", borderRadius: 999 }}
+                        />
+                    </View>
 
                     {/* Auto-clear old messages */}
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 14, marginBottom: 6 }}>
@@ -3390,11 +3998,11 @@ export default function SettingsScreen() {
                                 }}
                                 style={{
                                     paddingHorizontal: 14,
-                                    paddingVertical: 7,
-                                    borderRadius: 999,
-                                    borderWidth: 1,
+                                    paddingVertical: 9,
+                                    borderRadius: 12,
+                                    borderWidth: 1.5, minHeight: 40,
                                     borderColor: colors.border,
-                                    backgroundColor: colors.surface,
+                                    backgroundColor: "transparent",
                                 }}
                             >
                                 <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textSecondary }}>
@@ -3460,15 +4068,15 @@ export default function SettingsScreen() {
                                     onPress={() => setDelayPreset(sec)}
                                     style={{
                                         paddingHorizontal: 14,
-                                        paddingVertical: 6,
-                                        borderRadius: 999,
-                                        borderWidth: 1,
+                                        paddingVertical: 9,
+                                        borderRadius: 12,
+                                        borderWidth: 1.5, minHeight: 40,
                                         borderColor: isActive
                                             ? colors.primary
                                             : colors.border,
                                         backgroundColor: isActive
-                                            ? "rgba(56, 189, 248, 0.18)"
-                                            : colors.surface,
+                                            ? colors.primaryTint
+                                            : "transparent",
                                         marginRight: index < 2 ? 8 : 0,
                                     }}
                                 >
@@ -3704,6 +4312,70 @@ export default function SettingsScreen() {
                     </View>
                 </AppSurface>
 
+                {/* P-3: Crisis country override */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Crisis resources country
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        Override the country used for crisis helpline resources. Default auto-detects from your device locale.
+                    </Text>
+                    <TouchableOpacity
+                        onPress={() => setShowCrisisCountryModal(true)}
+                        style={{
+                            flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                            borderRadius: 12, borderWidth: 1, borderColor: colors.border,
+                            backgroundColor: colors.surfaceSoft, paddingHorizontal: 14, paddingVertical: 10,
+                        }}
+                    >
+                        <Text style={{ fontSize: 13, color: colors.textPrimary }}>
+                            {CRISIS_COUNTRIES.find((c) => c.code === crisisCountry)?.label ?? "Auto-detect"}
+                        </Text>
+                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>›</Text>
+                    </TouchableOpacity>
+                    <Modal
+                        visible={showCrisisCountryModal}
+                        transparent
+                        animationType="slide"
+                        onRequestClose={() => setShowCrisisCountryModal(false)}
+                    >
+                        <TouchableOpacity
+                            style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
+                            activeOpacity={1}
+                            onPress={() => setShowCrisisCountryModal(false)}
+                        >
+                            <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+                                <View style={{ backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 16, paddingBottom: 32, maxHeight: 480 }}>
+                                    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textSecondary, textAlign: "center", marginBottom: 12, paddingHorizontal: 16 }}>
+                                        Select country for crisis resources
+                                    </Text>
+                                    <ScrollView showsVerticalScrollIndicator={false}>
+                                        {CRISIS_COUNTRIES.map((c) => {
+                                            const active = crisisCountry === c.code;
+                                            return (
+                                                <TouchableOpacity
+                                                    key={c.code}
+                                                    onPress={() => handleCrisisCountryChange(c.code)}
+                                                    style={{
+                                                        paddingVertical: 14, paddingHorizontal: 20,
+                                                        flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                                                        borderBottomWidth: 0.5, borderBottomColor: colors.border,
+                                                        backgroundColor: active ? `${colors.primary}18` : "transparent",
+                                                    }}
+                                                >
+                                                    <Text style={{ fontSize: 14, color: active ? colors.primary : colors.textPrimary, fontWeight: active ? "600" : "400" }}>
+                                                        {c.label}
+                                                    </Text>
+                                                    {active && <Text style={{ fontSize: 16, color: colors.primary }}>✓</Text>}
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </ScrollView>
+                                </View>
+                            </TouchableOpacity>
+                        </TouchableOpacity>
+                    </Modal>
+                </AppSurface>
 
                 </View>
                 )}
@@ -3738,25 +4410,20 @@ export default function SettingsScreen() {
                                 <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "500" }}>{label}</Text>
                                 <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>{desc}</Text>
                             </View>
-                            <TouchableOpacity
-                                onPress={() => handleMindsetToggle(key)}
-                                activeOpacity={0.8}
-                                style={{
-                                    width: 44, height: 26, borderRadius: 13,
-                                    backgroundColor: mindsetPrefs[key] ? "#7c3aed" : "rgba(148,163,184,0.25)",
-                                    justifyContent: "center",
-                                    paddingHorizontal: 2,
-                                }}
-                            >
-                                <View style={{
-                                    width: 22, height: 22, borderRadius: 11,
-                                    backgroundColor: "#fff",
-                                    transform: [{ translateX: mindsetPrefs[key] ? 18 : 0 }],
-                                    shadowColor: "#000", shadowOpacity: 0.15, shadowOffset: { width: 0, height: 1 }, shadowRadius: 2,
-                                }} />
-                            </TouchableOpacity>
+                            <Switch
+                                value={mindsetPrefs[key]}
+                                onValueChange={() => handleMindsetToggle(key)}
+                                trackColor={{ false: colors.border, true: colors.primary }}
+                                thumbColor="#ffffff"
+                            />
                         </View>
                     ))}
+
+                    <View style={{ borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", marginTop: 8, paddingTop: 12 }}>
+                        <SettingRow label="30-day mood chart" description="Show the 30-day mood trend chart on Trends tab">
+                            <Switch value={moodChartEnabled} onValueChange={handleMoodChartToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                        </SettingRow>
+                    </View>
                 </AppSurface>
                 </View>
                 )}
@@ -3767,7 +4434,7 @@ export default function SettingsScreen() {
                 <View>
 
                 {/* Emotional fingerprint */}
-                {emotionalFingerprint && (
+                {fingerprintShow && emotionalFingerprint && (
                     <AppSurface style={{ marginBottom: 16 }}>
                         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                             <View>
@@ -3938,11 +4605,8 @@ export default function SettingsScreen() {
                         <Switch
                             value={teenMode}
                             onValueChange={setTeenMode}
-                            trackColor={{
-                                false: isDark ? "#4b5563" : "#94a3b8",
-                                true: "#7c3aed",
-                            }}
-                            thumbColor={"#f9fafb"}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
                         />
                     </View>
 
@@ -4004,11 +4668,11 @@ export default function SettingsScreen() {
                                 onPress={() => setFeedbackType(t)}
                                 style={{
                                     paddingHorizontal: 14,
-                                    paddingVertical: 6,
-                                    borderRadius: 999,
-                                    borderWidth: 1,
-                                    borderColor: feedbackType === t ? colors.primary : "rgba(255,255,255,0.15)",
-                                    backgroundColor: feedbackType === t ? "rgba(56,189,248,0.15)" : "transparent",
+                                    paddingVertical: 9,
+                                    borderRadius: 12,
+                                    borderWidth: 1.5, minHeight: 40,
+                                    borderColor: feedbackType === t ? colors.primary : colors.border,
+                                    backgroundColor: feedbackType === t ? colors.primaryTint : "transparent",
                                 }}
                             >
                                 <Text style={{ fontSize: 13, color: feedbackType === t ? colors.primary : colors.textSecondary, fontWeight: feedbackType === t ? "600" : "400" }}>
@@ -4107,12 +4771,35 @@ export default function SettingsScreen() {
                                 key={d}
                                 onPress={() => handleAutoCleanupChange(d)}
                                 style={{
-                                    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
+                                    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40,
                                     borderColor: autoCleanupDays === d ? colors.primary : colors.border,
                                     backgroundColor: autoCleanupDays === d ? colors.primaryTint : "transparent",
                                 }}
                             >
                                 <Text style={{ fontSize: 12, color: autoCleanupDays === d ? colors.primary : colors.textSecondary }}>
+                                    {d === 0 ? "Never" : `${d} days`}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </AppSurface>
+
+                {/* S-6: Chat thread auto-cleanup */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>Auto-delete old chat threads</Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 12 }}>Automatically remove chat threads older than:</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                        {(CHAT_CLEANUP_OPTIONS as readonly number[]).map((d) => (
+                            <TouchableOpacity
+                                key={d}
+                                onPress={() => handleChatCleanupChange(d)}
+                                style={{
+                                    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, minHeight: 40,
+                                    borderColor: chatCleanupDays === d ? colors.primary : colors.border,
+                                    backgroundColor: chatCleanupDays === d ? colors.primaryTint : "transparent",
+                                }}
+                            >
+                                <Text style={{ fontSize: 12, color: chatCleanupDays === d ? colors.primary : colors.textSecondary }}>
                                     {d === 0 ? "Never" : `${d} days`}
                                 </Text>
                             </TouchableOpacity>

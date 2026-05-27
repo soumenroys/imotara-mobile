@@ -156,6 +156,7 @@ const LICENSE_EXPIRES_AT_KEY = "imotara_license_expires_at_v1";
 function isValidTier(v: unknown): v is LicenseTier {
     return (
         v === "FREE" ||
+        v === "PLUS" ||
         v === "PREMIUM" ||
         v === "FAMILY" ||
         v === "EDU" ||
@@ -319,7 +320,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
                     const t = String(licRow.tier || "free").toLowerCase();
                     const mobileTier: LicenseTier =
-                        t === "plus" || t === "pro" ? "PREMIUM" :
+                        t === "pro" ? "PREMIUM" :
+                        t === "plus" ? "PLUS" :
                         t === "family" ? "FAMILY" :
                         t === "edu" ? "EDU" :
                         t === "enterprise" ? "ENTERPRISE" : "FREE";

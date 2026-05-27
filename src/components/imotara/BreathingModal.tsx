@@ -15,6 +15,7 @@ import {
 import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColors } from "../../theme/ThemeContext";
 
 // ── Lotus mandala header ─────────────────────────────────────────────────────
@@ -175,6 +176,13 @@ export function BreathingModal({ visible, onClose }: Props) {
   const colors = useColors();
   const [selectedPattern, setSelectedPattern] = useState(0);
   const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem("imotara.breathing.defaultPattern.v1").then((v) => {
+      const n = parseInt(v ?? "0", 10);
+      if ([0, 1, 2].includes(n)) setSelectedPattern(n);
+    }).catch(() => {});
+  }, []);
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [cycles, setCycles] = useState(0);

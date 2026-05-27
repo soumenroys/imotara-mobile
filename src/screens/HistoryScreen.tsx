@@ -367,6 +367,12 @@ export default function HistoryScreen() {
     const [showScrollToLatest, setShowScrollToLatest] = React.useState(false);
     const [showScrollToTop, setShowScrollToTop] = React.useState(false);
 
+    // ── OTD visibility ───────────────────────────────────────────────────────
+    const [otdShow, setOtdShow] = React.useState(true);
+    React.useEffect(() => {
+        AsyncStorage.getItem("imotara.history.otd.show.v1").then((v) => { if (v === "0") setOtdShow(false); }).catch(() => {});
+    }, []);
+
     // ── Mindset Analysis ─────────────────────────────────────────────────────
     const MINDSET_PREFS_KEY = "imotara:mindset.analysis.prefs.v1";
     type MindsetPrefs = { today: boolean; week7: boolean; days30: boolean; allTime: boolean };
@@ -378,6 +384,7 @@ export default function HistoryScreen() {
         neutral: "😐", hopeful: "🌱", hope: "🌱", gratitude: "🙏", confused: "🤔",
     };
     const [mindsetPrefs, setMindsetPrefs] = React.useState<MindsetPrefs>({ today: false, week7: false, days30: false, allTime: false });
+    const [mindsetDismissedSession, setMindsetDismissedSession] = React.useState<Set<keyof MindsetPrefs>>(new Set());
     const [mindsetAnalyses, setMindsetAnalyses] = React.useState<Record<string, MindsetResult>>({});
     const [expandedCapsules, setExpandedCapsules] = React.useState<Record<string, boolean>>({});
     const [capsuleInsights, setCapsuleInsights] = React.useState<Record<string, { analysis: string; advice: string } | "loading" | "error">>({});
@@ -836,11 +843,20 @@ export default function HistoryScreen() {
         return sortedHistory.filter((h: HistoryRecord) => h.from === "user");
     }, [sortedHistory, showAssistantReplies]);
 
+    const [searchMode, setSearchMode] = React.useState<"fuzzy" | "exact">("fuzzy");
+    React.useEffect(() => {
+        AsyncStorage.getItem("imotara.search.mode.v1").then((v) => setSearchMode(v === "exact" ? "exact" : "fuzzy")).catch(() => {});
+    }, []);
+
     const searchFilteredHistory = React.useMemo(() => {
         const q = showSearch ? debouncedSearch.trim().toLowerCase() : "";
         if (!q) return visibleHistory;
-        return visibleHistory.filter((h) => h.text?.toLowerCase().includes(q));
-    }, [visibleHistory, showSearch, debouncedSearch]);
+        return visibleHistory.filter((h) => {
+            const text = h.text?.toLowerCase() ?? "";
+            if (searchMode === "exact") return text.includes(q);
+            return q.split(/\s+/).every((word) => text.includes(word));
+        });
+    }, [visibleHistory, showSearch, debouncedSearch, searchMode]);
 
     const emotionFilteredHistory = React.useMemo(() => {
         if (selectedEmotionFilter === "all") return searchFilteredHistory;
@@ -1165,7 +1181,7 @@ export default function HistoryScreen() {
                                     </View>
                                     <Ionicons name="chevron-forward" size={16} color="rgba(165,180,252,0.7)" />
                                 </TouchableOpacity>
-                                {onThisDay.length > 0 && (
+                                {otdShow && onThisDay.length > 0 && (
                                     <View style={{ marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 12 }}>
                                         <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textSecondary, marginBottom: 6 }}>On This Day</Text>
                                         {onThisDay.map((item: HistoryRecord) => {
@@ -1345,17 +1361,18 @@ export default function HistoryScreen() {
                                             { key: "days30",  label: "Last 30 Days",     icon: "🗓️" },
                                             { key: "allTime", label: "All Time",         icon: "✦" },
                                         ] as { key: keyof MindsetPrefs; label: string; icon: string }[])
-                                            .filter(({ key }) => mindsetPrefs[key])
+                                            .filter(({ key }) => mindsetPrefs[key] && !mindsetDismissedSession.has(key))
                                             .map(({ key, label, icon }) => {
                                                 const analysis = mindsetAnalyses[key];
                                                 const isExpanded = expandedCapsules[key] ?? false;
                                                 const dominantEmoji = analysis ? (MINDSET_EMOTION_ICON[analysis.dominant] ?? "💭") : null;
                                                 return (
                                                     <View key={key} style={{ borderRadius: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", backgroundColor: colors.surface, marginBottom: 8, overflow: "hidden" }}>
+                                                        <View style={{ flexDirection: "row", alignItems: "center" }}>
                                                         <TouchableOpacity
                                                             activeOpacity={0.8}
                                                             onPress={() => handleCapsuleToggle(key)}
-                                                            style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 12 }}
+                                                            style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingLeft: 14, paddingVertical: 12, flex: 1 }}
                                                         >
                                                             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
                                                                 <Text style={{ fontSize: 18 }}>{icon}</Text>
@@ -1370,8 +1387,26 @@ export default function HistoryScreen() {
                                                                     )}
                                                                 </View>
                                                             </View>
-                                                            <Text style={{ fontSize: 14, color: colors.textSecondary, transform: [{ rotate: isExpanded ? "180deg" : "0deg" }] }}>▾</Text>
+                                                            <Text style={{ fontSize: 14, color: colors.textSecondary, marginRight: 6, transform: [{ rotate: isExpanded ? "180deg" : "0deg" }] }}>▾</Text>
                                                         </TouchableOpacity>
+                                                        <TouchableOpacity
+                                                            onPress={() => Alert.alert(label, "What would you like to do?", [
+                                                                { text: "Dismiss forever", style: "destructive", onPress: async () => {
+                                                                    const next = { ...mindsetPrefs, [key]: false };
+                                                                    setMindsetPrefs(next);
+                                                                    await AsyncStorage.setItem(MINDSET_PREFS_KEY, JSON.stringify(next)).catch(() => {});
+                                                                }},
+                                                                { text: "Dismiss for now", onPress: () => {
+                                                                    setMindsetDismissedSession(prev => new Set([...prev, key]));
+                                                                }},
+                                                                { text: "Cancel", style: "cancel" },
+                                                            ])}
+                                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                            style={{ paddingRight: 14, paddingVertical: 12 }}
+                                                        >
+                                                            <Ionicons name="ellipsis-vertical" size={14} color={colors.textSecondary} />
+                                                        </TouchableOpacity>
+                                                        </View>
 
                                                         {isExpanded && analysis && (
                                                             <View style={{ borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", paddingHorizontal: 14, paddingBottom: 14, paddingTop: 12 }}>

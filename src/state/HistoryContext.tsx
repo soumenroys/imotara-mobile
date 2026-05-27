@@ -214,6 +214,7 @@ const LAUNCH_CLOUD_SYNC_FREE_FOR_ALL = (() => {
 function isValidTier(v: unknown): v is LicenseTier {
     return (
         v === "FREE" ||
+        v === "PLUS" ||
         v === "PREMIUM" ||
         v === "FAMILY" ||
         v === "EDU" ||

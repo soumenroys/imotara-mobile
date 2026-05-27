@@ -764,6 +764,157 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                             })}
                         </View>
 
+                        {/* Enterprise & Institutional */}
+                        <View style={{
+                            borderRadius: 14, padding: 16, marginBottom: 20,
+                            borderWidth: 1, borderColor: "rgba(167,139,250,0.25)",
+                            backgroundColor: "rgba(167,139,250,0.07)",
+                        }}>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                <Text style={{ fontSize: 14, fontWeight: "700", color: colors.textPrimary }}>
+                                    Enterprise &amp; Institutional
+                                </Text>
+                                <View style={{
+                                    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20,
+                                    backgroundColor: "rgba(167,139,250,0.2)", borderWidth: 1,
+                                    borderColor: "rgba(167,139,250,0.3)",
+                                }}>
+                                    <Text style={{ fontSize: 9, fontWeight: "700", color: "#c4b5fd", letterSpacing: 0.5 }}>
+                                        CUSTOM PRICING
+                                    </Text>
+                                </View>
+                            </View>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 18, marginBottom: 10 }}>
+                                For organisations, healthcare platforms, schools, and HR teams. Includes admin dashboard, multi-profile management, child-safe mode, SSO, data residency, and dedicated support.
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() => Linking.openURL("mailto:info@imotara.com?subject=Enterprise%20inquiry")}
+                                style={{
+                                    paddingVertical: 9, paddingHorizontal: 16, borderRadius: 10,
+                                    backgroundColor: "rgba(139,92,246,0.3)", alignItems: "center",
+                                    borderWidth: 1, borderColor: "rgba(167,139,250,0.3)",
+                                }}
+                            >
+                                <Text style={{ fontSize: 13, fontWeight: "700", color: "#c4b5fd" }}>
+                                    Contact us for Enterprise
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Feature comparison by tier */}
+                        <View style={{ marginBottom: 20 }}>
+                            <Text style={{ fontSize: 14, fontWeight: "700", color: colors.textPrimary, marginBottom: 12 }}>
+                                Compare plans
+                            </Text>
+
+                            {([
+                                {
+                                    tier: "Free",
+                                    color: "#a1a1aa",
+                                    badge: "#27272a",
+                                    items: [
+                                        "20 cloud replies / day",
+                                        "Unlimited on-device replies",
+                                        "7-day cloud history",
+                                        "Basic TTS (device voice)",
+                                        "Voice input (speech-to-text)",
+                                        "Streak tracking",
+                                        "Daily check-in reminder",
+                                        "Encrypted cloud storage",
+                                        "GDPR & data deletion request",
+                                        "Community docs & FAQ",
+                                    ],
+                                },
+                                {
+                                    tier: "Plus",
+                                    color: "#38bdf8",
+                                    badge: "rgba(14,165,233,0.15)",
+                                    items: [
+                                        "Unlimited cloud replies",
+                                        "90-day cloud history",
+                                        "Cross-device sync",
+                                        "Companion mode / personas",
+                                        "Response length control",
+                                        "All companion tones",
+                                        "History search across dates",
+                                        "Data export (JSON, CSV, PDF)",
+                                        "Advanced TTS — voice, speed & pitch",
+                                        "Azure Neural TTS",
+                                        "Language-matched TTS voices",
+                                        "Semantic history search",
+                                        "Reply cadence controls",
+                                        "Session duration stats",
+                                        "Custom notification schedule",
+                                        "Session token management",
+                                        "Email & priority support",
+                                    ],
+                                },
+                                {
+                                    tier: "Pro",
+                                    color: "#818cf8",
+                                    badge: "rgba(99,102,241,0.15)",
+                                    items: [
+                                        "Everything in Plus",
+                                        "Unlimited history",
+                                        "Emotion trends & mood graphs",
+                                        "Conversation insights",
+                                        "Weekly emotional summary",
+                                        "Weekly insight digest (push)",
+                                        "Monthly companion letter",
+                                        "Long-term growth arc narrative",
+                                    ],
+                                },
+                                {
+                                    tier: "Enterprise",
+                                    color: "#c4b5fd",
+                                    badge: "rgba(139,92,246,0.15)",
+                                    items: [
+                                        "Everything in Pro",
+                                        "Multi-profile management",
+                                        "Child-safe mode",
+                                        "Admin dashboard & analytics",
+                                        "User & bulk provisioning",
+                                        "SSO / SAML integration",
+                                        "Data residency control",
+                                        "Audit logs",
+                                        "API access",
+                                        "Custom integrations & webhooks",
+                                        "Institution branding",
+                                        "Dedicated account manager",
+                                        "SLA guarantee",
+                                        "Onboarding assistance",
+                                    ],
+                                },
+                            ] as const).map(({ tier, color, badge, items }) => (
+                                <View key={tier} style={{
+                                    marginBottom: 10, borderRadius: 12,
+                                    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+                                    backgroundColor: "rgba(255,255,255,0.03)",
+                                    overflow: "hidden",
+                                }}>
+                                    <View style={{
+                                        paddingHorizontal: 12, paddingVertical: 8,
+                                        backgroundColor: badge,
+                                        borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)",
+                                    }}>
+                                        <Text style={{ fontSize: 12, fontWeight: "700", color }}>
+                                            {tier}
+                                        </Text>
+                                    </View>
+                                    <View style={{ padding: 12, gap: 5 }}>
+                                        {items.map((item) => (
+                                            <View key={item} style={{ flexDirection: "row", gap: 7, alignItems: "flex-start" }}>
+                                                <Text style={{ color, fontSize: 12, lineHeight: 18 }}>✓</Text>
+                                                <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 18, flex: 1 }}>
+                                                    {item}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+
                         {/* iOS: Restore purchases (App Store guideline requirement) */}
                         {Platform.OS === "ios" && (
                             <TouchableOpacity

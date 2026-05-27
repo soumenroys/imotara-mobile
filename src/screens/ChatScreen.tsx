@@ -1671,8 +1671,18 @@ export default function ChatScreen() {
     { maxDurationMs: voiceMaxDurationMs, quality: voiceQuality, cloudTranscription: voiceCloudTranscription, lang: voiceLangRef.current },
   );
 
-  // Message reactions — messageId → emoji
+  // Message reactions — messageId → emoji (persisted to AsyncStorage)
+  const REACTIONS_KEY = "imotara.reactions.v1";
   const [reactions, setReactions] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    AsyncStorage.getItem(REACTIONS_KEY).then((raw) => {
+      if (!raw) return;
+      try {
+        const obj = JSON.parse(raw) as Record<string, string>;
+        setReactions(new Map(Object.entries(obj)));
+      } catch {}
+    }).catch(() => {});
+  }, []);
 
   const pendingConsentSendRef = useRef<string | null>(null);
 
@@ -1714,6 +1724,50 @@ export default function ChatScreen() {
     AsyncStorage.setItem(GROW_NUDGE_KEY, "1").catch(() => {});
   }
 
+  // Settings-controlled feature flags
+  const [sentimentChipsEnabled, setSentimentChipsEnabled] = useState(true);
+  const [sentimentChipsDismissedSession, setSentimentChipsDismissedSession] = useState(false);
+  const [weeklyRecapSettingEnabled, setWeeklyRecapSettingEnabled] = useState(true);
+  const [undoSettingEnabled, setUndoSettingEnabled] = useState(true);
+  const [moodGlimpseDismissedSession, setMoodGlimpseDismissedSession] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem("imotara.sentiment.chips.enabled.v1").then((v) => setSentimentChipsEnabled(v !== "0")).catch(() => {});
+    AsyncStorage.getItem("imotara.weekly.recap.enabled.v1").then((v) => setWeeklyRecapSettingEnabled(v !== "0")).catch(() => {});
+    AsyncStorage.getItem("imotara.undo.enabled.v1").then((v) => setUndoSettingEnabled(v === "1")).catch(() => {});
+  }, []);
+
+  // Permanent capsule visibility flags — written "0" by "Dismiss forever", re-enabled from Settings
+  const DAILY_CHECKIN_ENABLED_KEY = "imotara.daily.checkin.show.v1";
+  const [dailyCheckinEnabled, setDailyCheckinEnabled] = useState(true);
+  const COLLECTIVE_PULSE_ENABLED_KEY = "imotara.collective.pulse.show.v1";
+  const [collectivePulseEnabled, setCollectivePulseEnabled] = useState(true);
+  const TONE_REFLECTION_ENABLED_KEY = "imotara.tone.reflection.show.v1";
+  const [toneReflectionEnabled, setToneReflectionEnabled] = useState(true);
+  const RETURN_GREETING_ENABLED_KEY = "imotara.return.greeting.show.v1";
+  const [returnGreetingEnabled, setReturnGreetingEnabled] = useState(true);
+  const MOOD_GLIMPSE_ENABLED_KEY = "imotara.mood.glimpse.show.v1";
+  const [moodGlimpseEnabled, setMoodGlimpseEnabled] = useState(true);
+  const MILESTONE_ENABLED_KEY = "imotara.milestone.show.v1";
+  const [milestoneEnabled, setMilestoneEnabled] = useState(true);
+  const UNSENT_HINT_ENABLED_KEY = "imotara.unsent.hint.show.v1";
+  const [unsentHintEnabled, setUnsentHintEnabled] = useState(true);
+  const TRIAL_BANNER_ENABLED_KEY = "imotara.trial.banner.show.v1";
+  const [trialBannerEnabled, setTrialBannerEnabled] = useState(true);
+  const SESSION_GREETING_KEY = "imotara.session.greeting.show.v1";
+  const [sessionGreetingEnabled, setSessionGreetingEnabled] = useState(true);
+  const [sessionGreeting, setSessionGreeting] = useState<string | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(DAILY_CHECKIN_ENABLED_KEY).then((v) => setDailyCheckinEnabled(v !== "0")).catch(() => {});
+    AsyncStorage.getItem(COLLECTIVE_PULSE_ENABLED_KEY).then((v) => setCollectivePulseEnabled(v !== "0")).catch(() => {});
+    AsyncStorage.getItem(TONE_REFLECTION_ENABLED_KEY).then((v) => setToneReflectionEnabled(v !== "0")).catch(() => {});
+    AsyncStorage.getItem(RETURN_GREETING_ENABLED_KEY).then((v) => setReturnGreetingEnabled(v !== "0")).catch(() => {});
+    AsyncStorage.getItem(MOOD_GLIMPSE_ENABLED_KEY).then((v) => setMoodGlimpseEnabled(v !== "0")).catch(() => {});
+    AsyncStorage.getItem(MILESTONE_ENABLED_KEY).then((v) => setMilestoneEnabled(v !== "0")).catch(() => {});
+    AsyncStorage.getItem(UNSENT_HINT_ENABLED_KEY).then((v) => setUnsentHintEnabled(v !== "0")).catch(() => {});
+    AsyncStorage.getItem(TRIAL_BANNER_ENABLED_KEY).then((v) => setTrialBannerEnabled(v !== "0")).catch(() => {});
+    AsyncStorage.getItem(SESSION_GREETING_KEY).then((v) => setSessionGreetingEnabled(v !== "0")).catch(() => {});
+  }, []);
+
   // NF-5: Anonymous Collective Pulse
   const [collectivePulse, setCollectivePulse] = useState<{ heavyPercent: number } | null>(null);
   const [pulseDismissed, setPulseDismissed] = useState(false);
@@ -1728,9 +1782,28 @@ export default function ChatScreen() {
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const openLoopCheckedRef = useRef(false);
+  const greetingCheckedForRef = useRef<string | null>(null);
 
   // Feature discovery cards — one per session, after 3+ user messages
   const navigation = useNavigation<any>();
+
+  // Long-press helper: show "Turn off / Go to Settings / Cancel" alert for any capsule
+  function showCapsuleMenu(
+    label: string,
+    onDismissForever?: () => void,
+    onDismiss?: () => void,
+  ) {
+    const buttons: { text: string; style?: "cancel" | "destructive" | "default"; onPress?: () => void }[] = [];
+    if (onDismissForever) {
+      buttons.push({ text: "Dismiss forever", style: "destructive", onPress: onDismissForever });
+    }
+    if (onDismiss) {
+      buttons.push({ text: "Dismiss for now", onPress: onDismiss });
+    }
+    buttons.push({ text: "Cancel", style: "cancel" });
+    Alert.alert(label, "What would you like to do?", buttons);
+  }
+
   const [discoveryCard, setDiscoveryCard] = useState<DiscoveryCardId | null>(null);
   // L-2: post-session tone reflection card
   const [sessionToneCardDismissed, setSessionToneCardDismissed] = useState(false);
@@ -1793,12 +1866,14 @@ export default function ChatScreen() {
       AsyncStorage.setItem(LAST_SEEN_KEY, String(now));
     }).catch(() => { });
   }, []);
+
   const addReaction = (messageId: string, emoji: string) => {
     setReactions((prev) => {
       const next = new Map(prev);
       // Toggle off if same emoji tapped again
       if (next.get(messageId) === emoji) next.delete(messageId);
       else next.set(messageId, emoji);
+      AsyncStorage.setItem(REACTIONS_KEY, JSON.stringify(Object.fromEntries(next))).catch(() => {});
       return next;
     });
     setActionMessage(null);
@@ -1852,6 +1927,52 @@ export default function ChatScreen() {
   // Keep panel-enabled refs in sync with settings (refs are read inside the PanResponder closure)
   useEffect(() => { companionPanelEnabledRef.current = companionPanelEnabled; }, [companionPanelEnabled]);
   useEffect(() => { planPanelEnabledRef.current = planPanelEnabled; }, [planPanelEnabled]);
+
+  // UX-4 + EN-2 — emotion continuation / topic-specific session greeting
+  useEffect(() => {
+    if (!activeThreadId || greetingCheckedForRef.current === activeThreadId) return;
+    setSessionGreeting(null);
+    if (!sessionGreetingEnabled) return;
+    if (activeHistory.length < 2) return; // wait for history to load — don't lock ref yet
+    greetingCheckedForRef.current = activeThreadId;
+    const sorted = [...activeHistory].sort((a: any, b: any) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+    const lastMsg = sorted[sorted.length - 1];
+    const gapHours = (Date.now() - (lastMsg?.timestamp ?? Date.now())) / 3_600_000;
+    if (gapHours < 2) return;
+
+    const EN2_TOPICS: Array<{ pattern: RegExp; reOpener: string }> = [
+      { pattern: /\b(work|job|boss|deadline|career|burnout|workload|promotion|fired|manager|office|salary)\b/i,
+        reOpener: "Last time you were navigating some work stress. How has that been since we spoke?" },
+      { pattern: /\b(lonely|loneliness|alone|isolated|no friends|disconnected|left out|no one cares)\b/i,
+        reOpener: "Last time you were feeling a bit lonely. How are you doing today?" },
+      { pattern: /\b(anxious|anxiety|worry|worried|nervous|panic|overwhelmed|overthinking|dread)\b/i,
+        reOpener: "Last time you were carrying some anxiety. How is that sitting with you now?" },
+      { pattern: /\b(grief|grieving|loss|lost someone|died|death|passed away|miss them|mourning)\b/i,
+        reOpener: "Last time you were sitting with some grief. How have you been holding up?" },
+      { pattern: /\b(relationship|partner|boyfriend|girlfriend|husband|wife|breakup|broke up|divorce|fight|conflict)\b/i,
+        reOpener: "Last time there was some relationship tension on your mind. How have things been?" },
+      { pattern: /\b(can'?t sleep|insomnia|sleepless|exhausted|no energy|fatigue|nightmares|awake all night)\b/i,
+        reOpener: "Last time you were struggling with sleep. Has that improved at all?" },
+      { pattern: /\b(worthless|not good enough|failure|shame|hate myself|self.hate|inadequate|imposter|don'?t deserve)\b/i,
+        reOpener: "Last time some questions of self-worth were coming up for you. How are you feeling today?" },
+      { pattern: /\b(family|parents?|toxic|controlling|expectations|family pressure|family conflict)\b/i,
+        reOpener: "Last time there was some family tension weighing on you. How has that been?" },
+    ];
+
+    const recentUserText = sorted.filter((m: any) => m.from === "user").slice(-4).map((m: any) => m.text ?? "").join(" ");
+    const matched = EN2_TOPICS.find((t) => t.pattern.test(recentUserText));
+    if (matched) { setSessionGreeting(matched.reOpener); return; }
+
+    const heavyPattern = /low|tense|worried|upset|frustrated|stuck|sad|anxious|overwhelmed|hurt|difficult|hard time|heavy/i;
+    const lastBotMsgs = sorted.filter((m: any) => m.from === "bot").slice(-3);
+    const isHeavy = lastBotMsgs.some((m: any) => heavyPattern.test(m.text ?? ""));
+    if (isHeavy) {
+      const h = new Date().getHours();
+      const timeGreet = h < 12 ? "Good morning." : h < 17 ? "Good afternoon." : "Good evening.";
+      setSessionGreeting(`${timeGreet} Last time you were carrying something heavy. How are you feeling now?`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThreadId, activeHistory.length, sessionGreetingEnabled]);
 
   const effectiveCompanionName = toneContext?.companion?.name?.trim() || "Imotara";
 
@@ -2229,16 +2350,17 @@ export default function ChatScreen() {
   }, [lastSyncAt, lastSyncStatus]);
 
   // Banner priority queue — max 1 Tier-2 banner visible at once
-  const activeTier2Banner = useMemo((): "returnGreeting" | "dailyCheckin" | "trialCountdown" | "milestoneLoop" | "weeklyRecap" | "collectivePulse" | "growNudge" | null => {
-    if (showReturnGreeting) return "returnGreeting";
-    if (showDailyCheckin && intakeStep === 0) return "dailyCheckin";
-    if (showTrialBanner && licenseExpiresAt) return "trialCountdown";
-    if (milestoneLoop) return "milestoneLoop";
-    if (weeklyRecap && !weeklyRecapDismissed) return "weeklyRecap";
-    if (collectivePulse && !pulseDismissed) return "collectivePulse";
+  const activeTier2Banner = useMemo((): "returnGreeting" | "sessionGreeting" | "dailyCheckin" | "trialCountdown" | "milestoneLoop" | "weeklyRecap" | "collectivePulse" | "growNudge" | null => {
+    if (showReturnGreeting && returnGreetingEnabled) return "returnGreeting";
+    if (sessionGreeting && sessionGreetingEnabled) return "sessionGreeting";
+    if (showDailyCheckin && intakeStep === 0 && dailyCheckinEnabled) return "dailyCheckin";
+    if (showTrialBanner && licenseExpiresAt && trialBannerEnabled) return "trialCountdown";
+    if (milestoneLoop && milestoneEnabled) return "milestoneLoop";
+    if (weeklyRecap && !weeklyRecapDismissed && weeklyRecapSettingEnabled) return "weeklyRecap";
+    if (collectivePulse && !pulseDismissed && collectivePulseEnabled) return "collectivePulse";
     if (!growNudgeDismissed && messages.filter((m) => m.from === "user").length >= 3) return "growNudge";
     return null;
-  }, [showReturnGreeting, showDailyCheckin, intakeStep, showTrialBanner, licenseExpiresAt, milestoneLoop, weeklyRecap, weeklyRecapDismissed, collectivePulse, pulseDismissed, growNudgeDismissed, messages]);
+  }, [showReturnGreeting, returnGreetingEnabled, sessionGreeting, sessionGreetingEnabled, showDailyCheckin, dailyCheckinEnabled, intakeStep, showTrialBanner, trialBannerEnabled, licenseExpiresAt, milestoneLoop, milestoneEnabled, weeklyRecap, weeklyRecapDismissed, weeklyRecapSettingEnabled, collectivePulse, pulseDismissed, collectivePulseEnabled, growNudgeDismissed, messages]);
 
   useEffect(() => {
     if (!isTyping) {
@@ -2769,9 +2891,9 @@ export default function ChatScreen() {
       }
     }
 
-    // 5-second undo window before API call fires
+    // 5-second undo window before API call fires (skipped if undo disabled in Settings)
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    setPendingUndo({ messageId: userMessage.id });
+    if (undoSettingEnabled) setPendingUndo({ messageId: userMessage.id });
     undoTimerRef.current = setTimeout(() => {
       setPendingUndo(null);
       undoTimerRef.current = null;
@@ -2826,11 +2948,14 @@ export default function ChatScreen() {
 
           // ── Companion memory ──────────────────────────────────
           // Detect facts and persist (fire-and-forget; refresh cached ref after save)
-          const newFacts = detectMemories(trimmed);
-          for (const fact of newFacts) {
-              void addMemory({ text: fact, source: trimmed.slice(0, 80) }).then(() => {
-                  loadMemories().then((items) => { memoriesRef.current = items; }).catch(() => {});
-              }).catch(() => {});
+          const memoryCaptureEnabled = await AsyncStorage.getItem("imotara.memory.capture.enabled.v1").catch(() => "1");
+          if (memoryCaptureEnabled !== "0") {
+              const newFacts = detectMemories(trimmed);
+              for (const fact of newFacts) {
+                  void addMemory({ text: fact, source: trimmed.slice(0, 80) }).then(() => {
+                      loadMemories().then((items) => { memoriesRef.current = items; }).catch(() => {});
+                  }).catch(() => {});
+              }
           }
           // Use cached memories (zero AsyncStorage I/O on hot path)
           const memories = memoriesRef.current;
@@ -3290,7 +3415,8 @@ export default function ChatScreen() {
           }
           setMessages((prev) => [...prev, ...extraMessages, botMessage]);
           smoothScrollToBottom(scrollViewRef);
-          if (handsfreeRef.current && botMessage.text) {
+          const autoReadEnabled1 = await AsyncStorage.getItem("imotara.tts.autoRead.v1").catch(() => "0");
+          if ((handsfreeRef.current || autoReadEnabled1 === "1") && botMessage.text) {
             const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
             const l = toneContext?.user?.preferredLang ?? "en";
             setSpeakingMessageId(botMessage.id);
@@ -3388,7 +3514,8 @@ export default function ChatScreen() {
           haptic.receive();
           setMessages((prev) => [...prev, botMessage]);
           smoothScrollToBottom(scrollViewRef);
-          if (handsfreeRef.current && botMessage.text) {
+          const autoReadEnabled2 = await AsyncStorage.getItem("imotara.tts.autoRead.v1").catch(() => "0");
+          if ((handsfreeRef.current || autoReadEnabled2 === "1") && botMessage.text) {
             const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
             const l = toneContext?.user?.preferredLang ?? "en";
             setSpeakingMessageId(botMessage.id);
@@ -3406,7 +3533,7 @@ export default function ChatScreen() {
         }
       })();
     }, 800);
-    }, 5000); // undo timer — closes the 5-second undo window
+    }, undoSettingEnabled ? 5000 : 0); // undo timer — 0ms when undo disabled
   };
 
   function handleUndo() {
@@ -4276,16 +4403,39 @@ export default function ChatScreen() {
           {/* Return greeting — shown after >24h absence */}
           {activeTier2Banner === "returnGreeting" && (
             <View style={{ marginBottom: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.35)", backgroundColor: "rgba(99,102,241,0.08)" }}>
-              <Text style={{ fontSize: 13, color: colors.textPrimary }}>
-                Welcome back 👋
-              </Text>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 13, color: colors.textPrimary }}>Welcome back 👋</Text>
+                <TouchableOpacity onPress={() => showCapsuleMenu("Return greeting", () => { setReturnGreetingEnabled(false); AsyncStorage.setItem(RETURN_GREETING_ENABLED_KEY, "0").catch(() => {}); }, () => setShowReturnGreeting(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="ellipsis-vertical" size={14} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
               <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
                 Good to see you again. How are you feeling today?
               </Text>
             </View>
           )}
 
-          {emotionInsightsEnabled && latestMoodHint && (
+          {/* UX-4/EN-2 — emotion continuation / topic-specific session greeting */}
+          {activeTier2Banner === "sessionGreeting" && sessionGreeting && (
+            <View style={{ marginBottom: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: "rgba(100,116,139,0.3)", backgroundColor: "rgba(51,65,85,0.45)" }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <Text style={{ fontSize: 13, color: colors.textPrimary, flex: 1, lineHeight: 19 }}>{sessionGreeting}</Text>
+                <TouchableOpacity
+                  onPress={() => showCapsuleMenu(
+                    "Session greeting",
+                    () => { AsyncStorage.setItem(SESSION_GREETING_KEY, "0").catch(() => {}); setSessionGreetingEnabled(false); setSessionGreeting(null); },
+                    () => setSessionGreeting(null),
+                  )}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{ marginLeft: 8 }}
+                >
+                  <Ionicons name="ellipsis-vertical" size={14} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {emotionInsightsEnabled && latestMoodHint && moodGlimpseEnabled && !moodGlimpseDismissedSession && (
             <View
               style={{
                 marginBottom: 12,
@@ -4297,9 +4447,12 @@ export default function ChatScreen() {
                 borderColor: colors.border,
               }}
             >
-              <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                Mood glimpse
-              </Text>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 11, color: colors.textSecondary }}>Mood glimpse</Text>
+                <TouchableOpacity onPress={() => showCapsuleMenu("Mood glimpse", () => { setMoodGlimpseEnabled(false); AsyncStorage.setItem(MOOD_GLIMPSE_ENABLED_KEY, "0").catch(() => {}); }, () => setMoodGlimpseDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="ellipsis-vertical" size={14} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
               <Text
                 style={{
                   fontSize: 13,
@@ -4695,6 +4848,7 @@ export default function ChatScreen() {
       {/* L-2: Post-session tone reflection card */}
       {!isTyping &&
         !sessionToneCardDismissed &&
+        toneReflectionEnabled &&
         messages.filter((m) => m.from === "user").length >= 3 && (() => {
           const MOOD_EMOJI: Record<string, string> = {
             happy: "😄", joy: "😄", grateful: "🙏", hopeful: "💚",
@@ -4710,8 +4864,8 @@ export default function ChatScreen() {
             <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.25)", backgroundColor: "rgba(99,102,241,0.09)", paddingHorizontal: 12, paddingVertical: 10 }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <Text style={{ fontSize: 9, fontWeight: "700", color: "rgba(165,180,252,0.7)", textTransform: "uppercase", letterSpacing: 0.8 }}>Tone Reflection</Text>
-                <TouchableOpacity onPress={() => setSessionToneCardDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={{ fontSize: 14, color: "rgba(165,180,252,0.4)" }}>✕</Text>
+                <TouchableOpacity onPress={() => showCapsuleMenu("Tone reflection", () => { setToneReflectionEnabled(false); AsyncStorage.setItem(TONE_REFLECTION_ENABLED_KEY, "0").catch(() => {}); }, () => setSessionToneCardDismissed(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="ellipsis-vertical" size={14} color="rgba(165,180,252,0.4)" />
                 </TouchableOpacity>
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
@@ -4731,26 +4885,36 @@ export default function ChatScreen() {
 
       {/* P4 — Unsent Letter mode banner */}
       {unsentLetterSetup && (
-        <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 12, borderWidth: 1, borderColor: "rgba(167,139,250,0.3)", backgroundColor: "rgba(167,139,250,0.08)", paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Ionicons name="pencil-outline" size={13} color="#a78bfa" />
-          <Text style={{ flex: 1, fontSize: 12, color: "#a78bfa" }}>
+        <View style={{
+          marginHorizontal: 12, marginBottom: 6, borderRadius: 12, borderWidth: 1,
+          borderColor: isDark ? "rgba(167,139,250,0.3)" : "rgba(139,92,246,0.35)",
+          backgroundColor: isDark ? "rgba(167,139,250,0.08)" : "rgba(237,233,254,0.85)",
+          paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 8,
+        }}>
+          <Ionicons name="pencil-outline" size={13} color={isDark ? "#a78bfa" : "#6d28d9"} />
+          <Text style={{ flex: 1, fontSize: 12, color: isDark ? "#a78bfa" : "#4c1d95" }}>
             Writing to <Text style={{ fontWeight: "700" }}>{unsentLetterSetup.recipientName}</Text> — Imotara will respond in their voice.
           </Text>
-          <TouchableOpacity onPress={() => setUnsentLetterSetup(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="close-outline" size={16} color="rgba(167,139,250,0.6)" />
+          <TouchableOpacity onPress={() => showCapsuleMenu("Unsent Letter mode", () => setUnsentLetterSetup(null), () => setUnsentLetterSetup(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(167,139,250,0.6)" : "rgba(109,40,217,0.5)"} />
           </TouchableOpacity>
         </View>
       )}
 
       {/* NF-2 — Grief & Loss space banner */}
       {griefMode && (
-        <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 12, borderWidth: 1, borderColor: "rgba(251,113,133,0.3)", backgroundColor: "rgba(251,113,133,0.08)", paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Ionicons name="heart-outline" size={13} color="#fda4af" />
-          <Text style={{ flex: 1, fontSize: 12, color: "#fda4af" }}>
+        <View style={{
+          marginHorizontal: 12, marginBottom: 6, borderRadius: 12, borderWidth: 1,
+          borderColor: isDark ? "rgba(251,113,133,0.3)" : "rgba(244,63,94,0.3)",
+          backgroundColor: isDark ? "rgba(251,113,133,0.08)" : "rgba(255,228,230,0.85)",
+          paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 8,
+        }}>
+          <Ionicons name="heart-outline" size={13} color={isDark ? "#fda4af" : "#be123c"} />
+          <Text style={{ flex: 1, fontSize: 12, color: isDark ? "#fda4af" : "#9f1239" }}>
             Grief &amp; Loss space — Imotara will hold this with you, without rushing.
           </Text>
-          <TouchableOpacity onPress={() => setGriefMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="close-outline" size={16} color="rgba(253,164,175,0.6)" />
+          <TouchableOpacity onPress={() => showCapsuleMenu("Grief & Loss mode", () => setGriefMode(false), () => setGriefMode(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(253,164,175,0.6)" : "rgba(159,18,57,0.5)"} />
           </TouchableOpacity>
         </View>
       )}
@@ -4763,14 +4927,14 @@ export default function ChatScreen() {
           <View style={{
             marginHorizontal: 12, marginBottom: 6,
             borderRadius: 14,
-            backgroundColor: "rgba(245,158,11,0.12)",
-            borderWidth: 1, borderColor: "rgba(245,158,11,0.25)",
+            backgroundColor: isDark ? "rgba(245,158,11,0.12)" : "rgba(255,251,235,0.9)",
+            borderWidth: 1, borderColor: isDark ? "rgba(245,158,11,0.25)" : "rgba(217,119,6,0.35)",
             paddingHorizontal: 14, paddingVertical: 10,
             flexDirection: "row", alignItems: "flex-start", gap: 10,
           }}>
             <Text style={{ fontSize: 16, marginTop: 1 }}>⏳</Text>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: "#fcd34d", fontWeight: "600", fontSize: 13 }}>
+              <Text style={{ color: isDark ? "#fcd34d" : "#92400e", fontWeight: "600", fontSize: 13 }}>
                 {daysLeft === 1 ? "Last day of your free trial" : `${daysLeft} days left in your free trial`}
               </Text>
               <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>
@@ -4778,13 +4942,13 @@ export default function ChatScreen() {
               </Text>
               <TouchableOpacity
                 onPress={() => setShowUpgradeSheet(true)}
-                style={{ marginTop: 8, alignSelf: "flex-start", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: "rgba(245,158,11,0.20)", borderWidth: 1, borderColor: "rgba(245,158,11,0.40)" }}
+                style={{ marginTop: 8, alignSelf: "flex-start", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: isDark ? "rgba(245,158,11,0.20)" : "rgba(217,119,6,0.12)", borderWidth: 1, borderColor: isDark ? "rgba(245,158,11,0.40)" : "rgba(217,119,6,0.35)" }}
               >
-                <Text style={{ color: "#fcd34d", fontSize: 12, fontWeight: "600" }}>Upgrade →</Text>
+                <Text style={{ color: isDark ? "#fcd34d" : "#92400e", fontSize: 12, fontWeight: "600" }}>Upgrade →</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={dismissTrialBanner} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={{ color: colors.textSecondary, fontSize: 16, lineHeight: 18 }}>✕</Text>
+            <TouchableOpacity onPress={() => showCapsuleMenu("Trial countdown", () => { setTrialBannerEnabled(false); AsyncStorage.setItem(TRIAL_BANNER_ENABLED_KEY, "0").catch(() => {}); }, dismissTrialBanner)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="ellipsis-vertical" size={14} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
         );
@@ -4803,11 +4967,11 @@ export default function ChatScreen() {
 
       {/* Weekly mood recap */}
       {activeTier2Banner === "weeklyRecap" && weeklyRecap && (
-        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.2)", backgroundColor: "rgba(30,27,75,0.5)", paddingHorizontal: 14, paddingVertical: 10 }}>
+        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.3)", backgroundColor: isDark ? "rgba(30,27,75,0.5)" : "rgba(238,242,255,0.85)", paddingHorizontal: 14, paddingVertical: 10 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Text style={{ flex: 1, fontSize: 12, color: "rgba(196,181,253,0.85)", lineHeight: 18 }}>{weeklyRecap}</Text>
-            <TouchableOpacity onPress={() => setWeeklyRecapDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={{ color: "rgba(165,180,252,0.5)", fontSize: 18, marginLeft: 8 }}>×</Text>
+            <Text style={{ flex: 1, fontSize: 12, color: isDark ? "rgba(196,181,253,0.85)" : "#4338ca", lineHeight: 18 }}>{weeklyRecap}</Text>
+            <TouchableOpacity onPress={() => showCapsuleMenu("Weekly recap", () => { setWeeklyRecapSettingEnabled(false); AsyncStorage.setItem("imotara.weekly.recap.enabled.v1", "0").catch(() => {}); }, () => setWeeklyRecapDismissed(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(165,180,252,0.5)" : "rgba(67,56,202,0.5)"} />
             </TouchableOpacity>
           </View>
         </View>
@@ -4815,13 +4979,13 @@ export default function ChatScreen() {
 
       {/* NF-5 — Anonymous Collective Pulse */}
       {activeTier2Banner === "collectivePulse" && collectivePulse && (
-        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.2)", backgroundColor: "rgba(30,27,75,0.5)", paddingHorizontal: 14, paddingVertical: 10 }}>
+        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.3)", backgroundColor: isDark ? "rgba(30,27,75,0.5)" : "rgba(238,242,255,0.85)", paddingHorizontal: 14, paddingVertical: 10 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Text style={{ flex: 1, fontSize: 12, color: "rgba(196,181,253,0.85)", lineHeight: 18 }}>
-              <Text style={{ color: "#a5b4fc", fontWeight: "600" }}>{collectivePulse.heavyPercent}% of people</Text> are carrying something heavy today. You{"'"}re not alone.
+            <Text style={{ flex: 1, fontSize: 12, color: isDark ? "rgba(196,181,253,0.85)" : "#4338ca", lineHeight: 18 }}>
+              <Text style={{ color: isDark ? "#a5b4fc" : "#4f46e5", fontWeight: "600" }}>{collectivePulse.heavyPercent}% of people</Text> are carrying something heavy today. You{"'"}re not alone.
             </Text>
-            <TouchableOpacity onPress={() => setPulseDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={{ color: "rgba(165,180,252,0.5)", fontSize: 18, marginLeft: 8 }}>×</Text>
+            <TouchableOpacity onPress={() => showCapsuleMenu("Collective pulse", () => { setCollectivePulseEnabled(false); AsyncStorage.setItem(COLLECTIVE_PULSE_ENABLED_KEY, "0").catch(() => {}); }, () => setPulseDismissed(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(165,180,252,0.5)" : "rgba(67,56,202,0.5)"} />
             </TouchableOpacity>
           </View>
         </View>
@@ -4829,14 +4993,14 @@ export default function ChatScreen() {
 
       {/* Grow nudge — shown after ≥3 user messages, lowest banner priority */}
       {activeTier2Banner === "growNudge" && (
-        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(52,211,153,0.2)", backgroundColor: "rgba(6,78,59,0.25)", paddingHorizontal: 14, paddingVertical: 10 }}>
+        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: isDark ? "rgba(52,211,153,0.2)" : "rgba(16,185,129,0.35)", backgroundColor: isDark ? "rgba(6,78,59,0.25)" : "rgba(209,250,229,0.8)", paddingHorizontal: 14, paddingVertical: 10 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Text style={{ flex: 1, fontSize: 12, color: "rgba(167,243,208,0.85)", lineHeight: 18 }}>
+            <Text style={{ flex: 1, fontSize: 12, color: isDark ? "rgba(167,243,208,0.85)" : "#065f46", lineHeight: 18 }}>
               You{"'"}ve been opening up — would a short reflection help?{" "}
-              <Text style={{ color: "#6ee7b7", fontWeight: "600", textDecorationLine: "underline" }}>Grow →</Text>
+              <Text style={{ color: isDark ? "#6ee7b7" : "#059669", fontWeight: "600", textDecorationLine: "underline" }}>Grow →</Text>
             </Text>
-            <TouchableOpacity onPress={handleGrowNudgeDismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={{ color: "rgba(110,231,183,0.5)", fontSize: 18, marginLeft: 8 }}>×</Text>
+            <TouchableOpacity onPress={() => showCapsuleMenu("Grow nudge", handleGrowNudgeDismiss, () => setGrowNudgeDismissed(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(110,231,183,0.5)" : "rgba(6,95,70,0.45)"} />
             </TouchableOpacity>
           </View>
         </View>
@@ -4844,16 +5008,16 @@ export default function ChatScreen() {
 
       {/* NF-1 — Emotional Milestone Celebration */}
       {activeTier2Banner === "milestoneLoop" && milestoneLoop && (
-        <View style={{ marginHorizontal: 16, marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: "rgba(52,211,153,0.3)", backgroundColor: "rgba(6,78,59,0.35)", padding: 14 }}>
+        <View style={{ marginHorizontal: 16, marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: isDark ? "rgba(52,211,153,0.3)" : "rgba(16,185,129,0.35)", backgroundColor: isDark ? "rgba(6,78,59,0.35)" : "rgba(209,250,229,0.85)", padding: 14 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: "700", color: "#6ee7b7", marginBottom: 4 }}>You closed a loop ✦</Text>
-              <Text style={{ fontSize: 13, color: "rgba(209,250,229,0.85)", lineHeight: 19 }}>
-                The theme of <Text style={{ fontStyle: "italic", color: "#a7f3d0" }}>{milestoneLoop.themeName}</Text> that kept returning — it looks like you found some resolution. That{"'"}s real growth.
+              <Text style={{ fontSize: 14, fontWeight: "700", color: isDark ? "#6ee7b7" : "#065f46", marginBottom: 4 }}>You closed a loop ✦</Text>
+              <Text style={{ fontSize: 13, color: isDark ? "rgba(209,250,229,0.85)" : "#047857", lineHeight: 19 }}>
+                The theme of <Text style={{ fontStyle: "italic", color: isDark ? "#a7f3d0" : "#059669" }}>{milestoneLoop.themeName}</Text> that kept returning — it looks like you found some resolution. That{"'"}s real growth.
               </Text>
             </View>
-            <TouchableOpacity onPress={() => setMilestoneLoop(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={{ color: "rgba(110,231,183,0.6)", fontSize: 18, marginLeft: 8 }}>×</Text>
+            <TouchableOpacity onPress={() => showCapsuleMenu("Milestone", () => { setMilestoneEnabled(false); AsyncStorage.setItem(MILESTONE_ENABLED_KEY, "0").catch(() => {}); }, () => setMilestoneLoop(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(110,231,183,0.6)" : "rgba(6,95,70,0.5)"} />
             </TouchableOpacity>
           </View>
         </View>
@@ -4883,25 +5047,44 @@ export default function ChatScreen() {
       )}
 
       {/* UX-3 — contextual unsent-letter hint */}
-      {showUnsentHint && (
-        <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 12, borderWidth: 1, borderColor: "rgba(167,139,250,0.3)", backgroundColor: "rgba(167,139,250,0.08)", paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Ionicons name="mail-open-outline" size={16} color="#a78bfa" />
-          <Text style={{ flex: 1, fontSize: 11.5, color: "rgba(196,181,253,0.9)", lineHeight: 16 }}>
+      {showUnsentHint && unsentHintEnabled && (
+        <View style={{
+          marginHorizontal: 12, marginBottom: 6, borderRadius: 12, borderWidth: 1,
+          borderColor: isDark ? "rgba(167,139,250,0.3)" : "rgba(109,40,217,0.5)",
+          backgroundColor: isDark ? "rgba(167,139,250,0.08)" : "#ede9fe",
+          paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 8,
+        }}>
+          <Ionicons name="mail-open-outline" size={16} color={isDark ? "#a78bfa" : "#5b21b6"} />
+          <Text style={{ flex: 1, fontSize: 11.5, color: isDark ? "rgba(196,181,253,0.9)" : "#3b0764", lineHeight: 16 }}>
             Sounds like there's something you might want to say to someone. The Unsent Letter space is here if you need it.
           </Text>
-          <TouchableOpacity onPress={() => { setShowUnsentHint(false); setUnsentLetterVisible(true); AsyncStorage.setItem(UNSENT_TRIED_KEY, "1").catch(() => {}); }} accessibilityRole="button">
-            <Text style={{ fontSize: 11, color: "#a78bfa", fontWeight: "600" }}>Try it →</Text>
+          <TouchableOpacity
+            onPress={() => { setShowUnsentHint(false); setUnsentLetterVisible(true); AsyncStorage.setItem(UNSENT_TRIED_KEY, "1").catch(() => {}); }}
+            accessibilityRole="button"
+            style={isDark ? undefined : { backgroundColor: "#7c3aed", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}
+          >
+            <Text style={{ fontSize: 11, color: isDark ? "#a78bfa" : "#ffffff", fontWeight: "700" }}>Try it →</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowUnsentHint(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Dismiss" accessibilityRole="button">
-            <Ionicons name="close-outline" size={16} color="rgba(148,163,184,0.6)" />
+          <TouchableOpacity onPress={() => showCapsuleMenu("Unsent Letter hint", () => { setUnsentHintEnabled(false); AsyncStorage.setItem(UNSENT_HINT_ENABLED_KEY, "0").catch(() => {}); }, () => setShowUnsentHint(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="More options" accessibilityRole="button">
+            <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(148,163,184,0.6)" : "rgba(91,33,182,0.5)"} />
           </TouchableOpacity>
         </View>
       )}
 
       {/* EN-3 — Daily micro check-in pulse (once per day, not during first-chat intake arc) */}
       {activeTier2Banner === "dailyCheckin" && (
-        <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 14, borderWidth: 1, borderColor: "rgba(56,189,248,0.2)", backgroundColor: "rgba(12,74,110,0.2)", paddingHorizontal: 12, paddingVertical: 10 }}>
-          <Text style={{ fontSize: 11.5, fontWeight: "600", color: "rgba(186,230,253,0.85)", marginBottom: 8 }}>How are you right now?</Text>
+        <View style={{
+          marginHorizontal: 12, marginBottom: 6, borderRadius: 14, borderWidth: 1,
+          borderColor: isDark ? "rgba(56,189,248,0.2)" : "rgba(14,165,233,0.3)",
+          backgroundColor: isDark ? "rgba(12,74,110,0.2)" : "rgba(224,242,254,0.7)",
+          paddingHorizontal: 12, paddingVertical: 10,
+        }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <Text style={{ fontSize: 11.5, fontWeight: "600", color: isDark ? "rgba(186,230,253,0.85)" : "#0369a1" }}>How are you right now?</Text>
+            <TouchableOpacity onPress={() => showCapsuleMenu("Daily check-in", () => { setDailyCheckinEnabled(false); AsyncStorage.setItem(DAILY_CHECKIN_ENABLED_KEY, "0").catch(() => {}); }, () => { AsyncStorage.setItem(DAILY_CHECKIN_KEY, new Date().toISOString().slice(0, 10)).catch(() => {}); setShowDailyCheckin(false); })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(148,163,184,0.5)" : "rgba(71,85,105,0.6)"} />
+            </TouchableOpacity>
+          </View>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
             {([
               { emoji: "😔", label: "Heavy" }, { emoji: "😟", label: "Unsettled" }, { emoji: "😶", label: "Somewhere here" },
@@ -4910,43 +5093,62 @@ export default function ChatScreen() {
               <TouchableOpacity
                 key={label}
                 onPress={() => handleDailyCheckin(label)}
-                style={{ flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, borderColor: "rgba(56,189,248,0.25)", backgroundColor: "rgba(56,189,248,0.08)", paddingHorizontal: 10, paddingVertical: 4 }}
+                style={{
+                  flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1,
+                  borderColor: isDark ? "rgba(56,189,248,0.25)" : "rgba(14,165,233,0.4)",
+                  backgroundColor: isDark ? "rgba(56,189,248,0.08)" : "rgba(186,230,253,0.5)",
+                  paddingHorizontal: 10, paddingVertical: 4,
+                }}
               >
                 <Text style={{ fontSize: 13 }}>{emoji}</Text>
-                <Text style={{ fontSize: 11, color: "#7dd3fc", fontWeight: "500" }}>{label}</Text>
+                <Text style={{ fontSize: 11, color: isDark ? "#7dd3fc" : "#0369a1", fontWeight: "500" }}>{label}</Text>
               </TouchableOpacity>
             ))}
           </View>
-          <TouchableOpacity onPress={() => { AsyncStorage.setItem(DAILY_CHECKIN_KEY, new Date().toISOString().slice(0, 10)).catch(() => {}); setShowDailyCheckin(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ alignSelf: "flex-end", marginTop: 6 }}>
-            <Text style={{ fontSize: 10, color: "rgba(148,163,184,0.5)" }}>Later</Text>
-          </TouchableOpacity>
         </View>
       )}
 
       {/* Message undo toast — 5-second window before API fires */}
       {pendingUndo && (
-        <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "rgba(251,191,36,0.3)", backgroundColor: "rgba(120,53,15,0.35)" }}>
+        <View style={{
+          marginHorizontal: 12, marginBottom: 6, borderRadius: 14, overflow: "hidden", borderWidth: 1,
+          borderColor: isDark ? "rgba(251,191,36,0.3)" : "rgba(217,119,6,0.35)",
+          backgroundColor: isDark ? "rgba(120,53,15,0.35)" : "rgba(254,243,199,0.85)",
+        }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 8 }}>
-            <Text style={{ fontSize: 12, color: "rgba(253,230,138,0.9)" }}>Sending in a moment…</Text>
-            <TouchableOpacity onPress={handleUndo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={{ fontSize: 12, fontWeight: "700", color: "#fbbf24", textDecorationLine: "underline" }}>Undo</Text>
-            </TouchableOpacity>
+            <Text style={{ fontSize: 12, color: isDark ? "rgba(253,230,138,0.9)" : "#92400e" }}>Sending in a moment…</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <TouchableOpacity onPress={handleUndo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: isDark ? "#fbbf24" : "#b45309", textDecorationLine: "underline" }}>Undo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => showCapsuleMenu("Message undo", () => { setUndoSettingEnabled(false); AsyncStorage.setItem("imotara.undo.enabled.v1", "0").catch(() => {}); }, () => setPendingUndo(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(253,230,138,0.5)" : "rgba(146,64,14,0.5)"} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       )}
 
       {/* Sentiment seed chips — shown when chat has messages and input is empty */}
-      {messages.length > 0 && input.trim() === "" && (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 12, paddingBottom: 6 }}>
+      {sentimentChipsEnabled && !sentimentChipsDismissedSession && messages.length > 0 && input.trim() === "" && (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 12, paddingBottom: 6, alignItems: "center" }}>
           {(SENTIMENT_SEEDS_BY_LANG[toneContext?.user?.preferredLang ?? "en"] ?? SENTIMENT_SEEDS_BY_LANG.en).map((seed) => (
             <TouchableOpacity
               key={seed}
               onPress={() => handleInputChange(seed)}
-              style={{ borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.05)", paddingHorizontal: 10, paddingVertical: 4 }}
+              style={{
+                borderRadius: 20, borderWidth: 1,
+                borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.12)",
+                backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                paddingHorizontal: 10, paddingVertical: 4,
+              }}
             >
-              <Text style={{ fontSize: 11, color: "rgba(161,161,170,0.9)" }}>{seed}</Text>
+              <Text style={{ fontSize: 11, color: isDark ? "rgba(161,161,170,0.9)" : "rgba(71,85,105,0.9)" }}>{seed}</Text>
             </TouchableOpacity>
           ))}
+          <TouchableOpacity onPress={() => showCapsuleMenu("Sentiment chips", () => { setSentimentChipsEnabled(false); AsyncStorage.setItem("imotara.sentiment.chips.enabled.v1", "0").catch(() => {}); }, () => setSentimentChipsDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(161,161,170,0.4)" : "rgba(71,85,105,0.4)"} />
+          </TouchableOpacity>
         </View>
       )}
 
