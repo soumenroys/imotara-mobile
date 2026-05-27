@@ -2079,6 +2079,11 @@ export default function ChatScreen() {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+      setPendingUndo(null);
+    }
 
     // Release send lock as well (prevents stuck send disabled)
     isSendingRef.current = false;
