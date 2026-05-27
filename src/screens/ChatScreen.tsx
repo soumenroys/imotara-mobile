@@ -1703,6 +1703,17 @@ export default function ChatScreen() {
   const [activeOpenLoop, setActiveOpenLoop] = useState<OpenLoop | null>(null);
   const [milestoneLoop, setMilestoneLoop] = useState<{ themeName: string } | null>(null);
 
+  // Grow nudge — shown when user has ≥3 messages and hasn't permanently dismissed
+  const GROW_NUDGE_KEY = "imotara.grow.nudge.perm.v1";
+  const [growNudgeDismissed, setGrowNudgeDismissed] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(GROW_NUDGE_KEY).then((v) => { if (v === "1") setGrowNudgeDismissed(true); }).catch(() => {});
+  }, []);
+  function handleGrowNudgeDismiss() {
+    setGrowNudgeDismissed(true);
+    AsyncStorage.setItem(GROW_NUDGE_KEY, "1").catch(() => {});
+  }
+
   // NF-5: Anonymous Collective Pulse
   const [collectivePulse, setCollectivePulse] = useState<{ heavyPercent: number } | null>(null);
   const [pulseDismissed, setPulseDismissed] = useState(false);
@@ -2022,6 +2033,10 @@ export default function ChatScreen() {
   // ✅ RN-safe typing (fixes TS issues in many RN setups)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Message undo — 5-second window before API call fires
+  const [pendingUndo, setPendingUndo] = useState<{ messageId: string } | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ✅ 80/20: prevent double-send / overlapping async flows
   const isSendingRef = useRef(false);
 
@@ -2031,6 +2046,7 @@ export default function ChatScreen() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     };
   }, []);
 
@@ -2208,15 +2224,16 @@ export default function ChatScreen() {
   }, [lastSyncAt, lastSyncStatus]);
 
   // Banner priority queue — max 1 Tier-2 banner visible at once
-  const activeTier2Banner = useMemo((): "returnGreeting" | "dailyCheckin" | "trialCountdown" | "milestoneLoop" | "weeklyRecap" | "collectivePulse" | null => {
+  const activeTier2Banner = useMemo((): "returnGreeting" | "dailyCheckin" | "trialCountdown" | "milestoneLoop" | "weeklyRecap" | "collectivePulse" | "growNudge" | null => {
     if (showReturnGreeting) return "returnGreeting";
     if (showDailyCheckin && intakeStep === 0) return "dailyCheckin";
     if (showTrialBanner && licenseExpiresAt) return "trialCountdown";
     if (milestoneLoop) return "milestoneLoop";
     if (weeklyRecap && !weeklyRecapDismissed) return "weeklyRecap";
     if (collectivePulse && !pulseDismissed) return "collectivePulse";
+    if (!growNudgeDismissed && messages.filter((m) => m.from === "user").length >= 3) return "growNudge";
     return null;
-  }, [showReturnGreeting, showDailyCheckin, intakeStep, showTrialBanner, licenseExpiresAt, milestoneLoop, weeklyRecap, weeklyRecapDismissed, collectivePulse, pulseDismissed]);
+  }, [showReturnGreeting, showDailyCheckin, intakeStep, showTrialBanner, licenseExpiresAt, milestoneLoop, weeklyRecap, weeklyRecapDismissed, collectivePulse, pulseDismissed, growNudgeDismissed, messages]);
 
   useEffect(() => {
     if (!isTyping) {
@@ -2746,6 +2763,14 @@ export default function ChatScreen() {
         }).catch(() => {});
       }
     }
+
+    // 5-second undo window before API call fires
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setPendingUndo({ messageId: userMessage.id });
+    undoTimerRef.current = setTimeout(() => {
+      setPendingUndo(null);
+      undoTimerRef.current = null;
+      if (!mountedRef.current) return;
 
     setIsTyping(true);
     typingStartedAtRef.current = Date.now();
@@ -3376,7 +3401,21 @@ export default function ChatScreen() {
         }
       })();
     }, 800);
+    }, 5000); // undo timer — closes the 5-second undo window
   };
+
+  function handleUndo() {
+    if (!pendingUndo) return;
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+    const { messageId } = pendingUndo;
+    setPendingUndo(null);
+    isSendingRef.current = false;
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    deleteFromHistory(messageId);
+  }
 
   // ✅ DEV-only helper: fill input with a local test prompt (auto-send only in local mode)
   const runLocalDevPrompt = (prompt: string) => {
@@ -4783,6 +4822,21 @@ export default function ChatScreen() {
         </View>
       )}
 
+      {/* Grow nudge — shown after ≥3 user messages, lowest banner priority */}
+      {activeTier2Banner === "growNudge" && (
+        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(52,211,153,0.2)", backgroundColor: "rgba(6,78,59,0.25)", paddingHorizontal: 14, paddingVertical: 10 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ flex: 1, fontSize: 12, color: "rgba(167,243,208,0.85)", lineHeight: 18 }}>
+              You{"'"}ve been opening up — would a short reflection help?{" "}
+              <Text style={{ color: "#6ee7b7", fontWeight: "600", textDecorationLine: "underline" }}>Grow →</Text>
+            </Text>
+            <TouchableOpacity onPress={handleGrowNudgeDismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={{ color: "rgba(110,231,183,0.5)", fontSize: 18, marginLeft: 8 }}>×</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* NF-1 — Emotional Milestone Celebration */}
       {activeTier2Banner === "milestoneLoop" && milestoneLoop && (
         <View style={{ marginHorizontal: 16, marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: "rgba(52,211,153,0.3)", backgroundColor: "rgba(6,78,59,0.35)", padding: 14 }}>
@@ -4861,6 +4915,18 @@ export default function ChatScreen() {
           <TouchableOpacity onPress={() => { AsyncStorage.setItem(DAILY_CHECKIN_KEY, new Date().toISOString().slice(0, 10)).catch(() => {}); setShowDailyCheckin(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ alignSelf: "flex-end", marginTop: 6 }}>
             <Text style={{ fontSize: 10, color: "rgba(148,163,184,0.5)" }}>Later</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Message undo toast — 5-second window before API fires */}
+      {pendingUndo && (
+        <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "rgba(251,191,36,0.3)", backgroundColor: "rgba(120,53,15,0.35)" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 8 }}>
+            <Text style={{ fontSize: 12, color: "rgba(253,230,138,0.9)" }}>Sending in a moment…</Text>
+            <TouchableOpacity onPress={handleUndo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#fbbf24", textDecorationLine: "underline" }}>Undo</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 

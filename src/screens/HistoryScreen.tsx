@@ -1154,6 +1154,17 @@ export default function HistoryScreen() {
                                         <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 16 }}>This appears after a few messages are captured with mood hints.</Text>
                                     </View>
                                 )}
+                                {/* G-W3: Emotion trends link — opens TrendsScreen radar/chart */}
+                                <TouchableOpacity
+                                    onPress={() => navigation.navigate("Trends")}
+                                    style={{ marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.25)", backgroundColor: "rgba(99,102,241,0.06)", padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+                                >
+                                    <View>
+                                        <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textPrimary }}>Emotion trends</Text>
+                                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Radar chart · 30-day line · mood heatmap</Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={16} color="rgba(165,180,252,0.7)" />
+                                </TouchableOpacity>
                                 {onThisDay.length > 0 && (
                                     <View style={{ marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 12 }}>
                                         <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textSecondary, marginBottom: 6 }}>On This Day</Text>
