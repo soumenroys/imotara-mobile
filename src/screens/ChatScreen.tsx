@@ -118,6 +118,42 @@ import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adult
 import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+// ── Sentiment seed chips — quick-tap mood starters ────────────────────────────
+const SENTIMENT_SEEDS_BY_LANG: Record<string, [string, string, string]> = {
+  en: ["Feeling heavy", "Need to vent", "Just thinking out loud"],
+  hi: ["मन भारी है", "मन की भड़ास निकालनी है", "बस सोच रहा/रही हूँ"],
+  mr: ["मन जड आहे", "मन मोकळं करायचंय", "विचार करतोय/करतेय"],
+  bn: ["মন ভারী", "মনের কথা বলতে চাই", "শুধু ভাবছি"],
+  ta: ["மனம் கனமாக இருக்கிறது", "மனசு காலி செய்யணும்", "யோசிக்கிறேன்"],
+  te: ["మనసు భారంగా ఉంది", "మనసు తేలిక చేసుకోవాలి", "ఆలోచిస్తున్నాను"],
+  kn: ["ಮನಸ್ಸು ಭಾರ", "ಮನಸ್ಸು ಹಗುರ ಮಾಡಬೇಕು", "ಯೋಚಿಸುತ್ತಿದ್ದೇನೆ"],
+  ml: ["മനസ്സ് ഭാരം", "മനസ്സ് ഒഴിക്കണം", "ആലോചിക്കുന്നു"],
+  gu: ["મન ભારે છે", "મન ઠાળવવું છે", "વિચારી રહ્યો/રહી છું"],
+  pa: ["ਮਨ ਭਾਰਾ ਹੈ", "ਮਨ ਹੌਲਾ ਕਰਨਾ ਹੈ", "ਸੋਚ ਰਿਹਾ/ਰਹੀ ਹਾਂ"],
+  or: ["ମନ ଭାରୀ ଅଛି", "ମନ ହାଲୁକା କରିବାକୁ ଚାହୁଁଛି", "ଭାବୁଛି"],
+  he: ["מרגיש כבד", "צריך להוציא את זה", "רק חושב בקול"],
+  ar: ["أشعر بثقل", "أحتاج للتعبير", "أفكر بصوت عالٍ"],
+  de: ["Fühle mich schwer", "Muss mal reden", "Denke laut nach"],
+  ja: ["気持ちが重い", "話を聞いてほしい", "ただ考えを整理したい"],
+};
+
+// ── Weekly mood recap text ─────────────────────────────────────────────────────
+function getWeeklyRecapText(topEmotion: string, count: number, lang: string): string {
+  const RECAP: Record<string, (e: string, c: number) => string> = {
+    en: (e, c) => `Last 7 days: "${e}" was your most frequent feeling (${c} times). Want to reflect on what's been driving it?`,
+    hi: (e, c) => `पिछले 7 दिन: "${e}" सबसे ज़्यादा महसूस हुआ (${c} बार)। इसके पीछे क्या है, सोचना चाहेंगे?`,
+    mr: (e, c) => `गेले 7 दिवस: "${e}" सर्वाधिक जाणवलं (${c} वेळा). यामागे काय आहे यावर विचार करायचा आहे का?`,
+    bn: (e, c) => `গত ৭ দিন: "${e}" সবচেয়ে বেশি অনুভব হয়েছে (${c} বার)। এর পেছনে কী আছে ভাবতে চাও?`,
+    ta: (e, c) => `கடந்த 7 நாட்கள்: "${e}" அதிகமாக உணர்ந்தீர்கள் (${c} முறை). இதற்கு பின்னால் என்ன என்று சிந்திக்க விரும்புகிறீர்களா?`,
+    te: (e, c) => `గత 7 రోజులు: "${e}" అత్యధికంగా అనిపించింది (${c} సార్లు). దీని వెనక ఏముందో ఆలోచించాలనుకుంటున్నారా?`,
+    kn: (e, c) => `ಕಳೆದ 7 ದಿನಗಳು: "${e}" ಅತ್ಯಧಿಕ ಅನಿಸಿತು (${c} ಬಾರಿ). ಇದರ ಹಿಂದೆ ಏನಿದೆ ಎಂದು ಯೋಚಿಸಬೇಕಾ?`,
+    ml: (e, c) => `കഴിഞ്ഞ 7 ദിവസം: "${e}" ഏറ്റവും കൂടുതൽ (${c} തവണ). ഇതിന് പിന്നിൽ എന്തുണ്ടെന്ന് ചിന്തിക്കാൻ ആഗ്രഹിക്കുന്നോ?`,
+    gu: (e, c) => `છેલ્લા 7 દિવસ: "${e}" સૌથી વધુ (${c} વખત). આ પાછળ શું છે, વિચારવું છે?`,
+    pa: (e, c) => `ਪਿਛਲੇ 7 ਦਿਨ: "${e}" ਸਭ ਤੋਂ ਵੱਧ (${c} ਵਾਰ). ਇਸ ਪਿੱਛੇ ਕੀ ਹੈ, ਸੋਚਣਾ ਚਾਹੋਗੇ?`,
+    or: (e, c) => `ଗତ 7 ଦିନ: "${e}" ସବୁଠୁ ଅଧିକ (${c} ଥର). ଏହା ପଛରେ କ'ଣ ଅଛି ଭାବିବାକୁ ଚାହୁଁଛନ୍ତି?`,
+  };
+  return (RECAP[lang] ?? RECAP.en)(topEmotion, count);
+}
 
 // ── 3-tier crisis detection ───────────────────────────────────────────────────
 // Tier 2: direct suicidal ideation, self-harm, immediate danger
@@ -1659,6 +1695,10 @@ export default function ChatScreen() {
     }).catch(() => {});
   }, []);
 
+  // Weekly mood recap banner — state only; effect wired after history is declared below
+  const [weeklyRecap, setWeeklyRecap] = useState<string | null>(null);
+  const [weeklyRecapDismissed, setWeeklyRecapDismissed] = useState(false);
+
   // P1 state — effect wired after history is declared (below store destructure)
   const [activeOpenLoop, setActiveOpenLoop] = useState<OpenLoop | null>(null);
   const [milestoneLoop, setMilestoneLoop] = useState<{ themeName: string } | null>(null);
@@ -1839,6 +1879,23 @@ export default function ChatScreen() {
 
   // ── Auth: get Supabase session token for mobile API calls ──────────────────
   const { accessToken } = useAuth();
+
+  // Weekly mood recap — compute from history once it's loaded
+  useEffect(() => {
+    if (history.length === 0) return;
+    const now = Date.now();
+    const weekMs = 7 * 86_400_000;
+    const thisWeek = history.filter(
+      (r: any) => !r.deleted && r.from === "user" && (r.timestamp ?? 0) >= now - weekMs && r.emotion && r.emotion !== "neutral",
+    );
+    if (thisWeek.length < 5) return;
+    const freq: Record<string, number> = {};
+    for (const r of thisWeek as any[]) freq[r.emotion] = (freq[r.emotion] ?? 0) + 1;
+    const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
+    if (!top) return;
+    const lang = toneContext?.user?.preferredLang ?? "en";
+    setWeeklyRecap(getWeeklyRecapText(top[0], top[1], lang));
+  }, [history.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // P1 — Emotional Open Loops + NF-1 milestone celebration
   useEffect(() => {
@@ -2151,14 +2208,15 @@ export default function ChatScreen() {
   }, [lastSyncAt, lastSyncStatus]);
 
   // Banner priority queue — max 1 Tier-2 banner visible at once
-  const activeTier2Banner = useMemo((): "returnGreeting" | "dailyCheckin" | "trialCountdown" | "milestoneLoop" | "collectivePulse" | null => {
+  const activeTier2Banner = useMemo((): "returnGreeting" | "dailyCheckin" | "trialCountdown" | "milestoneLoop" | "weeklyRecap" | "collectivePulse" | null => {
     if (showReturnGreeting) return "returnGreeting";
     if (showDailyCheckin && intakeStep === 0) return "dailyCheckin";
     if (showTrialBanner && licenseExpiresAt) return "trialCountdown";
     if (milestoneLoop) return "milestoneLoop";
+    if (weeklyRecap && !weeklyRecapDismissed) return "weeklyRecap";
     if (collectivePulse && !pulseDismissed) return "collectivePulse";
     return null;
-  }, [showReturnGreeting, showDailyCheckin, intakeStep, showTrialBanner, licenseExpiresAt, milestoneLoop, collectivePulse, pulseDismissed]);
+  }, [showReturnGreeting, showDailyCheckin, intakeStep, showTrialBanner, licenseExpiresAt, milestoneLoop, weeklyRecap, weeklyRecapDismissed, collectivePulse, pulseDismissed]);
 
   useEffect(() => {
     if (!isTyping) {
@@ -4699,6 +4757,18 @@ export default function ChatScreen() {
         />
       )}
 
+      {/* Weekly mood recap */}
+      {activeTier2Banner === "weeklyRecap" && weeklyRecap && (
+        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.2)", backgroundColor: "rgba(30,27,75,0.5)", paddingHorizontal: 14, paddingVertical: 10 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ flex: 1, fontSize: 12, color: "rgba(196,181,253,0.85)", lineHeight: 18 }}>{weeklyRecap}</Text>
+            <TouchableOpacity onPress={() => setWeeklyRecapDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={{ color: "rgba(165,180,252,0.5)", fontSize: 18, marginLeft: 8 }}>×</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* NF-5 — Anonymous Collective Pulse */}
       {activeTier2Banner === "collectivePulse" && collectivePulse && (
         <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.2)", backgroundColor: "rgba(30,27,75,0.5)", paddingHorizontal: 14, paddingVertical: 10 }}>
@@ -4791,6 +4861,21 @@ export default function ChatScreen() {
           <TouchableOpacity onPress={() => { AsyncStorage.setItem(DAILY_CHECKIN_KEY, new Date().toISOString().slice(0, 10)).catch(() => {}); setShowDailyCheckin(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ alignSelf: "flex-end", marginTop: 6 }}>
             <Text style={{ fontSize: 10, color: "rgba(148,163,184,0.5)" }}>Later</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Sentiment seed chips — shown when chat has messages and input is empty */}
+      {messages.length > 0 && input.trim() === "" && (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 12, paddingBottom: 6 }}>
+          {(SENTIMENT_SEEDS_BY_LANG[toneContext?.user?.preferredLang ?? "en"] ?? SENTIMENT_SEEDS_BY_LANG.en).map((seed) => (
+            <TouchableOpacity
+              key={seed}
+              onPress={() => handleInputChange(seed)}
+              style={{ borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.05)", paddingHorizontal: 10, paddingVertical: 4 }}
+            >
+              <Text style={{ fontSize: 11, color: "rgba(161,161,170,0.9)" }}>{seed}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 
