@@ -1,5 +1,5 @@
 # Google Play — Data Safety Section Answers
-# Imotara v1.0.2
+# Imotara (keep updated with each release — data types rarely change)
 
 Use this document to fill in the Data Safety form in Google Play Console.
 ---
@@ -123,7 +123,7 @@ Use this document to fill in the Data Safety form in Google Play Console.
 ## 7. Security Practices (check these in the form)
 
 - [x] Data is encrypted in transit (HTTPS)
-- [ ] Data is encrypted at rest *(local AsyncStorage is not encrypted — do NOT check this)*
+- [ ] Data is encrypted at rest *(chat history in AsyncStorage is not encrypted — do NOT check this. Companion memories and JWT are in device Keychain/Keystore via expo-secure-store.)*
 - [x] Users can request data deletion
 - [ ] App follows Families Policy *(only check if targeting children)*
 - [ ] App has been independently security reviewed
