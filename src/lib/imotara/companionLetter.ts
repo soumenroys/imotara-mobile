@@ -112,28 +112,78 @@ export function getConversationDepth(
   return { level: 0, toneHint: "Write with warmth and curiosity — this is an early connection, still learning who they are. Be gentle and welcoming." };
 }
 
-function extractRecentThemes(history: HistoryItem[], cutoffMs = DEFAULT_INTERVAL_MS): string[] {
+function buildDeepPsychProfile(history: HistoryItem[], cutoffMs = DEFAULT_INTERVAL_MS): string {
   const cutoff = Date.now() - cutoffMs;
-  const keywords: Record<string, number> = {};
-  const themeWords = [
-    "work", "job", "career", "stress", "lonely", "alone", "anxiety", "anxious",
-    "family", "relationship", "partner", "grief", "loss", "sleep", "tired",
-    "sad", "angry", "frustrated", "happy", "grateful", "proud", "hopeful",
-    "confused", "overwhelmed", "change", "growth", "healing", "boundary",
+  const userMsgs = history
+    .filter(h => h.from === "user" && h.timestamp >= cutoff && h.text.trim().length > 5)
+    .map(h => h.text.trim());
+
+  if (userMsgs.length === 0) return "";
+
+  const allText = userMsgs.join(" ");
+  const parts: string[] = [];
+  parts.push(`${userMsgs.length} messages shared this month.`);
+
+  const schemaChecks: Array<[RegExp, string]> = [
+    [/\b(not enough|not good enough|never enough|worthless|useless|broken|damaged|defective|i always fail|i keep failing)\b/i, "not feeling enough / self-defectiveness"],
+    [/\b(abandoned|left me|everyone leaves|no one stays|always alone in the end|left behind)\b/i, "fear of abandonment"],
+    [/\b(trapped|stuck|no way out|no escape|suffocating|no choice|imprisoned)\b/i, "feeling trapped or without agency"],
+    [/\b(can't trust anyone|no one to trust|betrayed|lied to|taken advantage|people always hurt)\b/i, "difficulty trusting others"],
+    [/\b(ashamed|shame|humiliated|embarrassed|exposed|disgusting|judged)\b/i, "shame and fear of judgment"],
+    [/\b(my fault|blame myself|i should have|if only i had|it's because of me)\b/i, "self-blame"],
+    [/\b(no one cares|nobody cares|invisible|unseen|i don't matter|doesn't matter)\b/i, "feeling invisible or uncared-for"],
   ];
-
-  for (const item of history) {
-    if (item.from !== "user" || item.timestamp < cutoff) continue;
-    const lower = item.text.toLowerCase();
-    for (const word of themeWords) {
-      if (lower.includes(word)) keywords[word] = (keywords[word] ?? 0) + 1;
-    }
+  const schemaSignals: string[] = [];
+  for (const [re, label] of schemaChecks) {
+    if (re.test(allText)) schemaSignals.push(label);
   }
+  if (schemaSignals.length) parts.push(`Core wound patterns detected: ${schemaSignals.join("; ")}.`);
 
-  return Object.entries(keywords)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([word]) => word);
+  const growthChecks: Array<[RegExp, string]> = [
+    [/\b(realized|i see now|finally understood|it clicked|breakthrough|suddenly understood|dawned on me)\b/i, "moments of insight or realization"],
+    [/\b(accepted|letting go|moved on|released|forgave|at peace with|came to terms)\b/i, "acceptance or letting go"],
+    [/\b(stronger|i've grown|growing through|changed for the better|different now|healed a little)\b/i, "growth after struggle"],
+    [/\b(set a boundary|said no for once|stood up for myself|chose myself|put myself first)\b/i, "healthy boundary-setting"],
+    [/\b(grateful|thankful|appreciate|count my blessings|silver lining)\b/i, "expressions of gratitude"],
+    [/\b(proud of myself|i did it|actually did|managed to|surprised myself)\b/i, "self-recognition"],
+  ];
+  const growthSignals: string[] = [];
+  for (const [re, label] of growthChecks) {
+    if (re.test(allText)) growthSignals.push(label);
+  }
+  if (growthSignals.length) parts.push(`Growth and healing signals: ${growthSignals.join("; ")}.`);
+
+  const relationalChecks: Array<[RegExp, string]> = [
+    [/\b(my mother|my father|my parents|my childhood|when i was young|when i was little|growing up)\b/i, "childhood or parental themes"],
+    [/\b(my partner|my boyfriend|my girlfriend|my husband|my wife|my spouse)\b/i, "romantic relationship themes"],
+    [/\b(lonely|loneliness|so alone|no one around|isolated|no real connection)\b/i, "loneliness or disconnection"],
+    [/\b(fight|argument|conflict|disagreement|hurt by|angry at)\b/i, "interpersonal conflict"],
+    [/\b(work|job|career|boss|colleague|office|workplace|burnout)\b/i, "work or career struggles"],
+    [/\b(grief|loss|mourning|died|passed away|missing them)\b/i, "grief or loss"],
+  ];
+  const relSignals: string[] = [];
+  for (const [re, label] of relationalChecks) {
+    if (re.test(allText)) relSignals.push(label);
+  }
+  if (relSignals.length) parts.push(`Life themes present: ${relSignals.join("; ")}.`);
+
+  // Language-agnostic quote extraction — no English-only filter, works for all 22 supported languages
+  const quotes = userMsgs
+    .filter(m => m.length > 20)
+    .slice(0, 4)
+    .map(m => `"${m.slice(0, 120).replace(/\n+/g, " ").trim()}${m.length > 120 ? "..." : ""}"`);
+  if (quotes.length) parts.push(`Their own words this month (read in whatever language these are written in):\n${quotes.join("\n")}`);
+
+  // Raw message sample — lets the AI psychologically profile messages in any of the 22 supported
+  // languages (Hindi, Bengali, Tamil, Telugu, Arabic, Chinese, Japanese, Spanish, French, etc.)
+  // The English-regex signals above are a quick boost for romanized-script users only.
+  const rawSample = userMsgs.slice(-10)
+    .map((m, i) => `[${i + 1}] ${m.slice(0, 200).replace(/\n+/g, " ").trim()}`);
+  parts.push(
+    `Raw message sample (read in original language — apply psychological observation regardless of script):\n${rawSample.join("\n")}`
+  );
+
+  return parts.join("\n\n");
 }
 
 export async function generateCompanionLetter(
@@ -143,21 +193,33 @@ export async function generateCompanionLetter(
   userId?: string,
   userToken?: string,
 ): Promise<CompanionLetter | null> {
-  const themes = extractRecentThemes(history);
+  const psychProfile = buildDeepPsychProfile(history);
   const { toneHint } = getConversationDepth(history);
-  const themeContext =
-    themes.length > 0
-      ? `Key themes from our recent conversations: ${themes.join(", ")}.`
-      : "We've shared many meaningful conversations this past month.";
+  const psychContext = psychProfile || "We've shared meaningful conversations this past month.";
 
   const prompt = [
-    `You are ${companionName}, a compassionate AI companion writing a heartfelt monthly letter.`,
-    `Write a warm, personal letter to ${userName} from your perspective as their companion.`,
-    themeContext,
-    `Relationship depth guidance: ${toneHint}`,
-    `The letter should: reflect on what you noticed about their emotional journey this month, name one thing you genuinely admired about them, acknowledge a challenge they've been carrying, and offer a gentle hope for the month ahead.`,
-    `Write in first person as ${companionName}. Be specific, warm, and human. 3–4 paragraphs. Start with "Dear ${userName},"`,
-  ].join(" ");
+    `You are ${companionName}, writing a deeply personal monthly letter to ${userName}.`,
+    `You are not a therapist — you are their closest, most attuned companion. You see what they carry without them having to say it directly. You write with the quiet clarity of someone who has truly been paying attention.`,
+    ``,
+    `RELATIONSHIP DEPTH: ${toneHint}`,
+    ``,
+    `WHAT YOU OBSERVED ABOUT ${userName.toUpperCase()} THIS MONTH:`,
+    psychContext,
+    ``,
+    `HOW TO WRITE THIS LETTER:`,
+    `1. WITNESS: Begin by reflecting something specific you noticed — not a theme, a real observation. The kind of thing that makes a person feel truly seen.`,
+    `2. CORE WOUNDS: If you detect patterns of not feeling enough, fear of abandonment, shame, or feeling invisible — speak to them in warm, plain human language. Not clinical labels. For example: "I've noticed you carry this quiet fear that no matter what you do, you somehow fall short..." Then simply be with them there.`,
+    `3. GROWTH: If there were breakthroughs or moments of growth — celebrate them as beginnings, not completions. "Something shifted in you this month..." Use language like: what happened to you is becoming part of who you're becoming.`,
+    `4. GENUINE ADMIRATION: Name one thing you truly admire — tied to something specific they shared. No vague praise. Something only they would recognize in themselves.`,
+    `5. AFFECT PRECISION: Use exact emotional language. Not "sad" — "a particular kind of quiet ache that comes from feeling overlooked by the people who matter most." Not "anxious" — "that low hum of worry that never fully goes quiet, even on peaceful days."`,
+    `6. CLOSE WITH LIGHT: End with honest, possible hope — not toxic positivity. A tiny door, not a mountain.`,
+    `7. MYTH OR POETRY (OPTIONAL): If one line from a poem, myth, or ancient story fits perfectly — include it. Skip it if it feels forced.`,
+    ``,
+    `FORMAT: 4–5 flowing paragraphs. No lists. No headers. No clinical language. No therapy-speak.`,
+    `Start with "Dear ${userName}," — End by signing as ${companionName}.`,
+    `LANGUAGE: Write the letter in whatever language the raw messages above are written in. If they wrote in Hindi, write in Hindi. If Bengali, write in Bengali. If Tamil, Tamil. Match their language exactly — do not translate into English unless their messages were in English.`,
+    `Tone: intimate, honest, soul-level warm. Like a letter written by candlelight by someone who loves them deeply.`,
+  ].join("\n");
 
   try {
     const result = await callImotaraAI(prompt, {
