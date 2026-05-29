@@ -1,9 +1,12 @@
 // src/hooks/useVoiceInput.ts
 // Records audio via expo-av and returns the URI for STT transcription.
+// Uses expo-file-system for file upload — required for reliable FormData
+// serialisation in production Hermes builds (RN 0.76 new architecture).
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Alert, Linking, Platform } from "react-native";
 import { Audio } from "expo-av";
+import * as FileSystem from "expo-file-system/legacy";
 
 export type VoiceInputState = "idle" | "recording" | "transcribing" | "error";
 
@@ -31,6 +34,47 @@ export type VoiceInputOptions = {
     cloudTranscription?: boolean;
     lang?: string;
 };
+
+/**
+ * Upload an audio file to /api/voice/transcribe.
+ *
+ * In production Hermes builds, passing { uri, name, type } directly to
+ * FormData.append silently fails — the file blob is empty or corrupt.
+ * The fix: read the file via expo-file-system first, then use
+ * FileSystem.uploadAsync which handles the native multipart encoding
+ * correctly in both debug and production builds.
+ */
+async function transcribeAudio(
+    uri: string,
+    apiBaseUrl: string,
+    lang: string,
+): Promise<string> {
+    const endpoint = `${apiBaseUrl}/api/voice/transcribe`;
+
+    // FileSystem.uploadAsync is the reliable path for production Hermes builds.
+    // It directly reads the file on the native side, bypassing the JS-side
+    // FormData serialisation that breaks in release/Hermes mode.
+    const uploadResult = await FileSystem.uploadAsync(endpoint, uri, {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType: "audio/m4a",
+        parameters: { lang },
+    });
+
+    if (uploadResult.status < 200 || uploadResult.status >= 300) {
+        throw new Error(`Transcription API returned ${uploadResult.status}`);
+    }
+
+    let json: { text?: string } | null = null;
+    try {
+        json = JSON.parse(uploadResult.body);
+    } catch {
+        throw new Error("Invalid response from transcription API");
+    }
+
+    return (json?.text ?? "").trim();
+}
 
 export function useVoiceInput(
     onTranscript: (text: string) => void,
@@ -61,52 +105,52 @@ export function useVoiceInput(
         if (!recording) { setState("idle"); return; }
 
         setState("transcribing");
+        let uri: string | null = null;
         try {
             await recording.stopAndUnloadAsync();
             await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-            const uri = recording.getURI();
+            uri = recording.getURI() ?? null;
             recordingRef.current = null;
 
             if (!uri) throw new Error("No recording URI");
 
             let transcript = "";
+
             if (apiBaseUrl && cloudTranscription) {
                 try {
-                    const form = new FormData();
-                    form.append("file", {
-                        uri,
-                        name: "voice.m4a",
-                        type: "audio/m4a",
-                    } as any);
-                    form.append("lang", langRef.current);
-                    const res = await fetch(`${apiBaseUrl}/api/voice/transcribe`, {
-                        method: "POST",
-                        body: form,
-                    });
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    const json = await res.json().catch(() => null);
-                    transcript = json?.text ?? "";
-                } catch {
-                    // transcription unavailable — fall through
+                    transcript = await transcribeAudio(uri, apiBaseUrl, langRef.current);
+                } catch (err) {
+                    // Transcription failed — log but don't crash
+                    console.warn("[useVoiceInput] Transcription failed:", err);
                 }
             }
 
             if (transcript.trim()) {
                 onTranscript(transcript.trim());
             } else {
+                // Transcription returned nothing — could be silence, very short
+                // recording, or a temporary API issue.
                 Alert.alert(
-                    "Voice recorded",
-                    "Cloud transcription is not set up yet. Your recording was captured but cannot be converted to text automatically right now.",
+                    "Couldn't transcribe",
+                    "We couldn't convert your voice to text. Please try again, or type your message instead.",
                     [{ text: "OK" }],
                 );
             }
-        } catch {
-            Alert.alert("Voice input error", "Could not process the recording. Please try again.");
+        } catch (err) {
+            console.warn("[useVoiceInput] stopRecording error:", err);
+            Alert.alert(
+                "Voice input error",
+                "Could not process the recording. Please try again.",
+            );
         } finally {
+            // Clean up temp file to avoid filling device storage
+            if (uri) {
+                FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+            }
             setState("idle");
             setDurationMs(0);
         }
-    }, [apiBaseUrl, onTranscript]);
+    }, [apiBaseUrl, cloudTranscription, onTranscript]);
 
     const startRecording = useCallback(async (): Promise<boolean> => {
         if (Platform.OS === "web") {
@@ -157,7 +201,8 @@ export function useVoiceInput(
             }, 500);
 
             return true;
-        } catch {
+        } catch (err) {
+            console.warn("[useVoiceInput] startRecording error:", err);
             const { granted } = await Audio.getPermissionsAsync().catch(() => ({ granted: false, canAskAgain: false }));
             if (!granted) {
                 Alert.alert(
@@ -174,7 +219,7 @@ export function useVoiceInput(
             }
             return false;
         }
-    }, [stopRecording]);
+    }, [maxDurationMs, quality, stopRecording]);
 
     const cancelRecording = useCallback(async (): Promise<void> => {
         clearTimer();
@@ -184,6 +229,10 @@ export function useVoiceInput(
             try {
                 await recording.stopAndUnloadAsync();
                 await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+                const uri = recording.getURI();
+                if (uri) {
+                    FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+                }
             } catch { /* ignore */ }
         }
         setState("idle");
