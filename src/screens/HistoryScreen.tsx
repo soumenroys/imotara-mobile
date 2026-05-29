@@ -361,6 +361,7 @@ export default function HistoryScreen() {
         autoSyncDelaySeconds,
         showAssistantRepliesInHistory,
         setShowAssistantRepliesInHistory,
+        showSyncBadge,
     } = useSettings();
 
     const scrollRef = React.useRef<FlatList>(null);
@@ -936,8 +937,8 @@ export default function HistoryScreen() {
 
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
-            {/* Sync status banner — moved from ChatScreen header */}
-            {(() => {
+            {/* Sync status banner — hidden by default, shown only if showSyncBadge is enabled */}
+            {showSyncBadge && (() => {
                 const chipColor =
                     topChip.variant === "danger" ? "#f87171"
                     : topChip.variant === "primary" ? colors.primary
@@ -1670,7 +1671,7 @@ export default function HistoryScreen() {
                                     <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4 }}>
                                         {formatTimeLabelSafe(item.timestamp)}
                                     </Text>
-                                    <AppChip label={chipLabel} variant={chipVariant} icon={chipIcon} iconName={chipIconName} animate style={{ alignSelf: isUser ? "flex-end" : "flex-start", marginTop: 6 }} />
+                                    {showSyncBadge && <AppChip label={chipLabel} variant={chipVariant} icon={chipIcon} iconName={chipIconName} animate style={{ alignSelf: isUser ? "flex-end" : "flex-start", marginTop: 6 }} />}
                                     {!isUser && typeof item.intensity === "number" && item.intensity > 0 && (
                                         <View style={{ marginTop: 6, flexDirection: "row", alignItems: "center", gap: 6 }}>
                                             <View style={{ flex: 1, height: 3, borderRadius: 2, backgroundColor: "rgba(148,163,184,0.2)" }}>
@@ -1681,7 +1682,7 @@ export default function HistoryScreen() {
                                             </Text>
                                         </View>
                                     )}
-                                    {!item.isSynced && (
+                                    {showSyncBadge && !item.isSynced && (
                                         <AppButton
                                             title={isLoadingRemote ? "Checking cloud…" : !canCloudSync ? "Cloud copy (Premium)" : "Tap to check cloud copy"}
                                             onPress={() => { if (!canCloudSync) { showPremiumAlert(); return; } handleLoadRemote(); }}

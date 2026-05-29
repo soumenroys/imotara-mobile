@@ -981,6 +981,7 @@ type MessageBubbleProps = {
   showTimestamps?: boolean;
   reactionsSet?: "default" | "minimal" | "extended";
   crisisThreshold?: "sensitive" | "standard" | "conservative";
+  showSyncBadge?: boolean;
   onLongPress: (msg: ChatMessage) => void;
   onDismissCrisisCard: (id: string) => void;
   onRetry: (messageId: string, prevUserText: string) => void;
@@ -1006,6 +1007,7 @@ function MessageBubble({
   companionAvatarSource,
   companionName,
   showTimestamps = false,
+  showSyncBadge = false,
   reactionsSet = "default",
   crisisThreshold = "standard",
   onLongPress,
@@ -1174,7 +1176,7 @@ function MessageBubble({
         </View>
       )}
 
-      {isUser && (
+      {isUser && showSyncBadge && (
         <View style={{
           alignSelf: "flex-end",
           marginTop: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1,
@@ -1233,7 +1235,7 @@ function MessageBubble({
           style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: Math.min(screenWidth * (isUser ? 0.76 : 0.75), 480), marginBottom: 10, paddingHorizontal: 1, marginRight: isUser ? 2 : 0 }}
         >
           {isUser ? (
-            <View style={{ backgroundColor: bubbleBackground, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: bubbleBorderColor === "transparent" ? 0 : 1, borderColor: bubbleBorderColor }}>
+            <View style={{ backgroundColor: bubbleBackground, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: (!showSyncBadge || bubbleBorderColor === "transparent") ? 0 : 1, borderColor: showSyncBadge ? bubbleBorderColor : "transparent" }}>
               {bubbleContent}
             </View>
           ) : (
@@ -1922,6 +1924,8 @@ export default function ChatScreen() {
     localUserScopeId,
 
     refreshLicense,
+
+    showSyncBadge,
   } = useSettings();
 
   // Keep panel-enabled refs in sync with settings (refs are read inside the PanResponder closure)
@@ -4287,6 +4291,7 @@ export default function ChatScreen() {
               onBookmark={handleToggleBookmark}
               onReact={addReaction}
               showTimestamps={showMsgTimestamps}
+              showSyncBadge={showSyncBadge}
               reactionsSet={chatReactionsSet}
               crisisThreshold={crisisThresholdSetting}
             />

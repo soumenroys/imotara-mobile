@@ -119,6 +119,10 @@ type SettingsContextValue = {
     /** Shows age-appropriate reflections with peer-supportive language. */
     teenMode: boolean;
     setTeenMode: (value: boolean) => void;
+
+    /** Show "Synced to cloud" / "On this device only" badges on messages. Default false. */
+    showSyncBadge: boolean;
+    setShowSyncBadge: (value: boolean) => void;
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -213,6 +217,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const [companionPanelEnabled, _setCompanionPanelEnabled] = useState(true);
     const [planPanelEnabled, _setPlanPanelEnabled] = useState(true);
     const [teenMode, _setTeenMode] = useState(false);
+    const [showSyncBadge, _setShowSyncBadge] = useState(false); // default: hidden
 
     // Phase 2.4: History list preference (default: hide assistant replies)
     const [showAssistantRepliesInHistory, _setShowAssistantRepliesInHistory] =
@@ -382,6 +387,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             _setTeenMode(safeBool((parsed as any).teenMode, false));
                         }
 
+                        if ("showSyncBadge" in parsed) {
+                            _setShowSyncBadge(safeBool((parsed as any).showSyncBadge, false));
+                        }
+
                         if ("showAssistantRepliesInHistory" in parsed) {
                             _setShowAssistantRepliesInHistory(
                                 safeBool((parsed as any).showAssistantRepliesInHistory, false)
@@ -508,6 +517,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             companionPanelEnabled,
             planPanelEnabled,
             teenMode,
+            showSyncBadge,
             showAssistantRepliesInHistory,
             autoSyncDelaySeconds,
             lastSyncAt,
@@ -533,6 +543,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         companionPanelEnabled,
         planPanelEnabled,
         teenMode,
+        showSyncBadge,
         showAssistantRepliesInHistory,
         autoSyncDelaySeconds,
         lastSyncAt,
@@ -558,6 +569,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     const setTeenMode = (value: boolean) => {
         _setTeenMode(!!value);
+    };
+
+    const setShowSyncBadge = (value: boolean) => {
+        _setShowSyncBadge(!!value);
     };
 
     const setShowAssistantRepliesInHistory = (value: boolean) => {
@@ -666,6 +681,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setChatLinkKey,
                 teenMode,
                 setTeenMode,
+                showSyncBadge,
+                setShowSyncBadge,
             }}
         >
             {children}

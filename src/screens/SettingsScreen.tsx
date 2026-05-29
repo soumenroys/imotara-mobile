@@ -298,6 +298,8 @@ export default function SettingsScreen() {
         setPlanPanelEnabled,
         teenMode,
         setTeenMode,
+        showSyncBadge,
+        setShowSyncBadge,
         lastSyncAt,
         lastSyncStatus,
         setLastSyncAt,
@@ -4755,6 +4757,22 @@ export default function SettingsScreen() {
                         <Switch
                             value={showChatTimestamps}
                             onValueChange={handleShowTimestampsToggle}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+                </AppSurface>
+
+                {/* Sync status badge toggle */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Show sync status</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Show "Synced" badges and sync indicators on messages</Text>
+                        </View>
+                        <Switch
+                            value={showSyncBadge}
+                            onValueChange={setShowSyncBadge}
                             trackColor={{ false: colors.border, true: colors.primary }}
                             thumbColor="#ffffff"
                         />
