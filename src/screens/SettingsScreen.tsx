@@ -25,6 +25,8 @@ import {
     Image,
     Share,
     Modal,
+    ActivityIndicator,
+    InteractionManager,
 } from "react-native";
 
 import { useHistoryStore } from "../state/HistoryContext";
@@ -267,7 +269,32 @@ function AvatarSlider({
     );
 }
 
+// ── SettingsScreen shell ─────────────────────────────────────────────────────
+// Splits the heavy content into a child component so we can defer its mount
+// until after the tab-switch animation completes. Without this, 140+ hook
+// initialisations + dozens of concurrent AsyncStorage reads fire on mount,
+// causing blank frames during tab switches.
 export default function SettingsScreen() {
+    const { colors: colors_early } = useTheme();
+    const [screenReady, setScreenReady] = React.useState(false);
+
+    React.useEffect(() => {
+        const task = InteractionManager.runAfterInteractions(() => setScreenReady(true));
+        return () => task.cancel();
+    }, []);
+
+    if (!screenReady) {
+        return (
+            <View style={{ flex: 1, backgroundColor: colors_early.background, alignItems: "center", justifyContent: "center" }}>
+                <ActivityIndicator size="small" color={colors_early.primary} />
+            </View>
+        );
+    }
+
+    return <SettingsScreenContent />;
+}
+
+function SettingsScreenContent() {
     const { accessToken, signOut } = useAuth();
 
     // Keep compatibility with your current store shape, but allow optional newer fields

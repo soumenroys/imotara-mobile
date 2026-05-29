@@ -3,7 +3,7 @@
 // Shows: streak, weekly emotion frequency bars, dominant emotion per day, summary.
 
 import React, { useMemo, useState, useEffect } from "react";
-import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, Vibration } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, Vibration, ActivityIndicator, InteractionManager } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -1154,7 +1154,30 @@ function ChallengeWidget({ colors }: { colors: any }) {
   );
 }
 
+// ── TrendsScreen shell ────────────────────────────────────────────────────────
+// Defers the heavy content mount until after tab-switch animation completes,
+// preventing blank frames caused by 43 hook initialisations firing simultaneously.
 export default function TrendsScreen() {
+  const colors_early = useColors();
+  const [screenReady, setScreenReady] = useState(false);
+
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => setScreenReady(true));
+    return () => task.cancel();
+  }, []);
+
+  if (!screenReady) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors_early.background, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator size="small" color={colors_early.primary} />
+      </View>
+    );
+  }
+
+  return <TrendsScreenContent />;
+}
+
+function TrendsScreenContent() {
   const colors = useColors();
   const navigation = useNavigation<any>();
   const store = useHistoryStore() as any;
