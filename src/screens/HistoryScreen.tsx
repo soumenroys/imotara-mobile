@@ -1,6 +1,6 @@
 // src/screens/HistoryScreen.tsx
 import React from "react";
-import { View, Text, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, RefreshControl, Animated, PanResponder, Share } from "react-native";
+import { View, Text, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, RefreshControl, Animated, PanResponder, Share, ActivityIndicator, InteractionManager } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { buildApiUrl } from "../config/api";
 import { Ionicons } from "@expo/vector-icons";
@@ -315,7 +315,30 @@ function SwipeableRow({
     );
 }
 
+// ── HistoryScreen shell ───────────────────────────────────────────────────────
+// Defers the heavy content (56 hooks + VirtualizedList) until after the
+// tab-switch animation completes, preventing blank frames.
 export default function HistoryScreen() {
+    const colors_early = useColors();
+    const [screenReady, setScreenReady] = React.useState(false);
+
+    React.useEffect(() => {
+        const task = InteractionManager.runAfterInteractions(() => setScreenReady(true));
+        return () => task.cancel();
+    }, []);
+
+    if (!screenReady) {
+        return (
+            <View style={{ flex: 1, backgroundColor: colors_early.background, alignItems: "center", justifyContent: "center" }}>
+                <ActivityIndicator size="small" color={colors_early.primary} />
+            </View>
+        );
+    }
+
+    return <HistoryScreenContent />;
+}
+
+function HistoryScreenContent() {
     const colors = useColors();
     const navigation = useNavigation<any>();
 
