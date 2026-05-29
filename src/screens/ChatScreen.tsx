@@ -1256,22 +1256,40 @@ function MessageBubble({
         const activeReaction = reactions.get(message.id);
         const isSpeaking = speakingMessageId === message.id;
         const isBookmarked = bookmarks.has(message.id);
-        const ALL_REACTION_OPTIONS: { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string }[] = [
-          { icon: "heart", color: "#ef4444" },
-          { icon: "sad-outline", color: "#60a5fa" },
-          { icon: "happy-outline", color: "#fbbf24" },
-          { icon: "thumbs-up", color: "#4ade80" },
-          { icon: "hand-left", color: "#a78bfa" },
-          { icon: "flame", color: "#fb923c" },
-          { icon: "star", color: "#f59e0b" },
-          { icon: "leaf", color: "#34d399" },
+        // Reactions can be emoji characters (new) or Ionicons names (legacy).
+        // isEmoji detects multi-byte characters (anything outside ASCII range).
+        const isEmoji = (v?: string) => !!v && /[^\x00-\x7F]/.test(v);
+
+        // Full emoji reaction set — grouped for picker display.
+        // "minimal" = first 6, "default" = first 12, "extended" = all 20.
+        const ALL_EMOJI_REACTIONS = [
+          // Love & warmth
+          "❤️", "🥰", "💕", "💜", "💛",
+          // Encouragement
+          "🌟", "✨", "🔥", "💪", "🎉",
+          // Empathy & support
+          "🫂", "🤗", "🙏", "💙", "🤍",
+          // Nature & calm
+          "🌸", "🌿", "🌈", "🦋", "🕊️",
         ];
         const REACTION_OPTIONS = reactionsSet === "minimal"
-          ? ALL_REACTION_OPTIONS.slice(0, 3)
+          ? ALL_EMOJI_REACTIONS.slice(0, 6)
           : reactionsSet === "extended"
-          ? ALL_REACTION_OPTIONS
-          : ALL_REACTION_OPTIONS.slice(0, 6);
-        const activeOption = REACTION_OPTIONS.find((r) => r.icon === activeReaction);
+          ? ALL_EMOJI_REACTIONS
+          : ALL_EMOJI_REACTIONS.slice(0, 12);
+
+        // Legacy Ionicons fallback for reactions stored before the emoji upgrade
+        const LEGACY_IONICONS: Record<string, { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string }> = {
+          heart:        { icon: "heart",        color: "#ef4444" },
+          "sad-outline":{ icon: "sad-outline",  color: "#60a5fa" },
+          "happy-outline":{ icon:"happy-outline",color:"#fbbf24" },
+          "thumbs-up":  { icon: "thumbs-up",    color: "#4ade80" },
+          "hand-left":  { icon: "hand-left",    color: "#a78bfa" },
+          flame:        { icon: "flame",         color: "#fb923c" },
+          star:         { icon: "star",          color: "#f59e0b" },
+          leaf:         { icon: "leaf",          color: "#34d399" },
+        };
+        const legacyOption = activeReaction ? LEGACY_IONICONS[activeReaction] : undefined;
         return (
           <View style={{ marginLeft: 4, marginBottom: 6, gap: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1292,11 +1310,13 @@ function MessageBubble({
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityLabel="React to message"
               >
-                <Ionicons
-                  name={activeOption ? activeOption.icon : "happy-outline"}
-                  size={18}
-                  color={activeOption ? activeOption.color : (reactionPickerOpen ? colors.textPrimary : colors.textSecondary)}
-                />
+                {activeReaction && isEmoji(activeReaction) ? (
+                  <Text style={{ fontSize: 18, lineHeight: 22 }}>{activeReaction}</Text>
+                ) : legacyOption ? (
+                  <Ionicons name={legacyOption.icon} size={18} color={legacyOption.color} />
+                ) : (
+                  <Ionicons name="happy-outline" size={18} color={reactionPickerOpen ? colors.textPrimary : colors.textSecondary} />
+                )}
               </TouchableOpacity>
 
               {/* Copy */}
@@ -1329,19 +1349,15 @@ function MessageBubble({
 
             {/* Expandable reaction picker */}
             {reactionPickerOpen && (
-              <View style={{ flexDirection: "row", gap: 12, paddingVertical: 4, paddingLeft: 2 }}>
-                {REACTION_OPTIONS.map((opt) => (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, paddingVertical: 4, paddingLeft: 2, maxWidth: 260 }}>
+                {REACTION_OPTIONS.map((emoji) => (
                   <TouchableOpacity
-                    key={opt.icon}
-                    onPress={() => { onReact(message.id, opt.icon); setReactionPickerOpen(false); }}
+                    key={emoji}
+                    onPress={() => { onReact(message.id, emoji); setReactionPickerOpen(false); }}
                     hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    style={{ opacity: activeReaction === emoji ? 1 : 0.6 }}
                   >
-                    <Ionicons
-                      name={opt.icon}
-                      size={22}
-                      color={opt.color}
-                      style={{ opacity: activeReaction === opt.icon ? 1 : 0.55 }}
-                    />
+                    <Text style={{ fontSize: 22 }}>{emoji}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -1939,26 +1955,46 @@ export default function ChatScreen() {
   // reaction so we don't re-trigger on every re-render.
   const companionReactedBotIds = useRef<Set<string>>(new Set());
 
-  // Maps moodHint → Ionicons icon names that feel emotionally appropriate.
+  // Maps moodHint → emoji that feel emotionally appropriate.
+  // Large variety prevents repetition — each bucket has 6–10 options.
   const pickCompanionReaction = useCallback((moodHint?: string): string | null => {
     // ~50% chance to react — feels natural, not mechanical
     if (Math.random() > 0.50) return null;
     const hint = (moodHint ?? "neutral").toLowerCase();
     const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
 
-    if (hint.includes("joy") || hint.includes("happy") || hint.includes("excit")) return pick(["heart", "star", "happy-outline", "flame"]);
-    if (hint.includes("hope") || hint.includes("hopeful"))                         return pick(["star", "leaf", "happy-outline"]);
-    if (hint.includes("gratit") || hint.includes("thankful"))                      return pick(["heart", "star"]);
-    if (hint.includes("sad") || hint.includes("grief") || hint.includes("loss"))   return pick(["heart", "hand-left"]);
-    if (hint.includes("anxi") || hint.includes("worry") || hint.includes("fear"))  return pick(["hand-left", "heart"]);
-    if (hint.includes("stress") || hint.includes("overwhelm"))                     return pick(["hand-left", "heart"]);
-    if (hint.includes("ang") || hint.includes("frustrat"))                         return pick(["hand-left", "heart"]);
-    if (hint.includes("lone") || hint.includes("isol"))                            return pick(["heart", "hand-left"]);
-    if (hint.includes("tired") || hint.includes("exhaust") || hint.includes("burn")) return pick(["heart", "leaf"]);
-    if (hint.includes("proud") || hint.includes("achiev") || hint.includes("succe")) return pick(["flame", "star"]);
-    if (hint.includes("love") || hint.includes("care"))                            return pick(["heart"]);
-    if (hint.includes("calm") || hint.includes("peace"))                           return pick(["leaf", "star"]);
-    return pick(["heart", "star", "leaf", "happy-outline", "thumbs-up"]);
+    if (hint.includes("joy") || hint.includes("happy") || hint.includes("excit") || hint.includes("delight"))
+      return pick(["❤️", "🥰", "🌟", "🔥", "✨", "🎉", "💫", "🌈", "😊", "💛"]);
+    if (hint.includes("hope") || hint.includes("hopeful") || hint.includes("optim"))
+      return pick(["🌱", "✨", "🌟", "💫", "🌸", "🕊️", "🌈", "💚", "🌻"]);
+    if (hint.includes("gratit") || hint.includes("thankful") || hint.includes("appreciat"))
+      return pick(["🙏", "❤️", "💛", "🌻", "✨", "💜", "🌸"]);
+    if (hint.includes("sad") || hint.includes("grief") || hint.includes("loss") || hint.includes("mourn"))
+      return pick(["🫂", "💙", "💜", "🤍", "🕊️", "❤️", "🌷", "💐"]);
+    if (hint.includes("anxi") || hint.includes("worry") || hint.includes("fear") || hint.includes("nervous"))
+      return pick(["🫂", "💙", "🤍", "💜", "🌿", "🕊️", "💗"]);
+    if (hint.includes("stress") || hint.includes("overwhelm") || hint.includes("burden"))
+      return pick(["🫂", "💙", "💪", "🌿", "🤍", "🌊", "💜"]);
+    if (hint.includes("ang") || hint.includes("frustrat") || hint.includes("irritat"))
+      return pick(["🫂", "💙", "🌿", "🤍", "💜", "🕊️"]);
+    if (hint.includes("lone") || hint.includes("isol") || hint.includes("miss") || hint.includes("empty"))
+      return pick(["❤️", "🫂", "💜", "🌻", "🦋", "💗", "🌸", "💕"]);
+    if (hint.includes("tired") || hint.includes("exhaust") || hint.includes("burn") || hint.includes("drain"))
+      return pick(["❤️", "🫂", "🌙", "💫", "🌿", "💜", "🤍"]);
+    if (hint.includes("proud") || hint.includes("achiev") || hint.includes("succe") || hint.includes("accomplish"))
+      return pick(["🔥", "🌟", "💪", "🎉", "✨", "👑", "🥳", "⭐"]);
+    if (hint.includes("love") || hint.includes("care") || hint.includes("affec"))
+      return pick(["❤️", "💕", "🥰", "💜", "🌸", "💗", "🩷"]);
+    if (hint.includes("calm") || hint.includes("peace") || hint.includes("serene") || hint.includes("relax"))
+      return pick(["🌿", "🕊️", "✨", "🌸", "💫", "🌊", "🍃"]);
+    if (hint.includes("confus") || hint.includes("unsure") || hint.includes("lost"))
+      return pick(["💙", "🫂", "🤍", "💜", "🌟"]);
+    if (hint.includes("excit") || hint.includes("thrill") || hint.includes("eager"))
+      return pick(["🔥", "🌟", "🎉", "✨", "💫", "🥳"]);
+    if (hint.includes("courage") || hint.includes("brave") || hint.includes("strong"))
+      return pick(["💪", "🔥", "🌟", "⭐", "🦋"]);
+    // Neutral / general — warm but varied
+    return pick(["❤️", "🌟", "✨", "🫂", "💛", "🌸", "💫", "🌿", "💙", "🕊️"]);
   }, []);
 
   // Watch messages — when a new non-pending bot reply arrives, optionally react
@@ -3861,9 +3897,9 @@ export default function ChatScreen() {
             </Text>
           </View>
 
-          {/* Emoji reactions */}
-          <View style={{ flexDirection: "row", justifyContent: "space-around", paddingVertical: 10, marginBottom: 4 }}>
-            {["👍", "💙", "🙏", "✨", "🤔", "❤️"].map((emoji) => {
+          {/* Emoji reactions — quick row */}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-around", paddingVertical: 10, marginBottom: 4, gap: 4 }}>
+            {["❤️", "🥰", "💜", "🌟", "🔥", "🫂", "🙏", "✨", "💪", "🕊️"].map((emoji) => {
               const isActive = reactions.get(actionMessage.id) === emoji;
               return (
                 <TouchableOpacity
