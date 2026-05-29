@@ -3763,7 +3763,7 @@ export default function SettingsScreen() {
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
                         Auto: tries cloud, falls back to local. Cloud: always uses cloud.
                         Local: device-only, nothing is sent externally.{"\n"}
-                        When cloud is used, your message text is sent to OpenAI (ChatGPT) to generate a reply, with Google (Gemini) as a fallback. No account info, device ID, or personal data is attached. OpenAI's and Google's privacy policies apply to data processed by their APIs. Local mode keeps everything on-device — nothing is sent externally.
+                        When cloud is used, your message text is sent to Imotara's servers to generate a reply. No account info, device ID, or personal data is attached. Local mode keeps everything on-device — nothing is sent externally.
                     </Text>
 
                     {!canCloudSync ? (
