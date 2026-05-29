@@ -123,6 +123,10 @@ type SettingsContextValue = {
     /** Show "Synced to cloud" / "On this device only" badges on messages. Default false. */
     showSyncBadge: boolean;
     setShowSyncBadge: (value: boolean) => void;
+
+    /** Companion reacts to user messages with mood-relevant emoji. Default true. */
+    companionReactionsEnabled: boolean;
+    setCompanionReactionsEnabled: (value: boolean) => void;
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -218,6 +222,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const [planPanelEnabled, _setPlanPanelEnabled] = useState(true);
     const [teenMode, _setTeenMode] = useState(false);
     const [showSyncBadge, _setShowSyncBadge] = useState(false); // default: hidden
+    const [companionReactionsEnabled, _setCompanionReactionsEnabled] = useState(true); // default: on
 
     // Phase 2.4: History list preference (default: hide assistant replies)
     const [showAssistantRepliesInHistory, _setShowAssistantRepliesInHistory] =
@@ -391,6 +396,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             _setShowSyncBadge(safeBool((parsed as any).showSyncBadge, false));
                         }
 
+                        if ("companionReactionsEnabled" in parsed) {
+                            _setCompanionReactionsEnabled(safeBool((parsed as any).companionReactionsEnabled, true));
+                        }
+
                         if ("showAssistantRepliesInHistory" in parsed) {
                             _setShowAssistantRepliesInHistory(
                                 safeBool((parsed as any).showAssistantRepliesInHistory, false)
@@ -518,6 +527,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             planPanelEnabled,
             teenMode,
             showSyncBadge,
+            companionReactionsEnabled,
             showAssistantRepliesInHistory,
             autoSyncDelaySeconds,
             lastSyncAt,
@@ -544,6 +554,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         planPanelEnabled,
         teenMode,
         showSyncBadge,
+        companionReactionsEnabled,
         showAssistantRepliesInHistory,
         autoSyncDelaySeconds,
         lastSyncAt,
@@ -573,6 +584,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     const setShowSyncBadge = (value: boolean) => {
         _setShowSyncBadge(!!value);
+    };
+
+    const setCompanionReactionsEnabled = (value: boolean) => {
+        _setCompanionReactionsEnabled(!!value);
     };
 
     const setShowAssistantRepliesInHistory = (value: boolean) => {
@@ -683,6 +698,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setTeenMode,
                 showSyncBadge,
                 setShowSyncBadge,
+                companionReactionsEnabled,
+                setCompanionReactionsEnabled,
             }}
         >
             {children}

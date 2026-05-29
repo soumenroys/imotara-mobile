@@ -1,5 +1,5 @@
 // src/screens/ChatScreen.tsx
-import React, { useState, useRef, useMemo, useEffect } from "react";
+import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -1881,6 +1881,7 @@ export default function ChatScreen() {
     setActionMessage(null);
   };
 
+
   // ✅ Read store once, but allow optional newer helpers safely (no behavior loss)
   const store = useHistoryStore() as any;
   const {
@@ -1926,11 +1927,74 @@ export default function ChatScreen() {
     refreshLicense,
 
     showSyncBadge,
+    companionReactionsEnabled,
   } = useSettings();
 
   // Keep panel-enabled refs in sync with settings (refs are read inside the PanResponder closure)
   useEffect(() => { companionPanelEnabledRef.current = companionPanelEnabled; }, [companionPanelEnabled]);
   useEffect(() => { planPanelEnabledRef.current = planPanelEnabled; }, [planPanelEnabled]);
+
+  // ── Companion auto-reactions ──────────────────────────────────────────────
+  // Tracks which bot message IDs have already been considered for a companion
+  // reaction so we don't re-trigger on every re-render.
+  const companionReactedBotIds = useRef<Set<string>>(new Set());
+
+  // Maps moodHint → Ionicons icon names that feel emotionally appropriate.
+  const pickCompanionReaction = useCallback((moodHint?: string): string | null => {
+    // ~50% chance to react — feels natural, not mechanical
+    if (Math.random() > 0.50) return null;
+    const hint = (moodHint ?? "neutral").toLowerCase();
+    const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+
+    if (hint.includes("joy") || hint.includes("happy") || hint.includes("excit")) return pick(["heart", "star", "happy-outline", "flame"]);
+    if (hint.includes("hope") || hint.includes("hopeful"))                         return pick(["star", "leaf", "happy-outline"]);
+    if (hint.includes("gratit") || hint.includes("thankful"))                      return pick(["heart", "star"]);
+    if (hint.includes("sad") || hint.includes("grief") || hint.includes("loss"))   return pick(["heart", "hand-left"]);
+    if (hint.includes("anxi") || hint.includes("worry") || hint.includes("fear"))  return pick(["hand-left", "heart"]);
+    if (hint.includes("stress") || hint.includes("overwhelm"))                     return pick(["hand-left", "heart"]);
+    if (hint.includes("ang") || hint.includes("frustrat"))                         return pick(["hand-left", "heart"]);
+    if (hint.includes("lone") || hint.includes("isol"))                            return pick(["heart", "hand-left"]);
+    if (hint.includes("tired") || hint.includes("exhaust") || hint.includes("burn")) return pick(["heart", "leaf"]);
+    if (hint.includes("proud") || hint.includes("achiev") || hint.includes("succe")) return pick(["flame", "star"]);
+    if (hint.includes("love") || hint.includes("care"))                            return pick(["heart"]);
+    if (hint.includes("calm") || hint.includes("peace"))                           return pick(["leaf", "star"]);
+    return pick(["heart", "star", "leaf", "happy-outline", "thumbs-up"]);
+  }, []);
+
+  // Watch messages — when a new non-pending bot reply arrives, optionally react
+  // to the user message that preceded it after a short natural delay.
+  useEffect(() => {
+    if (!companionReactionsEnabled) return;
+
+    const lastBot = [...messages].reverse().find(
+      (m) => m.from !== "user" && !m.isPending && !m.id.startsWith("greeting-"),
+    );
+    if (!lastBot || companionReactedBotIds.current.has(lastBot.id)) return;
+    companionReactedBotIds.current.add(lastBot.id);
+
+    const botIndex = messages.findIndex((m) => m.id === lastBot.id);
+    const userMsg = botIndex > 0
+      ? [...messages].slice(0, botIndex).reverse().find((m) => m.from === "user")
+      : undefined;
+    if (!userMsg) return;
+
+    const reaction = pickCompanionReaction(lastBot.moodHint);
+    if (!reaction) return;
+
+    // 1.2–2.5 s delay feels like the companion "noticed" and reacted naturally
+    const delay = 1200 + Math.random() * 1300;
+    const timer = setTimeout(() => {
+      setReactions((prev) => {
+        if (prev.has(userMsg.id)) return prev; // don't overwrite user's own reaction
+        const next = new Map(prev);
+        next.set(userMsg.id, reaction);
+        AsyncStorage.setItem(REACTIONS_KEY, JSON.stringify(Object.fromEntries(next))).catch(() => {});
+        return next;
+      });
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [messages, companionReactionsEnabled, pickCompanionReaction]);
 
   // UX-4 + EN-2 — emotion continuation / topic-specific session greeting
   useEffect(() => {

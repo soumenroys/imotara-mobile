@@ -327,6 +327,8 @@ function SettingsScreenContent() {
         setTeenMode,
         showSyncBadge,
         setShowSyncBadge,
+        companionReactionsEnabled,
+        setCompanionReactionsEnabled,
         lastSyncAt,
         lastSyncStatus,
         setLastSyncAt,
@@ -4784,6 +4786,22 @@ function SettingsScreenContent() {
                         <Switch
                             value={showChatTimestamps}
                             onValueChange={handleShowTimestampsToggle}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+                </AppSurface>
+
+                {/* Companion emoji reactions toggle */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Companion reactions</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Your companion reacts to your messages with mood-relevant emoji ❤️ 🌟 🤗</Text>
+                        </View>
+                        <Switch
+                            value={companionReactionsEnabled}
+                            onValueChange={setCompanionReactionsEnabled}
                             trackColor={{ false: colors.border, true: colors.primary }}
                             thumbColor="#ffffff"
                         />
