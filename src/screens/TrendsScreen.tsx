@@ -4,6 +4,8 @@
 
 import React, { useMemo, useState, useEffect } from "react";
 import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, Vibration, ActivityIndicator, InteractionManager } from "react-native";
+import CompanionLetterCard from "../components/imotara/CompanionLetterCard";
+import { loadLetterArchive, type CompanionLetter } from "../lib/imotara/companionLetter";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -1154,6 +1156,73 @@ function ChallengeWidget({ colors }: { colors: any }) {
   );
 }
 
+// ── Letters from Imotara ─────────────────────────────────────────────────────
+
+function LettersFromImotara({ colors, companionGender, lang }: { colors: any; companionGender?: string; lang?: string }) {
+  const [letters, setLetters] = useState<CompanionLetter[]>([]);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    loadLetterArchive().then((archive) => {
+      // Show newest first
+      setLetters([...archive].reverse());
+    });
+  }, []);
+
+  if (letters.length === 0) return null;
+
+  return (
+    <View style={{ marginTop: 24 }}>
+      <TouchableOpacity
+        onPress={() => setExpanded((v) => !v)}
+        style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}
+        activeOpacity={0.7}
+      >
+        <View>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 1 }}>
+            Letters from Imotara
+          </Text>
+          <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+            {letters.length} letter{letters.length !== 1 ? "s" : ""} · tap to read, react, or reply
+          </Text>
+        </View>
+        <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={16} color={colors.textSecondary} />
+      </TouchableOpacity>
+
+      {expanded && (
+        <View>
+          {letters.map((letter, i) => (
+            <CompanionLetterCard
+              key={letter.id}
+              letter={letter}
+              colors={colors}
+              companionGender={companionGender}
+              lang={lang}
+              defaultExpanded={i === 0}
+              onUpdate={(updated) => {
+                setLetters((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+              }}
+            />
+          ))}
+        </View>
+      )}
+
+      {!expanded && letters[0] && (
+        <CompanionLetterCard
+          letter={letters[0]}
+          colors={colors}
+          companionGender={companionGender}
+          lang={lang}
+          defaultExpanded={false}
+          onUpdate={(updated) => {
+            setLetters((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
 // ── TrendsScreen shell ────────────────────────────────────────────────────────
 // Defers the heavy content mount until after tab-switch animation completes,
 // preventing blank frames caused by 43 hook initialisations firing simultaneously.
@@ -2016,6 +2085,13 @@ function TrendsScreenContent() {
 
       {/* Daily Journal */}
       {journalShow && <JournalSection colors={colors} topEmotion={topEmotion as EmotionBucket | undefined} />}
+
+      {/* Letters from Imotara — archive with TTS, reactions, replies */}
+      <LettersFromImotara
+        colors={colors}
+        companionGender={toneContext?.companion?.gender}
+        lang={toneContext?.user?.preferredLang ?? "en"}
+      />
 
       {/* Future Letters */}
       <FutureLetterSection colors={colors} />

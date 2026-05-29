@@ -6,10 +6,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { HistoryItem } from "../../state/HistoryContext";
 import { callImotaraAI } from "../../api/aiClient";
 
-const LAST_LETTER_KEY = "imotara.companion_letter.last_at.v1";
-const LETTER_KEY = "imotara.companion_letter.v1";
+const LAST_LETTER_KEY    = "imotara.companion_letter.last_at.v1";
+const LETTER_ARCHIVE_KEY = "imotara.companion_letters.archive.v1"; // array of letters
 const LETTER_CADENCE_KEY = "imotara.letter.cadenceDays.v1";
 const DEFAULT_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_ARCHIVE_SIZE = 24; // keep up to 24 letters (~2 years at monthly)
 
 async function getIntervalMs(): Promise<number> {
   try {
@@ -26,21 +27,63 @@ export type CompanionLetter = {
   generatedAt: number;
   body: string;
   companionName: string;
+  // User interactions
+  reaction?: string;   // emoji the user placed on this letter
+  reply?: string;      // user's written reply to the letter
+  replyAt?: number;    // timestamp when the reply was written
 };
 
-export async function loadStoredLetter(): Promise<CompanionLetter | null> {
+export async function loadLetterArchive(): Promise<CompanionLetter[]> {
   try {
-    const raw = await AsyncStorage.getItem(LETTER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const raw = await AsyncStorage.getItem(LETTER_ARCHIVE_KEY);
+    if (!raw) {
+      // Migrate single legacy letter into archive
+      const legacyRaw = await AsyncStorage.getItem("imotara.companion_letter.v1");
+      if (legacyRaw) {
+        const legacy: CompanionLetter = JSON.parse(legacyRaw);
+        return [legacy];
+      }
+      return [];
+    }
+    return JSON.parse(raw) as CompanionLetter[];
   } catch {
-    return null;
+    return [];
   }
 }
 
-async function saveLetter(letter: CompanionLetter): Promise<void> {
+export async function loadStoredLetter(): Promise<CompanionLetter | null> {
+  const archive = await loadLetterArchive();
+  return archive.length > 0 ? archive[archive.length - 1] : null;
+}
+
+async function saveLetterToArchive(letter: CompanionLetter): Promise<void> {
   try {
-    await AsyncStorage.setItem(LETTER_KEY, JSON.stringify(letter));
+    const archive = await loadLetterArchive();
+    const updated = [...archive.filter((l) => l.id !== letter.id), letter]
+      .slice(-MAX_ARCHIVE_SIZE);
+    await AsyncStorage.setItem(LETTER_ARCHIVE_KEY, JSON.stringify(updated));
     await AsyncStorage.setItem(LAST_LETTER_KEY, String(letter.generatedAt));
+  } catch {}
+}
+
+export async function updateLetterInteraction(
+  id: string,
+  patch: { reaction?: string | null; reply?: string; replyAt?: number },
+): Promise<void> {
+  try {
+    const archive = await loadLetterArchive();
+    const updated = archive.map((l) => {
+      if (l.id !== id) return l;
+      const next = { ...l };
+      if (patch.reaction !== undefined) {
+        if (patch.reaction === null) delete next.reaction;
+        else next.reaction = patch.reaction;
+      }
+      if (patch.reply !== undefined) next.reply = patch.reply;
+      if (patch.replyAt !== undefined) next.replyAt = patch.replyAt;
+      return next;
+    });
+    await AsyncStorage.setItem(LETTER_ARCHIVE_KEY, JSON.stringify(updated));
   } catch {}
 }
 
@@ -131,7 +174,7 @@ export async function generateCompanionLetter(
       body: body.trim(),
       companionName,
     };
-    await saveLetter(letter);
+    await saveLetterToArchive(letter);
     return letter;
   } catch {
     return null;
