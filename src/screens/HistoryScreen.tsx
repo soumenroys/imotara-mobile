@@ -260,6 +260,14 @@ function SwipeableRow({
     const translateX = React.useRef(new Animated.Value(0)).current;
     const isOpen = React.useRef(false);
 
+    // Fade the delete zone in only as the user swipes — completely invisible at rest
+    // so it doesn't bleed through behind narrower message bubbles.
+    const deleteOpacity = translateX.interpolate({
+        inputRange: [-SWIPE_THRESHOLD, -20, 0],
+        outputRange: [1, 0.6, 0],
+        extrapolate: "clamp",
+    });
+
     const panResponder = React.useRef(
         PanResponder.create({
             onMoveShouldSetPanResponder: (_e, gs) =>
@@ -286,8 +294,8 @@ function SwipeableRow({
 
     return (
         <View style={{ overflow: "hidden" }}>
-            {/* Delete action revealed underneath */}
-            <View style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: SWIPE_THRESHOLD, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(239,68,68,0.15)", borderRadius: 12 }}>
+            {/* Delete action — opacity-linked to swipe distance, invisible at rest */}
+            <Animated.View style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: SWIPE_THRESHOLD, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(239,68,68,0.15)", borderRadius: 12, opacity: deleteOpacity }}>
                 <TouchableOpacity
                     onPress={() => { close(); onDelete(); }}
                     style={{ flex: 1, width: "100%", alignItems: "center", justifyContent: "center" }}
@@ -295,7 +303,7 @@ function SwipeableRow({
                     <Text style={{ fontSize: 18 }}>🗑</Text>
                     <Text style={{ fontSize: 10, color: "#ef4444", fontWeight: "600", marginTop: 2 }}>Delete</Text>
                 </TouchableOpacity>
-            </View>
+            </Animated.View>
             <Animated.View
                 style={{ transform: [{ translateX }] }}
                 accessibilityHint="Swipe left to reveal delete"
