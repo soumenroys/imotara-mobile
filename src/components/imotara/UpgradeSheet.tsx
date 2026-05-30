@@ -102,18 +102,65 @@ async function doAndroidPurchase(
     const paymentId = paymentData?.razorpay_payment_id;
     if (!paymentId) return { ok: false, error: "Payment ID missing" };
 
+    // verify-payment polls Razorpay internally (handles UPI mandate "authorized" → "captured" delay)
     let verifyRes: Response;
     try {
         verifyRes = await fetchWithTimeout(
             buildApiUrl("/api/license/verify-payment"),
             { method: "POST", headers, body: JSON.stringify({ paymentId, productId }) },
-            35_000,
+            45_000, // 45s to cover Razorpay's internal polling (5 × 2s + buffer)
         );
     } catch {
-        return { ok: false, error: "Network error verifying payment. Tap 'Restore previous purchases' if your payment was taken." };
+        // Network error after payment — poll license status as fallback
+        const polled = await pollLicenseStatus(headers, productId);
+        if (polled) return { ok: true };
+        return { ok: false, error: "Payment received but activation is pending. Tap 'Restore previous purchases' to activate." };
     }
+
     const verifyData = await verifyRes.json();
-    return verifyData.ok ? { ok: true } : { ok: false, error: verifyData.error ?? "Verification failed" };
+    if (verifyData.ok) return { ok: true };
+
+    // verify-payment returned non-ok — the Razorpay webhook may still grant the license.
+    // Poll the license status for up to 20s before giving up.
+    const polled = await pollLicenseStatus(headers, productId);
+    if (polled) return { ok: true };
+
+    return { ok: false, error: verifyData.error ?? "Verification failed" };
+}
+
+/**
+ * Polls /api/license/status until the tier matches the purchased product,
+ * or times out. Handles the case where the webhook grants the license
+ * after verify-payment returns a non-ok status.
+ */
+async function pollLicenseStatus(
+    headers: Record<string, string>,
+    productId: ProductId,
+): Promise<boolean> {
+    const expectedTier = productId.startsWith("pro") ? "pro" : productId.startsWith("plus") ? "plus" : null;
+    if (!expectedTier) return false; // token packs don't change tier
+
+    const POLL_INTERVAL = 3000;
+    const POLL_ATTEMPTS = 7; // 21s total
+
+    for (let i = 0; i < POLL_ATTEMPTS; i++) {
+        await new Promise(r => setTimeout(r, POLL_INTERVAL));
+        try {
+            const res = await fetchWithTimeout(
+                buildApiUrl("/api/license/status"),
+                { method: "GET", headers },
+                8_000,
+            );
+            if (res.ok) {
+                const data = await res.json();
+                const tier = String(data?.tier ?? "").toLowerCase();
+                if (tier === expectedTier || tier === "pro") return true;
+            }
+        } catch {
+            // Network hiccup — keep polling
+        }
+    }
+    return false;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
