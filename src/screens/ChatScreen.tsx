@@ -1060,7 +1060,7 @@ function MessageBubble({
     statusTextColor = colors.textSecondary;
   } else if (message.isSynced) {
     bubbleBorderColor = colors.primary;
-    statusLabel = "Synced to cloud";
+    statusLabel = "Saved to account";
     statusBg = "rgba(56, 189, 248, 0.18)";
     statusTextColor = colors.textPrimary;
   } else {
@@ -1071,19 +1071,19 @@ function MessageBubble({
     if (hasSyncError) {
       bubbleBorderColor = "#f97373";
       statusLabel = isCloudGenerated
-        ? "Sync issue · cloud reply"
-        : "Sync issue · on this device only";
+        ? "Connection issue · cloud reply"
+        : "Connection issue · on this device only";
       statusBg = "rgba(248, 113, 113, 0.24)";
       statusTextColor = "#fecaca";
     } else {
       if (isCloudGenerated) {
         bubbleBorderColor = "rgba(56, 189, 248, 0.55)";
-        statusLabel = "Imotara Cloud";
+        statusLabel = "Online";
         statusBg = "rgba(56, 189, 248, 0.14)";
         statusTextColor = colors.textPrimary;
       } else if (!isUser && message.cloudAttempted) {
         bubbleBorderColor = "#fbbf24";
-        statusLabel = "Cloud failed → Local";
+        statusLabel = "Offline mode";
         statusBg = "rgba(251, 191, 36, 0.18)";
         statusTextColor = "#fde68a";
       } else {
@@ -2209,7 +2209,7 @@ export default function ChatScreen() {
   };
 
   // ---------------------------------------------------------------------------
-  // Cloud sync trigger (centralized in HistoryContext)
+  // Account backup trigger (centralized in HistoryContext)
   // ChatScreen does NOT pull cloud chat directly anymore.
   // It simply triggers runSync(); HistoryContext handles remote pull + merge into History.
   // The existing "hydrate from history" effect will populate the chat UI.
@@ -2402,14 +2402,14 @@ export default function ChatScreen() {
 
   const syncHint = useMemo(() => {
     if (!lastSyncAt)
-      return "Some messages are stored locally until cloud sync is enabled.";
+      return "Some messages are stored locally until account backup is enabled.";
 
     if (hasUnsynced && isSyncing)
-      return "Syncing your messages to cloud\u2026";
+      return "Saving your messages\u2026";
 
     const lower = (lastSyncStatus || "").toLowerCase();
     if (lower.includes("failed") || lower.includes("error")) {
-      return "Sync issue \u00b7 your latest messages are only on this device.";
+      return "Connection issue \u00b7 your latest messages are only on this device.";
     }
 
     if (
@@ -2417,10 +2417,10 @@ export default function ChatScreen() {
       lower.includes("merged") ||
       lower.includes("synced")
     ) {
-      return "Recent messages are safely backed up to Imotara cloud.";
+      return "Recent messages are safely saved to your account.";
     }
 
-    return "Messages synced \u00b7 safely stored on cloud.";
+    return "Messages synced \u00b7 safely stored in your account.";
   }, [lastSyncAt, lastSyncStatus, hasUnsynced, isSyncing]);
 
   const syncHintAccent = useMemo(() => {
@@ -2757,7 +2757,7 @@ export default function ChatScreen() {
   const handleClearLocalChat = () => {
     Alert.alert(
       "Clear local chat?",
-      "This will remove the chat history stored on this device. Your cloud copy (if any) will remain.",
+      "This will remove the chat history stored on this device. Your account backup (if any) will remain.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -2845,8 +2845,8 @@ export default function ChatScreen() {
       // ✅ Hardening: don't start a sync attempt when cloud is gated off
       if (!cloudSyncAllowed) {
         Alert.alert(
-          "Cloud sync unavailable",
-          lastSyncStatus || "Cloud sync is not available on your plan.",
+          "Account backup unavailable",
+          lastSyncStatus || "Account backup is not included in your current plan.",
         );
         return;
       }
@@ -2879,17 +2879,17 @@ export default function ChatScreen() {
 
       if (!result.ok) {
         Alert.alert(
-          "Sync issue",
+          "Connection issue",
           result.errorMessage ||
-            "Could not sync right now. Your message is safe on this device.",
+            "Connection issue. Your message is safe on this device.",
         );
       }
     } catch (err) {
-      debugWarn("Sync now failed:", err);
+      debugWarn("Back up now failed:", err);
 
       Alert.alert(
-        "Sync error",
-        "Could not sync right now. Your message is safe on this device.",
+        "Connection issue",
+        "Connection issue. Your message is safe on this device.",
       );
       setMessages((prev) =>
         prev.map((m) => (m.id === msg.id ? { ...m, isPending: false } : m)),
@@ -3202,7 +3202,7 @@ export default function ChatScreen() {
           const cloudQuotaHit = cloudFailed && remote?.errorMessage === "quota_exceeded";
 
           if (cloudFailed && isOnline && !cloudQuotaHit) {
-            toastRef.current?.show("Cloud reply failed — using offline mode instead.", "error");
+            toastRef.current?.show("Couldn't connect — used on-device mode.", "error");
           }
 
           const remoteUrl: string | undefined =
@@ -3527,11 +3527,11 @@ export default function ChatScreen() {
             (typeof navigator !== "undefined" && !navigator.onLine);
           const isTimeout = errMsg.includes("timeout") || errMsg.includes("Timeout");
           if (isNetwork) {
-            toastRef.current?.show("No internet — replied offline", "info");
+            toastRef.current?.show("No internet — replied on device", "info");
           } else if (isTimeout) {
-            toastRef.current?.show("Server took too long — replied offline", "info");
+            toastRef.current?.show("Server took too long — replied on device", "info");
           } else {
-            toastRef.current?.show("Cloud unavailable — replied offline", "info");
+            toastRef.current?.show("Went offline — replied on device", "info");
           }
 
           const wantsCloud = analysisMode !== "local" && cloudSyncAllowed;
@@ -3680,7 +3680,7 @@ export default function ChatScreen() {
     smoothScrollToBottom(scrollViewRef);
   }, [activeHistory]);
 
-  // ✅ NEW: when history updates (e.g., after Sync Now), reflect isSynced/source changes in chat bubbles
+  // ✅ NEW: when history updates (e.g., after Back up now), reflect isSynced/source changes in chat bubbles
   useEffect(() => {
     if (!history || history.length === 0) return;
     if (!messages || messages.length === 0) return;
@@ -3973,7 +3973,7 @@ export default function ChatScreen() {
             }}
           >
             <Text style={{ fontSize: 14, color: colors.textPrimary }}>
-              Sync now (try cloud)
+              Back up now (try cloud)
             </Text>
             {!canSyncNow && (
               <Text
@@ -3988,7 +3988,7 @@ export default function ChatScreen() {
                   : actionMessage.isSynced
                     ? "Already synced."
                     : isSyncing
-                      ? "Sync in progress…"
+                      ? "Saving…"
                       : "Not available right now."}
               </Text>
             )}

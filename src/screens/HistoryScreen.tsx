@@ -385,10 +385,10 @@ function HistoryScreenContent() {
     const [renamingThreadId, setRenamingThreadId] = React.useState<string | null>(null);
     const [renameText, setRenameText] = React.useState("");
 
-    // ✅ Cloud sync gate (soft gating)
+    // ✅ Account backup gate (soft gating)
     const cloudGate = gate("CLOUD_SYNC", licenseTier);
 
-    // 🚀 Launch Phase Override: Cloud sync free for all users
+    // 🚀 Launch Phase Override: Account backup free for all users
     const canCloudSync = true;
 
     // ✅ TS-safe: reason exists only when enabled === false
@@ -526,7 +526,7 @@ function HistoryScreenContent() {
             await pushHistoryToRemote?.();
             if (mountedRef.current) toastRef.current?.show("Synced ✓", "success");
         } catch {
-            if (mountedRef.current) toastRef.current?.show("Sync failed — data saved locally", "error");
+            if (mountedRef.current) toastRef.current?.show("Couldn't save — data saved locally", "error");
         } finally {
             if (mountedRef.current) setIsRefreshing(false);
         }
@@ -652,10 +652,10 @@ function HistoryScreenContent() {
     );
 
     const topChip = React.useMemo(() => {
-        // ✅ If cloud sync is not available (Premium-gated), never show scary sync errors
+        // ✅ If account backup is not available (Premium-gated), never show scary sync errors
         if (!canCloudSync) {
             return {
-                label: "Device-only · cloud sync is off",
+                label: "Device-only · account backup is off",
                 variant: "neutral" as const,
                 iconName: "phone-portrait-outline",
             };
@@ -663,7 +663,7 @@ function HistoryScreenContent() {
 
         if (!effectiveLastSyncAt) {
             return {
-                label: "Sync status: never synced",
+                label: "Not yet saved to account",
                 variant: "neutral" as const,
                 iconName: "cloud-outline",
             };
@@ -673,7 +673,7 @@ function HistoryScreenContent() {
 
         if (hasSyncError) {
             return {
-                label: "Sync issue · history is only on this device",
+                label: "Connection issue · history is only on this device",
                 variant: "danger" as const,
                 iconName: "warning-outline",
             };
@@ -692,7 +692,7 @@ function HistoryScreenContent() {
         }
 
         return {
-            label: "Sync checked recently",
+            label: "Account connection checked recently",
             variant: "neutral" as const,
             iconName: "cloud-outline",
         };
@@ -701,7 +701,7 @@ function HistoryScreenContent() {
     const showPremiumAlert = React.useCallback(() => {
         Alert.alert(
             "Premium feature",
-            cloudGateReason || "Cloud sync is available with Premium.",
+            cloudGateReason || "Account backup included with Premium.",
             [{ text: "OK" }]
         );
     }, [cloudGateReason]);
@@ -786,23 +786,23 @@ function HistoryScreenContent() {
                 const pushedCount =
                     typeof result.pushed === "number" ? result.pushed : 0;
                 Alert.alert(
-                    "Sync complete",
+                    "Backup complete",
                     pushedCount > 0
-                        ? `Pushed ${pushedCount} item(s) to the cloud.`
-                        : "Everything is already in sync."
+                        ? `Pushed ${pushedCount} item(s) to your account.`
+                        : "Everything is already saved."
                 );
             } else {
                 Alert.alert(
-                    "Sync issue",
+                    "Connection issue",
                     result.errorMessage ||
-                    "Could not sync right now. Please try again later."
+                    "Couldn't connect right now. Please try again."
                 );
             }
         } catch (error) {
-            console.warn("handleRetrySync error:", error);
+            console.warn("handleRetryConnection issue:", error);
             Alert.alert(
-                "Sync error",
-                "Could not sync right now. Please try again later."
+                "Connection issue",
+                "Couldn't connect right now. Please try again."
             );
         }
     }, [
@@ -966,12 +966,12 @@ function HistoryScreenContent() {
     const retryLabel = isSyncing
         ? "Syncing…"
         : !canCloudSync
-            ? "Sync (Premium)"
+            ? "Backup (Premium)"
             : !hasUnsyncedChanges && !hasSyncError
                 ? "Up to date"
                 : hasSyncError
-                    ? "Try sync again now"
-                    : "Sync now";
+                    ? "Try again"
+                    : "Back up now";
 
     const isEmpty = visibleHistory.length === 0;
 
@@ -1265,10 +1265,10 @@ function HistoryScreenContent() {
                                         </Text>
                                         <Text style={{ marginTop: 2, fontSize: 11, color: hasSyncError ? "#fecaca" : colors.textSecondary }}>
                                             {hasSyncError
-                                                ? "Couldn't reach the cloud recently. Messages are safe and will sync when connection recovers."
+                                                ? "Couldn't reach your account recently. Messages are safe and will sync when connection recovers."
                                                 : autoSyncDelaySeconds > 0
-                                                    ? `Will auto-sync in ~${autoSyncDelaySeconds}s when online.`
-                                                    : "Will sync when you tap Sync."}
+                                                    ? `Will save in ~${autoSyncDelaySeconds}s when online.`
+                                                    : "Tap to back up now."}
                                         </Text>
                                         <AppButton title={retryLabel} onPress={handleRetrySync}
                                             disabled={isSyncing || !canCloudSync || (!hasUnsyncedChanges && !hasSyncError)}
@@ -1282,7 +1282,7 @@ function HistoryScreenContent() {
                                         </TouchableOpacity>
                                         {!canCloudSync && (
                                             <Text style={{ marginTop: 6, fontSize: 11, color: colors.textSecondary }}>
-                                                {!cloudGate.enabled ? (cloudGate as any).reason || "Cloud sync available with Premium." : null}
+                                                {!cloudGate.enabled ? (cloudGate as any).reason || "Account backup available with Premium." : null}
                                             </Text>
                                         )}
                                     </View>
@@ -1666,9 +1666,9 @@ function HistoryScreenContent() {
                             ? ("danger" as const)
                             : ("warning" as const);
                     const chipLabel = item.isSynced
-                        ? "Synced to cloud"
+                        ? "Saved to account"
                         : itemHasSyncError
-                            ? "Sync issue · device only"
+                            ? "Connection issue · device only"
                             : "On this device only";
                     const chipIconName = item.isSynced ? undefined : itemHasSyncError ? "warning-outline" : "phone-portrait-outline";
                     const chipIcon = item.isSynced ? "✓" : undefined;
@@ -1724,7 +1724,7 @@ function HistoryScreenContent() {
                                     )}
                                     {showSyncBadge && !item.isSynced && (
                                         <AppButton
-                                            title={isLoadingRemote ? "Checking cloud…" : !canCloudSync ? "Cloud copy (Premium)" : "Tap to check cloud copy"}
+                                            title={isLoadingRemote ? "Checking account…" : !canCloudSync ? "Account backup (Premium)" : "Tap to check account backup"}
                                             onPress={() => { if (!canCloudSync) { showPremiumAlert(); return; } handleLoadRemote(); }}
                                             disabled={isLoadingRemote || !canCloudSync}
                                             variant="ghost"

@@ -61,12 +61,12 @@ export const PLAN_DEFS: PlanDef[] = [
     {
         id: "plus_monthly", tier: "plus", period: "monthly",
         priceInr: 99, paise: 9_900,
-        features: ["Unlimited replies", "Cloud sync across devices", "90-day history", "All companion tones", "Export conversations"],
+        features: ["Unlimited replies", "Cross-device access", "90-day history", "All companion tones", "Export conversations"],
     },
     {
         id: "plus_annual", tier: "plus", period: "annual",
         priceInr: 699, paise: 69_900, monthlyPriceInr: 58, savingsPct: 41,
-        features: ["Unlimited replies", "Cloud sync across devices", "90-day history", "All companion tones", "Export conversations"],
+        features: ["Unlimited replies", "Cross-device access", "90-day history", "All companion tones", "Export conversations"],
     },
     {
         id: "pro_monthly", tier: "pro", period: "monthly",

@@ -370,7 +370,7 @@ function SettingsScreenContent() {
         (h: HistoryRecord) => !h.isSynced
     ).length;
 
-    // ✅ Cloud sync gate (soft gating)
+    // ✅ Account backup gate (soft gating)
     const cloudGate = gate("CLOUD_SYNC", licenseTier);
 
     // ✅ Keep real gating for production, but allow DEBUG builds to test sync reliability
@@ -449,7 +449,7 @@ function SettingsScreenContent() {
                 body: JSON.stringify(toneContext ?? {}),
             }, 12_000).catch(() => {
                 if (mountedRef.current) {
-                    showLinkStatus("Sync failed — changes saved locally");
+                    showLinkStatus("Couldn't save — changes saved locally");
                 }
             });
         }, 2000);
@@ -905,7 +905,7 @@ function SettingsScreenContent() {
         await AsyncStorage.setItem(VOICE_QUALITY_KEY, val).catch(() => {});
     };
 
-    // V-3: Cloud transcription toggle
+    // V-3: Online transcription toggle
     const VOICE_CLOUD_KEY = "imotara.voice.cloudTranscription.v1";
     const [voiceCloudTranscription, setVoiceCloudTranscription] = React.useState(true);
     React.useEffect(() => {
@@ -1566,7 +1566,7 @@ function SettingsScreenContent() {
         if (!canCloudSync) {
             Alert.alert(
                 "Premium feature",
-                cloudGateReason || "Cloud sync is available with Premium.",
+                cloudGateReason || "Account backup included with Premium.",
                 [{ text: "OK" }]
             );
             return;
@@ -1580,7 +1580,7 @@ function SettingsScreenContent() {
 
             if (!result.ok) {
                 Alert.alert(
-                    "Cloud sync",
+                    "Account backup",
                     `Could not push history to the backend. Please check your connection or try again later.\n\n${result.errorMessage || "Network request failed"
                     }`,
                     [{ text: "OK" }]
@@ -1597,7 +1597,7 @@ function SettingsScreenContent() {
             }
 
             Alert.alert(
-                "Cloud sync",
+                "Account backup",
                 `Pushed ${result.pushed} item(s) to the backend.\n\nStatus: ${result.status ?? "unknown"
                 }`,
                 [{ text: "OK" }]
@@ -1605,7 +1605,7 @@ function SettingsScreenContent() {
         } catch (error) {
             console.error("Failed to push remote history:", error);
             Alert.alert(
-                "Cloud sync",
+                "Account backup",
                 "Could not push history to the backend. Please check your connection or try again later.\n\nNetwork request failed",
                 [{ text: "OK" }]
             );
@@ -1620,7 +1620,7 @@ function SettingsScreenContent() {
         if (!canCloudSync) {
             Alert.alert(
                 "Premium feature",
-                cloudGateReason || "Cloud sync is available with Premium.",
+                cloudGateReason || "Account backup included with Premium.",
                 [{ text: "OK" }]
             );
             return;
@@ -1629,9 +1629,9 @@ function SettingsScreenContent() {
         // ✅ Never silently no-op
         if (busyRef.current.syncNow) {
             if (mountedRef.current) {
-                setLastSyncStatus("Sync already running…");
+                setLastSyncStatus("Backup in progress…");
             }
-            Alert.alert("Sync", "Sync is already running. Please wait a moment.", [
+            Alert.alert("Sync", "Backup is already in progress. Please wait a moment.", [
                 { text: "OK" },
             ]);
             return;
@@ -1658,7 +1658,7 @@ function SettingsScreenContent() {
             const pushResult =
                 syncFn === pushHistoryToRemote && (syncFn as any).length === 0
                     ? await (syncFn as any)()
-                    : await (syncFn as any)({ reason: "SettingsScreen: Sync Now" });
+                    : await (syncFn as any)({ reason: "SettingsScreen: Back up now" });
 
             // 2) Fetch latest remote history
             const remote = await fetchRemoteHistory();
@@ -1679,7 +1679,7 @@ function SettingsScreenContent() {
                     setLastSyncStatus(summary);
                 }
 
-                Alert.alert("Sync issue", `${pushedText}\n\n${mergedText}`, [
+                Alert.alert("Connection issue", `${pushedText}\n\n${mergedText}`, [
                     { text: "OK" },
                 ]);
                 return;
@@ -1713,7 +1713,7 @@ function SettingsScreenContent() {
                 setLastSyncStatus(summary);
             }
 
-            Alert.alert("Sync summary", `${pushedText}\n\n${mergedText}`, [
+            Alert.alert("Backup summary", `${pushedText}\n\n${mergedText}`, [
                 { text: "OK" },
             ]);
         } catch (error) {
@@ -1721,11 +1721,11 @@ function SettingsScreenContent() {
             if (mountedRef.current) {
                 setLastSyncAt(Date.now());
                 setLastSyncStatus(
-                    "Sync error: Full sync (push + fetch) failed. Please check your connection."
+                    "Connection issue: Full sync (push + fetch) failed. Please check your connection."
                 );
             }
             Alert.alert(
-                "Sync error",
+                "Connection issue",
                 "Full sync (push + fetch) failed. Please check your connection and try again.",
                 [{ text: "OK" }]
             );
@@ -1949,7 +1949,7 @@ function SettingsScreenContent() {
                     options — future versions will add full cloud backup controls and
                     teen safety settings.
                     {"\n\n"}Your messages are never shared publicly — sync only stores a
-                    private cloud copy for you.
+                    private account backup for you.
                 </Text>
 
                 {/* AI-powered settings search */}
@@ -2150,7 +2150,7 @@ function SettingsScreenContent() {
                             }}
                         >
                             {cloudGateReason ||
-                                "Cloud sync is available with Premium."}
+                                "Account backup included with Premium."}
                         </Text>
                     )}
 
@@ -2265,7 +2265,7 @@ function SettingsScreenContent() {
                             marginTop: 4,
                         }}
                     >
-                        This toggle does not send any extra data to the cloud yet. It
+                        This toggle does not send any extra data to your account yet. It
                         is a design placeholder for future intelligent insights.
                     </Text>
                 </AppSurface>
@@ -2488,7 +2488,7 @@ function SettingsScreenContent() {
                         })}
                     </View>
 
-                    <SettingRow label="Cloud transcription" description="Send recording to server to convert to text">
+                    <SettingRow label="Online transcription" description="Send recording to server to convert to text">
                         <Switch value={voiceCloudTranscription} onValueChange={handleVoiceCloudToggle} />
                     </SettingRow>
 
@@ -3797,7 +3797,7 @@ function SettingsScreenContent() {
                         {(
                             [
                                 { id: "auto", label: "Auto" },
-                                { id: "cloud", label: "Cloud" },
+                                { id: "cloud", label: "Online" },
                                 { id: "local", label: "Local" },
                             ] as const
                         ).map((opt) => {
@@ -3811,8 +3811,8 @@ function SettingsScreenContent() {
                                     onPress={() => {
                                         if (cloudLocked) {
                                             Alert.alert(
-                                                "Cloud mode unavailable",
-                                                cloudGateReason || "Cloud mode is available with Premium."
+                                                "Online mode unavailable",
+                                                cloudGateReason || "Online mode available with Premium."
                                             );
                                             return;
                                         }
@@ -3855,7 +3855,7 @@ function SettingsScreenContent() {
                     {!canCloudSync ? (
                         <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 8 }}>
                             Cloud is currently unavailable:{" "}
-                            {cloudGateReason || "Cloud mode is available with Premium."}
+                            {cloudGateReason || "Online mode available with Premium."}
                         </Text>
                     ) : null}
 
@@ -4122,7 +4122,7 @@ function SettingsScreenContent() {
                         }}
                     >
                         When new messages are only on this device, Imotara can gently
-                        sync them to the cloud after a short delay. This keeps your
+                        sync them to your account after a short delay. This keeps your
                         history backed up without you needing to tap anything.
                     </Text>
 
@@ -4255,7 +4255,7 @@ function SettingsScreenContent() {
                                 title={
                                     busyRef.current.pushOnly
                                         ? "Pushing…"
-                                        : "Push Local History to Cloud"
+                                        : "Save history to account"
                                 }
                                 onPress={handlePushLocalHistory}
                                 disabled={
@@ -4284,7 +4284,7 @@ function SettingsScreenContent() {
                         title={
                             busyRef.current.syncNow || isAnySyncBusy
                                 ? "Syncing…"
-                                : "Sync Now (push + fetch)"
+                                : "Back up now (push + fetch)"
                         }
                         onPress={handleSyncNow}
                         disabled={
@@ -4330,7 +4330,7 @@ function SettingsScreenContent() {
                                 }}
                             >
                                 {cloudGateReason ||
-                                    "Cloud sync is available with Premium."}
+                                    "Account backup included with Premium."}
                             </Text>
                         )}
                     </View>
@@ -4872,7 +4872,7 @@ function SettingsScreenContent() {
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                         <View style={{ flex: 1, marginRight: 12 }}>
                             <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Show sync status</Text>
-                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Show "Synced" badges and sync indicators on messages</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Show reply source on messages</Text>
                         </View>
                         <Switch
                             value={showSyncBadge}

@@ -102,7 +102,7 @@ export const ImotaraChatBubble: React.FC<ImotaraChatBubbleProps> = ({
             syncTextColor = "#fecaca";
         }
     } else {
-        syncLabel = "Synced to cloud";
+        syncLabel = "Saved to account";
     }
 
     // Source icon

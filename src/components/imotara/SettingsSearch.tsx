@@ -112,7 +112,6 @@ export default function SettingsSearch({ onResultSelect }: Props) {
         {loading && <ActivityIndicator size="small" color={colors.primary} />}
         {!loading && aiUsed && query.length > 0 && (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-            <Text style={{ fontSize: 9, color: colors.primary, fontWeight: "700", letterSpacing: 0.3 }}>AI</Text>
             <Ionicons name="sparkles" size={10} color={colors.primary} />
           </View>
         )}
