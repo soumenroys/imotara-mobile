@@ -318,14 +318,22 @@ function SwipeableRow({
 // ── HistoryScreen shell ───────────────────────────────────────────────────────
 // Defers the heavy content (56 hooks + VirtualizedList) until after the
 // tab-switch animation completes, preventing blank frames.
+// InteractionManager.runAfterInteractions fires immediately in production Hermes builds
+// because animations complete too fast. useFocusEffect + setTimeout is reliable on device.
 export default function HistoryScreen() {
     const colors_early = useColors();
     const [screenReady, setScreenReady] = React.useState(false);
 
-    React.useEffect(() => {
-        const task = InteractionManager.runAfterInteractions(() => setScreenReady(true));
-        return () => task.cancel();
-    }, []);
+    useFocusEffect(
+        React.useCallback(() => {
+            setScreenReady(false);
+            const timer = setTimeout(() => setScreenReady(true), 150);
+            return () => {
+                clearTimeout(timer);
+                setScreenReady(false);
+            };
+        }, [])
+    );
 
     if (!screenReady) {
         return (

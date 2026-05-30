@@ -2,11 +2,11 @@
 // Emotion trends — local history analysis, no external chart library needed.
 // Shows: streak, weekly emotion frequency bars, dominant emotion per day, summary.
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, Vibration, ActivityIndicator, InteractionManager } from "react-native";
 import CompanionLetterCard from "../components/imotara/CompanionLetterCard";
 import { loadLetterArchive, type CompanionLetter } from "../lib/imotara/companionLetter";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useHistoryStore } from "../state/HistoryContext";
@@ -1226,14 +1226,22 @@ function LettersFromImotara({ colors, companionGender, lang }: { colors: any; co
 // ── TrendsScreen shell ────────────────────────────────────────────────────────
 // Defers the heavy content mount until after tab-switch animation completes,
 // preventing blank frames caused by 43 hook initialisations firing simultaneously.
+// useFocusEffect + setTimeout is reliable in production Hermes builds unlike
+// InteractionManager.runAfterInteractions which fires immediately on fast devices.
 export default function TrendsScreen() {
   const colors_early = useColors();
   const [screenReady, setScreenReady] = useState(false);
 
-  useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => setScreenReady(true));
-    return () => task.cancel();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      setScreenReady(false);
+      const timer = setTimeout(() => setScreenReady(true), 150);
+      return () => {
+        clearTimeout(timer);
+        setScreenReady(false);
+      };
+    }, [])
+  );
 
   if (!screenReady) {
     return (

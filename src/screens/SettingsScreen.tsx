@@ -1,5 +1,5 @@
 // src/screens/SettingsScreen.tsx
-import React from "react";
+import React, { useCallback } from "react";
 import Constants from "expo-constants";
 import IOSTipJar from "../components/imotara/IOSTipJar";
 import UpgradeSheet from "../components/imotara/UpgradeSheet";
@@ -29,6 +29,7 @@ import {
     InteractionManager,
 } from "react-native";
 
+import { useFocusEffect } from "@react-navigation/native";
 import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
@@ -274,14 +275,22 @@ function AvatarSlider({
 // until after the tab-switch animation completes. Without this, 140+ hook
 // initialisations + dozens of concurrent AsyncStorage reads fire on mount,
 // causing blank frames during tab switches.
+// useFocusEffect + setTimeout is reliable in production Hermes builds unlike
+// InteractionManager.runAfterInteractions which fires immediately on fast devices.
 export default function SettingsScreen() {
     const { colors: colors_early } = useTheme();
     const [screenReady, setScreenReady] = React.useState(false);
 
-    React.useEffect(() => {
-        const task = InteractionManager.runAfterInteractions(() => setScreenReady(true));
-        return () => task.cancel();
-    }, []);
+    useFocusEffect(
+        useCallback(() => {
+            setScreenReady(false);
+            const timer = setTimeout(() => setScreenReady(true), 150);
+            return () => {
+                clearTimeout(timer);
+                setScreenReady(false);
+            };
+        }, [])
+    );
 
     if (!screenReady) {
         return (
