@@ -335,7 +335,7 @@ export function BreathingModal({ visible, onClose }: Props) {
       >
         <Pressable
           style={{
-            backgroundColor: "rgba(15, 23, 42, 0.98)",
+            backgroundColor: colors.background,
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
             borderWidth: 1,
@@ -413,7 +413,7 @@ export function BreathingModal({ visible, onClose }: Props) {
                       borderRadius: 10,
                       borderWidth: 1,
                       borderColor: isSelected ? "rgba(167,139,250,0.6)" : colors.border,
-                      backgroundColor: isSelected ? "rgba(167,139,250,0.12)" : "rgba(30,41,59,0.5)",
+                      backgroundColor: isSelected ? "rgba(167,139,250,0.12)" : colors.surfaceSoft,
                       gap: 4,
                     }}
                   >

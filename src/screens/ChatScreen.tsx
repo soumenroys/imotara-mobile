@@ -1128,10 +1128,10 @@ function MessageBubble({
             } as any);
             if (!seed) return null;
             return (
-              <View style={{ marginBottom: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(0,0,0,0.22)" }}>
+              <View style={{ marginBottom: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                   <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>{seed.title}</Text>
-                  <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(255,255,255,0.06)" }}>
+                  <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
                     <Text style={{ fontSize: 10, color: colors.textSecondary }}>{seed.label}</Text>
                   </View>
                 </View>
@@ -4329,7 +4329,7 @@ export default function ChatScreen() {
           data={showBookmarksOnly ? messages.filter((m) => bookmarks.has(m.id)) : messages}
           keyExtractor={(item) => item.id}
           renderItem={({ item: message, index }) => message.isQuotaNotice ? (
-            <View style={{ marginHorizontal: 16, marginVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: "rgba(139,92,246,0.30)", backgroundColor: "#1e1028", padding: 16 }}>
+            <View style={{ marginHorizontal: 16, marginVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: "rgba(139,92,246,0.30)", backgroundColor: colors.surface, padding: 16 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Text style={{ fontSize: 16 }}>✨</Text>
                 <Text style={{ fontSize: 13, fontWeight: "600", color: "#e4e4f0" }}>I've used my 20 replies for today</Text>

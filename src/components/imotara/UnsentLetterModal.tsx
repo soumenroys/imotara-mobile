@@ -57,21 +57,21 @@ export function UnsentLetterModal({ visible, colors, onStart, onCancel }: Props)
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" }}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}>
           <View
             style={{
-              backgroundColor: "rgba(15, 23, 42, 0.99)",
+              backgroundColor: colors.background,
               borderTopLeftRadius: 24,
               borderTopRightRadius: 24,
               borderTopWidth: 1,
-              borderColor: "rgba(255,255,255,0.1)",
+              borderColor: colors.border,
               paddingHorizontal: 20,
               paddingTop: 20,
               paddingBottom: 36,
             }}
           >
             {/* Handle */}
-            <View style={{ alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.2)", marginBottom: 20 }} />
+            <View style={{ alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 20 }} />
 
             {/* Header */}
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
@@ -105,7 +105,7 @@ export function UnsentLetterModal({ visible, colors, onStart, onCancel }: Props)
                 paddingVertical: 10,
                 color: colors.textPrimary,
                 fontSize: 14,
-                backgroundColor: "rgba(255,255,255,0.04)",
+                backgroundColor: colors.surfaceSoft,
                 marginBottom: 16,
               }}
             />
@@ -126,7 +126,7 @@ export function UnsentLetterModal({ visible, colors, onStart, onCancel }: Props)
                       borderRadius: 999,
                       borderWidth: 1,
                       borderColor: relationship === r ? "rgba(167,139,250,0.6)" : colors.border,
-                      backgroundColor: relationship === r ? "rgba(167,139,250,0.12)" : "rgba(255,255,255,0.04)",
+                      backgroundColor: relationship === r ? "rgba(167,139,250,0.12)" : colors.surfaceSoft,
                     }}
                   >
                     <Text style={{ fontSize: 12, color: relationship === r ? "#a78bfa" : colors.textSecondary }}>
@@ -156,7 +156,7 @@ export function UnsentLetterModal({ visible, colors, onStart, onCancel }: Props)
                 paddingVertical: 10,
                 color: colors.textPrimary,
                 fontSize: 14,
-                backgroundColor: "rgba(255,255,255,0.04)",
+                backgroundColor: colors.surfaceSoft,
                 marginBottom: 20,
                 minHeight: 60,
                 textAlignVertical: "top",
@@ -170,7 +170,7 @@ export function UnsentLetterModal({ visible, colors, onStart, onCancel }: Props)
               style={{
                 paddingVertical: 14,
                 borderRadius: 14,
-                backgroundColor: recipientName.trim() ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.06)",
+                backgroundColor: recipientName.trim() ? "rgba(167,139,250,0.18)" : colors.surfaceSoft,
                 borderWidth: 1,
                 borderColor: recipientName.trim() ? "rgba(167,139,250,0.5)" : colors.border,
                 alignItems: "center",
