@@ -15,6 +15,7 @@ import {
   type SearchResult,
 } from "../../data/settingsCatalog";
 import { buildApiUrl } from "../../config/api";
+import { fetchWithTimeout } from "../../lib/fetchWithTimeout";
 
 type Props = {
   onResultSelect: (sectionKey: string, settingId: string) => void;
@@ -47,12 +48,11 @@ export default function SettingsSearch({ onResultSelect }: Props) {
     setLoading(true);
     setAiUsed(true);
     try {
-      const res = await fetch(buildApiUrl("/api/settings-search"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q }),
-        signal: AbortSignal.timeout(6000),
-      });
+      const res = await fetchWithTimeout(
+        buildApiUrl("/api/settings-search"),
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) },
+        6_000,
+      );
       if (res.ok) {
         const data = await res.json();
         const ids: string[] = Array.isArray(data.ids) ? data.ids : [];

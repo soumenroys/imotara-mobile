@@ -3,6 +3,7 @@
 // Shows: streak, weekly emotion frequency bars, dominant emotion per day, summary.
 
 import React, { useMemo, useState, useEffect, useCallback } from "react";
+import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, Vibration, ActivityIndicator, InteractionManager } from "react-native";
 import CompanionLetterCard from "../components/imotara/CompanionLetterCard";
 import { loadLetterArchive, type CompanionLetter } from "../lib/imotara/companionLetter";
@@ -1356,7 +1357,7 @@ function TrendsScreenContent() {
   useEffect(() => {
     const apiBase = (process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL ?? "").replace(/\/$/, "");
     if (!apiBase) return;
-    fetch(`${apiBase}/api/social-proof`)
+    fetchWithTimeout(`${apiBase}/api/social-proof`, {}, 10_000)
       .then((r) => r.json())
       .then((data) => {
         if (data.available) setSocialProof({ percentileBetter: data.percentileBetter, userActiveDays: data.userActiveDays });

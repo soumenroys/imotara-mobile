@@ -3,6 +3,7 @@ import React from "react";
 import { View, Text, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, RefreshControl, Animated, PanResponder, Share, ActivityIndicator, InteractionManager } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { buildApiUrl } from "../config/api";
+import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useHistoryStore } from "../state/HistoryContext";
@@ -494,11 +495,11 @@ function HistoryScreenContent() {
             return;
         }
         setCapsuleInsights((v) => ({ ...v, [key]: "loading" }));
-        fetch(buildApiUrl("/api/mindset-analysis"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ messages: msgs, period: periodLabel }),
-        })
+        fetchWithTimeout(
+            buildApiUrl("/api/mindset-analysis"),
+            { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, period: periodLabel }) },
+            20_000,
+        )
             .then((r) => r.json())
             .then((data: any) => setCapsuleInsights((v) => ({ ...v, [key]: { analysis: data.analysis ?? "", advice: data.advice ?? "" } })))
             .catch(() => setCapsuleInsights((v) => ({ ...v, [key]: "error" })));

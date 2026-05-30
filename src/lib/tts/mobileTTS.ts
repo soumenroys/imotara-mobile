@@ -11,6 +11,7 @@
 import * as Speech     from "expo-speech";
 import { Audio }       from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
+import { fetchWithTimeout } from "../fetchWithTimeout";
 
 // ── BCP-47 map ────────────────────────────────────────────────────────────────
 
@@ -164,11 +165,11 @@ export async function speakMessage(
     // Always use Azure Neural TTS — native Speech.speak() ignores gender,
     // so the companion voice setting would be silently overridden by the device default.
     try {
-        const res = await fetch(`${apiBase()}/api/tts`, {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ text: stripMarkdown(text), lang, gender: gender ?? "neutral" }),
-        });
+        const res = await fetchWithTimeout(
+            `${apiBase()}/api/tts`,
+            { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: stripMarkdown(text), lang, gender: gender ?? "neutral" }) },
+            20_000,
+        );
         if (!res.ok) throw new Error(`TTS API ${res.status}`);
         const arrayBuf = await res.arrayBuffer();
         const base64   = Buffer.from(arrayBuf).toString("base64");

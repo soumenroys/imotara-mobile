@@ -1,5 +1,6 @@
 // src/screens/SettingsScreen.tsx
 import React, { useCallback } from "react";
+import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import Constants from "expo-constants";
 import IOSTipJar from "../components/imotara/IOSTipJar";
 import UpgradeSheet from "../components/imotara/UpgradeSheet";
@@ -423,9 +424,7 @@ function SettingsScreenContent() {
         // pull would never happen (breaks name sync when signing in on a new device).
         const hasLocalUserName = !!(initialToneRef.current?.user?.name?.trim());
         if (hasLocalUserName) return; // user already has a local name — don't overwrite
-        fetch(`${base}/api/profile/sync`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-        })
+        fetchWithTimeout(`${base}/api/profile/sync`, { headers: { Authorization: `Bearer ${accessToken}` } }, 12_000)
             .then((r) => (r.ok ? r.json() : null))
             .then((data) => {
                 if (!mountedRef.current) return;
@@ -444,14 +443,11 @@ function SettingsScreenContent() {
         if (!base) return;
         const timer = setTimeout(() => {
             if (!mountedRef.current) return;
-            fetch(`${base}/api/profile/sync`, {
+            fetchWithTimeout(`${base}/api/profile/sync`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${accessToken}`,
-                },
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify(toneContext ?? {}),
-            }).catch(() => {
+            }, 12_000).catch(() => {
                 if (mountedRef.current) {
                     showLinkStatus("Sync failed — changes saved locally");
                 }
@@ -1465,10 +1461,7 @@ function SettingsScreenContent() {
                         if (!accessToken) { Alert.alert("Not signed in", "Sign in to delete remote data."); return; }
                         try {
                             const base = getApiBaseUrl();
-                            const res = await fetch(`${base}/api/history`, {
-                                method: "DELETE",
-                                headers: { Authorization: `Bearer ${accessToken}` },
-                            });
+                            const res = await fetchWithTimeout(`${base}/api/history`, { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }, 15_000);
                             if (res.ok) {
                                 Alert.alert("Done", "Remote data has been deleted.");
                             } else {
@@ -1801,10 +1794,7 @@ function SettingsScreenContent() {
                                     if (accessToken) {
                                         const base = getApiBaseUrl();
                                         if (base) {
-                                            fetch(`${base}/api/account/delete`, {
-                                                method: "DELETE",
-                                                headers: { Authorization: `Bearer ${accessToken}` },
-                                            }).catch(() => {});
+                                            fetchWithTimeout(`${base}/api/account/delete`, { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }, 15_000).catch(() => {});
                                         }
                                     }
                                     signOut().catch(() => {});

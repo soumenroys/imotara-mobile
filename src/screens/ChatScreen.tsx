@@ -87,6 +87,7 @@ import {
   type OpenLoop,
 } from "../lib/imotara/openLoops";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import { ImotaraTypingIndicator } from "../components/imotara/ImotaraTypingIndicator";
 import { Toast, type ToastHandle } from "../components/ui/Toast";
 import { CompanionQuickPanel } from "../components/imotara/CompanionQuickPanel";
@@ -1780,7 +1781,7 @@ export default function ChatScreen() {
   useEffect(() => {
     const apiBase = (process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL ?? "").replace(/\/$/, "");
     if (!apiBase) return;
-    fetch(`${apiBase}/api/pulse`)
+    fetchWithTimeout(`${apiBase}/api/pulse`, {}, 10_000)
       .then((r) => r.json())
       .then((data) => {
         if (data.available && data.heavyPercent >= 15) setCollectivePulse({ heavyPercent: data.heavyPercent });
