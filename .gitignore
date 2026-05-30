@@ -59,3 +59,4 @@ imotara-play-*.json
 .dev-mobile.log
 .env
 bugreport-*.zip
+.vercel
