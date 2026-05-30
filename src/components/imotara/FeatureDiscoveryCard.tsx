@@ -1,15 +1,20 @@
 // src/components/imotara/FeatureDiscoveryCard.tsx
 // Hourly rotating feature tip capsule shown in the Trends screen.
+// Tips advance after 30 minutes of ACTIVE app use — wall-clock time while
+// the app is closed does not count.
 
-import React, { useEffect, useState, useCallback } from "react";
-import { View, Text, TouchableOpacity, Animated } from "react-native";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { View, Text, TouchableOpacity, Animated, AppState, type AppStateStatus } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/ThemeContext";
 import {
   getCurrentTip,
   advanceTip,
   prevTip,
+  recordSessionStart,
+  flushActiveTime,
   FEATURE_TIPS,
+  ACTIVE_INTERVAL_MS,
   type FeatureTip,
   type TipCategory,
 } from "../../data/featureTips";
@@ -18,7 +23,7 @@ type Props = {
   onDismiss: () => void;
 };
 
-// Theme-aware color sets — light mode uses dark text for readability
+// Theme-aware color sets
 type Palette = { bg: string; border: string; text: string; badge: string };
 
 function getPalette(category: TipCategory, isDark: boolean): Palette {
@@ -46,33 +51,77 @@ export default function FeatureDiscoveryCard({ onDismiss }: Props) {
   const [tip, setTip] = useState<FeatureTip | null>(null);
   const [index, setIndex] = useState(0);
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const tipRef = useRef<FeatureTip | null>(null);
 
   const fadeIn = useCallback(() => {
     fadeAnim.setValue(0);
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, [fadeAnim]);
 
-  useEffect(() => {
-    getCurrentTip().then(({ tip: t, index: i }) => {
-      setTip(t);
-      setIndex(i);
-      fadeIn();
-    });
+  const applyTip = useCallback((t: FeatureTip, i: number) => {
+    tipRef.current = t;
+    setTip(t);
+    setIndex(i);
+    fadeIn();
   }, [fadeIn]);
+
+  // Load tip on mount + start active session
+  useEffect(() => {
+    getCurrentTip().then(({ tip: t, index: i }) => applyTip(t, i));
+    recordSessionStart();
+  }, [applyTip]);
+
+  // AppState listener: pause/resume active time tracking
+  useEffect(() => {
+    const handleAppStateChange = async (nextState: AppStateStatus) => {
+      if (nextState === "active") {
+        // App came to foreground — resume tracking
+        recordSessionStart();
+        // Re-check if tip advanced while we were away (another session may have crossed 30 min)
+        const { tip: t, index: i } = await getCurrentTip();
+        if (t && tipRef.current && t.id !== tipRef.current.id) {
+          applyTip(t, i);
+        }
+      } else if (nextState === "background" || nextState === "inactive") {
+        // App going to background — flush elapsed active time
+        const result = await flushActiveTime();
+        if (result.advanced && result.newIndex >= 0) {
+          const newTip = FEATURE_TIPS[result.newIndex];
+          applyTip(newTip, result.newIndex);
+        }
+      }
+    };
+
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => {
+      sub.remove();
+      // Flush on unmount (user navigated away from Trends)
+      flushActiveTime().catch(() => {});
+    };
+  }, [applyTip]);
+
+  // Periodic live check while Trends screen is visible (every 2 minutes)
+  // Catches the 30-min threshold mid-session without needing a background event
+  useEffect(() => {
+    const checkMs = Math.min(2 * 60 * 1000, ACTIVE_INTERVAL_MS / 4);
+    const timer = setInterval(async () => {
+      const { tip: t, index: i } = await getCurrentTip();
+      if (t && tipRef.current && t.id !== tipRef.current.id) {
+        applyTip(t, i);
+      }
+    }, checkMs);
+    return () => clearInterval(timer);
+  }, [applyTip]);
 
   const goNext = useCallback(async () => {
     const { tip: t, index: i } = await advanceTip(index);
-    setTip(t);
-    setIndex(i);
-    fadeIn();
-  }, [index, fadeIn]);
+    applyTip(t, i);
+  }, [index, applyTip]);
 
   const goPrev = useCallback(async () => {
     const { tip: t, index: i } = await prevTip(index);
-    setTip(t);
-    setIndex(i);
-    fadeIn();
-  }, [index, fadeIn]);
+    applyTip(t, i);
+  }, [index, applyTip]);
 
   if (!tip) return null;
 

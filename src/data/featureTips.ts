@@ -260,37 +260,104 @@ export const FEATURE_TIPS: FeatureTip[] = [
 
 ];
 
-// ── Rotation helpers ─────────────────────────────────────────────────────────
+// ── Active-time rotation helpers ──────────────────────────────────────────────
+//
+// Tips rotate after 30 minutes of ACTIVE app usage — not wall-clock time.
+// "Active" = the app is open and in the foreground.
+// Closing the app pauses the clock; reopening it resumes.
+//
+// Implementation:
+//   ACCUMULATED_MS  = total ms of active use since last tip was shown
+//   SESSION_START   = timestamp when the current active session began
+//
+// On session start (app foreground): store SESSION_START = now
+// On session end (app background): add (now - SESSION_START) to ACCUMULATED_MS,
+//   check if >= 30 min → if so, advance tip and carry over remainder
+// On getCurrentTip: add live in-progress session time to get real total
 
-const LAST_INDEX_KEY = "imotara.feature_tip.last_index.v1";
-const LAST_SHOWN_KEY = "imotara.feature_tip.last_shown_at.v1";
-const INTERVAL_MS    = 60 * 60 * 1000; // 1 hour
+const LAST_INDEX_KEY    = "imotara.feature_tip.last_index.v2";
+const ACCUMULATED_MS_KEY= "imotara.feature_tip.accumulated_ms.v2";
+const SESSION_START_KEY = "imotara.feature_tip.session_start.v2";
+
+export const ACTIVE_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes of active use
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+/** Call when app comes to foreground (session begins). */
+export async function recordSessionStart(): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SESSION_START_KEY, String(Date.now()));
+  } catch {}
+}
+
+/**
+ * Call when app goes to background (session ends).
+ * Adds elapsed time to accumulator. Returns whether the tip advanced.
+ */
+export async function flushActiveTime(): Promise<{ advanced: boolean; newIndex: number }> {
+  try {
+    const sessionStartRaw = await AsyncStorage.getItem(SESSION_START_KEY);
+    if (!sessionStartRaw) return { advanced: false, newIndex: -1 };
+
+    const elapsed = Math.max(0, Date.now() - Number(sessionStartRaw));
+    await AsyncStorage.removeItem(SESSION_START_KEY);
+
+    const accRaw = await AsyncStorage.getItem(ACCUMULATED_MS_KEY);
+    const accumulated = (accRaw ? Number(accRaw) : 0) + elapsed;
+
+    const idxRaw = await AsyncStorage.getItem(LAST_INDEX_KEY);
+    let idx = idxRaw ? parseInt(idxRaw, 10) : 0;
+    if (!isFinite(idx) || idx < 0) idx = 0;
+
+    if (accumulated >= ACTIVE_INTERVAL_MS) {
+      const next = (idx + 1) % FEATURE_TIPS.length;
+      const remainder = accumulated - ACTIVE_INTERVAL_MS;
+      await Promise.all([
+        AsyncStorage.setItem(LAST_INDEX_KEY, String(next)),
+        AsyncStorage.setItem(ACCUMULATED_MS_KEY, String(remainder)),
+      ]);
+      return { advanced: true, newIndex: next };
+    }
+
+    await AsyncStorage.setItem(ACCUMULATED_MS_KEY, String(accumulated));
+    return { advanced: false, newIndex: -1 };
+  } catch {
+    return { advanced: false, newIndex: -1 };
+  }
+}
+
+/**
+ * Returns the current tip. If a session is active, live session time is
+ * included so the tip can advance mid-session without waiting for background.
+ */
 export async function getCurrentTip(): Promise<{ tip: FeatureTip; index: number }> {
   try {
-    const [idxRaw, lastRaw] = await Promise.all([
+    const [idxRaw, accRaw, sessionStartRaw] = await Promise.all([
       AsyncStorage.getItem(LAST_INDEX_KEY),
-      AsyncStorage.getItem(LAST_SHOWN_KEY),
+      AsyncStorage.getItem(ACCUMULATED_MS_KEY),
+      AsyncStorage.getItem(SESSION_START_KEY),
     ]);
 
     let idx = idxRaw ? parseInt(idxRaw, 10) : 0;
     if (!isFinite(idx) || idx < 0) idx = 0;
 
-    const lastShown = lastRaw ? Number(lastRaw) : 0;
-    const elapsed   = Date.now() - lastShown;
+    const base       = accRaw ? Number(accRaw) : 0;
+    const liveMs     = sessionStartRaw ? Math.max(0, Date.now() - Number(sessionStartRaw)) : 0;
+    const total      = base + liveMs;
 
-    if (elapsed >= INTERVAL_MS) {
-      idx = (idx + 1) % FEATURE_TIPS.length;
+    if (total >= ACTIVE_INTERVAL_MS) {
+      const next      = (idx + 1) % FEATURE_TIPS.length;
+      const remainder = total - ACTIVE_INTERVAL_MS;
       await Promise.all([
-        AsyncStorage.setItem(LAST_INDEX_KEY, String(idx)),
-        AsyncStorage.setItem(LAST_SHOWN_KEY, String(Date.now())),
+        AsyncStorage.setItem(LAST_INDEX_KEY, String(next)),
+        AsyncStorage.setItem(ACCUMULATED_MS_KEY, String(remainder)),
+        // reset session start so remainder is counted from now
+        sessionStartRaw ? AsyncStorage.setItem(SESSION_START_KEY, String(Date.now())) : Promise.resolve(),
       ]);
+      idx = next;
     }
 
-    const safeIdx = idx % FEATURE_TIPS.length;
-    return { tip: FEATURE_TIPS[safeIdx], index: safeIdx };
+    return { tip: FEATURE_TIPS[idx % FEATURE_TIPS.length], index: idx % FEATURE_TIPS.length };
   } catch {
     return { tip: FEATURE_TIPS[0], index: 0 };
   }
@@ -301,7 +368,7 @@ export async function advanceTip(currentIndex: number): Promise<{ tip: FeatureTi
   try {
     await Promise.all([
       AsyncStorage.setItem(LAST_INDEX_KEY, String(next)),
-      AsyncStorage.setItem(LAST_SHOWN_KEY, String(Date.now())),
+      AsyncStorage.setItem(ACCUMULATED_MS_KEY, "0"),
     ]);
   } catch {}
   return { tip: FEATURE_TIPS[next], index: next };
