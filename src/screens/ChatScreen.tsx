@@ -1279,13 +1279,15 @@ function MessageBubble({
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               {/* Source badge */}
               <View style={{
-                paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1,
+                paddingHorizontal: 6, paddingVertical: 4, borderRadius: 999, borderWidth: 1,
                 borderColor: message.source === "cloud" ? "rgba(56,189,248,0.45)" : "rgba(148,163,184,0.35)",
                 backgroundColor: message.source === "cloud" ? "rgba(56,189,248,0.10)" : "rgba(148,163,184,0.10)",
               }}>
-                <Text style={{ fontSize: 10, fontWeight: "600", color: message.source === "cloud" ? "#7dd3fc" : colors.textSecondary }}>
-                  {message.source === "cloud" ? "Cloud" : "Local"}
-                </Text>
+                <Ionicons
+                  name={message.source === "cloud" ? "cloud-outline" : "phone-portrait-outline"}
+                  size={11}
+                  color={message.source === "cloud" ? "#7dd3fc" : colors.textSecondary}
+                />
               </View>
 
               {/* Reaction toggle */}
