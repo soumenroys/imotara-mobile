@@ -1989,13 +1989,18 @@ function SettingsScreenContent() {
                     </TouchableOpacity>
                 </View>
 
-                {/* Feature discovery tips — always visible, no accordion needed */}
-                <AppSurface style={{ marginBottom: 20 }}>
+                {/* Feature discovery tips — always visible, prominent card */}
+                <View style={{
+                    marginBottom: 20, borderRadius: 14, borderWidth: 1.5,
+                    borderColor: colors.primary,
+                    backgroundColor: colors.primaryTint,
+                    padding: 14,
+                }}>
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                         <View style={{ flex: 1, marginRight: 12 }}>
-                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "600" }}>🔍 Feature tips</Text>
-                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3, lineHeight: 17 }}>
-                                Show one feature tip per hour in the Trends tab to help you discover everything Imotara can do.
+                            <Text style={{ fontSize: 15, color: colors.primary, fontWeight: "700" }}>✦ Feature tips</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4, lineHeight: 18 }}>
+                                One tip per hour in the Trends tab — discover everything Imotara can do.
                             </Text>
                         </View>
                         <Switch
@@ -2005,7 +2010,7 @@ function SettingsScreenContent() {
                             thumbColor="#ffffff"
                         />
                     </View>
-                </AppSurface>
+                </View>
 
                 {/* ── Plan & support section ── */}
                 <View ref={el => { sectionRefs.current["support"] = el; }} collapsable={false}>
