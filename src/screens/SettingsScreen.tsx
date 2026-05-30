@@ -1989,28 +1989,7 @@ function SettingsScreenContent() {
                     </TouchableOpacity>
                 </View>
 
-                {/* Feature discovery tips — always visible, prominent card */}
-                <View style={{
-                    marginBottom: 20, borderRadius: 14, borderWidth: 1.5,
-                    borderColor: colors.primary,
-                    backgroundColor: colors.primaryTint,
-                    padding: 14,
-                }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                        <View style={{ flex: 1, marginRight: 12 }}>
-                            <Text style={{ fontSize: 15, color: colors.primary, fontWeight: "700" }}>✦ Feature tips</Text>
-                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4, lineHeight: 18 }}>
-                                One tip per hour in the Trends tab — discover everything Imotara can do.
-                            </Text>
-                        </View>
-                        <Switch
-                            value={featureTipsEnabled}
-                            onValueChange={setFeatureTipsEnabled}
-                            trackColor={{ false: colors.border, true: colors.primary }}
-                            thumbColor="#ffffff"
-                        />
-                    </View>
-                </View>
+
 
                 {/* ── Plan & support section ── */}
                 <View ref={el => { sectionRefs.current["support"] = el; }} collapsable={false}>
@@ -4902,6 +4881,22 @@ function SettingsScreenContent() {
                         <Switch
                             value={showSyncBadge}
                             onValueChange={setShowSyncBadge}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+                </AppSurface>
+
+                {/* Feature discovery tips toggle */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Feature tips</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Show one feature tip per hour in the Trends tab to discover what Imotara can do</Text>
+                        </View>
+                        <Switch
+                            value={featureTipsEnabled}
+                            onValueChange={setFeatureTipsEnabled}
                             trackColor={{ false: colors.border, true: colors.primary }}
                             thumbColor="#ffffff"
                         />
