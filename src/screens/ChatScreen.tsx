@@ -88,6 +88,7 @@ import {
 } from "../lib/imotara/openLoops";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
+import FeatureDiscoveryCard from "../components/imotara/FeatureDiscoveryCard";
 import { ImotaraTypingIndicator } from "../components/imotara/ImotaraTypingIndicator";
 import { Toast, type ToastHandle } from "../components/ui/Toast";
 import { CompanionQuickPanel } from "../components/imotara/CompanionQuickPanel";
@@ -1933,7 +1934,10 @@ export default function ChatScreen() {
 
     showSyncBadge,
     companionReactionsEnabled,
+    featureTipsEnabled,
   } = useSettings();
+
+  const [featureTipDismissed, setFeatureTipDismissed] = React.useState(false);
 
   // Keep panel-enabled refs in sync with settings (refs are read inside the PanResponder closure)
   useEffect(() => { companionPanelEnabledRef.current = companionPanelEnabled; }, [companionPanelEnabled]);
@@ -5221,6 +5225,11 @@ export default function ChatScreen() {
             </View>
           </View>
         </View>
+      )}
+
+      {/* Feature discovery tip — hourly rotating capsule */}
+      {featureTipsEnabled && !featureTipDismissed && (
+        <FeatureDiscoveryCard onDismiss={() => setFeatureTipDismissed(true)} />
       )}
 
       {/* Sentiment seed chips — shown when chat has messages and input is empty */}
