@@ -135,7 +135,7 @@ export default function CompanionLetterCard({
             {/* TTS */}
             <TouchableOpacity
               onPress={handleTTS}
-              style={[styles.actionBtn, { backgroundColor: speaking ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)", borderColor: speaking ? colors.primary : colors.border }]}
+              style={[styles.actionBtn, { backgroundColor: speaking ? "rgba(99,102,241,0.2)" : colors.surfaceSoft, borderColor: speaking ? colors.primary : colors.border }]}
             >
               <Ionicons
                 name={speaking ? "stop-circle" : "volume-high-outline"}
@@ -150,7 +150,7 @@ export default function CompanionLetterCard({
             {/* Reaction */}
             <TouchableOpacity
               onPress={() => setShowReactions((v) => !v)}
-              style={[styles.actionBtn, { backgroundColor: "rgba(255,255,255,0.06)", borderColor: colors.border }]}
+              style={[styles.actionBtn, { backgroundColor: colors.surfaceSoft, borderColor: colors.border }]}
             >
               <Text style={{ fontSize: 15 }}>{reaction ?? "🤍"}</Text>
               <Text style={{ fontSize: 11, color: colors.textSecondary, marginLeft: 4 }}>React</Text>
@@ -159,7 +159,7 @@ export default function CompanionLetterCard({
             {/* Reply */}
             <TouchableOpacity
               onPress={() => setReplyOpen((v) => !v)}
-              style={[styles.actionBtn, { backgroundColor: replyOpen ? "rgba(99,102,241,0.15)" : "rgba(255,255,255,0.06)", borderColor: replyOpen ? colors.primary : colors.border }]}
+              style={[styles.actionBtn, { backgroundColor: replyOpen ? "rgba(99,102,241,0.15)" : colors.surfaceSoft, borderColor: replyOpen ? colors.primary : colors.border }]}
             >
               <Ionicons name="return-down-back" size={15} color={replyOpen ? colors.primary : colors.textSecondary} />
               <Text style={{ fontSize: 11, color: replyOpen ? colors.primary : colors.textSecondary, marginLeft: 4 }}>

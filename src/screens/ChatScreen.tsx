@@ -4332,9 +4332,9 @@ export default function ChatScreen() {
             <View style={{ marginHorizontal: 16, marginVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: "rgba(139,92,246,0.30)", backgroundColor: colors.surface, padding: 16 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Text style={{ fontSize: 16 }}>✨</Text>
-                <Text style={{ fontSize: 13, fontWeight: "600", color: "#e4e4f0" }}>I've used my 20 replies for today</Text>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textPrimary }}>I've used my 20 replies for today</Text>
               </View>
-              <Text style={{ fontSize: 12, color: "#9ca3af", lineHeight: 18, marginBottom: 12 }}>
+              <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 18, marginBottom: 12 }}>
                 I'm still here. My responses now come from on-device mode — a little simpler, but present.
               </Text>
               <TouchableOpacity

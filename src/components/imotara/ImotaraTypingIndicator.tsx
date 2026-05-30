@@ -2,6 +2,7 @@
 import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Animated } from "react-native";
 import AppSurface from "../ui/AppSurface";
+import { useColors } from "../../theme/ThemeContext";
 
 export type ImotaraTypingIndicatorProps = {
     isUser?: boolean;
@@ -11,7 +12,7 @@ export type ImotaraTypingIndicatorProps = {
 const DOT_SIZE = 6;
 const BASE_DELAYS = [0, 150, 300];
 
-function AnimatedDot({ delay, duration }: { delay: number; duration: number }) {
+function AnimatedDot({ delay, duration, color }: { delay: number; duration: number; color?: string }) {
     const anim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -37,7 +38,7 @@ function AnimatedDot({ delay, duration }: { delay: number; duration: number }) {
 
     return (
         <Animated.View
-            style={[styles.dot, { transform: [{ translateY: anim }] }]}
+            style={[styles.dot, { transform: [{ translateY: anim }], ...(color ? { backgroundColor: color } : {}) }]}
         />
     );
 }
@@ -46,6 +47,7 @@ export const ImotaraTypingIndicator: React.FC<ImotaraTypingIndicatorProps> = ({
     isUser = false,
     speed = "normal",
 }) => {
+    const colors = useColors();
     const containerAlignment = isUser ? styles.userAlign : styles.botAlign;
     const duration = speed === "slow" ? 500 : speed === "fast" ? 180 : 300;
     const delayStep = speed === "slow" ? 220 : speed === "fast" ? 80 : 150;
@@ -56,7 +58,7 @@ export const ImotaraTypingIndicator: React.FC<ImotaraTypingIndicatorProps> = ({
             <AppSurface style={[styles.bubble, isUser ? styles.userBubble : styles.botBubble]}>
                 <View style={styles.dotsRow}>
                     {delays.map((delay, i) => (
-                        <AnimatedDot key={i} delay={delay} duration={duration} />
+                        <AnimatedDot key={i} delay={delay} duration={duration} color={colors.textSecondary} />
                     ))}
                 </View>
             </AppSurface>

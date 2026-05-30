@@ -59,7 +59,7 @@ export function CompanionInsightCard({ variant, title, body, colors, onDismiss }
     >
       {/* Badge row */}
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderColor: cfg.borderColor, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: "rgba(255,255,255,0.04)" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderColor: cfg.borderColor, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: colors.surfaceSoft }}>
           <Ionicons name={cfg.icon as any} size={11} color={cfg.accentColor} />
           <Text style={{ fontSize: 9, fontWeight: "700", color: cfg.accentColor, textTransform: "uppercase", letterSpacing: 0.5 }}>
             {cfg.label}

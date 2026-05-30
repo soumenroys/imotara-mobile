@@ -629,7 +629,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                         {/* Billing period toggle */}
                         <View style={{
                             flexDirection: "row",
-                            backgroundColor: "rgba(255,255,255,0.06)",
+                            backgroundColor: colors.surfaceSoft,
                             borderRadius: 12, padding: 4, marginBottom: 24, marginTop: 8,
                         }}>
                             {(["monthly", "annual"] as PlanPeriod[]).map((p) => (
@@ -666,8 +666,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                     <View key={plan.id} style={{
                                         flex: 1, borderRadius: 16, padding: 16,
                                         borderWidth: isPro ? 1.5 : 1,
-                                        borderColor: isCurrent ? colors.primary : isPro ? "#6366f1" : "rgba(255,255,255,0.12)",
-                                        backgroundColor: isPro ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.04)",
+                                        borderColor: isCurrent ? colors.primary : isPro ? "#6366f1" : colors.border,
+                                        backgroundColor: isPro ? "rgba(99,102,241,0.12)" : colors.surfaceSoft,
                                     }}>
                                         {isCurrent ? (
                                             <View style={{
@@ -742,8 +742,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                         disabled={!!purchasing}
                                         style={{
                                             paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
-                                            borderWidth: 1, borderColor: "rgba(255,255,255,0.12)",
-                                            backgroundColor: "rgba(255,255,255,0.04)",
+                                            borderWidth: 1, borderColor: colors.border,
+                                            backgroundColor: colors.surfaceSoft,
                                             alignItems: "center", flexGrow: 1, minWidth: "44%",
                                             opacity: purchasing && !isBusy ? 0.5 : 1,
                                         }}
@@ -893,14 +893,14 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                             ] as const).map(({ tier, color, badge, items }) => (
                                 <View key={tier} style={{
                                     marginBottom: 10, borderRadius: 12,
-                                    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
-                                    backgroundColor: "rgba(255,255,255,0.03)",
+                                    borderWidth: 1, borderColor: colors.border,
+                                    backgroundColor: colors.surface,
                                     overflow: "hidden",
                                 }}>
                                     <View style={{
                                         paddingHorizontal: 12, paddingVertical: 8,
                                         backgroundColor: badge,
-                                        borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)",
+                                        borderBottomWidth: 1, borderBottomColor: colors.border,
                                     }}>
                                         <Text style={{ fontSize: 12, fontWeight: "700", color }}>
                                             {tier}
