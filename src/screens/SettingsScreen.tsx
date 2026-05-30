@@ -702,8 +702,9 @@ function SettingsScreenContent() {
     const [sectionMindset, setSectionMindset] = React.useState(false);
 
     const settingsScrollRef = React.useRef<import("react-native").ScrollView>(null);
-    // One ref per section header — used to measureLayout after accordion opens
-    const sectionHeaderRefs = React.useRef<Record<string, import("react-native").View | null>>({});
+    // Track Y position of each section header via onLayout — no native measurement needed.
+    // This works reliably across Old and New Architecture.
+    const sectionYPositions = React.useRef<Record<string, number>>({});
 
     const handleSearchSelect = React.useCallback((sectionKey: string) => {
         const sectionMap: Record<string, React.Dispatch<React.SetStateAction<boolean>>> = {
@@ -718,27 +719,14 @@ function SettingsScreenContent() {
         const setter = sectionMap[sectionKey];
         if (setter) setter(true);
 
-        // After accordion opens and re-renders, measure the section header's
-        // Y position relative to the ScrollView and scroll to it.
+        // Wait for accordion to open, then scroll to the stored Y position.
+        // onLayout fires whenever the section header renders, keeping the position current.
         setTimeout(() => {
-            const headerRef = sectionHeaderRefs.current[sectionKey];
-            const scrollRef = settingsScrollRef.current;
-            if (headerRef && scrollRef) {
-                (headerRef as any).measureLayout(
-                    (scrollRef as any).getScrollResponder?.()?.getInnerViewNode?.() ?? scrollRef,
-                    (_x: number, y: number) => {
-                        // Scroll to 16px above the section header for breathing room
-                        scrollRef.scrollTo({ y: Math.max(0, y - 16), animated: true });
-                    },
-                    () => {
-                        // Fallback: measure absolute position and approximate
-                        (headerRef as any).measure((_x: number, _y: number, _w: number, _h: number, _px: number, pageY: number) => {
-                            scrollRef.scrollTo({ y: Math.max(0, pageY - 120), animated: true });
-                        });
-                    }
-                );
+            const y = sectionYPositions.current[sectionKey];
+            if (y !== undefined) {
+                settingsScrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
             }
-        }, 350); // Wait for accordion open animation to complete
+        }, 350);
     }, []);
 
     // ── Mindset Analysis Toggles ─────────────────────────────────────────────
@@ -1997,7 +1985,7 @@ function SettingsScreenContent() {
                 </View>
 
                 {/* ── Plan & support section ── */}
-                <View ref={el => { sectionHeaderRefs.current["support"] = el; }} collapsable={false}>
+                <View onLayout={e => { sectionYPositions.current["support"] = e.nativeEvent.layout.y; }}>
                 <AccordionHeader title="Plan & support" open={sectionSupport} onPress={() => toggleSection(setSectionSupport)} />
                 </View>
                 {sectionSupport && (
@@ -2107,7 +2095,7 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Your plan section (merged into Plan & support below) ── */}
-                <View ref={el => { sectionHeaderRefs.current["account"] = el; }} collapsable={false}>
+                <View onLayout={e => { sectionYPositions.current["account"] = e.nativeEvent.layout.y; }}>
                 <AccordionHeader title="Your plan" open={sectionAccount} onPress={() => toggleSection(setSectionAccount)} />
                 </View>
                 {sectionAccount && (
@@ -2283,7 +2271,7 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Experience section ── */}
-                <View ref={el => { sectionHeaderRefs.current["experience"] = el; }} collapsable={false}>
+                <View onLayout={e => { sectionYPositions.current["experience"] = e.nativeEvent.layout.y; }}>
                 <AccordionHeader title="Experience" open={sectionAppearance} onPress={() => toggleSection(setSectionAppearance)} />
                 </View>
                 {sectionAppearance && (
@@ -2870,7 +2858,7 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Your companion section ── */}
-                <View ref={el => { sectionHeaderRefs.current["companion"] = el; }} collapsable={false}>
+                <View onLayout={e => { sectionYPositions.current["companion"] = e.nativeEvent.layout.y; }}>
                 <AccordionHeader title="Your companion" open={sectionCompanion} onPress={() => toggleSection(setSectionCompanion)} />
                 </View>
                 {sectionCompanion && (
@@ -3779,7 +3767,7 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Privacy & safety section ── */}
-                <View ref={el => { sectionHeaderRefs.current["privacy"] = el; }} collapsable={false}>
+                <View onLayout={e => { sectionYPositions.current["privacy"] = e.nativeEvent.layout.y; }}>
                 <AccordionHeader title="Privacy & safety" open={sectionPrivacy} onPress={() => toggleSection(setSectionPrivacy)} />
                 </View>
                 {sectionPrivacy && (
@@ -4476,7 +4464,7 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Mindset Analysis section ── */}
-                <View ref={el => { sectionHeaderRefs.current["mindset"] = el; }} collapsable={false}>
+                <View onLayout={e => { sectionYPositions.current["mindset"] = e.nativeEvent.layout.y; }}>
                 <AccordionHeader title="Mindset Analysis" open={sectionMindset} onPress={() => toggleSection(setSectionMindset)} />
                 </View>
                 {sectionMindset && (
@@ -4526,7 +4514,7 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Advanced section ── */}
-                <View ref={el => { sectionHeaderRefs.current["advanced"] = el; }} collapsable={false}>
+                <View onLayout={e => { sectionYPositions.current["advanced"] = e.nativeEvent.layout.y; }}>
                 <AccordionHeader title="Advanced" open={sectionAdvancedMobile} onPress={() => toggleSection(setSectionAdvancedMobile)} />
                 </View>
                 {sectionAdvancedMobile && (
