@@ -10,6 +10,7 @@ import {
     Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../../theme/ThemeContext";
 
 export type AppChipVariant =
     | "neutral"
@@ -23,38 +24,34 @@ export type AppChipProps = {
     variant?: AppChipVariant;
     style?: StyleProp<ViewStyle>;
     textStyle?: StyleProp<TextStyle>;
-
-    /**
-     * Optional icon (e.g., "✓", "!")
-     * Non-breaking: if omitted, renders label only.
-     */
     icon?: string;
-
-    /**
-     * Optional Ionicons icon name — renders an Ionicons glyph instead of text icon.
-     * Takes precedence over `icon` when provided.
-     */
     iconName?: string;
-
-    /**
-     * Non-breaking enhancement:
-     * - default false → existing chips stay static
-     * - when true → subtle pulse + tiny fade
-     */
     animate?: boolean;
 };
 
-/**
- * AppChip
- * --------
- * Small status / badge / pill component.
- * Pure UI primitive — no logic.
- *
- * Safe defaults:
- * - variant: "neutral"
- * - animate: false
- * - icon: undefined (no icon shown)
- */
+// Theme-aware chip colors — dark values for dark mode, readable values for light mode
+function getVariantColors(variant: AppChipVariant, isDark: boolean): { bg: string; border: string; text: string } {
+    if (isDark) {
+        const dark: Record<AppChipVariant, { bg: string; border: string; text: string }> = {
+            neutral: { bg: "rgba(148,163,184,0.20)", border: "rgba(148,163,184,0.45)", text: "rgba(255,255,255,0.80)" },
+            primary: { bg: "rgba(56,189,248,0.18)",  border: "#38bdf8",                text: "#e0f2fe" },
+            success: { bg: "rgba(74,222,128,0.18)",  border: "#4ade80",                text: "#dcfce7" },
+            warning: { bg: "rgba(250,204,21,0.18)",  border: "#facc15",                text: "#fef9c3" },
+            danger:  { bg: "rgba(248,113,113,0.22)", border: "#f87171",                text: "#fecaca" },
+        };
+        return dark[variant];
+    } else {
+        const light: Record<AppChipVariant, { bg: string; border: string; text: string }> = {
+            neutral: { bg: "rgba(100,116,139,0.10)", border: "rgba(100,116,139,0.35)", text: "rgba(30,41,59,0.80)"  },
+            primary: { bg: "rgba(14,165,233,0.10)",  border: "rgba(14,165,233,0.40)",  text: "#0369a1"             },
+            success: { bg: "rgba(22,163,74,0.10)",   border: "rgba(22,163,74,0.40)",   text: "#15803d"             },
+            warning: { bg: "rgba(202,138,4,0.12)",   border: "rgba(202,138,4,0.45)",   text: "#92400e"             },
+            danger:  { bg: "rgba(220,38,38,0.10)",   border: "rgba(220,38,38,0.40)",   text: "#b91c1c"             },
+        };
+        return light[variant];
+    }
+}
+
 const AppChip: React.FC<AppChipProps> = ({
     label,
     variant = "neutral",
@@ -64,41 +61,24 @@ const AppChip: React.FC<AppChipProps> = ({
     iconName,
     animate = false,
 }) => {
+    const { isDark } = useTheme();
+    const vc = getVariantColors(variant, isDark);
+
     const scale = React.useRef(new Animated.Value(1)).current;
     const opacity = React.useRef(new Animated.Value(1)).current;
 
     React.useEffect(() => {
         if (!animate) return;
-
-        // Stop any in-flight animations before resetting (QA stability)
         scale.stopAnimation();
         opacity.stopAnimation();
-
         scale.setValue(0.98);
         opacity.setValue(0.92);
-
         const anim = Animated.parallel([
-            Animated.spring(scale, {
-                toValue: 1,
-                useNativeDriver: true,
-                damping: 14,
-                stiffness: 180,
-                mass: 0.8,
-            }),
-            Animated.timing(opacity, {
-                toValue: 1,
-                duration: 180,
-                useNativeDriver: true,
-            }),
+            Animated.spring(scale, { toValue: 1, useNativeDriver: true, damping: 14, stiffness: 180, mass: 0.8 }),
+            Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
         ]);
-
         anim.start();
-
-        return () => {
-            // Prevent warnings if parent unmounts mid-animation
-            anim.stop();
-        };
-        // Only re-pulse when the visible content or mood changes
+        return () => { anim.stop(); };
     }, [animate, label, variant, icon, opacity, scale]);
 
     const Container: any = animate ? Animated.View : View;
@@ -107,21 +87,18 @@ const AppChip: React.FC<AppChipProps> = ({
         <Container
             style={[
                 styles.base,
-                variantStyles.container[variant],
+                { backgroundColor: vc.bg, borderColor: vc.border },
                 animate && { transform: [{ scale }], opacity },
                 style,
             ]}
         >
             <View style={styles.row}>
                 {iconName ? (
-                    <Ionicons name={iconName as any} size={10} color={variantStyles.text[variant].color} style={{ marginRight: 6, opacity: 0.95 }} />
+                    <Ionicons name={iconName as any} size={10} color={vc.text} style={{ marginRight: 6, opacity: 0.95 }} />
                 ) : icon ? (
-                    <Text style={[styles.icon, variantStyles.text[variant]]}>
-                        {icon}
-                    </Text>
+                    <Text style={[styles.icon, { color: vc.text }]}>{icon}</Text>
                 ) : null}
-
-                <Text style={[styles.text, variantStyles.text[variant], textStyle]}>
+                <Text style={[styles.text, { color: vc.text }, textStyle]}>
                     {label}
                 </Text>
             </View>
@@ -137,62 +114,9 @@ const styles = StyleSheet.create({
         borderRadius: 999,
         borderWidth: 1,
     },
-    row: {
-        flexDirection: "row",
-        alignItems: "center",
-    },
-    icon: {
-        fontSize: 10,
-        fontWeight: "700",
-        marginRight: 6,
-        opacity: 0.95,
-    },
-    text: {
-        fontSize: 10,
-        fontWeight: "500",
-    },
+    row: { flexDirection: "row", alignItems: "center" },
+    icon: { fontSize: 10, fontWeight: "700", marginRight: 6, opacity: 0.95 },
+    text: { fontSize: 10, fontWeight: "500" },
 });
-
-const variantStyles = {
-    container: StyleSheet.create({
-        neutral: {
-            backgroundColor: "rgba(148, 163, 184, 0.20)",
-            borderColor: "#9ca3af",
-        },
-        primary: {
-            backgroundColor: "rgba(56, 189, 248, 0.18)",
-            borderColor: "#38bdf8",
-        },
-        success: {
-            backgroundColor: "rgba(74, 222, 128, 0.18)",
-            borderColor: "#4ade80",
-        },
-        warning: {
-            backgroundColor: "rgba(250, 204, 21, 0.18)",
-            borderColor: "#facc15",
-        },
-        danger: {
-            backgroundColor: "rgba(248, 113, 113, 0.22)",
-            borderColor: "#f87171",
-        },
-    }),
-    text: StyleSheet.create({
-        neutral: {
-            color: "rgba(255,255,255,0.85)",
-        },
-        primary: {
-            color: "#e0f2fe",
-        },
-        success: {
-            color: "#dcfce7",
-        },
-        warning: {
-            color: "#fef9c3",
-        },
-        danger: {
-            color: "#fecaca",
-        },
-    }),
-};
 
 export default AppChip;
