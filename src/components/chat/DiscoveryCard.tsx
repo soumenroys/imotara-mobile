@@ -7,6 +7,7 @@ import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { ColorPalette } from "../../theme/colors";
+import { useTheme } from "../../theme/ThemeContext";
 
 export type DiscoveryCardId = "trends" | "companion" | "offline" | "unsent_letter";
 
@@ -41,7 +42,15 @@ const CARD_CONTENT: Record<DiscoveryCardId, { icon: string; message: string; act
 };
 
 export function DiscoveryCard({ cardId, colors, onDismiss, onAction }: Props) {
+  const { isDark } = useTheme();
   const { icon, message, action } = CARD_CONTENT[cardId];
+
+  const textColor   = isDark ? "rgba(196,207,255,0.85)" : "#3730a3";
+  const actionColor = isDark ? "rgba(165,180,252,1)"    : "#4338ca";
+  const iconColor   = isDark ? "rgba(165,180,252,0.85)" : "#4338ca";
+  const bg          = isDark ? "rgba(99,102,241,0.10)"  : "rgba(99,102,241,0.08)";
+  const border      = isDark ? "rgba(99,102,241,0.25)"  : "rgba(99,102,241,0.35)";
+
   return (
     <View
       style={{
@@ -49,8 +58,8 @@ export function DiscoveryCard({ cardId, colors, onDismiss, onAction }: Props) {
         marginBottom: 6,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: "rgba(99,102,241,0.25)",
-        backgroundColor: "rgba(99,102,241,0.08)",
+        borderColor: border,
+        backgroundColor: bg,
         paddingHorizontal: 12,
         paddingVertical: 8,
         flexDirection: "row",
@@ -58,12 +67,12 @@ export function DiscoveryCard({ cardId, colors, onDismiss, onAction }: Props) {
         gap: 8,
       }}
     >
-      <Ionicons name={icon as any} size={16} color="rgba(165,180,252,0.85)" />
-      <Text style={{ flex: 1, fontSize: 11.5, color: "rgba(196,207,255,0.85)", lineHeight: 16 }}>
+      <Ionicons name={icon as any} size={16} color={iconColor} />
+      <Text style={{ flex: 1, fontSize: 11.5, color: textColor, lineHeight: 16 }}>
         {message}
       </Text>
       <TouchableOpacity onPress={onAction} accessibilityRole="button">
-        <Text style={{ fontSize: 11, color: "rgba(165,180,252,1)", fontWeight: "600" }}>
+        <Text style={{ fontSize: 11, color: actionColor, fontWeight: "700" }}>
           {action}
         </Text>
       </TouchableOpacity>
@@ -73,7 +82,7 @@ export function DiscoveryCard({ cardId, colors, onDismiss, onAction }: Props) {
         accessibilityRole="button"
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Ionicons name="close-outline" size={16} color="rgba(148,163,184,0.6)" />
+        <Ionicons name="close-outline" size={16} color={colors.textSecondary} />
       </TouchableOpacity>
     </View>
   );
