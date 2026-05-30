@@ -1,5 +1,5 @@
 // src/components/imotara/FeatureDiscoveryCard.tsx
-// One-hour rotating feature tip capsule shown in the Chat screen.
+// Hourly rotating feature tip capsule shown in the Trends screen.
 
 import React, { useEffect, useState, useCallback } from "react";
 import { View, Text, TouchableOpacity, Animated } from "react-native";
@@ -26,7 +26,7 @@ export default function FeatureDiscoveryCard({ onDismiss }: Props) {
 
   const fadeIn = useCallback(() => {
     fadeAnim.setValue(0);
-    Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }).start();
+    Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, [fadeAnim]);
 
   useEffect(() => {
@@ -56,57 +56,71 @@ export default function FeatureDiscoveryCard({ onDismiss }: Props) {
   const palette = CATEGORY_COLORS[tip.category];
 
   return (
-    <Animated.View style={{ opacity: fadeAnim, marginHorizontal: 12, marginBottom: 6 }}>
+    <Animated.View style={{ opacity: fadeAnim, marginHorizontal: 16, marginBottom: 16 }}>
       <View style={{
-        borderRadius: 16, borderWidth: 1,
+        borderRadius: 20, borderWidth: 1,
         borderColor: palette.border,
         backgroundColor: palette.bg,
-        paddingHorizontal: 14, paddingVertical: 10,
-        flexDirection: "row", alignItems: "center", gap: 12,
+        padding: 18,
       }}>
-        {/* Emoji graphic */}
-        <View style={{
-          width: 48, height: 48, borderRadius: 14,
-          backgroundColor: palette.badge,
-          alignItems: "center", justifyContent: "center",
-          flexShrink: 0,
-        }}>
-          <Text style={{ fontSize: 26 }}>{tip.emoji}</Text>
-        </View>
-
-        {/* Text */}
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
-            <View style={{ backgroundColor: palette.badge, borderRadius: 99, paddingHorizontal: 6, paddingVertical: 1 }}>
-              <Text style={{ fontSize: 9, fontWeight: "700", color: palette.text, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                Discover
-              </Text>
-            </View>
+        {/* Header row: badge + counter + close */}
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <View style={{ backgroundColor: palette.badge, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 3 }}>
+            <Text style={{ fontSize: 11, fontWeight: "700", color: palette.text, textTransform: "uppercase", letterSpacing: 0.6 }}>
+              ✦ Discover Imotara
+            </Text>
           </View>
-          <Text style={{ fontSize: 13, fontWeight: "700", color: colors.textPrimary, marginBottom: 2 }} numberOfLines={1}>
-            {tip.title}
-          </Text>
-          <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 17 }} numberOfLines={2}>
-            {tip.tip}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+              {index + 1} / {FEATURE_TIPS.length}
+            </Text>
+            <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close-outline" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Controls */}
-        <View style={{ flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0 }}>
-          <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 8, bottom: 4, left: 8, right: 8 }}>
-            <Ionicons name="close-outline" size={16} color={colors.textSecondary} />
+        {/* Body: emoji + text */}
+        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 16 }}>
+          {/* Emoji graphic */}
+          <View style={{
+            width: 64, height: 64, borderRadius: 18,
+            backgroundColor: palette.badge,
+            alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <Text style={{ fontSize: 34 }}>{tip.emoji}</Text>
+          </View>
+
+          {/* Text */}
+          <View style={{ flex: 1, justifyContent: "center" }}>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, marginBottom: 6 }}>
+              {tip.title}
+            </Text>
+            <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }}>
+              {tip.tip}
+            </Text>
+          </View>
+        </View>
+
+        {/* Navigation row */}
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 4, marginTop: 14 }}>
+          <TouchableOpacity
+            onPress={goPrev}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{ flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 99, borderWidth: 1, borderColor: palette.border }}
+          >
+            <Ionicons name="chevron-back" size={14} color={palette.text} />
+            <Text style={{ fontSize: 12, color: palette.text, fontWeight: "600" }}>Prev</Text>
           </TouchableOpacity>
-          <View style={{ flexDirection: "row", gap: 2 }}>
-            <TouchableOpacity onPress={goPrev} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}>
-              <Ionicons name="chevron-back" size={14} color={palette.text} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={goNext} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}>
-              <Ionicons name="chevron-forward" size={14} color={palette.text} />
-            </TouchableOpacity>
-          </View>
-          <Text style={{ fontSize: 8, color: colors.textSecondary }}>
-            {index + 1}/{FEATURE_TIPS.length}
-          </Text>
+          <TouchableOpacity
+            onPress={goNext}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{ flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 99, backgroundColor: palette.badge }}
+          >
+            <Text style={{ fontSize: 12, color: palette.text, fontWeight: "600" }}>Next tip</Text>
+            <Ionicons name="chevron-forward" size={14} color={palette.text} />
+          </TouchableOpacity>
         </View>
       </View>
     </Animated.View>

@@ -6,6 +6,7 @@ import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, Vibration, ActivityIndicator, InteractionManager } from "react-native";
 import CompanionLetterCard from "../components/imotara/CompanionLetterCard";
+import FeatureDiscoveryCard from "../components/imotara/FeatureDiscoveryCard";
 import { loadLetterArchive, type CompanionLetter } from "../lib/imotara/companionLetter";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -1261,7 +1262,8 @@ function TrendsScreenContent() {
   const store = useHistoryStore() as any;
   const history: any[] = store.history ?? [];
   const addToHistory: ((item: any) => void) | undefined = store.addToHistory;
-  const { toneContext, localUserScopeId } = useSettings() as any;
+  const { toneContext, localUserScopeId, featureTipsEnabled } = useSettings() as any;
+  const [featureTipDismissed, setFeatureTipDismissed] = useState(false);
   const { accessToken } = useAuth();
 
   const handleCheckin = (emotion: EmotionBucket, label: string, note: string) => {
@@ -1528,6 +1530,11 @@ function TrendsScreenContent() {
       contentContainerStyle={{ padding: 16 }}
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor="#38bdf8" colors={["#38bdf8"]} />}
     >
+      {/* Hourly feature discovery tip */}
+      {featureTipsEnabled && !featureTipDismissed && (
+        <FeatureDiscoveryCard onDismiss={() => setFeatureTipDismissed(true)} />
+      )}
+
       {/* Quick mood check-in */}
       <FeelSection colors={colors} onCheckin={handleCheckin} />
 
