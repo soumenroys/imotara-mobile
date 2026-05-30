@@ -10,7 +10,7 @@ import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import { fetchRemoteHistory } from "../api/historyClient";
-import { useColors } from "../theme/ThemeContext";
+import { useColors, useTheme } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
 import AppButton from "../components/ui/AppButton";
 import AppChip from "../components/ui/AppChip";
@@ -322,19 +322,31 @@ function SwipeableRow({
 // InteractionManager.runAfterInteractions fires immediately in production Hermes builds
 // because animations complete too fast. useFocusEffect + setTimeout is reliable on device.
 export default function HistoryScreen() {
-    const colors_early = useColors();
+    const { colors: colors_early, isDark } = useTheme();
     const [screenReady, setScreenReady] = React.useState(false);
+    const prevIsDarkRef = React.useRef(isDark);
+    const themeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useFocusEffect(
         React.useCallback(() => {
             setScreenReady(false);
-            const timer = setTimeout(() => setScreenReady(true), 150);
+            const timer = setTimeout(() => setScreenReady(true), 250);
             return () => {
                 clearTimeout(timer);
                 setScreenReady(false);
             };
         }, [])
     );
+
+    // Theme-change blank screen fix
+    React.useEffect(() => {
+        if (prevIsDarkRef.current === isDark) return;
+        prevIsDarkRef.current = isDark;
+        if (themeTimerRef.current) clearTimeout(themeTimerRef.current);
+        setScreenReady(false);
+        themeTimerRef.current = setTimeout(() => setScreenReady(true), 300);
+        return () => { if (themeTimerRef.current) clearTimeout(themeTimerRef.current); };
+    }, [isDark]);
 
     if (!screenReady) {
         return (

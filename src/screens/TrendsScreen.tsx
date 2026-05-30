@@ -12,7 +12,7 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useHistoryStore } from "../state/HistoryContext";
-import { useColors } from "../theme/ThemeContext";
+import { useColors, useTheme } from "../theme/ThemeContext";
 import { useSettings } from "../state/SettingsContext";
 import { useAuth } from "../auth/AuthContext";
 import {
@@ -1231,19 +1231,31 @@ function LettersFromImotara({ colors, companionGender, lang }: { colors: any; co
 // useFocusEffect + setTimeout is reliable in production Hermes builds unlike
 // InteractionManager.runAfterInteractions which fires immediately on fast devices.
 export default function TrendsScreen() {
-  const colors_early = useColors();
+  const { colors: colors_early, isDark } = useTheme();
   const [screenReady, setScreenReady] = useState(false);
+  const prevIsDarkRef = React.useRef(isDark);
+  const themeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       setScreenReady(false);
-      const timer = setTimeout(() => setScreenReady(true), 150);
+      const timer = setTimeout(() => setScreenReady(true), 250);
       return () => {
         clearTimeout(timer);
         setScreenReady(false);
       };
     }, [])
   );
+
+  // Theme-change blank screen fix
+  React.useEffect(() => {
+    if (prevIsDarkRef.current === isDark) return;
+    prevIsDarkRef.current = isDark;
+    if (themeTimerRef.current) clearTimeout(themeTimerRef.current);
+    setScreenReady(false);
+    themeTimerRef.current = setTimeout(() => setScreenReady(true), 300);
+    return () => { if (themeTimerRef.current) clearTimeout(themeTimerRef.current); };
+  }, [isDark]);
 
   if (!screenReady) {
     return (

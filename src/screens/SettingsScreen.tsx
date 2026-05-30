@@ -280,19 +280,37 @@ function AvatarSlider({
 // useFocusEffect + setTimeout is reliable in production Hermes builds unlike
 // InteractionManager.runAfterInteractions which fires immediately on fast devices.
 export default function SettingsScreen() {
-    const { colors: colors_early } = useTheme();
+    const { colors: colors_early, isDark } = useTheme();
     const [screenReady, setScreenReady] = React.useState(false);
+    const prevIsDarkRef = React.useRef(isDark);
+    const themeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Tab-switch blank screen fix: wait for navigation animation to complete
+    // before mounting the heavy 140-hook content.
     useFocusEffect(
         useCallback(() => {
             setScreenReady(false);
-            const timer = setTimeout(() => setScreenReady(true), 150);
+            const timer = setTimeout(() => setScreenReady(true), 250);
             return () => {
                 clearTimeout(timer);
                 setScreenReady(false);
             };
         }, [])
     );
+
+    // Theme-change blank screen fix: when dark/light mode changes, the 140-hook
+    // re-render cascade freezes the JS thread and shows blank. Briefly unmount
+    // the heavy content so React can commit the new theme in one clean pass.
+    React.useEffect(() => {
+        if (prevIsDarkRef.current === isDark) return;
+        prevIsDarkRef.current = isDark;
+        if (themeTimerRef.current) clearTimeout(themeTimerRef.current);
+        setScreenReady(false);
+        themeTimerRef.current = setTimeout(() => setScreenReady(true), 300);
+        return () => {
+            if (themeTimerRef.current) clearTimeout(themeTimerRef.current);
+        };
+    }, [isDark]);
 
     if (!screenReady) {
         return (
