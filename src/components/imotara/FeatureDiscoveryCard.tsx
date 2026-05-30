@@ -10,6 +10,7 @@ import {
   advanceTip,
   prevTip,
   CATEGORY_COLORS,
+  FEATURE_TIPS,
   type FeatureTip,
 } from "../../data/featureTips";
 
@@ -104,7 +105,7 @@ export default function FeatureDiscoveryCard({ onDismiss }: Props) {
             </TouchableOpacity>
           </View>
           <Text style={{ fontSize: 8, color: colors.textSecondary }}>
-            {index + 1}/50
+            {index + 1}/{FEATURE_TIPS.length}
           </Text>
         </View>
       </View>
