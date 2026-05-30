@@ -52,11 +52,11 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "tone_card",         emoji: "🎭", title: "Tone reflection card",     tip: "After a meaningful chat, a card shows the dominant emotion detected — a mirror of your session.", category: "chat" },
   { id: "daily_checkin",     emoji: "☀️", title: "Check-in prompt chips",    tip: "Quick emotion chips appear above the input — tap one to start a check-in in seconds.", category: "chat" },
   { id: "open_loop",         emoji: "🔄", title: "Open loops",               tip: "Imotara gently revisits unresolved themes from past conversations — a subtle follow-up.", category: "chat" },
-  { id: "milestone",         emoji: "🎉", title: "Milestone cards",          tip: "When a recurring theme resolves, a milestone card celebrates it — Imotara noticed you grew.", category: "chat" },
-  { id: "weekly_recap",      emoji: "📋", title: "Weekly mood recap",        tip: "A weekly summary of your emotional themes from the past 7 days appears in chat.", category: "chat" },
-  { id: "collective_pulse",  emoji: "💫", title: "Collective pulse",         tip: "The pulse shows what % of users are carrying something heavy today — you are not alone.", category: "chat" },
+  { id: "milestone",         emoji: "🎉", title: "Milestone cards",          tip: "When a recurring theme resolves, a milestone card appears in Trends — Imotara noticed you grew.", category: "growth" },
+  { id: "weekly_recap",      emoji: "📋", title: "Weekly mood recap",        tip: "A weekly summary of your emotional themes appears in the Trends tab — check it for insight.", category: "growth" },
+  { id: "collective_pulse",  emoji: "💫", title: "Collective pulse",         tip: "Check the Trends tab to see what % of people are carrying something heavy today — you're not alone.", category: "growth" },
   { id: "discovery_card",    emoji: "🗺️", title: "Feature discovery cards",  tip: "Cards in chat occasionally highlight a feature you haven't used yet — a gentle guide.", category: "chat" },
-  { id: "grow_nudge",        emoji: "🌿", title: "Grow nudge",               tip: "After several chats, a card nudges you toward the Trends tab for deeper reflection tools.", category: "chat" },
+  { id: "grow_nudge",        emoji: "🌿", title: "Trends tab",               tip: "The Trends tab is your growth hub — check it after chatting for insights, mood recap, and more.", category: "growth" },
   { id: "unsent_hint",       emoji: "💭", title: "Unsent letter hint",       tip: "If you seem to be processing something with someone, Imotara may suggest the Unsent Letter space.", category: "chat" },
 
   // ── Chat — Special modes ─────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "future_letters",    emoji: "🔮", title: "Future letters (web)",     tip: "On web, write a time-locked letter to your future self — it unlocks on the date you choose.", category: "growth" },
   { id: "mood_glimpse",      emoji: "👁️", title: "Mood glimpse card",        tip: "A subtle mood snapshot card in chat shows your current emotional tone at a glance.", category: "growth" },
   { id: "history_search",    emoji: "🔎", title: "Search conversations",     tip: "Use the search bar in History to find any word or phrase across all your conversations.", category: "growth" },
-  { id: "insight_letter",    emoji: "📬", title: "Letter insight card",      tip: "A companion insight card occasionally appears in chat when a letter or arc has been generated.", category: "growth" },
+  { id: "insight_letter",    emoji: "📬", title: "Letter insight card",      tip: "When your monthly letter or emotional arc is ready, a card appears at the top of Trends.", category: "growth" },
 
   // ── Growth — Psychological depth ─────────────────────────────────────────
   { id: "psych_tools",       emoji: "🔬", title: "71 psychological tools",   tip: "Imotara draws on 71 research-backed psychological tools — from CBT to polyvagal theory.", category: "growth" },
@@ -180,7 +180,7 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "teen_mode",         emoji: "🎓", title: "Teen insights mode",       tip: "Enable Teen Insights in Settings for age-appropriate responses — for users under 18.", category: "companion" },
   { id: "teen_safety",       emoji: "🛡️", title: "Teen safety features",     tip: "In Teen mode, Imotara has lower thresholds for crisis resources and softer language.", category: "companion" },
   { id: "companion_lang",    emoji: "🗣️", title: "Companion language",       tip: "Write in any of 22 languages and Imotara replies in the same one — switch anytime.", category: "companion" },
-  { id: "insight_card",      emoji: "🌟", title: "Companion insight card",   tip: "A quiet card occasionally appears in chat when Imotara has something personal to share.", category: "companion" },
+  { id: "insight_card",      emoji: "🌟", title: "Companion insight card",   tip: "When Imotara has something personal to share — a letter, arc, or milestone — it appears in Trends.", category: "companion" },
   { id: "unsent_voice",      emoji: "🎤", title: "Unsent letter by voice",   tip: "Speak your unsent letter using the mic — Imotara transcribes and responds in their voice.", category: "companion" },
   { id: "depth_levels",      emoji: "📶", title: "Depth grows over time",    tip: "After 10 messages, Imotara shifts tone. After 30 and 50 messages, it deepens further.", category: "companion" },
 
