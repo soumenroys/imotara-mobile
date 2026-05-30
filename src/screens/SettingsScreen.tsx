@@ -702,6 +702,9 @@ function SettingsScreenContent() {
     const [sectionMindset, setSectionMindset] = React.useState(false);
 
     const settingsScrollRef = React.useRef<import("react-native").ScrollView>(null);
+    // One ref per section header — used to measureLayout after accordion opens
+    const sectionHeaderRefs = React.useRef<Record<string, import("react-native").View | null>>({});
+
     const handleSearchSelect = React.useCallback((sectionKey: string) => {
         const sectionMap: Record<string, React.Dispatch<React.SetStateAction<boolean>>> = {
             companion: setSectionCompanion,
@@ -714,8 +717,28 @@ function SettingsScreenContent() {
         };
         const setter = sectionMap[sectionKey];
         if (setter) setter(true);
-        // Scroll to top so user can see the section open
-        setTimeout(() => settingsScrollRef.current?.scrollTo({ y: 0, animated: true }), 150);
+
+        // After accordion opens and re-renders, measure the section header's
+        // Y position relative to the ScrollView and scroll to it.
+        setTimeout(() => {
+            const headerRef = sectionHeaderRefs.current[sectionKey];
+            const scrollRef = settingsScrollRef.current;
+            if (headerRef && scrollRef) {
+                (headerRef as any).measureLayout(
+                    (scrollRef as any).getScrollResponder?.()?.getInnerViewNode?.() ?? scrollRef,
+                    (_x: number, y: number) => {
+                        // Scroll to 16px above the section header for breathing room
+                        scrollRef.scrollTo({ y: Math.max(0, y - 16), animated: true });
+                    },
+                    () => {
+                        // Fallback: measure absolute position and approximate
+                        (headerRef as any).measure((_x: number, _y: number, _w: number, _h: number, _px: number, pageY: number) => {
+                            scrollRef.scrollTo({ y: Math.max(0, pageY - 120), animated: true });
+                        });
+                    }
+                );
+            }
+        }, 350); // Wait for accordion open animation to complete
     }, []);
 
     // ── Mindset Analysis Toggles ─────────────────────────────────────────────
@@ -1974,7 +1997,9 @@ function SettingsScreenContent() {
                 </View>
 
                 {/* ── Plan & support section ── */}
+                <View ref={el => { sectionHeaderRefs.current["support"] = el; }} collapsable={false}>
                 <AccordionHeader title="Plan & support" open={sectionSupport} onPress={() => toggleSection(setSectionSupport)} />
+                </View>
                 {sectionSupport && (
                 <View>
 
@@ -2082,7 +2107,9 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Your plan section (merged into Plan & support below) ── */}
+                <View ref={el => { sectionHeaderRefs.current["account"] = el; }} collapsable={false}>
                 <AccordionHeader title="Your plan" open={sectionAccount} onPress={() => toggleSection(setSectionAccount)} />
+                </View>
                 {sectionAccount && (
                 <View>
 
@@ -2256,7 +2283,9 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Experience section ── */}
+                <View ref={el => { sectionHeaderRefs.current["experience"] = el; }} collapsable={false}>
                 <AccordionHeader title="Experience" open={sectionAppearance} onPress={() => toggleSection(setSectionAppearance)} />
+                </View>
                 {sectionAppearance && (
                 <View>
                 {/* Quick panel swipe gestures */}
@@ -2841,7 +2870,9 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Your companion section ── */}
+                <View ref={el => { sectionHeaderRefs.current["companion"] = el; }} collapsable={false}>
                 <AccordionHeader title="Your companion" open={sectionCompanion} onPress={() => toggleSection(setSectionCompanion)} />
+                </View>
                 {sectionCompanion && (
                 <View>
 
@@ -3748,7 +3779,9 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Privacy & safety section ── */}
+                <View ref={el => { sectionHeaderRefs.current["privacy"] = el; }} collapsable={false}>
                 <AccordionHeader title="Privacy & safety" open={sectionPrivacy} onPress={() => toggleSection(setSectionPrivacy)} />
+                </View>
                 {sectionPrivacy && (
                 <View>
 
@@ -4443,7 +4476,9 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Mindset Analysis section ── */}
+                <View ref={el => { sectionHeaderRefs.current["mindset"] = el; }} collapsable={false}>
                 <AccordionHeader title="Mindset Analysis" open={sectionMindset} onPress={() => toggleSection(setSectionMindset)} />
+                </View>
                 {sectionMindset && (
                 <View>
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -4491,7 +4526,9 @@ function SettingsScreenContent() {
                 )}
 
                 {/* ── Advanced section ── */}
+                <View ref={el => { sectionHeaderRefs.current["advanced"] = el; }} collapsable={false}>
                 <AccordionHeader title="Advanced" open={sectionAdvancedMobile} onPress={() => toggleSection(setSectionAdvancedMobile)} />
+                </View>
                 {sectionAdvancedMobile && (
                 <View>
 
