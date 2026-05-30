@@ -285,12 +285,24 @@ export default function SettingsScreen() {
     const prevIsDarkRef = React.useRef(isDark);
     const themeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Tab-switch blank screen fix: wait for navigation animation to complete
-    // before mounting the heavy 140-hook content.
+    // Tab-switch blank screen fix.
+    // Problem: even after our delay, React still needs to mount 140 hooks in
+    // SettingsScreenContent, and during that mounting phase the screen is blank
+    // before the first paint commits.
+    // Fix: double requestAnimationFrame inside the timeout ensures the spinner
+    // is fully painted to screen (2 frames committed) BEFORE React starts the
+    // heavy mount. RAF1 = schedule render of spinner. RAF2 = spinner committed.
+    // Then setScreenReady(true) triggers the heavy mount with a clean first frame.
     useFocusEffect(
         useCallback(() => {
             setScreenReady(false);
-            const timer = setTimeout(() => setScreenReady(true), 250);
+            const timer = setTimeout(() => {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        setScreenReady(true);
+                    });
+                });
+            }, 300);
             return () => {
                 clearTimeout(timer);
                 setScreenReady(false);
@@ -298,15 +310,19 @@ export default function SettingsScreen() {
         }, [])
     );
 
-    // Theme-change blank screen fix: when dark/light mode changes, the 140-hook
-    // re-render cascade freezes the JS thread and shows blank. Briefly unmount
-    // the heavy content so React can commit the new theme in one clean pass.
+    // Theme-change blank screen fix: same double-RAF pattern.
     React.useEffect(() => {
         if (prevIsDarkRef.current === isDark) return;
         prevIsDarkRef.current = isDark;
         if (themeTimerRef.current) clearTimeout(themeTimerRef.current);
         setScreenReady(false);
-        themeTimerRef.current = setTimeout(() => setScreenReady(true), 300);
+        themeTimerRef.current = setTimeout(() => {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    setScreenReady(true);
+                });
+            });
+        }, 350);
         return () => {
             if (themeTimerRef.current) clearTimeout(themeTimerRef.current);
         };

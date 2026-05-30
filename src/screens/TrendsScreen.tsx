@@ -1241,21 +1241,26 @@ export default function TrendsScreen() {
   useFocusEffect(
     useCallback(() => {
       setScreenReady(false);
-      const timer = setTimeout(() => setScreenReady(true), 250);
-      return () => {
-        clearTimeout(timer);
-        setScreenReady(false);
-      };
+      const timer = setTimeout(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => { setScreenReady(true); });
+        });
+      }, 300);
+      return () => { clearTimeout(timer); setScreenReady(false); };
     }, [])
   );
 
-  // Theme-change blank screen fix
+  // Theme-change blank screen fix — double RAF pattern
   React.useEffect(() => {
     if (prevIsDarkRef.current === isDark) return;
     prevIsDarkRef.current = isDark;
     if (themeTimerRef.current) clearTimeout(themeTimerRef.current);
     setScreenReady(false);
-    themeTimerRef.current = setTimeout(() => setScreenReady(true), 300);
+    themeTimerRef.current = setTimeout(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { setScreenReady(true); });
+      });
+    }, 350);
     return () => { if (themeTimerRef.current) clearTimeout(themeTimerRef.current); };
   }, [isDark]);
 
