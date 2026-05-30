@@ -4,6 +4,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getBadgeCount } from "../lib/pendingInsights";
 import { View, Text, TouchableOpacity, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -153,12 +154,21 @@ export default function RootNavigator() {
     // --- Onboarding ---
     const [onboardingVisible, setOnboardingVisible] = useState(false);
     const [onboardingChecked, setOnboardingChecked] = useState(false);
+    const [trendsBadge, setTrendsBadge] = useState(0);
 
     useEffect(() => {
         AsyncStorage.getItem(ONBOARDING_KEY).then((val) => {
             if (!val) setOnboardingVisible(true);
             setOnboardingChecked(true);
         });
+    }, []);
+
+    // Poll badge count every 10s so it updates after Chat computes new insights
+    useEffect(() => {
+        const refresh = () => getBadgeCount().then(setTrendsBadge).catch(() => {});
+        refresh();
+        const timer = setInterval(refresh, 10_000);
+        return () => clearInterval(timer);
     }, []);
 
     const handleOnboardingComplete = async (result: OnboardingResult) => {
@@ -254,7 +264,11 @@ export default function RootNavigator() {
                     <Tab.Screen
                         name="Trends"
                         component={TrendsScreen}
-                        options={{ title: "Trends" }}
+                        options={{
+                            title: "Trends",
+                            tabBarBadge: trendsBadge > 0 ? trendsBadge : undefined,
+                            tabBarBadgeStyle: { backgroundColor: colors.primary, color: "#fff", fontSize: 10, minWidth: 16, height: 16 },
+                        }}
                     />
                     <Tab.Screen
                         name="Settings"

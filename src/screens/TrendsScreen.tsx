@@ -13,6 +13,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useColors, useTheme } from "../theme/ThemeContext";
+import { loadPendingInsights, clearPendingInsight, type InsightPayload } from "../lib/pendingInsights";
+import { CompanionInsightCard } from "../components/imotara/CompanionInsightCard";
 import { useSettings } from "../state/SettingsContext";
 import { useAuth } from "../auth/AuthContext";
 import {
@@ -1270,11 +1272,32 @@ export default function TrendsScreen() {
 
 function TrendsScreenContent() {
   const colors = useColors();
+  const { isDark } = useTheme();
   const navigation = useNavigation<any>();
   const store = useHistoryStore() as any;
   const history: any[] = store.history ?? [];
   const addToHistory: ((item: any) => void) | undefined = store.addToHistory;
   const { toneContext, localUserScopeId, featureTipsEnabled } = useSettings() as any;
+
+  // ── Pending insights from Chat ─────────────────────────────────────────────
+  const [pendingInsights, setPendingInsights] = useState<InsightPayload>({});
+
+  useFocusEffect(
+    useCallback(() => {
+      loadPendingInsights().then(setPendingInsights).catch(() => {});
+    }, [])
+  );
+
+  // Clear badge when user visits Trends (they're now seeing the content)
+  useFocusEffect(
+    useCallback(() => {
+      // Small delay so badge updates after the screen is visible
+      const t = setTimeout(() => {
+        AsyncStorage.setItem("imotara.trends_badge.v2", "0").catch(() => {});
+      }, 500);
+      return () => clearTimeout(t);
+    }, [])
+  );
   const [featureTipDismissed, setFeatureTipDismissed] = useState(false);
   const { accessToken } = useAuth();
 
@@ -1545,6 +1568,67 @@ function TrendsScreenContent() {
       {/* Hourly feature discovery tip */}
       {featureTipsEnabled && !featureTipDismissed && (
         <FeatureDiscoveryCard onDismiss={() => setFeatureTipDismissed(true)} />
+      )}
+
+      {/* ── Insights from Chat (moved here to keep Chat clean) ─────────────── */}
+
+      {/* Companion insight — letter or emotional arc */}
+      {pendingInsights.companionInsight && (
+        <CompanionInsightCard
+          variant={pendingInsights.companionInsight.variant as any}
+          title={pendingInsights.companionInsight.title}
+          body={pendingInsights.companionInsight.body}
+          colors={colors}
+          onDismiss={() => {
+            clearPendingInsight("companionInsight").catch(() => {});
+            setPendingInsights((p) => { const n = { ...p }; delete n.companionInsight; return n; });
+          }}
+        />
+      )}
+
+      {/* Milestone — theme resolved */}
+      {pendingInsights.milestone && (
+        <View style={{ marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: isDark ? "rgba(52,211,153,0.3)" : "rgba(16,185,129,0.35)", backgroundColor: isDark ? "rgba(6,78,59,0.35)" : "rgba(209,250,229,0.85)", padding: 14 }}>
+          <Text style={{ fontSize: 14, fontWeight: "700", color: isDark ? "#6ee7b7" : "#065f46", marginBottom: 4 }}>You closed a loop ✦</Text>
+          <Text style={{ fontSize: 13, color: isDark ? "rgba(209,250,229,0.85)" : "#047857", lineHeight: 19 }}>
+            The theme of{" "}
+            <Text style={{ fontStyle: "italic", color: isDark ? "#a7f3d0" : "#059669" }}>{pendingInsights.milestone.themeName}</Text>
+            {" "}that kept returning — it looks like you found some resolution. That's real growth.
+          </Text>
+          <TouchableOpacity
+            onPress={() => { clearPendingInsight("milestone").catch(() => {}); setPendingInsights((p) => { const n = { ...p }; delete n.milestone; return n; }); }}
+            style={{ alignSelf: "flex-end", marginTop: 8 }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={{ fontSize: 11, color: isDark ? "#6ee7b7" : "#059669" }}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Weekly mood recap */}
+      {pendingInsights.weeklyRecap && (
+        <View style={{ marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.3)", backgroundColor: isDark ? "rgba(30,27,75,0.5)" : "rgba(238,242,255,0.85)", paddingHorizontal: 14, paddingVertical: 10 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ flex: 1, fontSize: 12, color: isDark ? "rgba(196,181,253,0.85)" : "#4338ca", lineHeight: 18 }}>{pendingInsights.weeklyRecap}</Text>
+            <TouchableOpacity onPress={() => { clearPendingInsight("weeklyRecap").catch(() => {}); setPendingInsights((p) => { const n = { ...p }; delete n.weeklyRecap; return n; }); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-outline" size={16} color={isDark ? "rgba(165,180,252,0.6)" : "rgba(67,56,202,0.5)"} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Collective pulse */}
+      {pendingInsights.collectivePulse && (
+        <View style={{ marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.3)", backgroundColor: isDark ? "rgba(30,27,75,0.5)" : "rgba(238,242,255,0.85)", paddingHorizontal: 14, paddingVertical: 10 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ flex: 1, fontSize: 12, color: isDark ? "rgba(196,181,253,0.85)" : "#4338ca", lineHeight: 18 }}>
+              <Text style={{ fontWeight: "600", color: isDark ? "#a5b4fc" : "#4f46e5" }}>{pendingInsights.collectivePulse.heavyPercent}% of people</Text> are carrying something heavy today. You're not alone.
+            </Text>
+            <TouchableOpacity onPress={() => { clearPendingInsight("collectivePulse").catch(() => {}); setPendingInsights((p) => { const n = { ...p }; delete n.collectivePulse; return n; }); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-outline" size={16} color={isDark ? "rgba(165,180,252,0.6)" : "rgba(67,56,202,0.5)"} />
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
 
       {/* Quick mood check-in */}

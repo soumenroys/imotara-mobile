@@ -88,6 +88,7 @@ import {
 } from "../lib/imotara/openLoops";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
+import { savePendingInsight } from "../lib/pendingInsights";
 import { ImotaraTypingIndicator } from "../components/imotara/ImotaraTypingIndicator";
 import { Toast, type ToastHandle } from "../components/ui/Toast";
 import { CompanionQuickPanel } from "../components/imotara/CompanionQuickPanel";
@@ -1784,7 +1785,10 @@ export default function ChatScreen() {
     fetchWithTimeout(`${apiBase}/api/pulse`, {}, 10_000)
       .then((r) => r.json())
       .then((data) => {
-        if (data.available && data.heavyPercent >= 15) setCollectivePulse({ heavyPercent: data.heavyPercent });
+        if (data.available && data.heavyPercent >= 15) {
+          setCollectivePulse({ heavyPercent: data.heavyPercent });
+          savePendingInsight("collectivePulse", { heavyPercent: data.heavyPercent }).catch(() => {});
+        }
       })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2120,7 +2124,9 @@ export default function ChatScreen() {
     const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
     if (!top) return;
     const lang = toneContext?.user?.preferredLang ?? "en";
-    setWeeklyRecap(getWeeklyRecapText(top[0], top[1], lang));
+    const recapText = getWeeklyRecapText(top[0], top[1], lang);
+    setWeeklyRecap(recapText);
+    savePendingInsight("weeklyRecap", recapText).catch(() => {});
   }, [history.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // P1 — Emotional Open Loops + NF-1 milestone celebration
@@ -2136,7 +2142,10 @@ export default function ChatScreen() {
           (l) => l.status === "closed" &&
             prevLoops.some((p) => p.id === l.id && p.status !== "closed")
         );
-        if (newlyClosed) setMilestoneLoop({ themeName: newlyClosed.themeName });
+        if (newlyClosed) {
+          setMilestoneLoop({ themeName: newlyClosed.themeName });
+          savePendingInsight("milestone", { id: newlyClosed.id ?? "milestone", themeName: newlyClosed.themeName }).catch(() => {});
+        }
         setActiveOpenLoop(getActiveLoop(loops));
       } catch {}
     })();
@@ -2159,6 +2168,7 @@ export default function ChatScreen() {
         const stored = await loadStoredLetter();
         if (stored) {
           setCompanionInsight({ variant: "letter", title: `A letter from ${stored.companionName}`, body: stored.body });
+          savePendingInsight("companionInsight", { variant: "letter", title: `A letter from ${stored.companionName}`, body: stored.body }).catch(() => {});
           return;
         }
         const companionName = (toneContext as any)?.companion?.name ?? "Imotara";
@@ -2166,6 +2176,7 @@ export default function ChatScreen() {
         const letter = await generateCompanionLetter(history, companionName, userName, localUserScopeId, accessToken ?? undefined).catch(() => null);
         if (letter) {
           setCompanionInsight({ variant: "letter", title: `A letter from ${letter.companionName}`, body: letter.body });
+          savePendingInsight("companionInsight", { variant: "letter", title: `A letter from ${letter.companionName}`, body: letter.body }).catch(() => {});
           return;
         }
       }
@@ -2174,12 +2185,14 @@ export default function ChatScreen() {
         const stored = await loadStoredArc();
         if (stored) {
           setCompanionInsight({ variant: "arc", title: `Your ${stored.periodLabel}`, body: stored.narrative });
+          savePendingInsight("companionInsight", { variant: "arc", title: `Your ${stored.periodLabel}`, body: stored.narrative }).catch(() => {});
           return;
         }
         const userName = (toneContext as any)?.user?.name ?? "you";
         const arc = await generateEmotionalArc(history, userName, localUserScopeId, accessToken ?? undefined).catch(() => null);
         if (arc) {
           setCompanionInsight({ variant: "arc", title: `Your ${arc.periodLabel}`, body: arc.narrative });
+          savePendingInsight("companionInsight", { variant: "arc", title: `Your ${arc.periodLabel}`, body: arc.narrative }).catch(() => {});
         }
       }
     })();
@@ -5049,74 +5062,8 @@ export default function ChatScreen() {
         );
       })()}
 
-      {/* P3/P5 — Companion Insight Card (letter or arc) */}
-      {companionInsight && (
-        <CompanionInsightCard
-          variant={companionInsight.variant}
-          title={companionInsight.title}
-          body={companionInsight.body}
-          colors={colors}
-          onDismiss={() => setCompanionInsight(null)}
-        />
-      )}
-
-      {/* Weekly mood recap */}
-      {activeTier2Banner === "weeklyRecap" && weeklyRecap && (
-        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.3)", backgroundColor: isDark ? "rgba(30,27,75,0.5)" : "rgba(238,242,255,0.85)", paddingHorizontal: 14, paddingVertical: 10 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Text style={{ flex: 1, fontSize: 12, color: isDark ? "rgba(196,181,253,0.85)" : "#4338ca", lineHeight: 18 }}>{weeklyRecap}</Text>
-            <TouchableOpacity onPress={() => showCapsuleMenu("Weekly recap", () => { setWeeklyRecapSettingEnabled(false); AsyncStorage.setItem("imotara.weekly.recap.enabled.v1", "0").catch(() => {}); }, () => setWeeklyRecapDismissed(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(165,180,252,0.5)" : "rgba(67,56,202,0.5)"} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* NF-5 — Anonymous Collective Pulse */}
-      {activeTier2Banner === "collectivePulse" && collectivePulse && (
-        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.3)", backgroundColor: isDark ? "rgba(30,27,75,0.5)" : "rgba(238,242,255,0.85)", paddingHorizontal: 14, paddingVertical: 10 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Text style={{ flex: 1, fontSize: 12, color: isDark ? "rgba(196,181,253,0.85)" : "#4338ca", lineHeight: 18 }}>
-              <Text style={{ color: isDark ? "#a5b4fc" : "#4f46e5", fontWeight: "600" }}>{collectivePulse.heavyPercent}% of people</Text> are carrying something heavy today. You{"'"}re not alone.
-            </Text>
-            <TouchableOpacity onPress={() => showCapsuleMenu("Collective pulse", () => { setCollectivePulseEnabled(false); AsyncStorage.setItem(COLLECTIVE_PULSE_ENABLED_KEY, "0").catch(() => {}); }, () => setPulseDismissed(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(165,180,252,0.5)" : "rgba(67,56,202,0.5)"} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* Grow nudge — shown after ≥3 user messages, lowest banner priority */}
-      {activeTier2Banner === "growNudge" && (
-        <View style={{ marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: isDark ? "rgba(52,211,153,0.2)" : "rgba(16,185,129,0.35)", backgroundColor: isDark ? "rgba(6,78,59,0.25)" : "rgba(209,250,229,0.8)", paddingHorizontal: 14, paddingVertical: 10 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Text style={{ flex: 1, fontSize: 12, color: isDark ? "rgba(167,243,208,0.85)" : "#065f46", lineHeight: 18 }}>
-              You{"'"}ve been opening up — would a short reflection help?{" "}
-              <Text style={{ color: isDark ? "#6ee7b7" : "#059669", fontWeight: "600", textDecorationLine: "underline" }}>Grow →</Text>
-            </Text>
-            <TouchableOpacity onPress={() => showCapsuleMenu("Grow nudge", handleGrowNudgeDismiss, () => setGrowNudgeDismissed(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(110,231,183,0.5)" : "rgba(6,95,70,0.45)"} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* NF-1 — Emotional Milestone Celebration */}
-      {activeTier2Banner === "milestoneLoop" && milestoneLoop && (
-        <View style={{ marginHorizontal: 16, marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: isDark ? "rgba(52,211,153,0.3)" : "rgba(16,185,129,0.35)", backgroundColor: isDark ? "rgba(6,78,59,0.35)" : "rgba(209,250,229,0.85)", padding: 14 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: "700", color: isDark ? "#6ee7b7" : "#065f46", marginBottom: 4 }}>You closed a loop ✦</Text>
-              <Text style={{ fontSize: 13, color: isDark ? "rgba(209,250,229,0.85)" : "#047857", lineHeight: 19 }}>
-                The theme of <Text style={{ fontStyle: "italic", color: isDark ? "#a7f3d0" : "#059669" }}>{milestoneLoop.themeName}</Text> that kept returning — it looks like you found some resolution. That{"'"}s real growth.
-              </Text>
-            </View>
-            <TouchableOpacity onPress={() => showCapsuleMenu("Milestone", () => { setMilestoneEnabled(false); AsyncStorage.setItem(MILESTONE_ENABLED_KEY, "0").catch(() => {}); }, () => setMilestoneLoop(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(110,231,183,0.6)" : "rgba(6,95,70,0.5)"} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+      {/* Companion insight, weekly recap, collective pulse, grow nudge, and milestone
+          cards are now shown in the Trends tab to keep the chat screen clean. */}
 
       {/* P1 — Open Loop Card */}
       {activeOpenLoop && (
