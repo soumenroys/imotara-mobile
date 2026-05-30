@@ -986,7 +986,7 @@ function HistoryScreenContent() {
                 const bgColor =
                     topChip.variant === "danger" ? "rgba(248,113,113,0.10)"
                     : topChip.variant === "primary" ? `${colors.primary}18`
-                    : "rgba(255,255,255,0.04)";
+                    : colors.surfaceSoft;
                 return (
                     <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 7, borderBottomWidth: 0.5, borderBottomColor: colors.border, backgroundColor: bgColor }}>
                         {"icon" in topChip ? (
