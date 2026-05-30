@@ -34,6 +34,7 @@ import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import { useAuth } from "../auth/AuthContext";
+import SettingsSearch from "../components/imotara/SettingsSearch";
 import { useTheme, ACCENT_COLORS, type Accent, type FontSize } from "../theme/ThemeContext";
 import {
     scheduleCheckInReminder,
@@ -699,6 +700,23 @@ function SettingsScreenContent() {
     const [sectionSupport, setSectionSupport] = React.useState(true);
     const [sectionAdvancedMobile, setSectionAdvancedMobile] = React.useState(false);
     const [sectionMindset, setSectionMindset] = React.useState(false);
+
+    const settingsScrollRef = React.useRef<import("react-native").ScrollView>(null);
+    const handleSearchSelect = React.useCallback((sectionKey: string) => {
+        const sectionMap: Record<string, React.Dispatch<React.SetStateAction<boolean>>> = {
+            companion: setSectionCompanion,
+            experience: setSectionAppearance,
+            privacy: setSectionPrivacy,
+            mindset: setSectionMindset,
+            advanced: setSectionAdvancedMobile,
+            account: setSectionAccount,
+            support: setSectionSupport,
+        };
+        const setter = sectionMap[sectionKey];
+        if (setter) setter(true);
+        // Scroll to top so user can see the section open
+        setTimeout(() => settingsScrollRef.current?.scrollTo({ y: 0, animated: true }), 150);
+    }, []);
 
     // ── Mindset Analysis Toggles ─────────────────────────────────────────────
     const MOOD_CHART_KEY = "imotara.mood.chart.show.v1";
@@ -1886,6 +1904,7 @@ function SettingsScreenContent() {
             keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
         >
             <ScrollView
+                ref={settingsScrollRef}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{
                     paddingHorizontal: 16,
@@ -1908,7 +1927,7 @@ function SettingsScreenContent() {
                     style={{
                         fontSize: 14,
                         color: colors.textSecondary,
-                        marginBottom: 24,
+                        marginBottom: 16,
                     }}
                 >
                     Imotara Mobile. By default your messages stay on this
@@ -1918,6 +1937,9 @@ function SettingsScreenContent() {
                     {"\n\n"}Your messages are never shared publicly — sync only stores a
                     private cloud copy for you.
                 </Text>
+
+                {/* AI-powered settings search */}
+                <SettingsSearch onResultSelect={handleSearchSelect} />
 
                 {/* How to use Imotara */}
                 <TouchableOpacity
