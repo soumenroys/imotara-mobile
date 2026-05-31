@@ -49,9 +49,9 @@ export const FEATURE_TIPS: FeatureTip[] = [
 
   // ── Chat — Discovery cards & nudges ─────────────────────────────────────────
   { id: "reflection_seed",   emoji: "🌱", title: "Reflection seeds",         tip: "A small prompt sometimes appears above a reply — it's an invitation to explore a feeling deeper.", category: "chat" },
-  { id: "tone_card",         emoji: "🎭", title: "Tone reflection card",     tip: "After a meaningful chat, a card shows the dominant emotion detected — a mirror of your session.", category: "chat" },
-  { id: "daily_checkin",     emoji: "☀️", title: "Check-in prompt chips",    tip: "Quick emotion chips appear above the input — tap one to start a check-in in seconds.", category: "chat" },
-  { id: "open_loop",         emoji: "🔄", title: "Open loops",               tip: "Imotara gently revisits unresolved themes from past conversations — a subtle follow-up.", category: "chat" },
+  { id: "tone_card",         emoji: "🎭", title: "Tone reflection",           tip: "Your session's dominant emotion is reflected in Trends — check your mood chart after a meaningful chat.", category: "growth" },
+  { id: "daily_checkin",     emoji: "☀️", title: "Daily mood check-in",      tip: "Tap an emotion in the Trends tab to log today's mood — keeps your streak and mood history alive.", category: "growth" },
+  { id: "open_loop",         emoji: "🔄", title: "Open loops",               tip: "A small chip appears in chat if Imotara noticed an unresolved theme — tap Continue to pick up where you left off.", category: "chat" },
   { id: "milestone",         emoji: "🎉", title: "Milestone cards",          tip: "When a recurring theme resolves, a milestone card appears in Trends — Imotara noticed you grew.", category: "growth" },
   { id: "weekly_recap",      emoji: "📋", title: "Weekly mood recap",        tip: "A weekly summary of your emotional themes appears in the Trends tab — check it for insight.", category: "growth" },
   { id: "collective_pulse",  emoji: "💫", title: "Collective pulse",         tip: "Check the Trends tab to see what % of people are carrying something heavy today — you're not alone.", category: "growth" },
