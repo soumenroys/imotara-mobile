@@ -83,18 +83,13 @@ const DONATION_UI_PRESETS = DONATION_PRESETS as readonly DonationUIItem[];
 function prettyTier(tier: LicenseTier | string | undefined | null): string {
     const t = String(tier ?? "FREE").toUpperCase();
     switch (t) {
-        case "FREE":
-            return "Free";
-        case "PREMIUM":
-            return "Premium";
-        case "FAMILY":
-            return "Family";
-        case "EDU":
-            return "Education";
-        case "ENTERPRISE":
-            return "Enterprise";
-        default:
-            return "Free";
+        case "FREE":    return "Free";
+        case "PLUS":    return "Plus";
+        case "PREMIUM": return "Pro";
+        case "FAMILY":  return "Family";
+        case "EDU":     return "Education";
+        case "ENTERPRISE": return "Enterprise";
+        default:        return "Free";
     }
 }
 
@@ -2027,10 +2022,49 @@ function SettingsScreenContent() {
 
                 {/* ── Plan & support section ── */}
                 <View ref={el => { sectionRefs.current["support"] = el; }} collapsable={false}>
-                <AccordionHeader title="Plan & support" open={sectionSupport} onPress={() => toggleSection(setSectionSupport)} />
+                <AccordionHeader title="Your plan" open={sectionSupport} onPress={() => toggleSection(setSectionSupport)} />
                 </View>
                 {sectionSupport && (
                 <View>
+
+                {/* Plan status — current tier + restore button */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                        Current plan:{" "}
+                        <Text style={{ fontWeight: "700", color: colors.textPrimary }}>{tierLabel}</Text>
+                    </Text>
+                    {licenseExpiresAt ? (
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+                            {new Date(licenseExpiresAt).getTime() > Date.now()
+                                ? `Renews ${new Date(licenseExpiresAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
+                                : `Expired ${new Date(licenseExpiresAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`}
+                        </Text>
+                    ) : null}
+                    {!accessToken ? (
+                        <TouchableOpacity
+                            onPress={async () => { try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
+                            style={{ marginTop: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primaryTint, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 6 }}
+                        >
+                            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600", flex: 1 }}>Sign in to restore your plan</Text>
+                            <Text style={{ fontSize: 13, color: colors.primary }}>→</Text>
+                        </TouchableOpacity>
+                    ) : String(licenseTier ?? "FREE").toUpperCase() === "FREE" ? (
+                        <TouchableOpacity
+                            onPress={async () => {
+                                await refreshLicense();
+                                try {
+                                    const stored = await AsyncStorage.getItem("imotara_license_tier_v1");
+                                    if (stored && setLicenseTier) setLicenseTier(stored as any);
+                                } catch {}
+                                Alert.alert("Plan checked", String(licenseTier ?? "FREE").toUpperCase() !== "FREE" ? "Your plan has been restored!" : "No active plan found for this account.");
+                            }}
+                            style={{ marginTop: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 6 }}
+                        >
+                            <Text style={{ fontSize: 13, color: colors.textSecondary, flex: 1 }}>Already purchased? Tap to check your plan</Text>
+                            <Text style={{ fontSize: 13, color: colors.primary }}>↻</Text>
+                        </TouchableOpacity>
+                    ) : null}
+                </AppSurface>
 
                 {/* Upgrade Plan card — native IAP (iOS) / Razorpay (Android) */}
                 <AppSurface style={{ marginBottom: 16 }}>
@@ -2135,241 +2169,21 @@ function SettingsScreenContent() {
                 </View>
                 )}
 
-                {/* ── Your plan section (merged into Plan & support below) ── */}
-                <View ref={el => { sectionRefs.current["account"] = el; }} collapsable={false}>
-                <AccordionHeader title="Your plan" open={sectionAccount} onPress={() => toggleSection(setSectionAccount)} />
-                </View>
-                {sectionAccount && (
-                <View>
-
-                {/* ✅ Plan / Licensing card (foundation) */}
-                <AppSurface style={{ marginBottom: 16 }}>
-                    <Text
-                        style={{
-                            fontSize: 14,
-                            color: colors.textPrimary,
-                            marginBottom: 6,
-                            fontWeight: "500",
-                        }}
-                    >
-                        Plan
-                    </Text>
-
-                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                        Current plan:{" "}
-                        <Text
-                            style={{
-                                fontWeight: "700",
-                                color: colors.textPrimary,
-                            }}
-                        >
-                            {tierLabel}
-                        </Text>
-                    </Text>
-
-                    {licenseExpiresAt ? (
-                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
-                            {new Date(licenseExpiresAt).getTime() > Date.now()
-                                ? `Renews ${new Date(licenseExpiresAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
-                                : `Expired ${new Date(licenseExpiresAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`}
-                        </Text>
-                    ) : String(licenseTier ?? "FREE").toUpperCase() === "FREE" ? (
-                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
-                            Upgrade to unlock unlimited chat, 90-day history, and all companion tones.
-                        </Text>
-                    ) : null}
-
-                    {/* Restore / refresh plan buttons */}
-                    {!accessToken ? (
-                        /* Not signed in — prompt Google sign-in */
-                        <TouchableOpacity
-                            onPress={async () => {
-                                try { await signInWithGoogle(); }
-                                catch { Alert.alert("Sign in failed", "Please try again."); }
-                            }}
-                            style={{
-                                marginTop: 14, borderRadius: 12, borderWidth: 1,
-                                borderColor: colors.primary, backgroundColor: colors.primaryTint,
-                                paddingHorizontal: 14, paddingVertical: 10,
-                                flexDirection: "row", alignItems: "center", gap: 8,
-                            }}
-                        >
-                            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600", flex: 1 }}>
-                                Sign in to restore your plan
-                            </Text>
-                            <Text style={{ fontSize: 13, color: colors.primary }}>→</Text>
-                        </TouchableOpacity>
-                    ) : String(licenseTier ?? "FREE").toUpperCase() === "FREE" ? (
-                        /* Signed in but showing Free — offer manual re-check from Supabase */
-                        <TouchableOpacity
-                            onPress={async () => {
-                                await refreshLicense();
-                                // refreshLicense() updates AsyncStorage but not HistoryContext state —
-                                // read the new value from AsyncStorage and sync it to React state now.
-                                try {
-                                    const stored = await AsyncStorage.getItem("imotara_license_tier_v1");
-                                    if (stored && setLicenseTier) setLicenseTier(stored as any);
-                                } catch {}
-                                const currentTier = String(licenseTier ?? "FREE").toUpperCase();
-                                Alert.alert(
-                                    "Plan checked",
-                                    currentTier !== "FREE"
-                                        ? "Your plan has been restored!"
-                                        : "No active plan found for this account. Make sure you are signed in with the same account used when you purchased."
-                                );
-                            }}
-                            style={{
-                                marginTop: 14, borderRadius: 12, borderWidth: 1,
-                                borderColor: colors.border, backgroundColor: colors.surfaceSoft,
-                                paddingHorizontal: 14, paddingVertical: 10,
-                                flexDirection: "row", alignItems: "center", gap: 8,
-                            }}
-                        >
-                            <Text style={{ fontSize: 13, color: colors.textSecondary, flex: 1 }}>
-                                Already purchased? Tap to check your plan
-                            </Text>
-                            <Text style={{ fontSize: 13, color: colors.primary }}>↻</Text>
-                        </TouchableOpacity>
-                    ) : null}
-
-                    {!canCloudSync && (
-                        <Text
-                            style={{
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                                marginTop: 8,
-                            }}
-                        >
-                            {cloudGateReason ||
-                                "Account backup included with Premium."}
-                        </Text>
-                    )}
-
-                    {DEBUG_UI_ENABLED && canSetTier && (
-                        <View style={{ marginTop: 12 }}>
-                            <Text
-                                style={{
-                                    fontSize: 12,
-                                    color: colors.textSecondary,
-                                    marginBottom: 8,
-                                }}
-                            >
-                                Debug (local): switch plan to test gated features
-                            </Text>
-
-                            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                                {(
-                                    [
-                                        "FREE",
-                                        "PREMIUM",
-                                        "FAMILY",
-                                        "EDU",
-                                        "ENTERPRISE",
-                                    ] as LicenseTier[]
-                                ).map((tier) => {
-                                    const active =
-                                        String(licenseTier ?? "FREE").toUpperCase() ===
-                                        tier;
-
-                                    return (
-                                        <TouchableOpacity
-                                            key={tier}
-                                            onPress={() => setTierSafe(tier)}
-                                            style={{
-                                                paddingHorizontal: 14,
-                                                paddingVertical: 9,
-                                                borderRadius: 12,
-                                                borderWidth: 1.5,
-                                                minHeight: 40,
-                                                borderColor: active
-                                                    ? colors.primary
-                                                    : colors.border,
-                                                backgroundColor: active
-                                                    ? colors.primaryTint
-                                                    : "transparent",
-                                                marginRight: 8,
-                                                marginBottom: 8,
-                                            }}
-                                        >
-                                            <Text
-                                                style={{
-                                                    fontSize: 12,
-                                                    fontWeight: "700",
-                                                    color: active
-                                                        ? colors.textPrimary
-                                                        : colors.textSecondary,
-                                                }}
-                                            >
-                                                {prettyTier(tier)}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </View>
-                        </View>
-                    )}
-                </AppSurface>
-
-                {/* Emotion Insights card */}
-                <AppSurface style={{ marginBottom: 16 }}>
-                    <View
-                        style={{
-                            flexDirection: "row",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            marginBottom: 6,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 14,
-                                color: colors.textPrimary,
-                                fontWeight: "500",
-                            }}
-                        >
-                            Emotion Insights
-                        </Text>
-                        <Switch
-                            value={emotionInsightsEnabled}
-                            onValueChange={setEmotionInsightsEnabled}
-                            trackColor={{ false: colors.border, true: colors.primary }}
-                            thumbColor="#ffffff"
-                        />
-                    </View>
-
-                    <Text
-                        style={{
-                            fontSize: 13,
-                            color: colors.textSecondary,
-                            marginBottom: 4,
-                        }}
-                    >
-                        When enabled, Imotara will try to give you deeper emotional
-                        reflections, suggestions, and gentle prompts in the chat. In
-                        this early version, analysis still runs locally on your device.
-                    </Text>
-
-                    <Text
-                        style={{
-                            fontSize: 12,
-                            color: colors.textSecondary,
-                            marginTop: 4,
-                        }}
-                    >
-                        This toggle does not send any extra data to your account yet. It
-                        is a design placeholder for future intelligent insights.
-                    </Text>
-                </AppSurface>
-
-                </View>
-                )}
-
                 {/* ── Experience section ── */}
                 <View ref={el => { sectionRefs.current["experience"] = el; }} collapsable={false}>
                 <AccordionHeader title="Experience" open={sectionAppearance} onPress={() => toggleSection(setSectionAppearance)} />
                 </View>
                 {sectionAppearance && (
                 <View>
+                {/* Emotion Insights */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Emotion Insights</Text>
+                        <Switch value={emotionInsightsEnabled} onValueChange={setEmotionInsightsEnabled} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
+                    </View>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>Enables deeper emotional reflections and gentle prompts in chat. Runs locally on your device.</Text>
+                </AppSurface>
+
                 {/* Quick panel swipe gestures */}
                 <AppSurface style={{ marginBottom: 16 }}>
                     <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "600", marginBottom: 2 }}>
@@ -5250,7 +5064,7 @@ function SettingsScreenContent() {
                         // HistoryContext's licenseTier state — read it back and sync so the
                         // tier label in Settings refreshes immediately without an app restart.
                         const raw = await AsyncStorage.getItem("imotara_license_tier_v1").catch(() => null);
-                        const VALID: LicenseTier[] = ["FREE", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"];
+                        const VALID: LicenseTier[] = ["FREE", "PLUS", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"];
                         if (raw && VALID.includes(raw as LicenseTier) && setLicenseTier) {
                             setLicenseTier(raw as LicenseTier);
                         }
