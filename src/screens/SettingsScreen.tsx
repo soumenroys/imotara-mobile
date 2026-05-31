@@ -340,7 +340,7 @@ export default function SettingsScreen() {
 }
 
 function SettingsScreenContent() {
-    const { accessToken, signOut } = useAuth();
+    const { accessToken, signOut, signInWithGoogle } = useAuth();
 
     // Keep compatibility with your current store shape, but allow optional newer fields
     const store = useHistoryStore() as any;
@@ -2178,6 +2178,30 @@ function SettingsScreenContent() {
                             Upgrade to unlock unlimited chat, 90-day history, and all companion tones.
                         </Text>
                     ) : null}
+
+                    {/* Sign-in to restore plan — shown when not signed in */}
+                    {!accessToken && (
+                        <TouchableOpacity
+                            onPress={async () => {
+                                try {
+                                    await signInWithGoogle();
+                                } catch {
+                                    Alert.alert("Sign in failed", "Please try again.");
+                                }
+                            }}
+                            style={{
+                                marginTop: 14, borderRadius: 12, borderWidth: 1,
+                                borderColor: colors.primary, backgroundColor: colors.primaryTint,
+                                paddingHorizontal: 14, paddingVertical: 10,
+                                flexDirection: "row", alignItems: "center", gap: 8,
+                            }}
+                        >
+                            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600", flex: 1 }}>
+                                Sign in to restore your plan
+                            </Text>
+                            <Text style={{ fontSize: 13, color: colors.primary }}>→</Text>
+                        </TouchableOpacity>
+                    )}
 
                     {!canCloudSync && (
                         <Text
