@@ -298,7 +298,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
             const t = String(licRow.tier || "free").toLowerCase();
             const mobileTier: LicenseTier =
-                t === "plus" || t === "pro" ? "PREMIUM" :
+                t === "pro" ? "PREMIUM" :
+                t === "plus" ? "PLUS" :
                 t === "family" ? "FAMILY" :
                 t === "edu" ? "EDU" :
                 t === "enterprise" ? "ENTERPRISE" : "FREE";
@@ -320,6 +321,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
 
     // ---- LIC-6 + LIC-7: sync real license tier + expiry from Supabase on sign-in ----
+    // Fires on: SIGNED_IN, INITIAL_SESSION (app startup with existing session),
+    // TOKEN_REFRESHED — all restore the real tier from Supabase including after reinstall.
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event, session) => {
@@ -502,13 +505,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                     _setLocalUserScopeId((prev) => (prev && prev.trim() ? prev : makeLocalScopeId()));
                 }
 
-                // 2) License tier → cloud sync gate
-                const tier: LicenseTier = isValidTier(rawTier) ? rawTier : "FREE";
-                const g = gate("CLOUD_SYNC", tier);
+                // 2) License tier — read from AsyncStorage first (fast path)
+                const localTier: LicenseTier = isValidTier(rawTier) ? rawTier : "FREE";
                 if (alive) {
-                    setCloudSyncAllowed(g.enabled);
+                    setCloudSyncAllowed(gate("CLOUD_SYNC", localTier).enabled);
                     setLicenseExpiresAt(rawExpiresAt ?? null);
                 }
+
+                // 3) Always sync real license from Supabase on startup if signed in.
+                //    Handles reinstall (AsyncStorage cleared) and cases where
+                //    onAuthStateChange INITIAL_SESSION fires before this hydration.
+                //    Fire-and-forget — doesn't block hydration completing.
+                supabase.auth.getSession().then(({ data: { session } }) => {
+                    if (session?.user?.id && alive) {
+                        refreshLicense().catch(() => {});
+                    }
+                }).catch(() => {});
 
             } catch (e) {
                 // Non-fatal; keep defaults

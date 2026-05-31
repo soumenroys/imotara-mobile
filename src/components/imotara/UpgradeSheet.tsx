@@ -983,6 +983,79 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                             </TouchableOpacity>
                         )}
 
+                        {/* Android: Restore plan via Supabase (sign in → fetch license) */}
+                        {Platform.OS === "android" && (
+                            <TouchableOpacity
+                                disabled={restoring}
+                                style={{ alignItems: "center", paddingVertical: 8 }}
+                                onPress={async () => {
+                                    if (!isSignedIn) {
+                                        // Prompt sign-in; once signed in the license
+                                        // is auto-fetched via onAuthStateChange
+                                        promptSignIn(async () => {
+                                            setRestoring(true);
+                                            try {
+                                                const token = accessTokenRef.current;
+                                                if (!token) return;
+                                                const res = await fetchWithTimeout(
+                                                    buildApiUrl("/api/license/status"),
+                                                    { method: "GET", headers: { Authorization: `Bearer ${token}` } },
+                                                    12_000,
+                                                );
+                                                if (res.ok) {
+                                                    const data = await res.json();
+                                                    const tier = String(data?.license?.tier ?? data?.tier ?? "free").toLowerCase();
+                                                    if (tier === "plus" || tier === "pro") {
+                                                        Alert.alert("Plan restored", `Your ${tier === "pro" ? "Pro" : "Plus"} plan has been restored.`);
+                                                        try { await onPurchaseComplete(); } catch { }
+                                                    } else {
+                                                        Alert.alert("No active plan found", "No active Plus or Pro subscription was found for this account.");
+                                                    }
+                                                }
+                                            } catch {
+                                                Alert.alert("Restore failed", "Could not reach the server. Please check your connection and try again.");
+                                            } finally {
+                                                setRestoring(false);
+                                            }
+                                        });
+                                        return;
+                                    }
+                                    // Already signed in — directly check Supabase
+                                    setRestoring(true);
+                                    try {
+                                        const token = accessTokenRef.current;
+                                        if (!token) { setRestoring(false); return; }
+                                        const res = await fetchWithTimeout(
+                                            buildApiUrl("/api/license/status"),
+                                            { method: "GET", headers: { Authorization: `Bearer ${token}` } },
+                                            12_000,
+                                        );
+                                        if (res.ok) {
+                                            const data = await res.json();
+                                            const tier = String(data?.license?.tier ?? data?.tier ?? "free").toLowerCase();
+                                            if (tier === "plus" || tier === "pro") {
+                                                Alert.alert("Plan restored", `Your ${tier === "pro" ? "Pro" : "Plus"} plan has been restored.`);
+                                                try { await onPurchaseComplete(); } catch { }
+                                            } else {
+                                                Alert.alert("No active plan found", "No active Plus or Pro subscription was found for this account.");
+                                            }
+                                        }
+                                    } catch {
+                                        Alert.alert("Restore failed", "Could not reach the server. Please check your connection and try again.");
+                                    } finally {
+                                        setRestoring(false);
+                                    }
+                                }}
+                            >
+                                {restoring
+                                    ? <ActivityIndicator size="small" color={colors.textSecondary} />
+                                    : <Text style={{ fontSize: 12, color: colors.textSecondary, textDecorationLine: "underline" }}>
+                                        Restore previous plan
+                                    </Text>
+                                }
+                            </TouchableOpacity>
+                        )}
+
                         <Text style={{ fontSize: 11, color: colors.textSecondary, textAlign: "center", marginTop: 8 }}>
                             {Platform.OS === "ios"
                                 ? "Subscriptions auto-renew monthly or annually at the price shown. Cancel anytime in iOS Settings → Subscriptions."
