@@ -73,7 +73,7 @@ export function OpenLoopCard({ loop, colors, onExplore, onDefer, onDismiss }: Pr
             borderRadius: 999,
             borderWidth: 1,
             borderColor: colors.border,
-            backgroundColor: "rgba(255,255,255,0.05)",
+            backgroundColor: colors.surfaceSoft,
             alignItems: "center",
           }}
         >

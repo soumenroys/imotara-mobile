@@ -1095,7 +1095,7 @@ function HistoryScreenContent() {
                                                 flexDirection: "row", alignItems: "center", gap: 4,
                                                 borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7,
                                                 borderWidth: 1,
-                                                borderColor: historyTab === tab ? "rgba(99,102,241,0.6)" : "rgba(255,255,255,0.14)",
+                                                borderColor: historyTab === tab ? "rgba(99,102,241,0.6)" : colors.border,
                                                 backgroundColor: historyTab === tab ? "rgba(99,102,241,0.18)" : "rgba(148,163,184,0.08)",
                                             }}
                                         >
@@ -1315,7 +1315,7 @@ function HistoryScreenContent() {
                                                 flexDirection: "row", alignItems: "center", gap: 4,
                                                 borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7,
                                                 borderWidth: 1,
-                                                borderColor: viewMode === mode ? "rgba(99,102,241,0.6)" : "rgba(255,255,255,0.14)",
+                                                borderColor: viewMode === mode ? "rgba(99,102,241,0.6)" : colors.border,
                                                 backgroundColor: viewMode === mode ? "rgba(99,102,241,0.18)" : "rgba(148,163,184,0.08)",
                                             }}
                                         >
@@ -1343,7 +1343,7 @@ function HistoryScreenContent() {
                                                     flexDirection: "row", alignItems: "center", gap: 4,
                                                     borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5,
                                                     borderWidth: 1,
-                                                    borderColor: isActive ? "rgba(56,189,248,0.6)" : "rgba(255,255,255,0.12)",
+                                                    borderColor: isActive ? "rgba(56,189,248,0.6)" : colors.border,
                                                     backgroundColor: isActive ? "rgba(56,189,248,0.15)" : "rgba(148,163,184,0.08)",
                                                 }}
                                             >
@@ -1425,7 +1425,7 @@ function HistoryScreenContent() {
                                                 const isExpanded = expandedCapsules[key] ?? false;
                                                 const dominantEmoji = analysis ? (MINDSET_EMOTION_ICON[analysis.dominant] ?? "💭") : null;
                                                 return (
-                                                    <View key={key} style={{ borderRadius: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", backgroundColor: colors.surface, marginBottom: 8, overflow: "hidden" }}>
+                                                    <View key={key} style={{ borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, marginBottom: 8, overflow: "hidden" }}>
                                                         <View style={{ flexDirection: "row", alignItems: "center" }}>
                                                         <TouchableOpacity
                                                             activeOpacity={0.8}
@@ -1467,7 +1467,7 @@ function HistoryScreenContent() {
                                                         </View>
 
                                                         {isExpanded && analysis && (
-                                                            <View style={{ borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", paddingHorizontal: 14, paddingBottom: 14, paddingTop: 12 }}>
+                                                            <View style={{ borderTopWidth: 0.5, borderTopColor: colors.border, paddingHorizontal: 14, paddingBottom: 14, paddingTop: 12 }}>
                                                                 {/* Dominant */}
                                                                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 }}>
                                                                     <Text style={{ fontSize: 28 }}>{dominantEmoji}</Text>
@@ -1493,7 +1493,7 @@ function HistoryScreenContent() {
                                                                     })}
                                                                 </View>
                                                                 {/* Footer */}
-                                                                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 10 }}>
+                                                                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, borderTopWidth: 0.5, borderTopColor: colors.border, paddingTop: 10 }}>
                                                                     <Text style={{ fontSize: 11, color: colors.textSecondary }}>{analysis.total} moment{analysis.total !== 1 ? "s" : ""} analysed</Text>
                                                                     <Text style={{ fontSize: 11, color: colors.textSecondary }}>·</Text>
                                                                     <Text style={{ fontSize: 11, color: colors.textSecondary }}>Avg intensity: {analysis.intensityLabel}</Text>
@@ -1502,16 +1502,16 @@ function HistoryScreenContent() {
                                                                 {(() => {
                                                                     const insight = capsuleInsights[key];
                                                                     if (insight === "loading") return (
-                                                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 10, marginTop: 4 }}>
+                                                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 0.5, borderTopColor: colors.border, paddingTop: 10, marginTop: 4 }}>
                                                                             <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 1.5, borderColor: "rgba(124,58,237,0.6)", borderTopColor: "rgba(124,58,237,0.2)" }} />
                                                                             <Text style={{ fontSize: 11, color: colors.textSecondary }}>Generating insight…</Text>
                                                                         </View>
                                                                     );
                                                                     if (insight === "error") return (
-                                                                        <Text style={{ fontSize: 11, color: colors.textSecondary, borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 10, marginTop: 4 }}>Could not generate insight right now.</Text>
+                                                                        <Text style={{ fontSize: 11, color: colors.textSecondary, borderTopWidth: 0.5, borderTopColor: colors.border, paddingTop: 10, marginTop: 4 }}>Could not generate insight right now.</Text>
                                                                     );
                                                                     if (insight && (insight.analysis || insight.advice)) return (
-                                                                        <View style={{ borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 12, marginTop: 4, gap: 8 }}>
+                                                                        <View style={{ borderTopWidth: 0.5, borderTopColor: colors.border, paddingTop: 12, marginTop: 4, gap: 8 }}>
                                                                             <Text style={{ fontSize: 10, fontWeight: "600", color: "rgba(167,139,250,0.9)", textTransform: "uppercase", letterSpacing: 1 }}>Psychological Insight</Text>
                                                                             {!!insight.analysis && (
                                                                                 <Text style={{ fontSize: 13, color: colors.textPrimary, lineHeight: 19 }}>{insight.analysis}</Text>
@@ -1588,9 +1588,9 @@ function HistoryScreenContent() {
                                     return (
                                         <View key={dayKey} style={{ marginBottom: 20 }}>
                                             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 8 }}>
-                                                <View style={{ height: 1, flex: 1, backgroundColor: "rgba(255,255,255,0.08)" }} />
+                                                <View style={{ height: 1, flex: 1, backgroundColor: colors.border }} />
                                                 <Text style={{ fontSize: 11, fontWeight: "600", color: colors.textSecondary, letterSpacing: 0.5 }}>{dayLabel}</Text>
-                                                <View style={{ height: 1, flex: 1, backgroundColor: "rgba(255,255,255,0.08)" }} />
+                                                <View style={{ height: 1, flex: 1, backgroundColor: colors.border }} />
                                             </View>
                                             <View style={{ paddingLeft: 14, borderLeftWidth: 2, borderLeftColor: "rgba(99,102,241,0.25)" }}>
                                                 {sortedItems.map((h) => {

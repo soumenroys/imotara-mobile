@@ -49,7 +49,6 @@ import { useSettings } from "../state/SettingsContext";
 import { useColors, useTheme } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
 import { callImotaraAI, streamChatReply } from "../api/aiClient";
-import { IMOTARA_API_BASE_URL } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
 import { useVoiceInput } from "../hooks/useVoiceInput";
@@ -4209,7 +4208,7 @@ export default function ChatScreen() {
                 width: 34, height: 34, borderRadius: 999,
                 borderWidth: 1,
                 borderColor: threads.length > 1 ? "rgba(99,102,241,0.5)" : colors.border,
-                backgroundColor: threads.length > 1 ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.06)",
+                backgroundColor: threads.length > 1 ? "rgba(99,102,241,0.12)" : colors.surfaceSoft,
                 alignItems: "center", justifyContent: "center",
               }}
               accessibilityRole="button"
@@ -4241,7 +4240,7 @@ export default function ChatScreen() {
                 width: 34, height: 34, borderRadius: 999,
                 borderWidth: 1,
                 borderColor: colors.border,
-                backgroundColor: "rgba(255,255,255,0.06)",
+                backgroundColor: colors.surfaceSoft,
                 alignItems: "center", justifyContent: "center",
               }}
               accessibilityRole="button"

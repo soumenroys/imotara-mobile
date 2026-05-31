@@ -1129,7 +1129,7 @@ function ChallengeWidget({ colors }: { colors: any }) {
               key={i}
               style={{
                 width: 12, height: 12, borderRadius: 6,
-                backgroundColor: done ? "#10b981" : isToday ? "#6366f1" : isFuture ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.15)",
+                backgroundColor: done ? "#10b981" : isToday ? "#6366f1" : colors.surfaceSoft,
                 borderWidth: isToday ? 1.5 : 0,
                 borderColor: isToday ? "rgba(99,102,241,0.5)" : "transparent",
               }}
@@ -1293,16 +1293,8 @@ function TrendsScreenContent() {
     }, [])
   );
 
-  // Clear badge when user visits Trends (they're now seeing the content)
-  useFocusEffect(
-    useCallback(() => {
-      // Small delay so badge updates after the screen is visible
-      const t = setTimeout(() => {
-        AsyncStorage.setItem("imotara.trends_badge.v2", "0").catch(() => {});
-      }, 500);
-      return () => clearTimeout(t);
-    }, [])
-  );
+  // Badge clears automatically as user dismisses cards via clearPendingInsight()
+  // No separate write needed — avoids race condition with card dismissals.
   const [featureTipDismissed, setFeatureTipDismissed] = useState(false);
   const { accessToken } = useAuth();
 

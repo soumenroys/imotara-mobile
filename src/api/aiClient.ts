@@ -1016,13 +1016,13 @@ export async function fetchRemoteChatMessages(args: {
   });
 
   try {
-    const res = await fetch(remoteUrl, {
+    const res = await fetchWithTimeout(remoteUrl, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
         ...(args.accessToken ? { Authorization: `Bearer ${args.accessToken}` } : { "x-imotara-user": args.userScope }),
       },
-    });
+    }, 15_000);
 
     if (!res.ok) {
       const bodyText = await res.text().catch(() => "");
@@ -1073,14 +1073,14 @@ export async function pushRemoteChatMessages(args: {
   const remoteUrl = `${IMOTARA_API_BASE_URL}/api/chat/messages`;
 
   try {
-    const res = await fetch(remoteUrl, {
+    const res = await fetchWithTimeout(remoteUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(args.accessToken ? { Authorization: `Bearer ${args.accessToken}` } : { "x-imotara-user": args.userScope }),
       },
       body: JSON.stringify({ messages: args.messages }),
-    });
+    }, 15_000);
 
     if (!res.ok) {
       const bodyText = await res.text().catch(() => "");
