@@ -392,6 +392,89 @@ function deriveEmotionHintFromMessage(message: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Streams a chat-reply response via SSE (?stream=1).
+ * Calls onToken(accumulated) as each token arrives — batched per animation frame.
+ * Returns { ok, text } when [DONE] is received or on error.
+ * Falls back gracefully: caller should try callImotaraAI() if this returns ok:false.
+ */
+export async function streamChatReply(
+  payload: Record<string, unknown>,
+  accessToken: string | undefined,
+  onToken: (accumulated: string) => void,
+  timeoutMs: number = 25_000,
+): Promise<{ ok: boolean; text: string }> {
+  const url = `${IMOTARA_API_BASE_URL}/api/chat-reply?stream=1`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+
+  // RAF batching — flush at most once per animation frame to avoid excessive re-renders
+  let pendingAccumulated = "";
+  let rafHandle: ReturnType<typeof requestAnimationFrame> | null = null;
+  const flush = () => {
+    if (rafHandle) cancelAnimationFrame(rafHandle);
+    const snap = pendingAccumulated;
+    rafHandle = requestAnimationFrame(() => onToken(snap));
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal,
+    });
+
+    if (!res.ok || !res.body) return { ok: false, text: "" };
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let accumulated = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") {
+          if (rafHandle) cancelAnimationFrame(rafHandle);
+          onToken(accumulated);
+          clearTimeout(timer);
+          return { ok: accumulated.length > 10, text: accumulated };
+        }
+        try {
+          const parsed = JSON.parse(data);
+          const token = String(parsed.t ?? "");
+          if (token) {
+            accumulated += token;
+            pendingAccumulated = accumulated;
+            flush();
+          }
+        } catch { /* malformed SSE chunk — skip */ }
+      }
+    }
+
+    if (rafHandle) cancelAnimationFrame(rafHandle);
+    clearTimeout(timer);
+    return { ok: accumulated.length > 10, text: accumulated };
+  } catch {
+    if (rafHandle) cancelAnimationFrame(rafHandle);
+    return { ok: false, text: "" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function callImotaraAI(
   message: string,
   opts?: CallAIOptions,

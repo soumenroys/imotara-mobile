@@ -48,7 +48,8 @@ import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import { useColors, useTheme } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
-import { callImotaraAI } from "../api/aiClient";
+import { callImotaraAI, streamChatReply } from "../api/aiClient";
+import { IMOTARA_API_BASE_URL } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
 import { useVoiceInput } from "../hooks/useVoiceInput";
@@ -1495,6 +1496,8 @@ export default function ChatScreen() {
   const [inputHeight, setInputHeight] = useState(40);
   const [isTyping, setIsTyping] = useState(false);
   const [typingDots, setTypingDots] = useState(1);
+  // Streaming reply state — tracks the in-progress streaming message
+  const streamingMsgIdRef = React.useRef<string | null>(null);
 
   const [recentlySyncedAt, setRecentlySyncedAt] = useState<number | null>(null);
 
@@ -3118,82 +3121,114 @@ export default function ChatScreen() {
             : trimmed;
 
           // 1) Try cloud if allowed by Analysis Mode AND device is online
-          //    Skip immediately if offline — avoids a 20s fetch timeout before local fallback
-          const remote: any = wantsCloud && isOnline
-            ? await callImotaraAI(aiMessage, {
-                // ✅ always send toneContext if present (server can decide what to use)
-                // ✅ parity: ensure ageTone is present (fallback to ageRange) when sending
-                toneContext: toneContext
-                  ? {
-                      ...toneContext,
-                      user: toneContext.user
-                        ? {
-                            ...toneContext.user,
-                            ageTone:
-                              toneContext.user.ageTone ??
-                              toneContext.user.ageRange,
-                          }
-                        : undefined,
-                      companion: toneContext.companion
-                        ? {
-                            ...toneContext.companion,
-                            ageTone:
-                              toneContext.companion.ageTone ??
-                              toneContext.companion.ageRange,
-                          }
-                        : undefined,
-                    }
-                  : undefined,
+          //    Uses streaming (?stream=1) for faster perceived response — text appears
+          //    word-by-word within ~500ms instead of waiting 4-6s for the full reply.
+          //    Falls back to non-streaming callImotaraAI() if stream fails.
 
+          // Build shared payload for both streaming and non-streaming paths
+          const cloudPayload: Record<string, unknown> = {
+            messages: [
+              ...(toneContext?.user?.name?.trim()
+                ? [{ role: "system", content: `The user's preferred name is: ${toneContext.user.name.trim()}. Use it naturally — not every line.` }]
+                : []),
+              ...messages.slice(-10).map((m) => ({
+                role: m.from === "user" ? "user" : "assistant",
+                content: m.text,
+              })),
+              { role: "user", content: aiMessage },
+            ],
+            tone: (() => {
+              const rel = String(toneContext?.companion?.relationship ?? "");
+              if (rel === "close_friend") return "close_friend";
+              if (rel === "coach") return "coach";
+              if (rel === "mentor") return "mentor";
+              return "calm_companion";
+            })(),
+            lang: toneContext?.user?.preferredLang || "en",
+            ...(toneContext?.user?.gender && toneContext.user.gender !== "prefer_not" ? { userGender: toneContext.user.gender } : {}),
+            ...(toneContext?.companion?.gender && toneContext.companion.gender !== "prefer_not" ? { companionGender: toneContext.companion.gender } : {}),
+            ...(toneContext?.companion?.name?.trim() ? { companionName: toneContext.companion.name.trim() } : {}),
+            ...(emotionMemory ? { emotionMemory } : {}),
+            threadId: localUserScopeId || undefined,
+            userId: localUserScopeId || undefined,
+          };
+
+          let remote: any = { ok: false, replyText: "" };
+
+          if (wantsCloud && isOnline) {
+            // ── Streaming path (fast perceived response) ──────────────────────
+            streamingMsgIdRef.current = null;
+            let streamedText = "";
+
+            const streamResult = await streamChatReply(
+              cloudPayload,
+              accessToken || undefined,
+              (accumulated) => {
+                if (!mountedRef.current) return;
+                if (!streamingMsgIdRef.current) {
+                  // First token — create streaming message and hide typing indicator
+                  const newId = `b-stream-${Date.now()}`;
+                  streamingMsgIdRef.current = newId;
+                  const streamMsg: ChatMessage = {
+                    id: newId, from: "bot", text: accumulated,
+                    timestamp: Date.now(), isSynced: false, source: "cloud",
+                  };
+                  setIsTyping(false);
+                  setMessages((prev) => [...prev, streamMsg]);
+                  smoothScrollToBottom(scrollViewRef);
+                } else {
+                  // Update streaming message in place
+                  streamedText = accumulated;
+                  setMessages((prev) => prev.map((m) =>
+                    m.id === streamingMsgIdRef.current ? { ...m, text: accumulated } : m,
+                  ));
+                }
+              },
+              Math.min(apiTimeoutMs, 25_000),
+            );
+
+            if (streamResult.ok && streamResult.text.trim().length > 0) {
+              // Streaming succeeded — ensure final text is applied
+              streamedText = streamResult.text;
+              if (streamingMsgIdRef.current) {
+                setMessages((prev) => prev.map((m) =>
+                  m.id === streamingMsgIdRef.current ? { ...m, text: streamResult.text } : m,
+                ));
+              }
+              remote = { ok: true, replyText: streamResult.text, analysisSource: "cloud" };
+            } else {
+              // Streaming failed — remove any partial message and fall back to non-streaming
+              if (streamingMsgIdRef.current) {
+                setMessages((prev) => prev.filter((m) => m.id !== streamingMsgIdRef.current));
+                streamingMsgIdRef.current = null;
+              }
+              if (mountedRef.current) setIsTyping(true);
+
+              // Fallback: full non-streaming call
+              remote = await callImotaraAI(aiMessage, {
+                toneContext: toneContext ? {
+                  ...toneContext,
+                  user: toneContext.user ? { ...toneContext.user, ageTone: toneContext.user.ageTone ?? toneContext.user.ageRange } : undefined,
+                  companion: toneContext.companion ? { ...toneContext.companion, ageTone: toneContext.companion.ageTone ?? toneContext.companion.ageRange } : undefined,
+                } : undefined,
                 countryCode: detectCountryCode(),
-
-                analysisMode: analysisMode,
+                analysisMode,
                 emotionInsightsEnabled: wantsInsights,
-
-                // Companion tone prefs always forwarded as persona hints.
-                // companion.enabled controls named persona; tone prefs apply regardless.
                 settings: {
-                  relationshipTone:
-                    (toneContext?.companion?.relationship !== "prefer_not"
-                      ? toneContext?.companion?.relationship
-                      : undefined) ?? toneContext?.user?.relationship,
-
-                  ageTone:
-                    (toneContext?.companion?.ageTone !== "prefer_not"
-                      ? (toneContext?.companion?.ageTone ?? toneContext?.companion?.ageRange)
-                      : undefined) ??
-                    toneContext?.user?.ageTone ??
-                    toneContext?.user?.ageRange,
-
-                  genderTone:
-                    (toneContext?.companion?.gender !== "prefer_not"
-                      ? toneContext?.companion?.gender
-                      : undefined) ?? toneContext?.user?.gender,
+                  relationshipTone: (toneContext?.companion?.relationship !== "prefer_not" ? toneContext?.companion?.relationship : undefined) ?? toneContext?.user?.relationship,
+                  ageTone: (toneContext?.companion?.ageTone !== "prefer_not" ? (toneContext?.companion?.ageTone ?? toneContext?.companion?.ageRange) : undefined) ?? toneContext?.user?.ageTone ?? toneContext?.user?.ageRange,
+                  genderTone: (toneContext?.companion?.gender !== "prefer_not" ? toneContext?.companion?.gender : undefined) ?? toneContext?.user?.gender,
                 },
-
-                // More history for richer long-discussion context (web sends 6, mobile sends 10)
-                recentMessages: messages.slice(-10).map((m) => ({
-                  role: m.from === "user" ? "user" : "assistant",
-                  content: m.text,
-                })),
-
-                // ✅ Web parity: emotional history + factual memory calibrate AI empathy depth
+                recentMessages: messages.slice(-10).map((m) => ({ role: m.from === "user" ? "user" : "assistant", content: m.text })),
                 emotionMemory: emotionMemory || undefined,
-
-                // ✅ Web parity: preferred language for server language-derivation pipeline
                 preferredLanguage: toneContext?.user?.preferredLang || undefined,
-
-                // ✅ Web parity: stable user/thread scope
-                // Server uses userId as fallback when no Supabase auth session exists
                 threadId: localUserScopeId || undefined,
                 userId: localUserScopeId || undefined,
-
-                // ✅ Mobile auth: Supabase JWT → server resolves real user → pinnedRecall
                 accessToken: accessToken || undefined,
-
                 timeoutMs: apiTimeoutMs,
-              })
-            : { ok: false, replyText: "" };
+              });
+            }
+          }
 
           debugLog("[imotara] remote:", {
             ok: remote?.ok,
@@ -3520,7 +3555,20 @@ export default function ChatScreen() {
               isQuotaNotice: true,
             });
           }
-          setMessages((prev) => [...prev, ...extraMessages, botMessage]);
+
+          // If streaming was used, replace the streaming placeholder with the
+          // finalised botMessage (which carries emotion, reflectionSeed, etc.).
+          // Otherwise, add the botMessage as a new entry.
+          const streamId = streamingMsgIdRef.current;
+          streamingMsgIdRef.current = null;
+          if (streamId && source === "cloud") {
+            setMessages((prev) => [
+              ...extraMessages,
+              ...prev.map((m) => (m.id === streamId ? { ...botMessage, id: streamId } : m)),
+            ]);
+          } else {
+            setMessages((prev) => [...prev, ...extraMessages, botMessage]);
+          }
           smoothScrollToBottom(scrollViewRef);
           const autoReadEnabled1 = await AsyncStorage.getItem("imotara.tts.autoRead.v1").catch(() => "0");
           if ((handsfreeRef.current || autoReadEnabled1 === "1") && botMessage.text) {
