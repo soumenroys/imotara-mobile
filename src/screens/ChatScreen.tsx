@@ -5001,43 +5001,7 @@ export default function ChatScreen() {
         </Animated.View>
       )}
 
-      {/* L-2: Post-session tone reflection card */}
-      {!isTyping &&
-        !sessionToneCardDismissed &&
-        toneReflectionEnabled &&
-        messages.filter((m) => m.from === "user").length >= 3 && (() => {
-          const MOOD_EMOJI: Record<string, string> = {
-            happy: "😄", joy: "😄", grateful: "🙏", hopeful: "💚",
-            sad: "💙", sadness: "💙", grief: "💜", loss: "💜",
-            anxious: "😰", anxiety: "😰", stressed: "💛",
-            angry: "❤️", anger: "❤️", confused: "🟣", lonely: "🫂", neutral: "💭",
-          };
-          const recentMoods = messages.filter((m) => m.from === "user" && m.moodHint).slice(-5);
-          const dominant = recentMoods.length > 0 ? (recentMoods[recentMoods.length - 1].moodHint ?? "neutral") : "neutral";
-          const emoji = MOOD_EMOJI[dominant.toLowerCase()] ?? "💭";
-          const emotionLabel = dominant.charAt(0).toUpperCase() + dominant.slice(1);
-          return (
-            <View style={{ marginHorizontal: 12, marginBottom: 6, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.25)", backgroundColor: "rgba(99,102,241,0.09)", paddingHorizontal: 12, paddingVertical: 10 }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <Text style={{ fontSize: 9, fontWeight: "700", color: "rgba(165,180,252,0.7)", textTransform: "uppercase", letterSpacing: 0.8 }}>Tone Reflection</Text>
-                <TouchableOpacity onPress={() => showCapsuleMenu("Tone reflection", () => { setToneReflectionEnabled(false); AsyncStorage.setItem(TONE_REFLECTION_ENABLED_KEY, "0").catch(() => {}); }, () => setSessionToneCardDismissed(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="ellipsis-vertical" size={14} color="rgba(165,180,252,0.4)" />
-                </TouchableOpacity>
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                <Text style={{ fontSize: 16 }}>{emoji}</Text>
-                <Text style={{ fontSize: 12, fontWeight: "600", color: "#a5b4fc" }}>{emotionLabel}</Text>
-              </View>
-              <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 18 }}>
-                You've been sharing openly. Take a moment to reflect on what came up for you.
-              </Text>
-              <TouchableOpacity onPress={() => navigation.navigate("Trends")} style={{ marginTop: 6 }}>
-                <Text style={{ fontSize: 11, color: "#818cf8", textDecorationLine: "underline" }}>Reflect on this →</Text>
-              </TouchableOpacity>
-            </View>
-          );
-        })()
-      }
+      {/* Tone reflection moved to Trends tab — check your mood chart there after a session */}
 
       {/* P4 — Unsent Letter mode banner */}
       {unsentLetterSetup && (
@@ -5113,27 +5077,39 @@ export default function ChatScreen() {
       {/* Companion insight, weekly recap, collective pulse, grow nudge, and milestone
           cards are now shown in the Trends tab to keep the chat screen clean. */}
 
-      {/* P1 — Open Loop Card */}
+      {/* P1 — Open Loop — minimal one-line chip */}
       {activeOpenLoop && (
-        <OpenLoopCard
-          loop={activeOpenLoop}
-          colors={colors}
-          onExplore={() => {
-            const prompt = getLoopPrompt(activeOpenLoop.themeKey);
-            dismissLoop(activeOpenLoop.id).catch(() => {});
-            setActiveOpenLoop(null);
-            setUnsentLetterSetup(null);
-            startNewThread(activeOpenLoop.themeName);
-            setInput(prompt);
-            latestInputRef.current = prompt;
-          }}
-          onDefer={() => {
-            deferLoop(activeOpenLoop.id).then(() => setActiveOpenLoop(null)).catch(() => {});
-          }}
-          onDismiss={() => {
-            dismissLoop(activeOpenLoop.id).then(() => setActiveOpenLoop(null)).catch(() => {});
-          }}
-        />
+        <View style={{
+          marginHorizontal: 12, marginBottom: 6,
+          flexDirection: "row", alignItems: "center", gap: 8,
+          borderRadius: 20, borderWidth: 1,
+          borderColor: isDark ? "rgba(148,163,184,0.2)" : "rgba(100,116,139,0.25)",
+          backgroundColor: isDark ? "rgba(148,163,184,0.06)" : "rgba(241,245,249,0.9)",
+          paddingHorizontal: 12, paddingVertical: 6,
+        }}>
+          <Ionicons name="refresh-outline" size={13} color={colors.textSecondary} />
+          <Text style={{ flex: 1, fontSize: 11.5, color: colors.textSecondary }} numberOfLines={1}>
+            {`Last time you were exploring ${activeOpenLoop.themeName} — still on your mind?`}
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              const prompt = getLoopPrompt(activeOpenLoop.themeKey);
+              dismissLoop(activeOpenLoop.id).catch(() => {});
+              setActiveOpenLoop(null);
+              setInput(prompt);
+              latestInputRef.current = prompt;
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Continue</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => dismissLoop(activeOpenLoop.id).then(() => setActiveOpenLoop(null)).catch(() => {})}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close-outline" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* UX-3 — contextual unsent-letter hint */}
@@ -5161,42 +5137,7 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* EN-3 — Daily micro check-in pulse (once per day, not during first-chat intake arc) */}
-      {activeTier2Banner === "dailyCheckin" && (
-        <View style={{
-          marginHorizontal: 12, marginBottom: 6, borderRadius: 14, borderWidth: 1,
-          borderColor: isDark ? "rgba(56,189,248,0.2)" : "rgba(14,165,233,0.3)",
-          backgroundColor: isDark ? "rgba(12,74,110,0.2)" : "rgba(224,242,254,0.7)",
-          paddingHorizontal: 12, paddingVertical: 10,
-        }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <Text style={{ fontSize: 11.5, fontWeight: "600", color: isDark ? "rgba(186,230,253,0.85)" : "#0369a1" }}>How are you right now?</Text>
-            <TouchableOpacity onPress={() => showCapsuleMenu("Daily check-in", () => { setDailyCheckinEnabled(false); AsyncStorage.setItem(DAILY_CHECKIN_ENABLED_KEY, "0").catch(() => {}); }, () => { AsyncStorage.setItem(DAILY_CHECKIN_KEY, new Date().toISOString().slice(0, 10)).catch(() => {}); setShowDailyCheckin(false); })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(148,163,184,0.5)" : "rgba(71,85,105,0.6)"} />
-            </TouchableOpacity>
-          </View>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            {([
-              { emoji: "😔", label: "Heavy" }, { emoji: "😟", label: "Unsettled" }, { emoji: "😶", label: "Somewhere here" },
-              { emoji: "🌱", label: "Okay" }, { emoji: "🙂", label: "Good" }, { emoji: "✨", label: "Bright" },
-            ] as const).map(({ emoji, label }) => (
-              <TouchableOpacity
-                key={label}
-                onPress={() => handleDailyCheckin(label)}
-                style={{
-                  flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1,
-                  borderColor: isDark ? "rgba(56,189,248,0.25)" : "rgba(14,165,233,0.4)",
-                  backgroundColor: isDark ? "rgba(56,189,248,0.08)" : "rgba(186,230,253,0.5)",
-                  paddingHorizontal: 10, paddingVertical: 4,
-                }}
-              >
-                <Text style={{ fontSize: 13 }}>{emoji}</Text>
-                <Text style={{ fontSize: 11, color: isDark ? "#7dd3fc" : "#0369a1", fontWeight: "500" }}>{label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
+      {/* Daily check-in removed from Chat — use the Trends tab FeelSection instead */}
 
       {/* Message undo toast — 5-second window before API fires */}
       {pendingUndo && (
