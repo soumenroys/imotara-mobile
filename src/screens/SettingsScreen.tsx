@@ -2204,9 +2204,16 @@ function SettingsScreenContent() {
                         <TouchableOpacity
                             onPress={async () => {
                                 await refreshLicense();
+                                // refreshLicense() updates AsyncStorage but not HistoryContext state —
+                                // read the new value from AsyncStorage and sync it to React state now.
+                                try {
+                                    const stored = await AsyncStorage.getItem("imotara_license_tier_v1");
+                                    if (stored && setLicenseTier) setLicenseTier(stored as any);
+                                } catch {}
+                                const currentTier = String(licenseTier ?? "FREE").toUpperCase();
                                 Alert.alert(
                                     "Plan checked",
-                                    String(licenseTier ?? "FREE").toUpperCase() !== "FREE"
+                                    currentTier !== "FREE"
                                         ? "Your plan has been restored!"
                                         : "No active plan found for this account. Make sure you are signed in with the same account used when you purchased."
                                 );
