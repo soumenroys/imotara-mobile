@@ -2179,15 +2179,13 @@ function SettingsScreenContent() {
                         </Text>
                     ) : null}
 
-                    {/* Sign-in to restore plan — shown when not signed in */}
-                    {!accessToken && (
+                    {/* Restore / refresh plan buttons */}
+                    {!accessToken ? (
+                        /* Not signed in — prompt Google sign-in */
                         <TouchableOpacity
                             onPress={async () => {
-                                try {
-                                    await signInWithGoogle();
-                                } catch {
-                                    Alert.alert("Sign in failed", "Please try again.");
-                                }
+                                try { await signInWithGoogle(); }
+                                catch { Alert.alert("Sign in failed", "Please try again."); }
                             }}
                             style={{
                                 marginTop: 14, borderRadius: 12, borderWidth: 1,
@@ -2201,7 +2199,31 @@ function SettingsScreenContent() {
                             </Text>
                             <Text style={{ fontSize: 13, color: colors.primary }}>→</Text>
                         </TouchableOpacity>
-                    )}
+                    ) : String(licenseTier ?? "FREE").toUpperCase() === "FREE" ? (
+                        /* Signed in but showing Free — offer manual re-check from Supabase */
+                        <TouchableOpacity
+                            onPress={async () => {
+                                await refreshLicense();
+                                Alert.alert(
+                                    "Plan checked",
+                                    String(licenseTier ?? "FREE").toUpperCase() !== "FREE"
+                                        ? "Your plan has been restored!"
+                                        : "No active plan found for this account. Make sure you are signed in with the same account used when you purchased."
+                                );
+                            }}
+                            style={{
+                                marginTop: 14, borderRadius: 12, borderWidth: 1,
+                                borderColor: colors.border, backgroundColor: colors.surfaceSoft,
+                                paddingHorizontal: 14, paddingVertical: 10,
+                                flexDirection: "row", alignItems: "center", gap: 8,
+                            }}
+                        >
+                            <Text style={{ fontSize: 13, color: colors.textSecondary, flex: 1 }}>
+                                Already purchased? Tap to check your plan
+                            </Text>
+                            <Text style={{ fontSize: 13, color: colors.primary }}>↻</Text>
+                        </TouchableOpacity>
+                    ) : null}
 
                     {!canCloudSync && (
                         <Text
