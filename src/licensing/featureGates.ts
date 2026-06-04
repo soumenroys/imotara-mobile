@@ -41,7 +41,7 @@ const HISTORY_DAYS: Partial<Record<LicenseTier, number>> = {
 const ALL: Record<LicenseTier, Set<FeatureKey>> = {
     FREE: new Set<FeatureKey>([
         "CLOUD_SYNC",
-        // Server enforces 10 replies/day quota. History capped at 7 days.
+        // Server enforces 20 replies/day quota. History capped at 7 days.
     ]),
     PLUS: new Set<FeatureKey>([
         "CLOUD_SYNC",
