@@ -298,24 +298,33 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const refreshLicense = async () => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.user?.id) return;
+            if (!session?.user?.id || !session.access_token) return;
 
-            const { data: licRow } = await supabase
-                .from("licenses")
-                .select("tier, expires_at, org_id")
-                .eq("user_id", session.user.id)
-                .maybeSingle();
+            // Use /api/license/status which calls resolveUserTier() — correctly handles
+            // pool_assignment > org_override > org_tier > personal > free priority chain.
+            // Direct DB reads miss pool assignments and tier overrides.
+            const { buildApiUrl } = require("../../config/api");
+            const statusRes = await fetch(buildApiUrl("/api/license/status"), {
+                method: "GET",
+                headers: { Authorization: `Bearer ${session.access_token}` },
+            });
 
-            if (!licRow) return;
+            if (!statusRes.ok) return;
+            const statusData = await statusRes.json();
+            const lic = statusData?.license;
+            if (!lic) return;
 
-            const t = String(licRow.tier || "free").toLowerCase();
+            const t = String(lic.tier || "free").toLowerCase();
             const mobileTier: LicenseTier =
                 t === "pro" ? "PREMIUM" :
                 t === "plus" ? "PLUS" :
                 t === "family" ? "FAMILY" :
                 t === "edu" ? "EDU" :
                 t === "enterprise" ? "ENTERPRISE" : "FREE";
-            const expiresAt: string | null = licRow.expires_at ?? null;
+            const expiresAt: string | null = lic.expiresAt ?? null;
+
+            // Fake licRow for org context lookup below
+            const licOrgId = statusData?.org?.orgId ?? null;
 
             await AsyncStorage.setItem(LICENSE_TIER_KEY, mobileTier);
             if (expiresAt) {
@@ -327,19 +336,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             setCloudSyncAllowed(gate("CLOUD_SYNC", mobileTier).enabled);
             setLicenseExpiresAt(expiresAt);
 
-            // ── Phase 5: org membership awareness ────────────────────────────
-            if (licRow.org_id) {
+            // ── Phase 5: org membership awareness (from /api/license/status response) ──
+            if (licOrgId) {
                 try {
-                    const [orgResult, roleResult] = await Promise.all([
-                        supabase.from("organizations").select("name").eq("id", licRow.org_id).single(),
-                        supabase.from("org_members").select("role").eq("org_id", licRow.org_id).eq("user_id", session.user.id).eq("status", "active").maybeSingle(),
-                    ]);
-                    const name = orgResult.data?.name ?? null;
-                    const role = roleResult.data?.role ?? null;
-                    setOrgId(licRow.org_id);
-                    setOrgName(name);
-                    setOrgRole(role);
-                    await AsyncStorage.setItem(ORG_CONTEXT_KEY, JSON.stringify({ orgId: licRow.org_id, orgName: name, orgRole: role }));
+                    const orgCtx = statusData?.org;
+                    const orgName = orgCtx?.orgName ?? null;
+                    const orgRole = orgCtx?.orgRole ?? null;
+                    setOrgId(licOrgId);
+                    setOrgName(orgName);
+                    setOrgRole(orgRole);
+                    await AsyncStorage.setItem(ORG_CONTEXT_KEY, JSON.stringify({ orgId: licOrgId, orgName, orgRole }));
                 } catch { /* fail open */ }
             } else {
                 setOrgId(null); setOrgName(null); setOrgRole(null);
