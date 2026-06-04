@@ -14,6 +14,7 @@ import type { LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
 import type { ToneContextPayload } from "../api/aiClient";
 import { supabase } from "../lib/supabase/client";
+import { buildApiUrl } from "../config/api";
 
 type SettingsContextValue = {
     // Emotion insight toggle for Imotara replies
@@ -303,7 +304,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             // Use /api/license/status which calls resolveUserTier() — correctly handles
             // pool_assignment > org_override > org_tier > personal > free priority chain.
             // Direct DB reads miss pool assignments and tier overrides.
-            const { buildApiUrl } = require("../../config/api");
             const statusRes = await fetch(buildApiUrl("/api/license/status"), {
                 method: "GET",
                 headers: { Authorization: `Bearer ${session.access_token}` },
