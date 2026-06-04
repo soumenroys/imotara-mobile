@@ -390,6 +390,9 @@ function SettingsScreenContent() {
 
         licenseExpiresAt,
         refreshLicense,
+        orgId,
+        orgName,
+        orgRole,
     } = useSettings();
 
     const { themeMode, toggleTheme, isDark, colors, accent, setAccent, fontSize, setFontSize } = useTheme();
@@ -2033,6 +2036,17 @@ function SettingsScreenContent() {
                         Current plan:{" "}
                         <Text style={{ fontWeight: "700", color: colors.textPrimary }}>{tierLabel}</Text>
                     </Text>
+                    {/* ── Phase 5: org membership badge ─────────────────────── */}
+                    {orgName ? (
+                        <View style={{ marginTop: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 10, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <Text style={{ fontSize: 11, color: colors.primary }}>🏢</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>
+                                Managed by{" "}
+                                <Text style={{ fontWeight: "700", color: colors.textPrimary }}>{orgName}</Text>
+                                {orgRole ? <Text style={{ color: colors.textSecondary }}> · {orgRole}</Text> : null}
+                            </Text>
+                        </View>
+                    ) : null}
                     {licenseExpiresAt ? (
                         <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
                             {new Date(licenseExpiresAt).getTime() > Date.now()

@@ -131,6 +131,14 @@ type SettingsContextValue = {
     /** Show hourly feature discovery tips in chat. Default true. */
     featureTipsEnabled: boolean;
     setFeatureTipsEnabled: (value: boolean) => void;
+
+    // ── Phase 5: Org membership awareness ──────────────────────────────────────
+    /** Org UUID if user belongs to an organisation, null otherwise. */
+    orgId:   string | null;
+    /** Display name of the organisation. */
+    orgName: string | null;
+    /** User's role in the org: owner | admin | member | null */
+    orgRole: string | null;
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -138,6 +146,7 @@ const SettingsContext = createContext<SettingsContextValue | undefined>(
 );
 
 const STORAGE_KEY = "imotara_settings_v1";
+const ORG_CONTEXT_KEY = "imotara_org_context_v1";
 
 // Keep this tiny + safe (no dependency on other files)
 function clampDelaySeconds(v: unknown, fallback: number): number {
@@ -270,6 +279,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // ✅ Licensing-derived flag (default FREE behavior: device-only)
     const [cloudSyncAllowed, setCloudSyncAllowed] = useState<boolean>(false);
     const [licenseExpiresAt, setLicenseExpiresAt] = useState<string | null>(null);
+    const [orgId,   setOrgId]   = useState<string | null>(null);
+    const [orgName, setOrgName] = useState<string | null>(null);
+    const [orgRole, setOrgRole] = useState<string | null>(null);
 
     const refreshCloudSyncAllowed = async () => {
         try {
@@ -290,7 +302,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
             const { data: licRow } = await supabase
                 .from("licenses")
-                .select("tier, expires_at")
+                .select("tier, expires_at, org_id")
                 .eq("user_id", session.user.id)
                 .maybeSingle();
 
@@ -314,6 +326,25 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
             setCloudSyncAllowed(gate("CLOUD_SYNC", mobileTier).enabled);
             setLicenseExpiresAt(expiresAt);
+
+            // ── Phase 5: org membership awareness ────────────────────────────
+            if (licRow.org_id) {
+                try {
+                    const [orgResult, roleResult] = await Promise.all([
+                        supabase.from("organizations").select("name").eq("id", licRow.org_id).single(),
+                        supabase.from("org_members").select("role").eq("org_id", licRow.org_id).eq("user_id", session.user.id).eq("status", "active").maybeSingle(),
+                    ]);
+                    const name = orgResult.data?.name ?? null;
+                    const role = roleResult.data?.role ?? null;
+                    setOrgId(licRow.org_id);
+                    setOrgName(name);
+                    setOrgRole(role);
+                    await AsyncStorage.setItem(ORG_CONTEXT_KEY, JSON.stringify({ orgId: licRow.org_id, orgName: name, orgRole: role }));
+                } catch { /* fail open */ }
+            } else {
+                setOrgId(null); setOrgName(null); setOrgRole(null);
+                await AsyncStorage.removeItem(ORG_CONTEXT_KEY);
+            }
         } catch {
             // fail-open
         }
@@ -371,11 +402,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const hydrate = async () => {
             try {
                 // ✅ hydrate settings + compute license gate in parallel
-                const [raw, rawTier, rawExpiresAt] = await Promise.all([
+                const [raw, rawTier, rawExpiresAt, rawOrg] = await Promise.all([
                     AsyncStorage.getItem(STORAGE_KEY),
                     AsyncStorage.getItem(LICENSE_TIER_KEY),
                     AsyncStorage.getItem(LICENSE_EXPIRES_AT_KEY),
+                    AsyncStorage.getItem(ORG_CONTEXT_KEY),
                 ]);
+
+                // ── Phase 5: restore org context from cache ───────────────────
+                if (alive && rawOrg) {
+                    try {
+                        const orgCtx = JSON.parse(rawOrg);
+                        if (orgCtx?.orgId)   setOrgId(orgCtx.orgId);
+                        if (orgCtx?.orgName) setOrgName(orgCtx.orgName);
+                        if (orgCtx?.orgRole) setOrgRole(orgCtx.orgRole);
+                    } catch { /* ignore */ }
+                }
 
                 // 1) Settings payload
                 if (raw) {
@@ -729,6 +771,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setCompanionReactionsEnabled,
                 featureTipsEnabled,
                 setFeatureTipsEnabled,
+                orgId,
+                orgName,
+                orgRole,
             }}
         >
             {children}
