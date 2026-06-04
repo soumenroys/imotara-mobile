@@ -10,7 +10,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_IMOTARA_API_BASE_URL": "https://imotaraapp.vercel.app",
+        "EXPO_PUBLIC_IMOTARA_API_BASE_URL": "https://www.imotara.com",
         "EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL": "true",
         "EXPO_PUBLIC_SUPABASE_URL": "https://rfsbvbqtiesswnplslln.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_XJHWBbiwctBMxav0PfoM0A_kESi6hfu",
@@ -27,7 +27,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_IMOTARA_API_BASE_URL": "https://imotaraapp.vercel.app",
+        "EXPO_PUBLIC_IMOTARA_API_BASE_URL": "https://www.imotara.com",
         "EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL": "false",
         "EXPO_PUBLIC_SUPABASE_URL": "https://rfsbvbqtiesswnplslln.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_XJHWBbiwctBMxav0PfoM0A_kESi6hfu",
