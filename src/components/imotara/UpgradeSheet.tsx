@@ -1,7 +1,8 @@
 // src/components/imotara/UpgradeSheet.tsx
 // Native upgrade modal.
-//   iOS  → Apple IAP via expo-iap (StoreKit 2). Requires App Store Connect products — see upgradePlans.ts.
-//   Android → Razorpay native checkout via react-native-razorpay.
+//   iOS     → Apple IAP via expo-iap (StoreKit 2). Requires App Store Connect products.
+//   Android → Google Play Billing via expo-iap. Requires Play Console products.
+//             Falls back to Razorpay if Google Play Billing unavailable (not recommended for new installs).
 
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -27,6 +28,9 @@ import {
     IOS_SUBSCRIPTION_SKUS,
     IOS_TOKEN_SKUS,
     iosSkuToProductId,
+    ANDROID_SUBSCRIPTION_SKUS,
+    ANDROID_TOKEN_SKUS,
+    ANDROID_SUBSCRIPTION_SET,
     type PlanPeriod,
     type PlanDef,
     type ProductId,
@@ -128,6 +132,36 @@ async function doAndroidPurchase(
     return { ok: false, error: verifyData.error ?? "Verification failed" };
 }
 
+// ── Android: Google Play Billing via expo-iap ─────────────────────────────────
+// Used in onPurchaseSuccess when Platform.OS === 'android'.
+// The actual purchase trigger happens via requestPurchase/requestSubscription in useIAP.
+
+async function verifyAndroidPurchase(
+    productId: ProductId,
+    purchaseToken: string,
+    accessToken: string,
+): Promise<{ ok: boolean; error?: string }> {
+    const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+    };
+
+    try {
+        const res = await fetchWithTimeout(
+            buildApiUrl("/api/payments/google-play/verify"),
+            { method: "POST", headers, body: JSON.stringify({ productId, purchaseToken }) },
+            30_000,
+        );
+        const data = await res.json();
+        if (data.ok) return { ok: true };
+        return { ok: false, error: data.error ?? "Google Play verification failed" };
+    } catch {
+        const polled = await pollLicenseStatus(headers, productId);
+        if (polled) return { ok: true };
+        return { ok: false, error: "Verification pending — tap Restore purchases to activate." };
+    }
+}
+
 /**
  * Polls /api/license/status until the tier matches the purchased product,
  * or times out. Handles the case where the webhook grants the license
@@ -215,7 +249,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         return () => subscription.unsubscribe();
     }, []);
 
-    // ── iOS IAP (expo-iap) ─────────────────────────────────────────────────────
+    // ── expo-iap: handles both iOS (Apple IAP) and Android (Google Play Billing) ──
     const {
         connected,
         products,
@@ -226,8 +260,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         restorePurchases,
     } = useIAP({
         onPurchaseSuccess: async (purchase: Purchase) => {
-            // expo-iap connects to Google Play on physical Android devices — ignore all events there.
-            if (Platform.OS !== "ios") return;
+            // Handles BOTH iOS and Android
             console.log("[IAP] onPurchaseSuccess:", purchase.productId, "gate=", purchaseOutcomeHandledRef.current);
             // Gate check first — whichever callback fires first (success or error) claims the gate.
             if (purchaseOutcomeHandledRef.current) return;
@@ -273,40 +306,62 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                     return;
                 }
 
-                console.log("[IAP] session: true user:", userEmail ?? "unknown");
-                const iosTransactionId = (purchase as PurchaseIOS).transactionId ?? purchase.id;
-                console.log("[IAP] verifying transactionId:", iosTransactionId);
-                // AbortSignal.timeout() is not available on Hermes — use AbortController manually.
-                const verifyAbort = new AbortController();
-                const verifyAbortTimer = setTimeout(() => verifyAbort.abort(), 35_000);
-                let verifyRes: Response;
-                try {
-                    verifyRes = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            Authorization: `Bearer ${accessToken}`,
-                        },
-                        body: JSON.stringify({ productId, transactionId: iosTransactionId }),
-                        signal: verifyAbort.signal,
-                    });
-                } finally {
-                    clearTimeout(verifyAbortTimer);
-                }
-                console.log("[IAP] verify response status:", verifyRes.status);
-                if (!verifyRes.ok) {
-                    const errBody = await verifyRes.json().catch(() => ({})) as { error?: string };
-                    Alert.alert(
-                        "Verification failed",
-                        `${errBody.error ?? "Unknown error"}. Re-open the app to retry, or tap 'Restore previous purchases'.`,
-                    );
-                    return;
-                }
-                serverVerified = true;
+                console.log("[IAP] session: true user:", userEmail ?? "unknown platform:", Platform.OS);
 
-                try {
-                    await finishTransaction({ purchase, isConsumable: isTokenPack });
-                } catch { /* safe to ignore — transaction may already be finalized */ }
+                if (Platform.OS === "android") {
+                    // ── Android: Google Play Billing verification ──────────────────
+                    const purchaseToken = (purchase as any).purchaseToken ?? (purchase as any).transactionReceipt ?? "";
+                    if (!purchaseToken) {
+                        Alert.alert("Purchase error", "No purchase token received. Please try again.");
+                        return;
+                    }
+                    const androidResult = await verifyAndroidPurchase(
+                        productId as ProductId,
+                        purchaseToken,
+                        accessToken,
+                    );
+                    if (!androidResult.ok) {
+                        Alert.alert("Verification failed", androidResult.error ?? "Try again or tap Restore purchases.");
+                        return;
+                    }
+                    serverVerified = true;
+                    try {
+                        await finishTransaction({ purchase, isConsumable: isTokenPack });
+                    } catch { /* safe to ignore */ }
+                } else {
+                    // ── iOS: Apple IAP verification ────────────────────────────────
+                    const iosTransactionId = (purchase as PurchaseIOS).transactionId ?? purchase.id;
+                    console.log("[IAP] verifying transactionId:", iosTransactionId);
+                    const verifyAbort = new AbortController();
+                    const verifyAbortTimer = setTimeout(() => verifyAbort.abort(), 35_000);
+                    let verifyRes: Response;
+                    try {
+                        verifyRes = await fetch(buildApiUrl("/api/license/verify-apple-purchase"), {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                Authorization: `Bearer ${accessToken}`,
+                            },
+                            body: JSON.stringify({ productId, transactionId: iosTransactionId }),
+                            signal: verifyAbort.signal,
+                        });
+                    } finally {
+                        clearTimeout(verifyAbortTimer);
+                    }
+                    console.log("[IAP] verify response status:", verifyRes.status);
+                    if (!verifyRes.ok) {
+                        const errBody = await verifyRes.json().catch(() => ({})) as { error?: string };
+                        Alert.alert(
+                            "Verification failed",
+                            `${errBody.error ?? "Unknown error"}. Re-open the app to retry, or tap 'Restore previous purchases'.`,
+                        );
+                        return;
+                    }
+                    serverVerified = true;
+                    try {
+                        await finishTransaction({ purchase, isConsumable: isTokenPack });
+                    } catch { /* safe to ignore — transaction may already be finalized */ }
+                }
 
                 try { await onPurchaseComplete(); } catch { /* best-effort */ }
                 const tierName = isTokenPack ? "credits" : (productId.includes("pro") ? "Pro" : "Plus");
@@ -331,7 +386,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
             }
         },
         onPurchaseError: (error) => {
-            if (Platform.OS !== "ios") return;
+            // Handle errors on both platforms
             const code = (error as any).code ?? "";
             const msg = (error as any).message ?? "";
             console.log("[IAP] onPurchaseError:", code, msg, "gate=", purchaseOutcomeHandledRef.current);
@@ -361,9 +416,15 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     });
 
     useEffect(() => {
-        if (Platform.OS !== "ios" || !connected || !visible) return;
-        fetchProducts({ skus: [...IOS_SUBSCRIPTION_SKUS], type: "subs" }).catch(() => {});
-        fetchProducts({ skus: [...IOS_TOKEN_SKUS], type: "in-app" }).catch(() => {});
+        if (!connected || !visible) return;
+        if (Platform.OS === "ios") {
+            fetchProducts({ skus: [...IOS_SUBSCRIPTION_SKUS], type: "subs" }).catch(() => {});
+            fetchProducts({ skus: [...IOS_TOKEN_SKUS], type: "in-app" }).catch(() => {});
+        } else if (Platform.OS === "android") {
+            // Google Play Billing — fetch both subscription and in-app products
+            fetchProducts({ skus: [...ANDROID_SUBSCRIPTION_SKUS], type: "subs" }).catch(() => {});
+            fetchProducts({ skus: [...ANDROID_TOKEN_SKUS], type: "in-app" }).catch(() => {});
+        }
     }, [connected, visible]);
 
     // expo-iap v3: in-app products → products[], auto-renewable → subscriptions[]
@@ -509,33 +570,38 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         }
     };
 
-    // ── Android purchase ───────────────────────────────────────────────────────
+    // ── Android: Google Play Billing via expo-iap ─────────────────────────────
+    // The actual purchase result is handled in onPurchaseSuccess above.
+    // This function just triggers the Google Play purchase sheet.
     const handleAndroidPurchase = async (productId: ProductId) => {
         if (purchasing || signingIn) return;
         if (isSignedInRef.current === false) {
             promptSignIn(() => handleAndroidPurchase(productId));
             return;
         }
-        const token = accessTokenRef.current;
-        if (!token) {
-            // Session not cached yet (component just mounted) — prompt sign-in
+        if (!accessTokenRef.current) {
             promptSignIn(() => handleAndroidPurchase(productId));
             return;
         }
+        if (!connected) {
+            Alert.alert("Store unavailable", "Google Play Billing is not connected. Please try again.");
+            return;
+        }
         setPurchasing(productId);
+        purchaseOutcomeHandledRef.current = false;
         try {
-            const result = await doAndroidPurchase(productId, token, userEmail);
-            if (result.ok) {
-                try { await onPurchaseComplete(); } catch { /* best-effort */ }
-                const isTokenPack = productId.startsWith("tokens_");
-                const tierName = isTokenPack ? "credits" : (productId.includes("pro") ? "Pro" : "Plus");
-                setPurchaseSuccess({ tierName, isTokenPack });
-            } else if (result.error !== "cancelled") {
-                Alert.alert("Payment failed", result.error ?? "Please try again.");
+            const isSubscription = ANDROID_SUBSCRIPTION_SET.has(productId);
+            if (isSubscription) {
+                await requestPurchase({ type: "subs", request: { android: { skus: [productId] } } });
+            } else {
+                await requestPurchase({ type: "in-app", request: { android: { skus: [productId] } } });
             }
-        } catch {
-            Alert.alert("Payment failed", "Network error. Please check your connection and try again.");
-        } finally {
+            // Result handled in onPurchaseSuccess — setPurchasing(null) called in finally there
+        } catch (err: any) {
+            const msg = String(err?.message ?? err ?? "");
+            if (!msg.toLowerCase().includes("cancel")) {
+                Alert.alert("Purchase failed", msg || "Please try again.");
+            }
             setPurchasing(null);
         }
     };

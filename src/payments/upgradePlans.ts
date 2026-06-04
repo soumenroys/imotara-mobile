@@ -12,7 +12,10 @@
 //     com.imotara.imotara.tokens_600    ₹199
 //     com.imotara.imotara.tokens_1800   ₹499
 //
-// Android: product IDs match the server PRODUCT_CATALOG keys exactly.
+// Android Google Play — product IDs match the server PRODUCT_CATALOG keys exactly.
+//   Create these in Play Console → Monetise → Products:
+//   Subscriptions: plus_monthly, plus_annual, pro_monthly, pro_annual
+//   In-app products: tokens_100, tokens_250, tokens_600, tokens_1800
 
 export type PlanPeriod  = "monthly" | "annual";
 export type PlanTier    = "plus" | "pro";
@@ -45,6 +48,17 @@ export function iosSkuToProductId(sku: string): ProductId | null {
     const id = sku.replace(`${IOS_BUNDLE}.`, "");
     return VALID_IDS.includes(id) ? (id as ProductId) : null;
 }
+
+// Android Google Play SKUs — same as product IDs (no bundle prefix)
+export const ANDROID_SUBSCRIPTION_SKUS = [
+    "plus_monthly", "plus_annual", "pro_monthly", "pro_annual",
+] as const;
+
+export const ANDROID_TOKEN_SKUS = [
+    "tokens_100", "tokens_250", "tokens_600", "tokens_1800",
+] as const;
+
+export const ANDROID_SUBSCRIPTION_SET = new Set<string>(ANDROID_SUBSCRIPTION_SKUS);
 
 export type PlanDef = {
     id: PlanId;

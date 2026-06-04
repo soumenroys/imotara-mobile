@@ -2080,6 +2080,44 @@ function SettingsScreenContent() {
                     ) : null}
                 </AppSurface>
 
+                {/* D2: Apply for organisation plan — visible to all users */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600", marginBottom: 4 }}>Organisation plan</Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        Deploy Imotara for your company, NGO, school, or healthcare organisation. Manage members, analytics, and bulk licensing.
+                    </Text>
+                    <TouchableOpacity
+                        onPress={() => Linking.openURL("https://imotara.com/org/new")}
+                        style={{ alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: "rgba(99,102,241,0.35)", backgroundColor: "rgba(99,102,241,0.12)" }}
+                    >
+                        <Text style={{ fontSize: 12, fontWeight: "600", color: colors.primary }}>Apply for org plan →</Text>
+                    </TouchableOpacity>
+                </AppSurface>
+
+                {/* D4: Subscription cancel/manage — visible for paid personal plans */}
+                {!orgId && licenseTier && licenseTier !== "FREE" && (
+                    <AppSurface style={{ marginBottom: 16 }}>
+                        <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600", marginBottom: 4 }}>Manage subscription</Text>
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                            Cancel or modify your subscription through {Platform.OS === "ios" ? "Apple" : "Google Play"} settings.
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => {
+                                if (Platform.OS === "ios") {
+                                    Linking.openURL("itms-apps://subscriptions");
+                                } else {
+                                    Linking.openURL("https://play.google.com/store/account/subscriptions");
+                                }
+                            }}
+                            style={{ alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft }}
+                        >
+                            <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                                {Platform.OS === "ios" ? "Manage in App Store →" : "Manage in Google Play →"}
+                            </Text>
+                        </TouchableOpacity>
+                    </AppSurface>
+                )}
+
                 {/* Upgrade Plan card — hidden when user is on org plan (org manages license) */}
                 {!orgId && <AppSurface style={{ marginBottom: 16 }}>
                     <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "600", marginBottom: 4 }}>
