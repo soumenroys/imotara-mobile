@@ -2080,8 +2080,8 @@ function SettingsScreenContent() {
                     ) : null}
                 </AppSurface>
 
-                {/* Upgrade Plan card — native IAP (iOS) / Razorpay (Android) */}
-                <AppSurface style={{ marginBottom: 16 }}>
+                {/* Upgrade Plan card — hidden when user is on org plan (org manages license) */}
+                {!orgId && <AppSurface style={{ marginBottom: 16 }}>
                     <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "600", marginBottom: 4 }}>
                         Upgrade your plan
                     </Text>
@@ -2104,7 +2104,7 @@ function SettingsScreenContent() {
                             View plans →
                         </Text>
                     </TouchableOpacity>
-                </AppSurface>
+                </AppSurface>}
 
                 {/* Support / Donation card
                     - iOS: Apple IAP "tip jar" via StoreKit 2 (guideline 3.1.1 compliant)
