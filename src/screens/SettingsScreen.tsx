@@ -30,7 +30,7 @@ import {
     InteractionManager,
 } from "react-native";
 
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
@@ -336,6 +336,7 @@ export default function SettingsScreen() {
 
 function SettingsScreenContent() {
     const { accessToken, signOut, signInWithGoogle } = useAuth();
+    const navigation = useNavigation<any>();
 
     // Keep compatibility with your current store shape, but allow optional newer fields
     const store = useHistoryStore() as any;
@@ -2091,6 +2092,20 @@ function SettingsScreenContent() {
                         style={{ alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: "rgba(99,102,241,0.35)", backgroundColor: "rgba(99,102,241,0.12)" }}
                     >
                         <Text style={{ fontSize: 12, fontWeight: "600", color: colors.primary }}>Apply for org plan →</Text>
+                    </TouchableOpacity>
+                </AppSurface>
+
+                {/* Join Imotara Movement */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600", marginBottom: 4 }}>🌿 Join Imotara Movement</Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        Share your lived experience, empathy, and care to support others as a peer Wellness Companion on Imotara Connect.
+                    </Text>
+                    <TouchableOpacity
+                        onPress={() => navigation.navigate("Connect", { startRegister: true })}
+                        style={{ alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: "rgba(52,211,153,0.35)", backgroundColor: "rgba(52,211,153,0.12)" }}
+                    >
+                        <Text style={{ fontSize: 12, fontWeight: "600", color: "#34d399" }}>🤝 As Wellness Companion →</Text>
                     </TouchableOpacity>
                 </AppSurface>
 

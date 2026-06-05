@@ -15,6 +15,7 @@ import { useColors } from "../../theme/ThemeContext";
 import { useAuth } from "../../auth/AuthContext";
 import { buildApiUrl } from "../../config/api";
 import { supabase } from "../../lib/supabase/client";
+import { useRoute } from "@react-navigation/native";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Consultant {
@@ -105,8 +106,16 @@ export default function ConnectScreen() {
     const colors = useColors();
     const insets = useSafeAreaInsets();
     const { accessToken, user } = useAuth();
+    const route = useRoute<any>();
 
     const [view, setView] = useState<ConnectView>({ name: "browse" });
+
+    // Navigate directly to register when launched from "Join Imotara Movement" in Settings
+    useEffect(() => {
+        if (route.params?.startRegister) {
+            setView({ name: "register" });
+        }
+    }, [route.params?.startRegister]);
 
     const s = styles(colors);
 
@@ -140,7 +149,8 @@ export default function ConnectScreen() {
         return <DashboardView colors={colors} insets={insets}
             accessToken={accessToken}
             onBack={() => setView({ name: "browse" })}
-            onJoinSession={(s) => setView({ name: "chat", session: s })} />;
+            onJoinSession={(s) => setView({ name: "chat", session: s })}
+            onRegister={() => setView({ name: "register" })} />;
     }
     if (view.name === "register") {
         return <RegisterView colors={colors} insets={insets}
@@ -1216,10 +1226,11 @@ function EmergencyModal({ visible, onClose, colors }: { visible: boolean; onClos
 }
 
 // ── Dashboard View ─────────────────────────────────────────────────────────────
-function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
+function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onRegister }: {
     colors: any; insets: any; accessToken: string | null;
     onBack: () => void;
     onJoinSession: (session: Session) => void;
+    onRegister?: () => void;
 }) {
     const [profile, setProfile]             = useState<any>(null);
     const [earnings, setEarnings]           = useState<any>(null);
@@ -1484,7 +1495,12 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                 <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
                     <View style={s.card}>
                         <Text style={[s.cardName, { marginBottom: 8 }]}>Not registered as a companion</Text>
-                        <Text style={s.cardBio}>Browse the Connect tab, or register to become a companion.</Text>
+                        <Text style={[s.cardBio, { marginBottom: 12 }]}>Join Imotara as a Wellness Companion and help others through peer support.</Text>
+                        {onRegister && (
+                            <TouchableOpacity style={styles(colors).primaryBtn} onPress={onRegister}>
+                                <Text style={styles(colors).primaryBtnText}>🌿 Register as Wellness Companion</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </ScrollView>
             ) : (
@@ -1821,6 +1837,81 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
 }
 
 // ── Register View ──────────────────────────────────────────────────────────────
+
+const COUNTRY_CODES_DIAL = [
+    { code: "+91",  name: "India",          flag: "🇮🇳" },
+    { code: "+1",   name: "USA / Canada",   flag: "🇺🇸" },
+    { code: "+44",  name: "United Kingdom", flag: "🇬🇧" },
+    { code: "+61",  name: "Australia",      flag: "🇦🇺" },
+    { code: "+64",  name: "New Zealand",    flag: "🇳🇿" },
+    { code: "+65",  name: "Singapore",      flag: "🇸🇬" },
+    { code: "+60",  name: "Malaysia",       flag: "🇲🇾" },
+    { code: "+63",  name: "Philippines",    flag: "🇵🇭" },
+    { code: "+66",  name: "Thailand",       flag: "🇹🇭" },
+    { code: "+62",  name: "Indonesia",      flag: "🇮🇩" },
+    { code: "+84",  name: "Vietnam",        flag: "🇻🇳" },
+    { code: "+880", name: "Bangladesh",     flag: "🇧🇩" },
+    { code: "+92",  name: "Pakistan",       flag: "🇵🇰" },
+    { code: "+94",  name: "Sri Lanka",      flag: "🇱🇰" },
+    { code: "+977", name: "Nepal",          flag: "🇳🇵" },
+    { code: "+975", name: "Bhutan",         flag: "🇧🇹" },
+    { code: "+960", name: "Maldives",       flag: "🇲🇻" },
+    { code: "+971", name: "UAE",            flag: "🇦🇪" },
+    { code: "+966", name: "Saudi Arabia",   flag: "🇸🇦" },
+    { code: "+974", name: "Qatar",          flag: "🇶🇦" },
+    { code: "+965", name: "Kuwait",         flag: "🇰🇼" },
+    { code: "+973", name: "Bahrain",        flag: "🇧🇭" },
+    { code: "+968", name: "Oman",           flag: "🇴🇲" },
+    { code: "+962", name: "Jordan",         flag: "🇯🇴" },
+    { code: "+972", name: "Israel",         flag: "🇮🇱" },
+    { code: "+49",  name: "Germany",        flag: "🇩🇪" },
+    { code: "+33",  name: "France",         flag: "🇫🇷" },
+    { code: "+39",  name: "Italy",          flag: "🇮🇹" },
+    { code: "+34",  name: "Spain",          flag: "🇪🇸" },
+    { code: "+31",  name: "Netherlands",    flag: "🇳🇱" },
+    { code: "+46",  name: "Sweden",         flag: "🇸🇪" },
+    { code: "+47",  name: "Norway",         flag: "🇳🇴" },
+    { code: "+45",  name: "Denmark",        flag: "🇩🇰" },
+    { code: "+41",  name: "Switzerland",    flag: "🇨🇭" },
+    { code: "+81",  name: "Japan",          flag: "🇯🇵" },
+    { code: "+82",  name: "South Korea",    flag: "🇰🇷" },
+    { code: "+86",  name: "China",          flag: "🇨🇳" },
+];
+
+const COC_CLAUSES_REG = [
+    "I am a peer supporter, not a licensed clinical professional, and I will not present myself as a therapist, psychiatrist, or medical doctor.",
+    "I will not provide diagnosis, medical advice, prescriptions, or treatment plans of any kind.",
+    "I will maintain strict confidentiality of all user conversations and never share personally identifiable information with third parties.",
+    "I will never solicit personal contact information (phone number, home address, personal email) from users outside the Imotara platform.",
+    "I will immediately refer users to emergency services whenever I believe there is risk to life, and end the session if necessary.",
+    "I will not engage in any romantic, sexual, or emotionally exploitative conduct with users at any time.",
+    "I accept that Imotara may suspend or terminate my account without prior notice if I violate this Code of Conduct or the Platform's Terms of Service.",
+    "I understand that session summaries or transcripts may be reviewed by Imotara's Trust & Safety team solely for quality assurance and compliance purposes.",
+    "I will not use sessions to advertise competing services, redirect users to external platforms, or solicit payments outside the Imotara wallet.",
+    "I commit to maintaining reasonable response times and notifying users promptly if I need to cancel a scheduled session.",
+    "I agree to uphold Imotara's community standards of respect, empathy, and non-discrimination at all times.",
+];
+
+const PLATFORM_DISCLAIMER_REG = [
+    "Imotara Connect is a peer-support marketplace, not a medical or mental health service. Conversations with Companions do not constitute therapy, counselling, or clinical treatment.",
+    "All per-minute session charges are processed through the Imotara wallet system. Session fees are non-refundable once a session is in progress, except in cases of verified technical failure.",
+    "Imotara is not responsible for advice given by Companions and does not guarantee outcomes. Users seek support at their own discretion.",
+    "All disputes between users and Companions must be submitted through Imotara's in-platform resolution process within 7 days of the session.",
+    "Imotara reserves the right to modify payout rates, platform fees, and policies with 30 days' notice. Continued use constitutes acceptance.",
+];
+
+const AVAIL_TIMEZONES_REG = [
+    "Asia/Kolkata", "Asia/Dubai", "Asia/Singapore", "Asia/Tokyo",
+    "Asia/Seoul", "Asia/Shanghai", "Asia/Dhaka", "Asia/Karachi",
+    "Europe/London", "Europe/Paris", "Europe/Berlin", "Europe/Moscow",
+    "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+    "America/Sao_Paulo", "Australia/Sydney", "Pacific/Auckland",
+];
+
+const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+interface AvailSlot { days: string[]; start: string; end: string; timezone: string; }
+
 function ChipSelector({ label, options, selected, onToggle, colors }: {
     label: string; options: string[]; selected: string[];
     onToggle: (v: string) => void; colors: any;
@@ -1846,46 +1937,164 @@ function ChipSelector({ label, options, selected, onToggle, colors }: {
     );
 }
 
+function TField({ label, value, onChange, placeholder, multiline, keyboard, colors }: {
+    label: string; value: string; onChange: (v: string) => void;
+    placeholder?: string; multiline?: boolean; keyboard?: any; colors: any;
+}) {
+    const s = styles(colors);
+    return (
+        <View style={{ marginBottom: 12 }}>
+            <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>{label}</Text>
+            <TextInput
+                style={[s.messageInput, multiline && { minHeight: 80, textAlignVertical: "top" }]}
+                value={value} onChangeText={onChange}
+                placeholder={placeholder} placeholderTextColor={colors.textSecondary}
+                multiline={multiline} keyboardType={keyboard ?? "default"}
+            />
+        </View>
+    );
+}
+
+function RRow({ label, value, colors }: { label: string; value: string; colors: any }) {
+    if (!value) return null;
+    return (
+        <View style={{ marginBottom: 10 }}>
+            <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 2 }}>{label}</Text>
+            <Text style={{ fontSize: 14, color: colors.textPrimary }}>{value}</Text>
+        </View>
+    );
+}
+
+function RegCheckbox({ value, onPress, label, colors }: { value: boolean; onPress: () => void; label: string; colors: any }) {
+    return (
+        <TouchableOpacity style={{ flexDirection: "row", gap: 10, alignItems: "flex-start", marginBottom: 12 }}
+            onPress={onPress} activeOpacity={0.7}>
+            <View style={{
+                width: 22, height: 22, borderRadius: 6, borderWidth: 2, marginTop: 1,
+                borderColor: value ? colors.primary : colors.border,
+                backgroundColor: value ? colors.primary : "transparent",
+                alignItems: "center", justifyContent: "center",
+            }}>
+                {value && <Ionicons name="checkmark" size={14} color="#fff" />}
+            </View>
+            <Text style={{ color: colors.textPrimary, fontSize: 13, flex: 1, lineHeight: 20 }}>{label}</Text>
+        </TouchableOpacity>
+    );
+}
+
 function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
     colors: any; insets: any; accessToken: string | null;
     onBack: () => void; onSuccess: () => void;
 }) {
+    const TOTAL_STEPS = 5;
     const [step, setStep] = useState(1);
-    const [form, setForm] = useState({
-        display_name: "", gender: "", bio: "",
-        expertise_tags: [] as string[],
-        languages: [] as string[],
-        rate_per_min: "10", currency_code: "INR",
-        availability_note: "", coc_agreed: false,
-    });
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
     const s = styles(colors);
 
-    function update(field: string, value: string | boolean | string[]) {
-        setForm((f) => ({ ...f, [field]: value }));
-    }
+    // Step 1
+    const [displayName, setDisplayName] = useState("");
+    const [gender, setGender] = useState("");
+    const [contactEmail, setContactEmail] = useState("");
+    const [contactPhone, setContactPhone] = useState("");
+    const [countryCode, setCountryCode] = useState("+91");
+    const [websiteUrl, setWebsiteUrl] = useState("");
+    const [socialLinks, setSocialLinks] = useState<string[]>(["", ""]);
+    const [photoUrl, setPhotoUrl] = useState("");
+    const [expertiseTags, setExpertiseTags] = useState<string[]>([]);
+    const [languages, setLanguages] = useState<string[]>([]);
+    const [dialPickerOpen, setDialPickerOpen] = useState(false);
 
-    function toggleItem(field: "expertise_tags" | "languages", value: string) {
-        setForm((f) => {
-            const arr = f[field];
-            return { ...f, [field]: arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value] };
-        });
+    // Step 2
+    const [bio, setBio] = useState("");
+    const [ratePerMin, setRatePerMin] = useState("10");
+    const [currencyCode, setCurrencyCode] = useState("INR");
+    const [availSlots, setAvailSlots] = useState<AvailSlot[]>([
+        { days: [], start: "09:00", end: "21:00", timezone: "Asia/Kolkata" },
+    ]);
+    const [tzPickerIdx, setTzPickerIdx] = useState<number | null>(null);
+
+    // Step 3
+    const [payoutMethod, setPayoutMethod] = useState<"upi" | "paypal" | "bank_in" | "bank_int" | "">("");
+    const [upiId, setUpiId] = useState("");
+    const [paypalEmail, setPaypalEmail] = useState("");
+    const [bankAcc, setBankAcc] = useState("");
+    const [bankIfsc, setBankIfsc] = useState("");
+    const [bankSwift, setBankSwift] = useState("");
+    const [bankIban, setBankIban] = useState("");
+
+    // Step 4
+    const [consent1, setConsent1] = useState(false);
+    const [consent2, setConsent2] = useState(false);
+    const [consent3, setConsent3] = useState(false);
+    const [consent4, setConsent4] = useState(false);
+    const [consent5, setConsent5] = useState(false);
+
+    // Step 5
+    const [agreeInfoTrue, setAgreeInfoTrue] = useState(false);
+    const [digitalSig, setDigitalSig] = useState("");
+
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+
+    // Auto-detect country code from device timezone
+    useEffect(() => {
+        try {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+            const TZ_MAP: Record<string, string> = {
+                "Asia/Kolkata": "+91", "Asia/Calcutta": "+91",
+                "Asia/Dubai": "+971",  "Asia/Singapore": "+65",
+                "Asia/Tokyo": "+81",   "Asia/Seoul": "+82",
+                "Asia/Shanghai": "+86","Asia/Dhaka": "+880",
+                "Asia/Karachi": "+92", "Asia/Colombo": "+94",
+                "Europe/London": "+44","Europe/Paris": "+33",
+                "Europe/Berlin": "+49","America/New_York": "+1",
+                "America/Chicago": "+1","America/Denver": "+1",
+                "America/Los_Angeles": "+1","America/Sao_Paulo": "+55",
+                "Australia/Sydney": "+61","Pacific/Auckland": "+64",
+            };
+            const detected = TZ_MAP[tz];
+            if (detected) setCountryCode(detected);
+        } catch { /* ignore */ }
+    }, []);
+
+    function buildPayoutInfo() {
+        if (payoutMethod === "upi")      return { method: "upi",      upi_id: upiId.trim() };
+        if (payoutMethod === "paypal")   return { method: "paypal",   paypal_email: paypalEmail.trim() };
+        if (payoutMethod === "bank_in")  return { method: "bank_in",  account_number: bankAcc.trim(), ifsc: bankIfsc.trim() };
+        if (payoutMethod === "bank_int") return { method: "bank_int", swift: bankSwift.trim(), iban: bankIban.trim() };
+        return null;
     }
 
     async function submit() {
-        if (!form.coc_agreed) { setError("You must agree to the Code of Conduct."); return; }
+        if (!agreeInfoTrue) { setError("Please confirm all submitted information is true."); return; }
+        if (!digitalSig.trim()) { setError("Please enter your name as digital signature."); return; }
         if (!accessToken) { setError("Sign in required."); return; }
-        if (form.expertise_tags.length === 0) { setError("Select at least one specialty."); return; }
-        if (form.languages.length === 0) { setError("Select at least one language."); return; }
         setLoading(true); setError("");
         try {
+            const fullPhone = contactPhone.trim() ? `${countryCode}${contactPhone.trim()}` : "";
+            const filteredSocials = socialLinks.filter((l) => l.trim().length > 0);
+            const availWindows = availSlots
+                .filter((sl) => sl.days.length > 0)
+                .map((sl) => ({ days: sl.days, start: sl.start, end: sl.end, timezone: sl.timezone }));
             const res = await fetch(buildApiUrl("/api/connect/consultant/register"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({
-                    ...form,
-                    rate_per_min: parseFloat(form.rate_per_min),
+                    display_name:        displayName.trim(),
+                    gender,
+                    contact_email:       contactEmail.trim() || null,
+                    contact_phone:       fullPhone || null,
+                    website_url:         websiteUrl.trim() || null,
+                    social_links:        filteredSocials.length > 0 ? filteredSocials : null,
+                    photo_url:           photoUrl.trim() || null,
+                    bio:                 bio.trim(),
+                    expertise_tags:      expertiseTags,
+                    languages,
+                    rate_per_min:        parseFloat(ratePerMin),
+                    currency_code:       currencyCode,
+                    availability_windows: availWindows.length > 0 ? availWindows : null,
+                    payout_info:         buildPayoutInfo(),
+                    coc_agreed:          true,
+                    digital_signature:   digitalSig.trim(),
                 }),
             });
             const d = await res.json();
@@ -1898,141 +2107,416 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
         }
     }
 
-    function textField(label: string, field: string, placeholder?: string, multiline = false) {
-        return (
-            <View style={{ marginBottom: 12 }}>
-                <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>{label}</Text>
-                <TextInput
-                    style={[s.messageInput, multiline && { minHeight: 80 }]}
-                    value={(form as any)[field]}
-                    onChangeText={(v) => update(field, v)}
-                    placeholder={placeholder}
-                    placeholderTextColor={colors.textSecondary}
-                    multiline={multiline}
-                />
-            </View>
-        );
-    }
+    const step1Valid = displayName.trim().length > 0 && gender.length > 0 &&
+        expertiseTags.length > 0 && languages.length > 0;
+    const step2Valid = bio.trim().length >= 10 && bio.trim().length <= 500 && parseFloat(ratePerMin) > 0;
+    let step3Valid = false;
+    if (payoutMethod === "upi")           step3Valid = upiId.trim().length > 0;
+    else if (payoutMethod === "paypal")   step3Valid = paypalEmail.trim().length > 0;
+    else if (payoutMethod === "bank_in")  step3Valid = bankAcc.trim().length > 0 && bankIfsc.trim().length > 0;
+    else if (payoutMethod === "bank_int") step3Valid = bankSwift.trim().length > 0 && bankIban.trim().length > 0;
+    const step4Valid = consent1 && consent2 && consent3 && consent4 && consent5;
+    const step5Valid = agreeInfoTrue && digitalSig.trim().length > 0;
 
     return (
         <KeyboardAvoidingView style={[s.container, { paddingTop: insets.top }]}
             behavior={Platform.OS === "ios" ? "padding" : undefined}>
+
             <View style={s.header}>
-                <TouchableOpacity onPress={step > 1 ? () => setStep(step - 1) : onBack} style={s.backBtn}>
+                <TouchableOpacity onPress={step > 1 ? () => { setStep(step - 1); setError(""); } : onBack} style={s.backBtn}>
                     <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
                 </TouchableOpacity>
-                <Text style={s.headerTitle}>Become a Companion ({step}/3)</Text>
+                <Text style={s.headerTitle}>Become a Companion ({step}/{TOTAL_STEPS})</Text>
                 <View style={{ width: 36 }} />
             </View>
 
-            <ScrollView contentContainerStyle={{ padding: 20 }}>
+            <View style={{ height: 3, backgroundColor: colors.border }}>
+                <View style={{ height: 3, width: `${(step / TOTAL_STEPS) * 100}%` as any, backgroundColor: colors.primary }} />
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
+
+                {/* ── STEP 1: Profile & Contact ─────────────────────────── */}
                 {step === 1 && (
                     <View>
-                        {textField("Display Name", "display_name", "Your name as shown to users")}
+                        <Text style={[s.cardName, { marginBottom: 16 }]}>Step 1 — Profile & Contact</Text>
+
+                        <TField label="Display Name *" value={displayName} onChange={setDisplayName}
+                            placeholder="Your name as shown to users" colors={colors} />
+
                         <View style={{ marginBottom: 12 }}>
-                            <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Gender</Text>
+                            <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Gender *</Text>
                             <View style={{ flexDirection: "row", gap: 8 }}>
-                                {["male", "female"].map((g) => (
+                                {([ ["male","👨 Male"], ["female","👩 Female"] ] as [string,string][]).map(([g, lbl]) => (
                                     <TouchableOpacity key={g}
-                                        style={[s.durationBtn, form.gender === g && s.durationBtnActive, { flex: 1 }]}
-                                        onPress={() => update("gender", g)}>
-                                        <Text style={[s.durationBtnText, form.gender === g && s.durationBtnTextActive]}>
-                                            {g === "male" ? "👨 Male" : "👩 Female"}
-                                        </Text>
+                                        style={[s.durationBtn, gender===g && s.durationBtnActive, { flex: 1 }]}
+                                        onPress={() => setGender(g)}>
+                                        <Text style={[s.durationBtnText, gender===g && s.durationBtnTextActive]}>{lbl}</Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
                         </View>
-                        <ChipSelector
-                            label="Specialties (select all that apply)"
-                            options={EXPERTISE_OPTIONS}
-                            selected={form.expertise_tags}
-                            onToggle={(v) => toggleItem("expertise_tags", v)}
-                            colors={colors}
-                        />
-                        <ChipSelector
-                            label="Languages spoken"
-                            options={LANGUAGE_OPTIONS}
-                            selected={form.languages}
-                            onToggle={(v) => toggleItem("languages", v)}
-                            colors={colors}
-                        />
-                        <TouchableOpacity
-                            style={[s.primaryBtn, (!form.display_name || !form.gender || form.expertise_tags.length === 0 || form.languages.length === 0) && { opacity: 0.5 }]}
-                            disabled={!form.display_name || !form.gender || form.expertise_tags.length === 0 || form.languages.length === 0}
-                            onPress={() => setStep(2)}>
-                            <Text style={s.primaryBtnText}>Next</Text>
+
+                        <TField label="Contact Email" value={contactEmail} onChange={setContactEmail}
+                            placeholder="your@email.com" keyboard="email-address" colors={colors} />
+
+                        <View style={{ marginBottom: 12 }}>
+                            <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Contact Phone</Text>
+                            <View style={{ flexDirection: "row", gap: 8 }}>
+                                <TouchableOpacity onPress={() => setDialPickerOpen(true)}
+                                    style={[s.messageInput, { paddingHorizontal: 10, minWidth: 88, justifyContent: "center", alignItems: "center", flexDirection: "row", gap: 4 }]}>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 13 }}>
+                                        {COUNTRY_CODES_DIAL.find(c => c.code === countryCode)?.flag ?? "🌐"} {countryCode}
+                                    </Text>
+                                    <Ionicons name="chevron-down" size={11} color={colors.textSecondary} />
+                                </TouchableOpacity>
+                                <TextInput style={[s.messageInput, { flex: 1 }]}
+                                    value={contactPhone} onChangeText={setContactPhone}
+                                    placeholder="Phone number" placeholderTextColor={colors.textSecondary}
+                                    keyboardType="phone-pad" />
+                            </View>
+                        </View>
+
+                        <TField label="Website (optional)" value={websiteUrl} onChange={setWebsiteUrl}
+                            placeholder="https://yoursite.com" keyboard="url" colors={colors} />
+
+                        <View style={{ marginBottom: 12 }}>
+                            <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Social Links (optional)</Text>
+                            {socialLinks.map((link, idx) => (
+                                <View key={idx} style={{ flexDirection: "row", gap: 8, marginBottom: 6 }}>
+                                    <TextInput style={[s.messageInput, { flex: 1 }]}
+                                        value={link}
+                                        onChangeText={(v) => { const n=[...socialLinks]; n[idx]=v; setSocialLinks(n); }}
+                                        placeholder={`Link ${idx+1} — LinkedIn, X, Instagram…`}
+                                        placeholderTextColor={colors.textSecondary}
+                                        keyboardType="url" autoCapitalize="none" />
+                                    {socialLinks.length > 1 && (
+                                        <TouchableOpacity style={[s.durationBtn, { paddingHorizontal: 10 }]}
+                                            onPress={() => setSocialLinks(socialLinks.filter((_,i)=>i!==idx))}>
+                                            <Ionicons name="close" size={16} color={colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            ))}
+                            {socialLinks.length < 5 && (
+                                <TouchableOpacity style={[s.durationBtn, { alignSelf: "flex-start" }]}
+                                    onPress={() => setSocialLinks([...socialLinks, ""])}>
+                                    <Text style={s.durationBtnText}>+ Add Link</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        <TField label="Profile Photo URL (optional)" value={photoUrl} onChange={setPhotoUrl}
+                            placeholder="https://… (upload via web after registration)" keyboard="url" colors={colors} />
+
+                        <ChipSelector label="Specialties *" options={EXPERTISE_OPTIONS}
+                            selected={expertiseTags}
+                            onToggle={(v) => setExpertiseTags(prev => prev.includes(v) ? prev.filter(x=>x!==v) : [...prev,v])}
+                            colors={colors} />
+                        <ChipSelector label="Languages Spoken *" options={LANGUAGE_OPTIONS}
+                            selected={languages}
+                            onToggle={(v) => setLanguages(prev => prev.includes(v) ? prev.filter(x=>x!==v) : [...prev,v])}
+                            colors={colors} />
+
+                        <TouchableOpacity style={[s.primaryBtn, !step1Valid && { opacity: 0.5 }]}
+                            disabled={!step1Valid} onPress={() => { setError(""); setStep(2); }}>
+                            <Text style={s.primaryBtnText}>Next →</Text>
                         </TouchableOpacity>
                     </View>
                 )}
 
+                {/* ── STEP 2: Bio & Availability ───────────────────────── */}
                 {step === 2 && (
                     <View>
-                        {textField("Bio (max 500 chars)", "bio", "Tell users about your background and approach", true)}
+                        <Text style={[s.cardName, { marginBottom: 16 }]}>Step 2 — Bio & Availability</Text>
+
+                        <TField label="Bio * (10–500 chars)" value={bio} onChange={setBio}
+                            placeholder="Tell users about your background and approach" multiline colors={colors} />
+                        {bio.length > 0 && (
+                            <Text style={{ fontSize: 11, color: bio.length > 500 ? "#ef4444" : colors.textSecondary, marginTop: -8, marginBottom: 8 }}>
+                                {bio.length}/500
+                            </Text>
+                        )}
+
                         <View style={{ marginBottom: 12 }}>
-                            <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Rate per minute</Text>
+                            <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Rate per minute *</Text>
                             <View style={{ flexDirection: "row", gap: 8 }}>
-                                <TextInput
-                                    style={[s.messageInput, { flex: 1 }]}
-                                    value={form.rate_per_min}
-                                    onChangeText={(v) => update("rate_per_min", v)}
-                                    keyboardType="numeric"
-                                    placeholderTextColor={colors.textSecondary}
-                                />
+                                <TextInput style={[s.messageInput, { flex: 1 }]}
+                                    value={ratePerMin} onChangeText={setRatePerMin}
+                                    keyboardType="numeric" placeholderTextColor={colors.textSecondary} />
                                 <View style={{ flexDirection: "row", gap: 6 }}>
-                                    {["INR", "USD", "EUR", "GBP"].map((c) => (
+                                    {["INR","USD","EUR","GBP"].map((c) => (
                                         <TouchableOpacity key={c}
-                                            style={[s.durationBtn, form.currency_code === c && s.durationBtnActive]}
-                                            onPress={() => update("currency_code", c)}>
-                                            <Text style={[s.durationBtnText, form.currency_code === c && s.durationBtnTextActive]}>{c}</Text>
+                                            style={[s.durationBtn, currencyCode===c && s.durationBtnActive]}
+                                            onPress={() => setCurrencyCode(c)}>
+                                            <Text style={[s.durationBtnText, currencyCode===c && s.durationBtnTextActive]}>{c}</Text>
                                         </TouchableOpacity>
                                     ))}
                                 </View>
                             </View>
                         </View>
-                        {textField("Availability (optional)", "availability_note", "e.g. Weekdays 6–10 PM IST")}
-                        <TouchableOpacity style={s.primaryBtn} onPress={() => setStep(3)}>
-                            <Text style={s.primaryBtnText}>Next</Text>
+
+                        <Text style={[s.cardBio, { marginBottom: 8, fontWeight: "600" }]}>Availability Windows</Text>
+                        {availSlots.map((slot, idx) => (
+                            <View key={idx} style={[s.card, { marginBottom: 10, padding: 12 }]}>
+                                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+                                    <Text style={[s.cardBio, { fontWeight: "600" }]}>Window {idx+1}</Text>
+                                    {availSlots.length > 1 && (
+                                        <TouchableOpacity onPress={() => setAvailSlots(availSlots.filter((_,i)=>i!==idx))}>
+                                            <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                                    {DAYS_SHORT.map((d) => {
+                                        const active = slot.days.includes(d);
+                                        return (
+                                            <TouchableOpacity key={d}
+                                                style={[s.filterChip, active && s.filterChipActive]}
+                                                onPress={() => {
+                                                    const n=[...availSlots];
+                                                    n[idx]={...slot, days: active ? slot.days.filter(x=>x!==d) : [...slot.days,d]};
+                                                    setAvailSlots(n);
+                                                }}>
+                                                <Text style={[s.filterChipText, active && s.filterChipTextActive]}>{d}</Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                                <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 2 }}>Start (HH:MM)</Text>
+                                        <TextInput style={s.messageInput} value={slot.start}
+                                            onChangeText={(v) => { const n=[...availSlots]; n[idx]={...slot,start:v}; setAvailSlots(n); }}
+                                            placeholder="09:00" placeholderTextColor={colors.textSecondary} />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 2 }}>End (HH:MM)</Text>
+                                        <TextInput style={s.messageInput} value={slot.end}
+                                            onChangeText={(v) => { const n=[...availSlots]; n[idx]={...slot,end:v}; setAvailSlots(n); }}
+                                            placeholder="21:00" placeholderTextColor={colors.textSecondary} />
+                                    </View>
+                                </View>
+                                <TouchableOpacity
+                                    style={[s.messageInput, { flexDirection:"row", justifyContent:"space-between", alignItems:"center", paddingHorizontal:12 }]}
+                                    onPress={() => setTzPickerIdx(idx)}>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 13 }}>{slot.timezone}</Text>
+                                    <Ionicons name="chevron-down" size={12} color={colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+                        ))}
+                        {availSlots.length < 5 && (
+                            <TouchableOpacity style={[s.durationBtn, { alignSelf: "flex-start", marginBottom: 16 }]}
+                                onPress={() => setAvailSlots([...availSlots, { days:[], start:"09:00", end:"21:00", timezone:"Asia/Kolkata" }])}>
+                                <Text style={s.durationBtnText}>+ Add Window</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        <TouchableOpacity style={[s.primaryBtn, !step2Valid && { opacity: 0.5 }]}
+                            disabled={!step2Valid} onPress={() => { setError(""); setStep(3); }}>
+                            <Text style={s.primaryBtnText}>Next →</Text>
                         </TouchableOpacity>
                     </View>
                 )}
 
+                {/* ── STEP 3: Payout Details ────────────────────────────── */}
                 {step === 3 && (
                     <View>
+                        <Text style={[s.cardName, { marginBottom: 16 }]}>Step 3 — Payout Details</Text>
+
                         <View style={[s.card, { marginBottom: 16 }]}>
-                            <Text style={[s.cardName, { marginBottom: 8 }]}>Code of Conduct</Text>
-                            <Text style={s.cardBio}>
-                                As an Imotara companion, you agree to:{"\n\n"}
-                                • Provide genuine peer support, not clinical advice{"\n"}
-                                • Maintain confidentiality of user conversations{"\n"}
-                                • Never solicit personal contact information{"\n"}
-                                • Refer users to emergency services when in crisis{"\n"}
-                                • Imotara reserves the right to suspend accounts for violations
+                            <Text style={[s.cardBio, { fontSize: 12 }]}>
+                                🔒 Document verification (selfie, photo ID, address proof) is completed during admin review — you do not need to upload documents now.
                             </Text>
                         </View>
-                        <TouchableOpacity
-                            style={{ flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 20 }}
-                            onPress={() => update("coc_agreed", !form.coc_agreed)}>
-                            <View style={{
-                                width: 22, height: 22, borderRadius: 6, borderWidth: 2,
-                                borderColor: form.coc_agreed ? colors.primary : colors.border,
-                                backgroundColor: form.coc_agreed ? colors.primary : "transparent",
-                                alignItems: "center", justifyContent: "center",
-                            }}>
-                                {form.coc_agreed && <Ionicons name="checkmark" size={14} color="#fff" />}
-                            </View>
-                            <Text style={s.cardBio}>I agree to the Code of Conduct</Text>
+
+                        <Text style={[s.cardBio, { marginBottom: 12, fontWeight: "600" }]}>Payout Method *</Text>
+                        {([ ["upi","🇮🇳 UPI (India)"], ["paypal","🌐 PayPal"], ["bank_in","🏦 Bank Transfer (India)"], ["bank_int","🌍 International Bank Wire"] ] as [string,string][]).map(([v, lbl]) => (
+                            <TouchableOpacity key={v}
+                                style={[s.durationBtn, payoutMethod===v && s.durationBtnActive, { marginBottom: 8, alignSelf: "stretch", justifyContent: "flex-start", paddingHorizontal: 14 }]}
+                                onPress={() => setPayoutMethod(v as any)}>
+                                <Text style={[s.durationBtnText, payoutMethod===v && s.durationBtnTextActive, { fontSize: 14 }]}>{lbl}</Text>
+                            </TouchableOpacity>
+                        ))}
+
+                        {payoutMethod === "upi" && (
+                            <TField label="UPI ID *" value={upiId} onChange={setUpiId} placeholder="yourname@upi" colors={colors} />
+                        )}
+                        {payoutMethod === "paypal" && (
+                            <TField label="PayPal Email *" value={paypalEmail} onChange={setPaypalEmail}
+                                placeholder="paypal@email.com" keyboard="email-address" colors={colors} />
+                        )}
+                        {payoutMethod === "bank_in" && (<>
+                            <TField label="Account Number *" value={bankAcc} onChange={setBankAcc}
+                                placeholder="Bank account number" keyboard="numeric" colors={colors} />
+                            <TField label="IFSC Code *" value={bankIfsc} onChange={setBankIfsc}
+                                placeholder="e.g. HDFC0001234" colors={colors} />
+                        </>)}
+                        {payoutMethod === "bank_int" && (<>
+                            <TField label="SWIFT / BIC *" value={bankSwift} onChange={setBankSwift}
+                                placeholder="e.g. HDFCINBB" colors={colors} />
+                            <TField label="IBAN *" value={bankIban} onChange={setBankIban}
+                                placeholder="e.g. GB29NWBK60161331926819" colors={colors} />
+                        </>)}
+
+                        <TouchableOpacity style={[s.primaryBtn, !step3Valid && { opacity: 0.5 }]}
+                            disabled={!step3Valid} onPress={() => { setError(""); setStep(4); }}>
+                            <Text style={s.primaryBtnText}>Next →</Text>
                         </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* ── STEP 4: Code of Conduct ───────────────────────────── */}
+                {step === 4 && (
+                    <View>
+                        <Text style={[s.cardName, { marginBottom: 16 }]}>Step 4 — Code of Conduct</Text>
+
+                        <View style={[s.card, { marginBottom: 16 }]}>
+                            <Text style={[s.cardBio, { fontWeight: "700", marginBottom: 8 }]}>Code of Conduct</Text>
+                            {COC_CLAUSES_REG.map((clause, i) => (
+                                <Text key={i} style={[s.cardBio, { marginBottom: 5, lineHeight: 18 }]}>{i+1}. {clause}</Text>
+                            ))}
+                        </View>
+
+                        <View style={[s.card, { marginBottom: 16 }]}>
+                            <Text style={[s.cardBio, { fontWeight: "700", marginBottom: 8 }]}>Platform Disclaimer</Text>
+                            {PLATFORM_DISCLAIMER_REG.map((para, i) => (
+                                <Text key={i} style={[s.cardBio, { marginBottom: 5, lineHeight: 18 }]}>{para}</Text>
+                            ))}
+                        </View>
+
+                        <Text style={[s.cardBio, { fontWeight: "700", marginBottom: 12 }]}>I confirm *</Text>
+                        <RegCheckbox value={consent1} onPress={()=>setConsent1(!consent1)} colors={colors}
+                            label="I am 18 years or older and legally permitted to provide peer support in my jurisdiction." />
+                        <RegCheckbox value={consent2} onPress={()=>setConsent2(!consent2)} colors={colors}
+                            label="I have read and fully agree to the Code of Conduct above." />
+                        <RegCheckbox value={consent3} onPress={()=>setConsent3(!consent3)} colors={colors}
+                            label="I have read and agree to the Platform Disclaimer above." />
+                        <RegCheckbox value={consent4} onPress={()=>setConsent4(!consent4)} colors={colors}
+                            label="I consent to Imotara using my profile and anonymised session metrics for platform improvement and promotion." />
+                        <RegCheckbox value={consent5} onPress={()=>setConsent5(!consent5)} colors={colors}
+                            label="I agree to Imotara's Terms of Service and Privacy Policy." />
+
+                        <TouchableOpacity style={[s.primaryBtn, !step4Valid && { opacity: 0.5 }]}
+                            disabled={!step4Valid} onPress={() => { setError(""); setStep(5); }}>
+                            <Text style={s.primaryBtnText}>Next →</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* ── STEP 5: Review & Sign ─────────────────────────────── */}
+                {step === 5 && (
+                    <View>
+                        <Text style={[s.cardName, { marginBottom: 16 }]}>Step 5 — Review & Sign</Text>
+
+                        <View style={[s.card, { marginBottom: 16 }]}>
+                            <Text style={[s.cardBio, { fontWeight: "700", marginBottom: 10 }]}>Application Summary</Text>
+                            <RRow label="Display Name"   value={displayName}                                                colors={colors} />
+                            <RRow label="Gender"         value={gender}                                                      colors={colors} />
+                            <RRow label="Contact Email"  value={contactEmail}                                                colors={colors} />
+                            <RRow label="Contact Phone"  value={contactPhone ? `${countryCode} ${contactPhone}` : ""}       colors={colors} />
+                            <RRow label="Website"        value={websiteUrl}                                                  colors={colors} />
+                            <RRow label="Social Links"   value={socialLinks.filter(Boolean).join(", ")}                     colors={colors} />
+                            <RRow label="Specialties"    value={expertiseTags.join(", ")}                                   colors={colors} />
+                            <RRow label="Languages"      value={languages.join(", ")}                                       colors={colors} />
+                            <RRow label="Bio"            value={bio.length > 120 ? bio.slice(0,120)+"…" : bio}              colors={colors} />
+                            <RRow label="Rate"           value={`${ratePerMin} ${currencyCode}/min`}                        colors={colors} />
+                            <RRow label="Availability"   value={availSlots.filter(sl=>sl.days.length>0).map(sl=>`${sl.days.join(",")} ${sl.start}–${sl.end} (${sl.timezone})`).join(" | ")} colors={colors} />
+                            <RRow label="Payout Method"  value={payoutMethod}                                               colors={colors} />
+                        </View>
+
+                        <View style={[s.card, { marginBottom: 16, backgroundColor: "rgba(251,191,36,0.10)", borderColor: "rgba(251,191,36,0.30)" }]}>
+                            <Text style={{ fontSize: 13, color: colors.textPrimary, lineHeight: 20 }}>
+                                I solemnly declare that all the information I have submitted in this application is true, accurate, and complete to the best of my knowledge. I understand that submitting false or misleading information may result in immediate rejection or termination of my Imotara Companion account.
+                            </Text>
+                        </View>
+
+                        <RegCheckbox value={agreeInfoTrue} onPress={()=>setAgreeInfoTrue(!agreeInfoTrue)} colors={colors}
+                            label="I confirm all submitted information is true and accurate to my knowledge." />
+
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Digital Signature *</Text>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 8 }}>
+                                Type your full name as it appears on your identity document as your digital signature.
+                            </Text>
+                            <TextInput
+                                style={[s.messageInput, { fontSize: 18, fontStyle: "italic", fontFamily: Platform.OS === "ios" ? "Georgia" : "serif" }]}
+                                value={digitalSig} onChangeText={setDigitalSig}
+                                placeholder="Your full name" placeholderTextColor={colors.textSecondary}
+                            />
+                            {digitalSig.trim().length > 0 && (
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4 }}>
+                                    Signed as: {digitalSig.trim()} · {new Date().toLocaleDateString()}
+                                </Text>
+                            )}
+                        </View>
 
                         {error !== "" && <Text style={s.errorText}>{error}</Text>}
 
-                        <TouchableOpacity style={[s.primaryBtn, loading && { opacity: 0.6 }]}
-                            onPress={submit} disabled={loading}>
+                        <TouchableOpacity style={[s.primaryBtn, (!step5Valid || loading) && { opacity: 0.6 }]}
+                            disabled={!step5Valid || loading} onPress={submit}>
                             {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryBtnText}>Submit Application</Text>}
                         </TouchableOpacity>
                     </View>
                 )}
             </ScrollView>
+
+            {/* Country code picker */}
+            <Modal visible={dialPickerOpen} transparent animationType="slide" onRequestClose={()=>setDialPickerOpen(false)}>
+                <View style={{ flex:1, justifyContent:"flex-end", backgroundColor:"rgba(0,0,0,0.5)" }}>
+                    <View style={{ backgroundColor: colors.surface, borderTopLeftRadius:20, borderTopRightRadius:20, maxHeight:"70%", padding:16 }}>
+                        <View style={{ flexDirection:"row", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                            <Text style={[s.headerTitle, { fontSize:16 }]}>Country Code</Text>
+                            <TouchableOpacity onPress={()=>setDialPickerOpen(false)}>
+                                <Ionicons name="close" size={22} color={colors.textPrimary} />
+                            </TouchableOpacity>
+                        </View>
+                        <FlatList data={COUNTRY_CODES_DIAL} keyExtractor={(item)=>item.code+item.name}
+                            renderItem={({item}) => (
+                                <TouchableOpacity
+                                    style={{ flexDirection:"row", alignItems:"center", gap:12, paddingVertical:10, borderBottomWidth:1, borderBottomColor:colors.border }}
+                                    onPress={()=>{ setCountryCode(item.code); setDialPickerOpen(false); }}>
+                                    <Text style={{ fontSize:22 }}>{item.flag}</Text>
+                                    <Text style={{ flex:1, color:colors.textPrimary, fontSize:14 }}>{item.name}</Text>
+                                    <Text style={{ color:colors.textSecondary, fontSize:14 }}>{item.code}</Text>
+                                    {countryCode===item.code && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                                </TouchableOpacity>
+                            )} />
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Timezone picker */}
+            <Modal visible={tzPickerIdx!==null} transparent animationType="slide" onRequestClose={()=>setTzPickerIdx(null)}>
+                <View style={{ flex:1, justifyContent:"flex-end", backgroundColor:"rgba(0,0,0,0.5)" }}>
+                    <View style={{ backgroundColor: colors.surface, borderTopLeftRadius:20, borderTopRightRadius:20, maxHeight:"60%", padding:16 }}>
+                        <View style={{ flexDirection:"row", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                            <Text style={[s.headerTitle, { fontSize:16 }]}>Timezone</Text>
+                            <TouchableOpacity onPress={()=>setTzPickerIdx(null)}>
+                                <Ionicons name="close" size={22} color={colors.textPrimary} />
+                            </TouchableOpacity>
+                        </View>
+                        <FlatList data={AVAIL_TIMEZONES_REG} keyExtractor={(item)=>item}
+                            renderItem={({item}) => {
+                                const cur = tzPickerIdx!==null ? (availSlots[tzPickerIdx]?.timezone ?? "") : "";
+                                return (
+                                    <TouchableOpacity
+                                        style={{ paddingVertical:12, borderBottomWidth:1, borderBottomColor:colors.border, flexDirection:"row", justifyContent:"space-between" }}
+                                        onPress={()=>{
+                                            if(tzPickerIdx!==null){
+                                                const n=[...availSlots]; n[tzPickerIdx]={...n[tzPickerIdx], timezone:item};
+                                                setAvailSlots(n);
+                                            }
+                                            setTzPickerIdx(null);
+                                        }}>
+                                        <Text style={{ color:colors.textPrimary, fontSize:14 }}>{item}</Text>
+                                        {cur===item && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                                    </TouchableOpacity>
+                                );
+                            }} />
+                    </View>
+                </View>
+            </Modal>
         </KeyboardAvoidingView>
     );
 }
