@@ -39,12 +39,12 @@ interface Session {
     consultant_id: string;
     user_id: string;
     status: string;
-    session_type: string;
+    type: string;
     minutes_used: number;
-    note: string | null;
     scheduled_note: string | null;
+    currency_code: string | null;
     created_at: string;
-    connect_consultants: { display_name: string; photo_url: string | null } | null;
+    connect_consultants: { display_name: string; photo_url: string | null; rate_per_min?: number } | null;
 }
 
 interface Message {
@@ -519,7 +519,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
         if (sessionType === "instant") setLoading(true);
         else setScheduleLoading(true);
         try {
-            const body: Record<string, unknown> = { consultant_id: c.id, session_type: sessionType };
+            const body: Record<string, unknown> = { consultant_id: c.id, type: sessionType };
             if (note) body.scheduled_note = note;
             const res = await fetch(buildApiUrl("/api/connect/sessions"), {
                 method: "POST",
@@ -532,7 +532,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     setRechargeVisible(true);
                 } else if (d.redirect && d.existing_session_id) {
                     // existing session — navigate there
-                    onStartSession({ ...d.session ?? {}, id: d.existing_session_id, connect_consultants: null, status: "pending", session_type: sessionType, user_id: userId ?? "", consultant_id: c.id, minutes_used: 0, note: null, scheduled_note: note ?? null, created_at: new Date().toISOString() } as Session);
+                    onStartSession({ id: d.existing_session_id, connect_consultants: null, status: "pending", type: sessionType, user_id: userId ?? "", consultant_id: c.id, minutes_used: 0, scheduled_note: note ?? null, currency_code: c.currency_code, created_at: new Date().toISOString() } as Session);
                 } else {
                     Alert.alert("Error", d.error ?? "Could not start session");
                 }
@@ -815,13 +815,14 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const s = styles(colors);
 
-    // Synthetic consultant object for RechargeModal — needs at least rate/currency/display_name/id
+    // Synthetic consultant object for RechargeModal — uses actual rate/currency from session
     const consultantForRecharge: Consultant = {
         id: session.consultant_id,
         display_name: session.connect_consultants?.display_name ?? "Companion",
         gender: null, photo_url: null, bio: null,
         expertise_tags: [], languages: [],
-        rate_per_min: 10, currency_code: "INR",
+        rate_per_min: session.connect_consultants?.rate_per_min ?? 10,
+        currency_code: session.currency_code ?? "INR",
         is_online: true, rating_avg: 0, rating_count: 0,
         sessions_completed: 0, availability_note: null,
     };
