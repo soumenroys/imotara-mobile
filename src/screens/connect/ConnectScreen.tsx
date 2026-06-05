@@ -28,10 +28,12 @@ interface Consultant {
     rate_per_min: number;
     currency_code: string;
     is_online: boolean;
+    is_busy: boolean;
     rating_avg: number;
     rating_count: number;
     sessions_completed: number;
     availability_note: string | null;
+    availability_windows: Array<{ day: string; start: string; end: string }> | null;
 }
 
 interface Session {
@@ -195,19 +197,46 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
     const [loading, setLoading] = useState(true);
     const [filterOnline, setFilterOnline] = useState(false);
     const [filterTag, setFilterTag] = useState("");
+    const [favorites, setFavorites] = useState<Set<string>>(new Set());
+    const [favLoading, setFavLoading] = useState<string | null>(null);
     const s = styles(colors);
 
     useEffect(() => {
         const params = new URLSearchParams();
         if (filterOnline) params.set("online", "true");
-        fetch(buildApiUrl(`/api/connect/consultants?${params}`), {
-            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-        })
-            .then((r) => r.json())
-            .then((d) => setConsultants(d.consultants ?? []))
+        const authHeaders: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+        Promise.all([
+            fetch(buildApiUrl(`/api/connect/consultants?${params}`), { headers: authHeaders }).then((r) => r.json()),
+            accessToken
+                ? fetch(buildApiUrl("/api/connect/favorites"), { headers: authHeaders }).then((r) => r.json())
+                : Promise.resolve({ ok: false, favorites: [] }),
+        ])
+            .then(([cd, fd]) => {
+                if (cd.ok) setConsultants(cd.consultants ?? []);
+                if (fd.ok) setFavorites(new Set(fd.favorites ?? []));
+            })
             .catch(() => {})
             .finally(() => setLoading(false));
     }, [accessToken, filterOnline]);
+
+    async function toggleFavorite(consultantId: string) {
+        if (!accessToken) return;
+        const isFav = favorites.has(consultantId);
+        setFavLoading(consultantId);
+        try {
+            await fetch(buildApiUrl("/api/connect/favorites"), {
+                method: isFav ? "DELETE" : "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ consultant_id: consultantId }),
+            });
+            setFavorites((prev) => {
+                const next = new Set(prev);
+                if (isFav) next.delete(consultantId); else next.add(consultantId);
+                return next;
+            });
+        } catch { /* silent */ }
+        finally { setFavLoading(null); }
+    }
 
     const displayed = filterTag
         ? consultants.filter((c) => c.expertise_tags.includes(filterTag))
@@ -257,7 +286,15 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
                             <View style={{ flex: 1 }}>
                                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                                     <Text style={s.cardName}>{c.display_name}</Text>
-                                    <Text style={s.rateText}>{CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code}{c.rate_per_min}/min</Text>
+                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                        <Text style={s.rateText}>{CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code}{c.rate_per_min}/min</Text>
+                                        {/* Favorite heart button */}
+                                        <TouchableOpacity onPress={() => toggleFavorite(c.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                            <Text style={{ fontSize: 16, opacity: favLoading === c.id ? 0.4 : 1 }}>
+                                                {favorites.has(c.id) ? "❤️" : "🤍"}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
                                 <Text style={[s.ratingText, { marginTop: 2 }]}>
                                     ★ {c.rating_avg > 0 ? c.rating_avg.toFixed(1) : "New"} · {c.sessions_completed} sessions
@@ -271,9 +308,16 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
                                     ))}
                                 </View>
                                 <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8, alignItems: "center" }}>
-                                    <Text style={[s.cardBio, { fontSize: 11, color: c.is_online ? "#34d399" : "#f87171" }]}>
-                                        {c.is_online ? "● Online" : "○ Offline"}
-                                    </Text>
+                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                        <Text style={[s.cardBio, { fontSize: 11, color: c.is_online ? "#34d399" : "#94a3b8" }]}>
+                                            {c.is_online ? "● Online" : "○ Offline"}
+                                        </Text>
+                                        {c.is_busy && (
+                                            <Text style={[s.cardBio, { fontSize: 10, color: "#fb923c", backgroundColor: "rgba(251,146,60,0.15)", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8 }]}>
+                                                In Session
+                                            </Text>
+                                        )}
+                                    </View>
                                 </View>
                             </View>
                         </View>
@@ -292,7 +336,35 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
     const [sessions, setSessions] = useState<Session[]>([]);
     const [loading, setLoading] = useState(true);
     const [cancelling, setCancelling] = useState<string | null>(null);
+    const [summaryCopied, setSummaryCopied] = useState<string | null>(null);
     const s = styles(colors);
+
+    function buildSummary(item: Session) {
+        const companion = item.connect_consultants?.display_name ?? "Companion";
+        const date = new Date(item.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+        const duration = item.minutes_used > 0 ? `${Math.round(item.minutes_used)} min` : "< 1 min";
+        const sym = CURRENCY_SYMBOLS[item.currency_code ?? "INR"] ?? "₹";
+        const cost = "—";
+        return [
+            `Imotara Connect — Session Summary`,
+            `Date: ${date}`,
+            `Companion: ${companion}`,
+            `Type: ${item.type === "instant" ? "Instant" : "Scheduled"}`,
+            `Duration: ${duration}`,
+            `Cost: ${cost}`,
+            ``,
+            `Imotara — Mindful wellness with human connection`,
+        ].join("\n");
+    }
+
+    async function shareSummary(item: Session) {
+        const { Share } = require("react-native");
+        try {
+            await Share.share({ message: buildSummary(item), title: "Session Summary" });
+        } catch {
+            /* user cancelled */
+        }
+    }
 
     useEffect(() => {
         if (!accessToken) { setLoading(false); return; }
@@ -373,6 +445,14 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
                             {cancelling === item.id
                                 ? <ActivityIndicator color="#f87171" size="small" />
                                 : <Text style={{ color: "#f87171", fontWeight: "600", fontSize: 13 }}>Cancel Request</Text>}
+                        </TouchableOpacity>
+                    )}
+                    {item.status === "completed" && (
+                        <TouchableOpacity
+                            style={{ marginTop: 8, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: "rgba(139,92,246,0.4)", alignItems: "center", backgroundColor: "rgba(139,92,246,0.08)" }}
+                            onPress={() => shareSummary(item)}
+                        >
+                            <Text style={{ color: "#a78bfa", fontWeight: "600", fontSize: 12 }}>📋 Share Session Summary</Text>
                         </TouchableOpacity>
                     )}
                 </View>
@@ -510,6 +590,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     const [loading, setLoading] = useState(false);
     const [scheduleVisible, setScheduleVisible] = useState(false);
     const [scheduleNote, setScheduleNote] = useState("");
+    const [scheduleDate, setScheduleDate] = useState("");
     const [scheduleLoading, setScheduleLoading] = useState(false);
     const s = styles(colors);
     const sym = CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code;
@@ -521,6 +602,10 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
         try {
             const body: Record<string, unknown> = { consultant_id: c.id, type: sessionType };
             if (note) body.scheduled_note = note;
+            if (sessionType === "scheduled" && scheduleDate.trim()) {
+                const parsed = new Date(scheduleDate.trim());
+                if (!isNaN(parsed.getTime())) body.scheduled_at = parsed.toISOString();
+            }
             const res = await fetch(buildApiUrl("/api/connect/sessions"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
@@ -655,11 +740,20 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                         <Text style={[s.cardBio, { marginBottom: 10 }]}>
                             Let {c.display_name} know your preferred time or what you'd like to discuss:
                         </Text>
+                        <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Preferred Date & Time</Text>
                         <TextInput
-                            style={[s.messageInput, { minHeight: 100, marginBottom: 16 }]}
+                            style={[s.messageInput, { marginBottom: 12 }]}
+                            value={scheduleDate}
+                            onChangeText={setScheduleDate}
+                            placeholder="YYYY-MM-DD HH:MM  (e.g. 2026-06-10 18:00)"
+                            placeholderTextColor={colors.textSecondary}
+                        />
+                        <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Message (optional)</Text>
+                        <TextInput
+                            style={[s.messageInput, { minHeight: 80, marginBottom: 16 }]}
                             value={scheduleNote}
                             onChangeText={setScheduleNote}
-                            placeholder="e.g. Available weekday evenings. Would love to talk about anxiety…"
+                            placeholder="e.g. Would love to talk about anxiety management…"
                             placeholderTextColor={colors.textSecondary}
                             multiline
                             maxLength={300}
@@ -823,8 +917,8 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         expertise_tags: [], languages: [],
         rate_per_min: session.connect_consultants?.rate_per_min ?? 10,
         currency_code: session.currency_code ?? "INR",
-        is_online: true, rating_avg: 0, rating_count: 0,
-        sessions_completed: 0, availability_note: null,
+        is_online: true, is_busy: false, rating_avg: 0, rating_count: 0,
+        sessions_completed: 0, availability_note: null, availability_windows: null,
     };
 
     // Load messages
@@ -1145,7 +1239,82 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
     const [payoutMsg, setPayoutMsg]         = useState<{ ok: boolean; text: string } | null>(null);
     const [newRequestAlert, setNewRequestAlert] = useState(false);
     const prevPendingCount = useRef(0);
+    // Availability windows
+    const [editingAvail, setEditingAvail] = useState(false);
+    const [availSaving, setAvailSaving]   = useState(false);
+    // Session notes
+    const [openNoteId, setOpenNoteId]     = useState<string | null>(null);
+    const [noteContent, setNoteContent]   = useState("");
+    const [noteSaving, setNoteSaving]     = useState(false);
+    const [noteSaved, setNoteSaved]       = useState(false);
+    // Block user
+    const [blockingId, setBlockingId]     = useState<string | null>(null);
     const s = styles(colors);
+
+    async function saveAvailability() {
+        if (!accessToken || !profile) return;
+        setAvailSaving(true);
+        try {
+            await fetch(buildApiUrl("/api/connect/consultant/profile"), {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ availability_windows: profile.availability_windows ?? [] }),
+            });
+            setEditingAvail(false);
+        } catch { /* silent */ }
+        finally { setAvailSaving(false); }
+    }
+
+    async function openNote(sessionId: string) {
+        if (openNoteId === sessionId) { setOpenNoteId(null); return; }
+        setOpenNoteId(sessionId);
+        setNoteContent(""); setNoteSaved(false);
+        if (!accessToken) return;
+        try {
+            const res = await fetch(buildApiUrl(`/api/connect/sessions/${sessionId}/notes`), {
+                headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            const d = await res.json();
+            if (d.ok) setNoteContent(d.content ?? "");
+        } catch { /* silent */ }
+    }
+
+    async function saveNote(sessionId: string) {
+        if (!accessToken) return;
+        setNoteSaving(true);
+        try {
+            await fetch(buildApiUrl(`/api/connect/sessions/${sessionId}/notes`), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ content: noteContent }),
+            });
+            setNoteSaved(true);
+            setTimeout(() => setNoteSaved(false), 2000);
+        } catch { /* silent */ }
+        finally { setNoteSaving(false); }
+    }
+
+    async function blockUser(userId: string) {
+        if (!accessToken) return;
+        Alert.alert("Block user", "They will no longer be able to request sessions with you.", [
+            { text: "Cancel" },
+            {
+                text: "Block", style: "destructive",
+                onPress: async () => {
+                    setBlockingId(userId);
+                    try {
+                        await fetch(buildApiUrl("/api/connect/blocks"), {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                            body: JSON.stringify({ blocked_user_id: userId, reason: "Reported by companion" }),
+                        });
+                        setHistory((prev) => prev.filter((h) => h.user_id !== userId));
+                    } catch { /* silent */ }
+                    finally { setBlockingId(null); }
+                },
+            },
+        ]);
+    }
 
     async function requestPayout() {
         const amount = parseFloat(payoutAmount);
@@ -1349,6 +1518,53 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                         )}
                     </View>
 
+                    {/* Availability Windows (collapsed by default) */}
+                    <TouchableOpacity
+                        style={[s.card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}
+                        onPress={() => setEditingAvail((v) => !v)}>
+                        <Text style={[s.cardBio, { fontWeight: "700" }]}>📅 Availability Windows</Text>
+                        <Text style={s.cardBio}>{editingAvail ? "▲" : "▼"}</Text>
+                    </TouchableOpacity>
+                    {editingAvail && (
+                        <View style={s.card}>
+                            <Text style={[s.cardBio, { marginBottom: 10, opacity: 0.7 }]}>
+                                Add your regular available time slots. Visible on your profile.
+                            </Text>
+                            {(profile.availability_windows ?? []).map((w: any, i: number) => (
+                                <View key={i} style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8, alignItems: "center" }}>
+                                    <Text style={[s.cardBio, { fontSize: 12, minWidth: 70 }]}>{w.day}</Text>
+                                    <Text style={[s.cardBio, { fontSize: 12 }]}>{w.start} – {w.end}</Text>
+                                    <TouchableOpacity
+                                        style={{ marginLeft: "auto", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: "rgba(248,113,113,0.15)" }}
+                                        onPress={() => {
+                                            const updated = (profile.availability_windows ?? []).filter((_: any, idx: number) => idx !== i);
+                                            setProfile((p: any) => ({ ...p, availability_windows: updated }));
+                                        }}>
+                                        <Text style={{ color: "#f87171", fontSize: 11 }}>Remove</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                            <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                                <TouchableOpacity
+                                    style={[{ flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, alignItems: "center" }]}
+                                    onPress={() => {
+                                        const updated = [...(profile.availability_windows ?? []), { day: "Monday", start: "09:00", end: "17:00" }];
+                                        setProfile((p: any) => ({ ...p, availability_windows: updated }));
+                                    }}>
+                                    <Text style={{ color: colors.primary, fontSize: 13, fontWeight: "600" }}>+ Add slot</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[s.primaryBtn, { flex: 1, paddingVertical: 8 }, availSaving && { opacity: 0.6 }]}
+                                    onPress={saveAvailability}
+                                    disabled={availSaving}>
+                                    {availSaving
+                                        ? <ActivityIndicator color="#fff" size="small" />
+                                        : <Text style={s.primaryBtnText}>Save</Text>}
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
+
                     {/* Active sessions */}
                     {active.map((s) => (
                         <View key={s.id} style={[styles(colors).card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
@@ -1364,44 +1580,56 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                         </View>
                     ))}
 
-                    {/* Pending requests */}
+                    {/* Pending requests with user preview */}
                     {pending.length > 0 && (
                         <View>
                             <Text style={[s.cardBio, { color: "#fbbf24", fontWeight: "700", marginBottom: 8 }]}>
                                 Incoming Requests ({pending.length})
                             </Text>
-                            {pending.map((req) => (
-                                <View key={req.id} style={[s.card, { marginBottom: 10 }]}>
-                                    <View style={{ marginBottom: 10 }}>
-                                        <Text style={s.cardBio}>
-                                            {req.type === "instant" ? "Instant session" : "Scheduled session"}
-                                            {" · "}{new Date(req.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                                        </Text>
+                            {pending.map((req) => {
+                                const userEmail = req.user_preview?.email ?? null;
+                                const userInitial = userEmail ? userEmail.charAt(0).toUpperCase() : "?";
+                                const userDisplayName = userEmail ? userEmail.split("@")[0] : "Anonymous user";
+                                return (
+                                    <View key={req.id} style={[s.card, { marginBottom: 10 }]}>
+                                        {/* User preview */}
+                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                                            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(99,102,241,0.2)", alignItems: "center", justifyContent: "center" }}>
+                                                <Text style={{ color: "#a78bfa", fontWeight: "700", fontSize: 15 }}>{userInitial}</Text>
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={[s.cardName, { fontSize: 14 }]}>{userDisplayName}</Text>
+                                                <Text style={[s.cardBio, { fontSize: 11 }]}>
+                                                    {req.type === "instant" ? "Instant" : "Scheduled"}{" · "}
+                                                    {new Date(req.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                                </Text>
+                                            </View>
+                                        </View>
                                         {req.scheduled_note && (
-                                            <Text style={[s.cardBio, { fontStyle: "italic", marginTop: 4 }]}>
-                                                "{req.scheduled_note}"
+                                            <Text style={[s.cardBio, { fontStyle: "italic", marginBottom: 10, backgroundColor: "rgba(255,255,255,0.04)", padding: 8, borderRadius: 8 }]}>
+                                                &ldquo;{req.scheduled_note}&rdquo;
                                             </Text>
                                         )}
+                                        <View style={{ flexDirection: "row", gap: 8 }}>
+                                            <TouchableOpacity
+                                                style={[s.primaryBtn, { flex: 1, paddingVertical: 10 }, actionLoading === req.id && { opacity: 0.6 }]}
+                                                onPress={() => handleAction(req.id, "accept")}
+                                                disabled={actionLoading === req.id}>
+                                                {actionLoading === req.id
+                                                    ? <ActivityIndicator color="#fff" size="small" />
+                                                    : <Text style={s.primaryBtnText}>Accept & Chat</Text>
+                                                }
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={[{ flex: 1, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: "rgba(248,113,113,0.4)", alignItems: "center" }, actionLoading === req.id && { opacity: 0.6 }]}
+                                                onPress={() => handleAction(req.id, "decline")}
+                                                disabled={actionLoading === req.id}>
+                                                <Text style={{ color: "#f87171", fontWeight: "700", fontSize: 14 }}>Decline</Text>
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
-                                    <View style={{ flexDirection: "row", gap: 8 }}>
-                                        <TouchableOpacity
-                                            style={[s.primaryBtn, { flex: 1, paddingVertical: 10 }, actionLoading === req.id && { opacity: 0.6 }]}
-                                            onPress={() => handleAction(req.id, "accept")}
-                                            disabled={actionLoading === req.id}>
-                                            {actionLoading === req.id
-                                                ? <ActivityIndicator color="#fff" size="small" />
-                                                : <Text style={s.primaryBtnText}>Accept & Chat</Text>
-                                            }
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={[{ flex: 1, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: "rgba(248,113,113,0.4)", alignItems: "center" }, actionLoading === req.id && { opacity: 0.6 }]}
-                                            onPress={() => handleAction(req.id, "decline")}
-                                            disabled={actionLoading === req.id}>
-                                            <Text style={{ color: "#f87171", fontWeight: "700", fontSize: 14 }}>Decline</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            ))}
+                                );
+                            })}
                         </View>
                     )}
 
@@ -1512,21 +1740,77 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                             ) : history.length === 0 ? (
                                 <Text style={[s.cardBio, { textAlign: "center", paddingVertical: 16 }]}>No completed sessions yet.</Text>
                             ) : (
-                                history.map((h) => (
-                                    <View key={h.id} style={[s.card, { marginBottom: 8 }]}>
-                                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                                            <Text style={[s.cardBio, { fontSize: 12 }]}>
-                                                {new Date(h.created_at).toLocaleDateString()} · {h.type} · {(h.minutes_used ?? 0).toFixed(0)} min
-                                            </Text>
-                                            {h.rating != null && (
-                                                <Text style={{ color: "#fbbf24", fontWeight: "700", fontSize: 13 }}>★ {h.rating}</Text>
+                                history.map((h) => {
+                                    const userEmail = h.user_preview?.email ?? null;
+                                    const displayName = userEmail ? userEmail.split("@")[0] : "Anonymous";
+                                    const initial = userEmail ? userEmail.charAt(0).toUpperCase() : "?";
+                                    return (
+                                        <View key={h.id} style={[s.card, { marginBottom: 8 }]}>
+                                            {/* User + session info */}
+                                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "rgba(99,102,241,0.15)", alignItems: "center", justifyContent: "center" }}>
+                                                    <Text style={{ color: "#a78bfa", fontWeight: "700", fontSize: 12 }}>{initial}</Text>
+                                                </View>
+                                                <Text style={[s.cardBio, { fontSize: 12, flex: 1 }]}>
+                                                    {displayName} · {new Date(h.created_at).toLocaleDateString()} · {h.type} · {Math.round(h.minutes_used ?? 0)} min
+                                                </Text>
+                                                {h.rating != null && (
+                                                    <Text style={{ color: "#fbbf24", fontWeight: "700", fontSize: 13 }}>★ {h.rating}</Text>
+                                                )}
+                                            </View>
+                                            {h.review_text && (
+                                                <Text style={[s.cardBio, { fontStyle: "italic", marginBottom: 8 }]}>"{h.review_text}"</Text>
+                                            )}
+                                            {/* Notes + Block buttons */}
+                                            <View style={{ flexDirection: "row", gap: 8 }}>
+                                                <TouchableOpacity
+                                                    style={{ flex: 1, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: "rgba(139,92,246,0.35)", alignItems: "center", backgroundColor: "rgba(139,92,246,0.08)" }}
+                                                    onPress={() => openNote(h.id)}>
+                                                    <Text style={{ color: "#a78bfa", fontSize: 12, fontWeight: "600" }}>
+                                                        {openNoteId === h.id ? "Close Notes" : "📝 Notes"}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={{ flex: 1, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: "rgba(248,113,113,0.35)", alignItems: "center", backgroundColor: "rgba(248,113,113,0.08)", opacity: blockingId === h.user_id ? 0.5 : 1 }}
+                                                    onPress={() => blockUser(h.user_id)}
+                                                    disabled={blockingId === h.user_id}>
+                                                    <Text style={{ color: "#f87171", fontSize: 12, fontWeight: "600" }}>🚫 Block</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                            {/* Inline notes editor */}
+                                            {openNoteId === h.id && (
+                                                <View style={{ marginTop: 10 }}>
+                                                    <Text style={[s.cardBio, { fontSize: 10, marginBottom: 4, opacity: 0.6 }]}>
+                                                        🔒 Private — only visible to you
+                                                    </Text>
+                                                    <TextInput
+                                                        style={[s.messageInput, { minHeight: 80, marginBottom: 8 }]}
+                                                        value={noteContent}
+                                                        onChangeText={setNoteContent}
+                                                        placeholder="Add a private note about this session..."
+                                                        placeholderTextColor={colors.textSecondary}
+                                                        multiline
+                                                        maxLength={2000}
+                                                    />
+                                                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                                                        <Text style={[s.cardBio, { fontSize: 10 }]}>{noteContent.length}/2000</Text>
+                                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                                            {noteSaved && <Text style={{ color: "#34d399", fontSize: 11 }}>Saved ✓</Text>}
+                                                            <TouchableOpacity
+                                                                style={[s.primaryBtn, { paddingHorizontal: 16, paddingVertical: 8 }, noteSaving && { opacity: 0.6 }]}
+                                                                onPress={() => saveNote(h.id)}
+                                                                disabled={noteSaving}>
+                                                                {noteSaving
+                                                                    ? <ActivityIndicator color="#fff" size="small" />
+                                                                    : <Text style={[s.primaryBtnText, { fontSize: 13 }]}>Save</Text>}
+                                                            </TouchableOpacity>
+                                                        </View>
+                                                    </View>
+                                                </View>
                                             )}
                                         </View>
-                                        {h.review_text && (
-                                            <Text style={[s.cardBio, { fontStyle: "italic", marginTop: 4 }]}>"{h.review_text}"</Text>
-                                        )}
-                                    </View>
-                                ))
+                                    );
+                                })
                             )}
                         </View>
                     )}
