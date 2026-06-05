@@ -42,6 +42,7 @@ interface Session {
     session_type: string;
     minutes_used: number;
     note: string | null;
+    scheduled_note: string | null;
     created_at: string;
     connect_consultants: { display_name: string; photo_url: string | null } | null;
 }
@@ -50,6 +51,17 @@ interface Message {
     id: string;
     sender_id: string;
     content: string;
+    created_at: string;
+}
+
+interface Transaction {
+    id: string;
+    type: "recharge" | "session";
+    consultant_name: string;
+    consultant_id: string;
+    minutes: number;
+    amount: number | null;
+    currency_code: string | null;
     created_at: string;
 }
 
@@ -64,6 +76,17 @@ const CRISIS_LINES = [
     { country: "USA", name: "988 Lifeline", phone: "988" },
     { country: "UK", name: "Samaritans", phone: "116123" },
     { country: "Australia", name: "Lifeline", phone: "131114" },
+];
+
+const EXPERTISE_OPTIONS = [
+    "Anxiety", "Depression", "Stress", "Relationships", "Grief", "Trauma",
+    "Career", "Self-esteem", "Parenting", "Life transitions", "Mindfulness", "Sleep",
+];
+
+const LANGUAGE_OPTIONS = [
+    "English", "Hindi", "Bengali", "Tamil", "Telugu", "Kannada",
+    "Malayalam", "Marathi", "Gujarati", "Punjabi", "Urdu", "French",
+    "Spanish", "German", "Arabic", "Mandarin",
 ];
 
 // ── View type ──────────────────────────────────────────────────────────────────
@@ -170,17 +193,25 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
 }) {
     const [consultants, setConsultants] = useState<Consultant[]>([]);
     const [loading, setLoading] = useState(true);
+    const [filterOnline, setFilterOnline] = useState(false);
+    const [filterTag, setFilterTag] = useState("");
     const s = styles(colors);
 
     useEffect(() => {
-        fetch(buildApiUrl("/api/connect/consultants"), {
+        const params = new URLSearchParams();
+        if (filterOnline) params.set("online", "true");
+        fetch(buildApiUrl(`/api/connect/consultants?${params}`), {
             headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         })
             .then((r) => r.json())
             .then((d) => setConsultants(d.consultants ?? []))
             .catch(() => {})
             .finally(() => setLoading(false));
-    }, [accessToken]);
+    }, [accessToken, filterOnline]);
+
+    const displayed = filterTag
+        ? consultants.filter((c) => c.expertise_tags.includes(filterTag))
+        : consultants;
 
     if (loading) return <View style={s.center}><ActivityIndicator color={colors.primary} /></View>;
     if (consultants.length === 0) return (
@@ -191,59 +222,65 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
     );
 
     return (
-        <FlatList
-            data={consultants}
-            keyExtractor={(c) => c.id}
-            contentContainerStyle={{ padding: 16, gap: 12 }}
-            renderItem={({ item }) => (
-                <ConsultantCard consultant={item} colors={colors} onPress={() => onSelectConsultant(item)} />
-            )}
-        />
-    );
-}
+        <View style={{ flex: 1 }}>
+            {/* Quick filters */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, gap: 8, flexDirection: "row" }}>
+                <TouchableOpacity
+                    style={[s.filterChip, filterOnline && s.filterChipActive]}
+                    onPress={() => setFilterOnline((v) => !v)}>
+                    <Text style={[s.filterChipText, filterOnline && s.filterChipTextActive]}>🟢 Online only</Text>
+                </TouchableOpacity>
+                {["Anxiety", "Stress", "Relationships", "Grief", "Career", "Mindfulness"].map((tag) => (
+                    <TouchableOpacity
+                        key={tag}
+                        style={[s.filterChip, filterTag === tag && s.filterChipActive]}
+                        onPress={() => setFilterTag((v) => (v === tag ? "" : tag))}>
+                        <Text style={[s.filterChipText, filterTag === tag && s.filterChipTextActive]}>{tag}</Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
 
-// ── Consultant Card ────────────────────────────────────────────────────────────
-function ConsultantCard({ consultant: c, colors, onPress }: {
-    consultant: Consultant; colors: any; onPress: () => void;
-}) {
-    const s = styles(colors);
-    const sym = CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code;
-
-    return (
-        <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.75}>
-            <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
-                {/* Avatar */}
-                <View style={s.avatar}>
-                    {c.photo_url
-                        ? <Image source={{ uri: c.photo_url }} style={s.avatarImg} />
-                        : <Text style={{ fontSize: 28 }}>{c.gender === "female" ? "👩" : "👨"}</Text>
-                    }
-                    {c.is_online && <View style={s.onlineDot} />}
-                </View>
-
-                <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                        <Text style={s.cardName}>{c.display_name}</Text>
-                        {c.is_online
-                            ? <Text style={[s.badge, { backgroundColor: "rgba(16,185,129,0.18)", color: "#34d399" }]}>Online</Text>
-                            : <Text style={[s.badge, { backgroundColor: "rgba(148,163,184,0.12)", color: colors.textSecondary }]}>Offline</Text>
-                        }
-                    </View>
-                    {c.bio && <Text style={s.cardBio} numberOfLines={2}>{c.bio}</Text>}
-
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
-                        {(c.expertise_tags ?? []).slice(0, 3).map((t) => (
-                            <Text key={t} style={s.tag}>{t}</Text>
-                        ))}
-                    </View>
-
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8, alignItems: "center" }}>
-                        <Text style={s.rateText}>{sym}{c.rate_per_min}/min</Text>
-                        <Text style={s.ratingText}>★ {c.rating_avg > 0 ? c.rating_avg.toFixed(1) : "New"} · {c.sessions_completed} sessions</Text>
-                    </View>
-                </View>
-            </View>
-        </TouchableOpacity>
+            <FlatList
+                data={displayed}
+                keyExtractor={(c) => c.id}
+                contentContainerStyle={{ padding: 12, gap: 12 }}
+                renderItem={({ item: c }) => (
+                    <TouchableOpacity style={s.card} onPress={() => onSelectConsultant(c)} activeOpacity={0.75}>
+                        <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
+                            <View style={s.avatar}>
+                                {c.photo_url
+                                    ? <Image source={{ uri: c.photo_url }} style={s.avatarImg} />
+                                    : <Text style={{ fontSize: 28 }}>{c.gender === "female" ? "👩" : "👨"}</Text>}
+                                {c.is_online && <View style={s.onlineDot} />}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                                    <Text style={s.cardName}>{c.display_name}</Text>
+                                    <Text style={s.rateText}>{CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code}{c.rate_per_min}/min</Text>
+                                </View>
+                                <Text style={[s.ratingText, { marginTop: 2 }]}>
+                                    ★ {c.rating_avg > 0 ? c.rating_avg.toFixed(1) : "New"} · {c.sessions_completed} sessions
+                                </Text>
+                                {c.bio && (
+                                    <Text style={[s.cardBio, { marginTop: 4 }]} numberOfLines={2}>{c.bio}</Text>
+                                )}
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                                    {c.expertise_tags.slice(0, 3).map((t) => (
+                                        <Text key={t} style={s.tag}>{t}</Text>
+                                    ))}
+                                </View>
+                                <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8, alignItems: "center" }}>
+                                    <Text style={[s.cardBio, { fontSize: 11, color: c.is_online ? "#34d399" : "#f87171" }]}>
+                                        {c.is_online ? "● Online" : "○ Offline"}
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+                )}
+            />
+        </View>
     );
 }
 
@@ -254,6 +291,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
 }) {
     const [sessions, setSessions] = useState<Session[]>([]);
     const [loading, setLoading] = useState(true);
+    const [cancelling, setCancelling] = useState<string | null>(null);
     const s = styles(colors);
 
     useEffect(() => {
@@ -266,6 +304,25 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
             .catch(() => {})
             .finally(() => setLoading(false));
     }, [accessToken]);
+
+    async function cancelSession(id: string) {
+        if (!accessToken) return;
+        setCancelling(id);
+        try {
+            const res = await fetch(buildApiUrl(`/api/connect/sessions/${id}`), {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ action: "cancel" }),
+            });
+            const d = await res.json();
+            if (d.ok) setSessions((prev) => prev.map((s) => s.id === id ? { ...s, status: "cancelled" } : s));
+            else Alert.alert("Error", d.error ?? "Could not cancel");
+        } catch {
+            Alert.alert("Error", "Network error");
+        } finally {
+            setCancelling(null);
+        }
+    }
 
     if (loading) return <View style={s.center}><ActivityIndicator color={colors.primary} /></View>;
     if (!accessToken) return (
@@ -286,20 +343,39 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
             keyExtractor={(s) => s.id}
             contentContainerStyle={{ padding: 16, gap: 10 }}
             renderItem={({ item }) => (
-                <TouchableOpacity style={s.card} onPress={() => onSelectSession(item)} activeOpacity={0.75}>
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                        <Text style={s.cardName}>
-                            {item.connect_consultants?.display_name ?? "Companion"}
+                <View style={s.card}>
+                    <TouchableOpacity
+                        style={{ flex: 1 }}
+                        onPress={() => onSelectSession(item)} activeOpacity={0.75}>
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                            <Text style={s.cardName}>
+                                {item.connect_consultants?.display_name ?? "Companion"}
+                            </Text>
+                            <Text style={[s.badge, { backgroundColor: "transparent", color: STATUS_COLORS[item.status] ?? colors.textSecondary }]}>
+                                {item.status}
+                            </Text>
+                        </View>
+                        <Text style={[s.cardBio, { marginTop: 2 }]}>
+                            {new Date(item.created_at).toLocaleDateString()} · {item.minutes_used.toFixed(0)} min used
                         </Text>
-                        <Text style={[s.badge, { backgroundColor: "transparent", color: STATUS_COLORS[item.status] ?? colors.textSecondary }]}>
-                            {item.status}
-                        </Text>
-                    </View>
-                    <Text style={[s.cardBio, { marginTop: 2 }]}>
-                        {new Date(item.created_at).toLocaleDateString()} · {item.minutes_used.toFixed(0)} min used
-                    </Text>
-                    {item.note && <Text style={[s.cardBio, { opacity: 0.7, fontStyle: "italic" }]} numberOfLines={1}>{item.note}</Text>}
-                </TouchableOpacity>
+                        {item.scheduled_note && <Text style={[s.cardBio, { opacity: 0.7, fontStyle: "italic" }]} numberOfLines={1}>{item.scheduled_note}</Text>}
+                    </TouchableOpacity>
+                    {item.status === "pending" && (
+                        <TouchableOpacity
+                            style={{ marginTop: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: "rgba(248,113,113,0.4)", alignItems: "center" }}
+                            onPress={() => {
+                                Alert.alert("Cancel Session", "Cancel this pending session request?", [
+                                    { text: "No" },
+                                    { text: "Yes, Cancel", style: "destructive", onPress: () => cancelSession(item.id) },
+                                ]);
+                            }}
+                            disabled={cancelling === item.id}>
+                            {cancelling === item.id
+                                ? <ActivityIndicator color="#f87171" size="small" />
+                                : <Text style={{ color: "#f87171", fontWeight: "600", fontSize: 13 }}>Cancel Request</Text>}
+                        </TouchableOpacity>
+                    )}
+                </View>
             )}
         />
     );
@@ -308,7 +384,10 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
 // ── Wallet Tab ─────────────────────────────────────────────────────────────────
 function WalletTab({ colors, accessToken }: { colors: any; accessToken: string | null }) {
     const [wallets, setWallets] = useState<{ consultant_id: string; display_name: string; currency_code: string; balance_minutes: number; photo_url: string | null; gender: string | null }[]>([]);
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
+    const [showHistory, setShowHistory] = useState(false);
+    const [historyLoading, setHistoryLoading] = useState(false);
     const s = styles(colors);
 
     useEffect(() => {
@@ -317,13 +396,24 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             headers: { Authorization: `Bearer ${accessToken}` },
         })
             .then((r) => r.json())
-            .then((d) => {
-                // API returns { wallets: [{consultant_id, display_name, balance_minutes, currency_code, photo_url, gender}] }
-                setWallets(d.wallets ?? []);
-            })
+            .then((d) => setWallets(d.wallets ?? []))
             .catch(() => {})
             .finally(() => setLoading(false));
     }, [accessToken]);
+
+    async function loadHistory() {
+        if (transactions.length > 0) { setShowHistory((v) => !v); return; }
+        setShowHistory(true);
+        setHistoryLoading(true);
+        try {
+            const res = await fetch(buildApiUrl("/api/connect/wallet/history"), {
+                headers: { Authorization: `Bearer ${accessToken ?? ""}` },
+            });
+            const d = await res.json();
+            if (d.ok) setTransactions(d.transactions ?? []);
+        } catch { /* silent */ }
+        finally { setHistoryLoading(false); }
+    }
 
     if (loading) return <View style={s.center}><ActivityIndicator color={colors.primary} /></View>;
     if (!accessToken) return (
@@ -339,16 +429,73 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                 </Text>
             </View>
             {wallets.map((w, i) => (
-                <View key={i} style={s.card}>
-                    <Text style={s.cardName}>{w.display_name}</Text>
-                    <Text style={s.cardBio}>{(w.balance_minutes ?? 0).toFixed(1)} minutes remaining</Text>
+                <View key={i} style={[s.card, { flexDirection: "row", alignItems: "center", gap: 12 }]}>
+                    <View style={[s.avatar, { width: 40, height: 40, borderRadius: 20 }]}>
+                        {w.photo_url
+                            ? <Image source={{ uri: w.photo_url }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                            : <Text style={{ fontSize: 22 }}>{w.gender === "female" ? "👩" : "👨"}</Text>}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={s.cardName}>{w.display_name}</Text>
+                        <Text style={s.cardBio}>{w.currency_code}</Text>
+                    </View>
+                    <Text style={[s.cardName, { color: colors.primary }]}>{(w.balance_minutes ?? 0).toFixed(0)} min</Text>
                 </View>
             ))}
-            <View style={[s.card, { padding: 16 }]}>
+            <View style={[s.card, { padding: 14 }]}>
                 <Text style={s.cardBio}>
                     Recharge from the Browse tab — select a companion and tap "Talk Now".
                 </Text>
             </View>
+
+            {/* Transaction History */}
+            <TouchableOpacity style={s.card} onPress={loadHistory} activeOpacity={0.75}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={[s.cardName, { fontSize: 14 }]}>🕓 Transaction History</Text>
+                    <Text style={s.cardBio}>{showHistory ? "▲" : "▼"}</Text>
+                </View>
+            </TouchableOpacity>
+
+            {showHistory && (
+                <View>
+                    {historyLoading ? (
+                        <View style={{ paddingVertical: 20, alignItems: "center" }}>
+                            <ActivityIndicator color={colors.primary} />
+                        </View>
+                    ) : transactions.length === 0 ? (
+                        <Text style={[s.cardBio, { textAlign: "center", paddingVertical: 16 }]}>No transactions yet.</Text>
+                    ) : (
+                        transactions.map((t) => (
+                            <View key={t.id} style={[s.card, { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }]}>
+                                <View style={{
+                                    width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center",
+                                    backgroundColor: t.type === "recharge" ? "rgba(52,211,153,0.15)" : "rgba(248,113,113,0.15)",
+                                }}>
+                                    <Text style={{ fontSize: 14 }}>{t.type === "recharge" ? "+" : "-"}</Text>
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[s.cardName, { fontSize: 13 }]}>
+                                        {t.type === "recharge" ? "Recharged" : "Session"} · {t.consultant_name}
+                                    </Text>
+                                    <Text style={[s.cardBio, { fontSize: 11 }]}>
+                                        {new Date(t.created_at).toLocaleDateString()}
+                                    </Text>
+                                </View>
+                                <View style={{ alignItems: "flex-end" }}>
+                                    <Text style={{ fontSize: 13, fontWeight: "700", color: t.type === "recharge" ? "#34d399" : "#f87171" }}>
+                                        {t.type === "recharge" ? "+" : "-"}{t.minutes} min
+                                    </Text>
+                                    {t.amount != null && t.currency_code && (
+                                        <Text style={[s.cardBio, { fontSize: 11 }]}>
+                                            {CURRENCY_SYMBOLS[t.currency_code] ?? t.currency_code}{t.amount.toFixed(2)}
+                                        </Text>
+                                    )}
+                                </View>
+                            </View>
+                        ))
+                    )}
+                </View>
+            )}
         </ScrollView>
     );
 }
@@ -361,32 +508,43 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 }) {
     const [rechargeVisible, setRechargeVisible] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [scheduleVisible, setScheduleVisible] = useState(false);
+    const [scheduleNote, setScheduleNote] = useState("");
+    const [scheduleLoading, setScheduleLoading] = useState(false);
     const s = styles(colors);
     const sym = CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code;
 
-    async function startSession() {
+    async function startSession(sessionType: "instant" | "scheduled" = "instant", note?: string) {
         if (!accessToken) { Alert.alert("Sign in required", "Please sign in to start a session."); return; }
-        setLoading(true);
+        if (sessionType === "instant") setLoading(true);
+        else setScheduleLoading(true);
         try {
+            const body: Record<string, unknown> = { consultant_id: c.id, session_type: sessionType };
+            if (note) body.scheduled_note = note;
             const res = await fetch(buildApiUrl("/api/connect/sessions"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-                body: JSON.stringify({ consultant_id: c.id, session_type: "instant" }),
+                body: JSON.stringify(body),
             });
             const d = await res.json();
             if (!d.ok) {
                 if (d.error?.includes("Insufficient balance")) {
                     setRechargeVisible(true);
+                } else if (d.redirect && d.existing_session_id) {
+                    // existing session — navigate there
+                    onStartSession({ ...d.session ?? {}, id: d.existing_session_id, connect_consultants: null, status: "pending", session_type: sessionType, user_id: userId ?? "", consultant_id: c.id, minutes_used: 0, note: null, scheduled_note: note ?? null, created_at: new Date().toISOString() } as Session);
                 } else {
                     Alert.alert("Error", d.error ?? "Could not start session");
                 }
                 return;
             }
+            setScheduleVisible(false);
             onStartSession(d.session);
         } catch {
             Alert.alert("Error", "Network error — please try again.");
         } finally {
             setLoading(false);
+            setScheduleLoading(false);
         }
     }
 
@@ -449,21 +607,28 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     </View>
                 )}
 
-                {/* Disclaimer */}
                 <Text style={[s.disclaimer, { textAlign: "center" }]}>
                     Peer wellness support only — not a substitute for professional mental health care.
                 </Text>
 
-                {/* CTA */}
+                {/* Talk Now */}
                 <TouchableOpacity
-                    style={[s.primaryBtn, loading && { opacity: 0.6 }]}
-                    onPress={startSession}
+                    style={[s.primaryBtn, (loading || !c.is_online) && { opacity: 0.6 }]}
+                    onPress={() => startSession("instant")}
                     disabled={loading || !c.is_online}
                 >
                     {loading
                         ? <ActivityIndicator color="#fff" />
-                        : <Text style={s.primaryBtnText}>{c.is_online ? "Talk Now" : "Offline"}</Text>
+                        : <Text style={s.primaryBtnText}>{c.is_online ? "Talk Now" : "Companion Offline"}</Text>
                     }
+                </TouchableOpacity>
+
+                {/* Request Meeting (scheduled session) */}
+                <TouchableOpacity
+                    style={[s.primaryBtn, { backgroundColor: "transparent", borderWidth: 1.5, borderColor: colors.primary }]}
+                    onPress={() => setScheduleVisible(true)}
+                >
+                    <Text style={[s.primaryBtnText, { color: colors.primary }]}>Request Meeting</Text>
                 </TouchableOpacity>
             </ScrollView>
 
@@ -473,9 +638,43 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 consultant={c}
                 accessToken={accessToken}
                 onClose={() => setRechargeVisible(false)}
-                onSuccess={() => { setRechargeVisible(false); startSession(); }}
+                onSuccess={() => { setRechargeVisible(false); startSession("instant"); }}
                 colors={colors}
             />
+
+            {/* Schedule session modal */}
+            <Modal visible={scheduleVisible} transparent animationType="slide" onRequestClose={() => setScheduleVisible(false)}>
+                <View style={s.modalBackdrop}>
+                    <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 16 }}>
+                            <Text style={[s.cardName, { fontSize: 18 }]}>Request a Meeting</Text>
+                            <TouchableOpacity onPress={() => setScheduleVisible(false)}>
+                                <Ionicons name="close" size={20} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={[s.cardBio, { marginBottom: 10 }]}>
+                            Let {c.display_name} know your preferred time or what you'd like to discuss:
+                        </Text>
+                        <TextInput
+                            style={[s.messageInput, { minHeight: 100, marginBottom: 16 }]}
+                            value={scheduleNote}
+                            onChangeText={setScheduleNote}
+                            placeholder="e.g. Available weekday evenings. Would love to talk about anxiety…"
+                            placeholderTextColor={colors.textSecondary}
+                            multiline
+                            maxLength={300}
+                        />
+                        <TouchableOpacity
+                            style={[s.primaryBtn, scheduleLoading && { opacity: 0.6 }]}
+                            onPress={() => startSession("scheduled", scheduleNote)}
+                            disabled={scheduleLoading}>
+                            {scheduleLoading
+                                ? <ActivityIndicator color="#fff" />
+                                : <Text style={s.primaryBtnText}>Send Request</Text>}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -564,7 +763,6 @@ function RechargeModal({ visible, consultant: c, accessToken, onClose, onSuccess
                         ))}
                     </View>
 
-                    {/* Breakdown */}
                     <View style={[s.card, { gap: 6 }]}>
                         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                             <Text style={s.cardBio}>{minutes} min × {sym}{c.rate_per_min}/min</Text>
@@ -575,8 +773,8 @@ function RechargeModal({ visible, consultant: c, accessToken, onClose, onSuccess
                             <Text style={[s.cardBio, { opacity: 0.6 }]}>{sym}{(total * 0.2).toFixed(2)}</Text>
                         </View>
                         <View style={{ flexDirection: "row", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6 }}>
-                            <Text style={[s.cardName]}>Total</Text>
-                            <Text style={[s.cardName]}>{sym}{total.toFixed(2)}</Text>
+                            <Text style={s.cardName}>Total</Text>
+                            <Text style={s.cardName}>{sym}{total.toFixed(2)}</Text>
                         </View>
                     </View>
 
@@ -609,12 +807,24 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [status, setStatus] = useState(session.status);
     const [showEmergency, setShowEmergency] = useState(false);
     const [showReview, setShowReview] = useState(false);
+    const [showTopUp, setShowTopUp] = useState(false);
     const [rating, setRating] = useState(0);
     const [reviewText, setReviewText] = useState("");
     const flatRef = useRef<FlatList>(null);
     const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const s = styles(colors);
+
+    // Synthetic consultant object for RechargeModal — needs at least rate/currency/display_name/id
+    const consultantForRecharge: Consultant = {
+        id: session.consultant_id,
+        display_name: session.connect_consultants?.display_name ?? "Companion",
+        gender: null, photo_url: null, bio: null,
+        expertise_tags: [], languages: [],
+        rate_per_min: 10, currency_code: "INR",
+        is_online: true, rating_avg: 0, rating_count: 0,
+        sessions_completed: 0, availability_note: null,
+    };
 
     // Load messages
     useEffect(() => {
@@ -703,6 +913,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const isActive = status === "active";
     const isCompleted = status === "completed";
     const isPending = status === "pending";
+    const isConsultantView = session.user_id !== userId;
 
     return (
         <KeyboardAvoidingView
@@ -741,14 +952,18 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 </Text>
             )}
             {isActive && displaySeconds !== null && displaySeconds <= 120 && displaySeconds > 0 && (
-                <Text style={{ textAlign: "center", color: "#f87171", fontSize: 12, padding: 8, backgroundColor: "rgba(248,113,113,0.08)", fontWeight: "600" }}>
-                    Less than 2 minutes remaining — recharge to continue
-                </Text>
+                <TouchableOpacity
+                    style={{ backgroundColor: "rgba(248,113,113,0.08)", padding: 10 }}
+                    onPress={() => setShowTopUp(true)}>
+                    <Text style={{ textAlign: "center", color: "#f87171", fontSize: 12, fontWeight: "600" }}>
+                        Less than 2 minutes remaining — tap to add more time
+                    </Text>
+                </TouchableOpacity>
             )}
             {isCompleted && (
                 <View style={{ padding: 10, alignItems: "center", backgroundColor: "rgba(148,163,184,0.08)" }}>
                     <Text style={s.cardBio}>Session completed · {session.minutes_used} min</Text>
-                    {!showReview && (
+                    {!showReview && !isConsultantView && (
                         <TouchableOpacity onPress={() => setShowReview(true)}>
                             <Text style={{ color: colors.primary, fontSize: 12, marginTop: 4 }}>Leave a review</Text>
                         </TouchableOpacity>
@@ -806,7 +1021,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 </View>
             )}
 
-            {/* End session button — visible to both user and consultant */}
+            {/* End session button */}
             {isActive && (
                 <TouchableOpacity style={{ alignItems: "center", paddingVertical: 8, paddingBottom: insets.bottom || 4 }}
                     onPress={() => {
@@ -815,7 +1030,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                             headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                             body: JSON.stringify({ action: "complete" }),
                         }).then(() => {
-                            if (session.user_id !== userId) onBack(); // consultant goes back to dashboard
+                            if (isConsultantView) onBack();
                         }).catch(() => {});
                     }}>
                     <Text style={{ color: colors.textSecondary, fontSize: 12 }}>End session</Text>
@@ -853,6 +1068,18 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     </View>
                 </View>
             </Modal>
+
+            {/* Mid-session top-up modal */}
+            {showTopUp && (
+                <RechargeModal
+                    visible={showTopUp}
+                    consultant={consultantForRecharge}
+                    accessToken={accessToken}
+                    onClose={() => setShowTopUp(false)}
+                    onSuccess={() => setShowTopUp(false)}
+                    colors={colors}
+                />
+            )}
         </KeyboardAvoidingView>
     );
 }
@@ -902,6 +1129,10 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
     const [profile, setProfile]             = useState<any>(null);
     const [earnings, setEarnings]           = useState<any>(null);
     const [incoming, setIncoming]           = useState<any[]>([]);
+    const [history, setHistory]             = useState<any[]>([]);
+    const [showHistory, setShowHistory]     = useState(false);
+    const [historyLoaded, setHistoryLoaded] = useState(false);
+    const [historyLoading, setHistoryLoading] = useState(false);
     const [loading, setLoading]             = useState(true);
     const [toggling, setToggling]           = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -911,6 +1142,8 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
     const [payoutAmount, setPayoutAmount]   = useState("");
     const [payoutLoading, setPayoutLoading] = useState(false);
     const [payoutMsg, setPayoutMsg]         = useState<{ ok: boolean; text: string } | null>(null);
+    const [newRequestAlert, setNewRequestAlert] = useState(false);
+    const prevPendingCount = useRef(0);
     const s = styles(colors);
 
     async function requestPayout() {
@@ -954,7 +1187,10 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
         const [p, e, s] = await Promise.all([pRes.json(), eRes.json(), sRes.json()]);
         if (p.ok) setProfile(p.consultant);
         if (e.ok) setEarnings(e);
-        if (s.ok) setIncoming(s.sessions ?? []);
+        if (s.ok) {
+            setIncoming(s.sessions ?? []);
+            prevPendingCount.current = (s.sessions ?? []).filter((x: any) => x.status === "pending").length;
+        }
         setLoading(false);
     }, [accessToken]);
 
@@ -966,11 +1202,63 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
         const t = setInterval(() => {
             fetch(buildApiUrl("/api/connect/consultant/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } })
                 .then((r) => r.json())
-                .then((d) => { if (d.ok) setIncoming(d.sessions ?? []); })
+                .then((d) => {
+                    if (d.ok) {
+                        const sessions = d.sessions ?? [];
+                        const newPendingCount = sessions.filter((x: any) => x.status === "pending").length;
+                        if (newPendingCount > prevPendingCount.current) {
+                            setNewRequestAlert(true);
+                            Alert.alert("New Request", "You have a new session request!");
+                        }
+                        prevPendingCount.current = newPendingCount;
+                        setIncoming(sessions);
+                    }
+                })
                 .catch(() => {});
         }, 15_000);
         return () => clearInterval(t);
     }, [accessToken]);
+
+    // Supabase Realtime: instant alert for new pending sessions
+    useEffect(() => {
+        if (!profile?.id) return;
+        const consultantId = profile.id;
+        const channel = supabase
+            .channel(`dashboard:${consultantId}`)
+            .on("postgres_changes" as any, {
+                event: "INSERT",
+                schema: "public",
+                table: "connect_sessions",
+                filter: `consultant_id=eq.${consultantId}`,
+            }, (payload: any) => {
+                const newSession = payload.new;
+                if (newSession?.status === "pending") {
+                    setIncoming((prev) => {
+                        if (prev.find((s) => s.id === newSession.id)) return prev;
+                        setNewRequestAlert(true);
+                        Alert.alert("New Request! 🔔", "A user wants to connect with you.");
+                        return [newSession, ...prev];
+                    });
+                }
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [profile?.id]);
+
+    async function loadHistory() {
+        if (historyLoaded) { setShowHistory((v) => !v); return; }
+        setShowHistory(true);
+        setHistoryLoading(true);
+        try {
+            const res = await fetch(buildApiUrl("/api/connect/consultant/sessions?status=history"), {
+                headers: { Authorization: `Bearer ${accessToken ?? ""}` },
+            });
+            const d = await res.json();
+            if (d.ok) { setHistory(d.sessions ?? []); setHistoryLoaded(true); }
+        } catch { /* silent */ }
+        finally { setHistoryLoading(false); }
+    }
 
     async function handleAction(sessionId: string, action: "accept" | "decline") {
         if (!accessToken) return;
@@ -1031,6 +1319,17 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                 </ScrollView>
             ) : (
                 <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+                    {/* New request banner */}
+                    {newRequestAlert && (
+                        <TouchableOpacity
+                            style={{ backgroundColor: "rgba(251,191,36,0.15)", borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1.5, borderColor: "rgba(251,191,36,0.4)" }}
+                            onPress={() => setNewRequestAlert(false)}>
+                            <Text style={{ fontSize: 18 }}>🔔</Text>
+                            <Text style={{ color: "#fbbf24", fontWeight: "700", flex: 1 }}>New session request!</Text>
+                            <Text style={{ color: "#fbbf24", opacity: 0.6, fontSize: 11 }}>tap to dismiss</Text>
+                        </TouchableOpacity>
+                    )}
+
                     {/* Status + online toggle */}
                     <View style={[s.card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
                         <View>
@@ -1049,7 +1348,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                         )}
                     </View>
 
-                    {/* Active sessions — rejoin */}
+                    {/* Active sessions */}
                     {active.map((s) => (
                         <View key={s.id} style={[styles(colors).card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
                             <View>
@@ -1119,7 +1418,9 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                             <View style={{ gap: 6 }}>
                                 <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                                     <Text style={s.cardBio}>Total earned</Text>
-                                    <Text style={s.cardName}>₹{(earnings.earned_amount ?? 0).toFixed(2)}</Text>
+                                    <Text style={s.cardName}>
+                                        {CURRENCY_SYMBOLS[earnings.earned_currency ?? "INR"] ?? "₹"}{(earnings.earned_amount ?? 0).toFixed(2)}
+                                    </Text>
                                 </View>
                                 <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                                     <Text style={s.cardBio}>Sessions completed</Text>
@@ -1127,7 +1428,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                                 </View>
                                 {(earnings.pending_payout ?? 0) > 0 && (
                                     <Text style={{ color: "#fbbf24", fontSize: 12, textAlign: "center", marginTop: 4 }}>
-                                        ₹{(earnings.pending_payout ?? 0).toFixed(2)} payout pending
+                                        {CURRENCY_SYMBOLS[earnings.earned_currency ?? "INR"] ?? "₹"}{(earnings.pending_payout ?? 0).toFixed(2)} payout pending
                                     </Text>
                                 )}
                             </View>
@@ -1138,7 +1439,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                                         style={[s.primaryBtn, { marginTop: 12 }]}
                                         onPress={() => { setShowPayout(!showPayout); setPayoutMsg(null); }}>
                                         <Text style={s.primaryBtnText}>
-                                            {showPayout ? "Cancel" : `Request Payout · ₹${available.toFixed(2)}`}
+                                            {showPayout ? "Cancel" : `Request Payout · ${CURRENCY_SYMBOLS[earnings.earned_currency ?? "INR"] ?? "₹"}${available.toFixed(2)}`}
                                         </Text>
                                     </TouchableOpacity>
                                 ) : null;
@@ -1192,6 +1493,42 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                             )}
                         </View>
                     )}
+
+                    {/* Session history + reviews */}
+                    <TouchableOpacity style={s.card} onPress={loadHistory} activeOpacity={0.75}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                            <Text style={[s.cardName, { fontSize: 14 }]}>🕓 Session History & Reviews</Text>
+                            <Text style={s.cardBio}>{showHistory ? "▲" : "▼"}</Text>
+                        </View>
+                    </TouchableOpacity>
+
+                    {showHistory && (
+                        <View>
+                            {historyLoading ? (
+                                <View style={{ paddingVertical: 20, alignItems: "center" }}>
+                                    <ActivityIndicator color={colors.primary} />
+                                </View>
+                            ) : history.length === 0 ? (
+                                <Text style={[s.cardBio, { textAlign: "center", paddingVertical: 16 }]}>No completed sessions yet.</Text>
+                            ) : (
+                                history.map((h) => (
+                                    <View key={h.id} style={[s.card, { marginBottom: 8 }]}>
+                                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                                            <Text style={[s.cardBio, { fontSize: 12 }]}>
+                                                {new Date(h.created_at).toLocaleDateString()} · {h.type} · {(h.minutes_used ?? 0).toFixed(0)} min
+                                            </Text>
+                                            {h.rating != null && (
+                                                <Text style={{ color: "#fbbf24", fontWeight: "700", fontSize: 13 }}>★ {h.rating}</Text>
+                                            )}
+                                        </View>
+                                        {h.review_text && (
+                                            <Text style={[s.cardBio, { fontStyle: "italic", marginTop: 4 }]}>"{h.review_text}"</Text>
+                                        )}
+                                    </View>
+                                ))
+                            )}
+                        </View>
+                    )}
                 </ScrollView>
             )}
         </View>
@@ -1199,6 +1536,31 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
 }
 
 // ── Register View ──────────────────────────────────────────────────────────────
+function ChipSelector({ label, options, selected, onToggle, colors }: {
+    label: string; options: string[]; selected: string[];
+    onToggle: (v: string) => void; colors: any;
+}) {
+    const s = styles(colors);
+    return (
+        <View style={{ marginBottom: 16 }}>
+            <Text style={[s.cardBio, { marginBottom: 8, fontWeight: "600" }]}>{label}</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {options.map((opt) => {
+                    const active = selected.includes(opt);
+                    return (
+                        <TouchableOpacity
+                            key={opt}
+                            style={[s.filterChip, active && s.filterChipActive]}
+                            onPress={() => onToggle(opt)}>
+                            <Text style={[s.filterChipText, active && s.filterChipTextActive]}>{opt}</Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        </View>
+    );
+}
+
 function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
     colors: any; insets: any; accessToken: string | null;
     onBack: () => void; onSuccess: () => void;
@@ -1206,7 +1568,8 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
     const [step, setStep] = useState(1);
     const [form, setForm] = useState({
         display_name: "", gender: "", bio: "",
-        expertise_tags: "", languages: "",
+        expertise_tags: [] as string[],
+        languages: [] as string[],
         rate_per_min: "10", currency_code: "INR",
         availability_note: "", coc_agreed: false,
     });
@@ -1214,13 +1577,22 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
     const [error, setError] = useState("");
     const s = styles(colors);
 
-    function update(field: string, value: string | boolean) {
+    function update(field: string, value: string | boolean | string[]) {
         setForm((f) => ({ ...f, [field]: value }));
+    }
+
+    function toggleItem(field: "expertise_tags" | "languages", value: string) {
+        setForm((f) => {
+            const arr = f[field];
+            return { ...f, [field]: arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value] };
+        });
     }
 
     async function submit() {
         if (!form.coc_agreed) { setError("You must agree to the Code of Conduct."); return; }
         if (!accessToken) { setError("Sign in required."); return; }
+        if (form.expertise_tags.length === 0) { setError("Select at least one specialty."); return; }
+        if (form.languages.length === 0) { setError("Select at least one language."); return; }
         setLoading(true); setError("");
         try {
             const res = await fetch(buildApiUrl("/api/connect/consultant/register"), {
@@ -1229,8 +1601,6 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                 body: JSON.stringify({
                     ...form,
                     rate_per_min: parseFloat(form.rate_per_min),
-                    expertise_tags: form.expertise_tags.split(",").map((t) => t.trim()).filter(Boolean),
-                    languages: form.languages.split(",").map((l) => l.trim()).filter(Boolean),
                 }),
             });
             const d = await res.json();
@@ -1243,7 +1613,7 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
         }
     }
 
-    function field(label: string, field: string, placeholder?: string, multiline = false) {
+    function textField(label: string, field: string, placeholder?: string, multiline = false) {
         return (
             <View style={{ marginBottom: 12 }}>
                 <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>{label}</Text>
@@ -1273,7 +1643,7 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
             <ScrollView contentContainerStyle={{ padding: 20 }}>
                 {step === 1 && (
                     <View>
-                        {field("Display Name", "display_name", "Your name as shown to users")}
+                        {textField("Display Name", "display_name", "Your name as shown to users")}
                         <View style={{ marginBottom: 12 }}>
                             <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Gender</Text>
                             <View style={{ flexDirection: "row", gap: 8 }}>
@@ -1288,9 +1658,24 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                                 ))}
                             </View>
                         </View>
-                        {field("Specialties (comma-separated)", "expertise_tags", "e.g. Anxiety, Relationships, Grief")}
-                        {field("Languages (comma-separated)", "languages", "e.g. English, Hindi")}
-                        <TouchableOpacity style={s.primaryBtn} onPress={() => setStep(2)}>
+                        <ChipSelector
+                            label="Specialties (select all that apply)"
+                            options={EXPERTISE_OPTIONS}
+                            selected={form.expertise_tags}
+                            onToggle={(v) => toggleItem("expertise_tags", v)}
+                            colors={colors}
+                        />
+                        <ChipSelector
+                            label="Languages spoken"
+                            options={LANGUAGE_OPTIONS}
+                            selected={form.languages}
+                            onToggle={(v) => toggleItem("languages", v)}
+                            colors={colors}
+                        />
+                        <TouchableOpacity
+                            style={[s.primaryBtn, (!form.display_name || !form.gender || form.expertise_tags.length === 0 || form.languages.length === 0) && { opacity: 0.5 }]}
+                            disabled={!form.display_name || !form.gender || form.expertise_tags.length === 0 || form.languages.length === 0}
+                            onPress={() => setStep(2)}>
                             <Text style={s.primaryBtnText}>Next</Text>
                         </TouchableOpacity>
                     </View>
@@ -1298,7 +1683,7 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
 
                 {step === 2 && (
                     <View>
-                        {field("Bio (max 500 chars)", "bio", "Tell users about your background and approach", true)}
+                        {textField("Bio (max 500 chars)", "bio", "Tell users about your background and approach", true)}
                         <View style={{ marginBottom: 12 }}>
                             <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Rate per minute</Text>
                             <View style={{ flexDirection: "row", gap: 8 }}>
@@ -1310,7 +1695,7 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                                     placeholderTextColor={colors.textSecondary}
                                 />
                                 <View style={{ flexDirection: "row", gap: 6 }}>
-                                    {["INR", "USD"].map((c) => (
+                                    {["INR", "USD", "EUR", "GBP"].map((c) => (
                                         <TouchableOpacity key={c}
                                             style={[s.durationBtn, form.currency_code === c && s.durationBtnActive]}
                                             onPress={() => update("currency_code", c)}>
@@ -1320,7 +1705,7 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                                 </View>
                             </View>
                         </View>
-                        {field("Availability", "availability_note", "e.g. Weekdays 6–10 PM IST")}
+                        {textField("Availability (optional)", "availability_note", "e.g. Weekdays 6–10 PM IST")}
                         <TouchableOpacity style={s.primaryBtn} onPress={() => setStep(3)}>
                             <Text style={s.primaryBtnText}>Next</Text>
                         </TouchableOpacity>
@@ -1418,6 +1803,17 @@ function styles(colors: any) {
             color: colors.primary, borderRadius: 8,
             paddingHorizontal: 8, paddingVertical: 3,
         },
+        filterChip: {
+            paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+            borderWidth: 1.5, borderColor: colors.border,
+            backgroundColor: colors.surfaceSoft,
+        },
+        filterChipActive: {
+            borderColor: colors.primary,
+            backgroundColor: colors.primaryTint,
+        },
+        filterChipText: { fontSize: 12, color: colors.textSecondary, fontWeight: "600" },
+        filterChipTextActive: { color: colors.primary },
         rateText: { fontSize: 14, fontWeight: "700", color: colors.primary },
         ratingText: { fontSize: 12, color: colors.textSecondary },
         disclaimer: { fontSize: 11, color: colors.textSecondary, opacity: 0.6, textAlign: "center", paddingHorizontal: 16 },
