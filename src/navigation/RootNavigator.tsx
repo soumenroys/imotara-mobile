@@ -12,6 +12,7 @@ import ChatScreen from "../screens/ChatScreen";
 import HistoryScreen from "../screens/HistoryScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import TrendsScreen from "../screens/TrendsScreen";
+import ConnectScreen from "../screens/connect/ConnectScreen";
 // lifecycle hook + history store
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { useHistoryStore } from "../state/HistoryContext";
@@ -103,6 +104,7 @@ const linking = {
             History: "history",
             Trends: "trends",
             Settings: "settings",
+            Connect: "connect",
         },
     },
 };
@@ -241,6 +243,8 @@ export default function RootNavigator() {
                                 iconName = focused ? "time" : "time-outline";
                             } else if (route.name === "Trends") {
                                 iconName = focused ? "bar-chart" : "bar-chart-outline";
+                            } else if (route.name === "Connect") {
+                                iconName = focused ? "people" : "people-outline";
                             } else {
                                 iconName = focused ? "settings" : "settings-outline";
                             }
@@ -269,6 +273,11 @@ export default function RootNavigator() {
                             tabBarBadge: trendsBadge > 0 ? trendsBadge : undefined,
                             tabBarBadgeStyle: { backgroundColor: colors.primary, color: "#fff", fontSize: 10, minWidth: 16, height: 16 },
                         }}
+                    />
+                    <Tab.Screen
+                        name="Connect"
+                        component={ConnectScreen}
+                        options={{ headerShown: false, title: "Connect" }}
                     />
                     <Tab.Screen
                         name="Settings"
