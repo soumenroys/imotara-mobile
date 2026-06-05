@@ -112,7 +112,8 @@ export default function ConnectScreen() {
     if (view.name === "dashboard") {
         return <DashboardView colors={colors} insets={insets}
             accessToken={accessToken}
-            onBack={() => setView({ name: "browse" })} />;
+            onBack={() => setView({ name: "browse" })}
+            onJoinSession={(s) => setView({ name: "chat", session: s })} />;
     }
     if (view.name === "register") {
         return <RegisterView colors={colors} insets={insets}
@@ -870,28 +871,68 @@ function EmergencyModal({ visible, onClose, colors }: { visible: boolean; onClos
 }
 
 // ── Dashboard View ─────────────────────────────────────────────────────────────
-function DashboardView({ colors, insets, accessToken, onBack }: {
-    colors: any; insets: any; accessToken: string | null; onBack: () => void;
+function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
+    colors: any; insets: any; accessToken: string | null;
+    onBack: () => void;
+    onJoinSession: (session: Session) => void;
 }) {
-    const [profile, setProfile] = useState<any>(null);
-    const [earnings, setEarnings] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [toggling, setToggling] = useState(false);
+    const [profile, setProfile]             = useState<any>(null);
+    const [earnings, setEarnings]           = useState<any>(null);
+    const [incoming, setIncoming]           = useState<any[]>([]);
+    const [loading, setLoading]             = useState(true);
+    const [toggling, setToggling]           = useState(false);
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
     const s = styles(colors);
 
     const load = useCallback(async () => {
         if (!accessToken) { setLoading(false); return; }
-        const [pRes, eRes] = await Promise.all([
+        const [pRes, eRes, sRes] = await Promise.all([
             fetch(buildApiUrl("/api/connect/consultant/profile"), { headers: { Authorization: `Bearer ${accessToken}` } }),
             fetch(buildApiUrl("/api/connect/consultant/earnings"), { headers: { Authorization: `Bearer ${accessToken}` } }),
+            fetch(buildApiUrl("/api/connect/consultant/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } }),
         ]);
-        const [p, e] = await Promise.all([pRes.json(), eRes.json()]);
+        const [p, e, s] = await Promise.all([pRes.json(), eRes.json(), sRes.json()]);
         if (p.ok) setProfile(p.consultant);
         if (e.ok) setEarnings(e);
+        if (s.ok) setIncoming(s.sessions ?? []);
         setLoading(false);
     }, [accessToken]);
 
     useEffect(() => { load(); }, [load]);
+
+    // Poll every 15s for new requests
+    useEffect(() => {
+        if (!accessToken) return;
+        const t = setInterval(() => {
+            fetch(buildApiUrl("/api/connect/consultant/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } })
+                .then((r) => r.json())
+                .then((d) => { if (d.ok) setIncoming(d.sessions ?? []); })
+                .catch(() => {});
+        }, 15_000);
+        return () => clearInterval(t);
+    }, [accessToken]);
+
+    async function handleAction(sessionId: string, action: "accept" | "decline") {
+        if (!accessToken) return;
+        setActionLoading(sessionId);
+        try {
+            const res = await fetch(buildApiUrl(`/api/connect/sessions/${sessionId}`), {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ action }),
+            });
+            const d = await res.json();
+            if (d.ok) {
+                if (action === "accept") {
+                    const sess = incoming.find((s) => s.id === sessionId);
+                    if (sess) onJoinSession({ ...sess, connect_consultants: null });
+                } else {
+                    setIncoming((prev) => prev.filter((s) => s.id !== sessionId));
+                }
+            }
+        } catch { /* silent */ }
+        finally { setActionLoading(null); }
+    }
 
     async function toggleOnline() {
         if (!accessToken || !profile) return;
@@ -905,6 +946,9 @@ function DashboardView({ colors, insets, accessToken, onBack }: {
         if (d.ok) setProfile((p: any) => ({ ...p, is_online: !p.is_online }));
         setToggling(false);
     }
+
+    const pending = incoming.filter((s) => s.status === "pending");
+    const active  = incoming.filter((s) => s.status === "active");
 
     return (
         <View style={[s.container, { paddingTop: insets.top }]}>
@@ -927,6 +971,7 @@ function DashboardView({ colors, insets, accessToken, onBack }: {
                 </ScrollView>
             ) : (
                 <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+                    {/* Status + online toggle */}
                     <View style={[s.card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
                         <View>
                             <Text style={s.cardName}>{profile.display_name}</Text>
@@ -937,24 +982,84 @@ function DashboardView({ colors, insets, accessToken, onBack }: {
                         {profile.status === "approved" && (
                             <TouchableOpacity
                                 style={[s.primaryBtn, { paddingHorizontal: 16, paddingVertical: 8 },
-                                    profile.is_online ? { backgroundColor: "#f87171" } : {}]}
+                                    profile.is_online ? { backgroundColor: "rgba(248,113,113,0.8)" } : {}]}
                                 onPress={toggleOnline} disabled={toggling}>
                                 <Text style={s.primaryBtnText}>{profile.is_online ? "Go Offline" : "Go Online"}</Text>
                             </TouchableOpacity>
                         )}
                     </View>
 
+                    {/* Active sessions — rejoin */}
+                    {active.map((s) => (
+                        <View key={s.id} style={[styles(colors).card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
+                            <View>
+                                <Text style={[styles(colors).cardName, { color: "#34d399" }]}>Session in progress</Text>
+                                <Text style={styles(colors).cardBio}>{s.type} · {(s.minutes_used ?? 0).toFixed(0)} min used</Text>
+                            </View>
+                            <TouchableOpacity
+                                style={[styles(colors).primaryBtn, { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: "rgba(52,211,153,0.8)" }]}
+                                onPress={() => onJoinSession({ ...s, connect_consultants: null })}>
+                                <Text style={styles(colors).primaryBtnText}>Rejoin</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ))}
+
+                    {/* Pending requests */}
+                    {pending.length > 0 && (
+                        <View>
+                            <Text style={[s.cardBio, { color: "#fbbf24", fontWeight: "700", marginBottom: 8 }]}>
+                                Incoming Requests ({pending.length})
+                            </Text>
+                            {pending.map((req) => (
+                                <View key={req.id} style={[s.card, { marginBottom: 10 }]}>
+                                    <View style={{ marginBottom: 10 }}>
+                                        <Text style={s.cardBio}>
+                                            {req.type === "instant" ? "Instant session" : "Scheduled session"}
+                                            {" · "}{new Date(req.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                        </Text>
+                                        {req.scheduled_note && (
+                                            <Text style={[s.cardBio, { fontStyle: "italic", marginTop: 4 }]}>
+                                                "{req.scheduled_note}"
+                                            </Text>
+                                        )}
+                                    </View>
+                                    <View style={{ flexDirection: "row", gap: 8 }}>
+                                        <TouchableOpacity
+                                            style={[s.primaryBtn, { flex: 1, paddingVertical: 10 }, actionLoading === req.id && { opacity: 0.6 }]}
+                                            onPress={() => handleAction(req.id, "accept")}
+                                            disabled={actionLoading === req.id}>
+                                            {actionLoading === req.id
+                                                ? <ActivityIndicator color="#fff" size="small" />
+                                                : <Text style={s.primaryBtnText}>Accept & Chat</Text>
+                                            }
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[{ flex: 1, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: "rgba(248,113,113,0.4)", alignItems: "center" }, actionLoading === req.id && { opacity: 0.6 }]}
+                                            onPress={() => handleAction(req.id, "decline")}
+                                            disabled={actionLoading === req.id}>
+                                            <Text style={{ color: "#f87171", fontWeight: "700", fontSize: 14 }}>Decline</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
+                    {pending.length === 0 && active.length === 0 && profile.status === "approved" && (
+                        <View style={[s.card, { alignItems: "center" }]}>
+                            <Text style={s.cardBio}>No incoming requests right now.</Text>
+                            <Text style={[s.cardBio, { opacity: 0.6, marginTop: 2 }]}>Go online to receive requests.</Text>
+                        </View>
+                    )}
+
+                    {/* Earnings */}
                     {earnings && (
                         <View style={s.card}>
                             <Text style={[s.cardName, { marginBottom: 8 }]}>Earnings</Text>
                             <View style={{ gap: 6 }}>
                                 <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                                     <Text style={s.cardBio}>Total earned</Text>
-                                    <Text style={s.cardName}>₹{(earnings.total_earned_inr ?? 0).toFixed(2)}</Text>
-                                </View>
-                                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                                    <Text style={s.cardBio}>Pending payout</Text>
-                                    <Text style={s.cardName}>₹{(earnings.pending_payout_inr ?? 0).toFixed(2)}</Text>
+                                    <Text style={s.cardName}>₹{(earnings.earned_amount ?? 0).toFixed(2)}</Text>
                                 </View>
                                 <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                                     <Text style={s.cardBio}>Sessions completed</Text>
