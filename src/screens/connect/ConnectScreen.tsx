@@ -59,6 +59,8 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 
 const CRISIS_LINES = [
     { country: "India", name: "iCall", phone: "9152987821" },
+    { country: "India", name: "Vandrevala Foundation", phone: "18602662345" },
+    { country: "India", name: "Snehi", phone: "04424640050" },
     { country: "USA", name: "988 Lifeline", phone: "988" },
     { country: "UK", name: "Samaritans", phone: "116123" },
     { country: "Australia", name: "Lifeline", phone: "131114" },
@@ -603,6 +605,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [input, setInput] = useState("");
     const [sending, setSending] = useState(false);
     const [remaining, setRemaining] = useState<number | null>(null);
+    const [displaySeconds, setDisplaySeconds] = useState<number | null>(null);
     const [status, setStatus] = useState(session.status);
     const [showEmergency, setShowEmergency] = useState(false);
     const [showReview, setShowReview] = useState(false);
@@ -610,6 +613,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [reviewText, setReviewText] = useState("");
     const flatRef = useRef<FlatList>(null);
     const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const s = styles(colors);
 
     // Load messages
@@ -664,6 +668,18 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         return () => { if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; } };
     }, [status, session.id, accessToken]);
 
+    // Per-second visual countdown synced from API tick
+    useEffect(() => {
+        if (remaining === null) { setDisplaySeconds(null); return; }
+        const secs = Math.round(remaining * 60);
+        setDisplaySeconds(secs);
+        if (countdownRef.current) clearInterval(countdownRef.current);
+        countdownRef.current = setInterval(() => {
+            setDisplaySeconds((prev) => (prev === null || prev <= 0 ? 0 : prev - 1));
+        }, 1000);
+        return () => { if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; } };
+    }, [remaining]);
+
     async function send() {
         const text = input.trim();
         if (!text || sending) return;
@@ -703,10 +719,10 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     <Text style={s.headerTitle}>{session.connect_consultants?.display_name ?? "Companion"}</Text>
                     <Text style={[s.cardBio, { fontSize: 11 }]}>{isActive ? "Active" : isPending ? "Waiting…" : status}</Text>
                 </View>
-                {isActive && remaining !== null && (
-                    <View style={{ backgroundColor: remaining <= 1 ? "rgba(248,113,113,0.2)" : "rgba(52,211,153,0.2)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
-                        <Text style={{ color: remaining <= 1 ? "#f87171" : "#34d399", fontSize: 12, fontWeight: "600" }}>
-                            {Math.round(remaining)} min
+                {isActive && displaySeconds !== null && (
+                    <View style={{ backgroundColor: displaySeconds <= 120 ? "rgba(248,113,113,0.2)" : "rgba(52,211,153,0.2)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                        <Text style={{ color: displaySeconds <= 120 ? "#f87171" : "#34d399", fontSize: 12, fontWeight: "600", fontVariant: ["tabular-nums"] }}>
+                            {Math.floor(displaySeconds / 60)}:{(displaySeconds % 60).toString().padStart(2, "0")}
                         </Text>
                     </View>
                 )}
@@ -722,6 +738,11 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             {isPending && (
                 <Text style={{ textAlign: "center", color: "#fbbf24", fontSize: 12, padding: 8, backgroundColor: "rgba(251,191,36,0.08)" }}>
                     Waiting for companion to accept…
+                </Text>
+            )}
+            {isActive && displaySeconds !== null && displaySeconds <= 120 && displaySeconds > 0 && (
+                <Text style={{ textAlign: "center", color: "#f87171", fontSize: 12, padding: 8, backgroundColor: "rgba(248,113,113,0.08)", fontWeight: "600" }}>
+                    Less than 2 minutes remaining — recharge to continue
                 </Text>
             )}
             {isCompleted && (
