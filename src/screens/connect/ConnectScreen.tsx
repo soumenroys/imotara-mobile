@@ -67,7 +67,7 @@ const CRISIS_LINES = [
 ];
 
 // ── View type ──────────────────────────────────────────────────────────────────
-type View =
+type ConnectView =
     | { name: "browse" }
     | { name: "sessions" }
     | { name: "wallet" }
@@ -81,7 +81,7 @@ export default function ConnectScreen() {
     const insets = useSafeAreaInsets();
     const { accessToken, user } = useAuth();
 
-    const [view, setView] = useState<View>({ name: "browse" });
+    const [view, setView] = useState<ConnectView>({ name: "browse" });
 
     const s = styles(colors);
 
@@ -141,7 +141,7 @@ export default function ConnectScreen() {
             <View style={s.tabBar}>
                 {(["browse", "sessions", "wallet"] as const).map((t) => (
                     <TouchableOpacity key={t} style={[s.tabItem, tab === t && s.tabItemActive]}
-                        onPress={() => setView({ name: t })}>
+                        onPress={() => setView({ name: t } as ConnectView)}>
                         <Text style={[s.tabLabel, tab === t && s.tabLabelActive]}>
                             {t === "browse" ? "Browse" : t === "sessions" ? "Sessions" : "Wallet"}
                         </Text>
@@ -307,7 +307,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
 
 // ── Wallet Tab ─────────────────────────────────────────────────────────────────
 function WalletTab({ colors, accessToken }: { colors: any; accessToken: string | null }) {
-    const [wallets, setWallets] = useState<{ display_name: string; currency_code: string; balance_minutes: number }[]>([]);
+    const [wallets, setWallets] = useState<{ consultant_id: string; display_name: string; currency_code: string; balance_minutes: number; photo_url: string | null; gender: string | null }[]>([]);
     const [loading, setLoading] = useState(true);
     const s = styles(colors);
 
@@ -318,8 +318,8 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
         })
             .then((r) => r.json())
             .then((d) => {
-                const w = d.wallets ?? (d.consultant ? [d] : []);
-                setWallets(w);
+                // API returns { wallets: [{consultant_id, display_name, balance_minutes, currency_code, photo_url, gender}] }
+                setWallets(d.wallets ?? []);
             })
             .catch(() => {})
             .finally(() => setLoading(false));
@@ -685,7 +685,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         if (!text || sending) return;
         setSending(true); setInput("");
         await supabase.from("connect_messages").insert({ session_id: session.id, sender_id: userId, content: text })
-            .catch(() => setInput(text));
+            .then(({ error }) => { if (error) setInput(text); });
         setSending(false);
     }
 
@@ -806,14 +806,16 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 </View>
             )}
 
-            {/* End session button */}
-            {isActive && session.user_id === userId && (
+            {/* End session button — visible to both user and consultant */}
+            {isActive && (
                 <TouchableOpacity style={{ alignItems: "center", paddingVertical: 8, paddingBottom: insets.bottom || 4 }}
                     onPress={() => {
                         fetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
                             method: "PATCH",
                             headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                             body: JSON.stringify({ action: "complete" }),
+                        }).then(() => {
+                            if (session.user_id !== userId) onBack(); // consultant goes back to dashboard
                         }).catch(() => {});
                     }}>
                     <Text style={{ color: colors.textSecondary, fontSize: 12 }}>End session</Text>
@@ -903,7 +905,44 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
     const [loading, setLoading]             = useState(true);
     const [toggling, setToggling]           = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [showPayout, setShowPayout]       = useState(false);
+    const [payoutMethod, setPayoutMethod]   = useState<"upi" | "bank" | "paypal">("upi");
+    const [payoutDetails, setPayoutDetails] = useState("");
+    const [payoutAmount, setPayoutAmount]   = useState("");
+    const [payoutLoading, setPayoutLoading] = useState(false);
+    const [payoutMsg, setPayoutMsg]         = useState<{ ok: boolean; text: string } | null>(null);
     const s = styles(colors);
+
+    async function requestPayout() {
+        const amount = parseFloat(payoutAmount);
+        if (!amount || amount <= 0 || !payoutDetails.trim() || !accessToken) return;
+        setPayoutLoading(true);
+        setPayoutMsg(null);
+        try {
+            const res = await fetch(buildApiUrl("/api/connect/consultant/payout"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({
+                    amount,
+                    currency_code:  earnings?.earned_currency ?? "INR",
+                    payout_method:  payoutMethod,
+                    payout_details: payoutMethod === "upi"   ? { upi_id: payoutDetails }
+                                  : payoutMethod === "bank"   ? { account_number: payoutDetails }
+                                  : { paypal_email: payoutDetails },
+                }),
+            });
+            const d = await res.json();
+            if (d.ok) {
+                setPayoutMsg({ ok: true, text: "Request submitted! Admin will process within 2 business days." });
+                setPayoutAmount(""); setPayoutDetails("");
+                setEarnings((e: any) => e ? { ...e, pending_payout: (e.pending_payout ?? 0) + amount } : e);
+            } else {
+                setPayoutMsg({ ok: false, text: d.error ?? "Request failed." });
+            }
+        } catch {
+            setPayoutMsg({ ok: false, text: "Network error." });
+        } finally { setPayoutLoading(false); }
+    }
 
     const load = useCallback(async () => {
         if (!accessToken) { setLoading(false); return; }
@@ -1073,7 +1112,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                         </View>
                     )}
 
-                    {/* Earnings */}
+                    {/* Earnings + payout */}
                     {earnings && (
                         <View style={s.card}>
                             <Text style={[s.cardName, { marginBottom: 8 }]}>Earnings</Text>
@@ -1086,7 +1125,71 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession }: {
                                     <Text style={s.cardBio}>Sessions completed</Text>
                                     <Text style={s.cardName}>{earnings.sessions_completed ?? 0}</Text>
                                 </View>
+                                {(earnings.pending_payout ?? 0) > 0 && (
+                                    <Text style={{ color: "#fbbf24", fontSize: 12, textAlign: "center", marginTop: 4 }}>
+                                        ₹{(earnings.pending_payout ?? 0).toFixed(2)} payout pending
+                                    </Text>
+                                )}
                             </View>
+                            {(() => {
+                                const available = (earnings.earned_amount ?? 0) - (earnings.pending_payout ?? 0);
+                                return available > 0 ? (
+                                    <TouchableOpacity
+                                        style={[s.primaryBtn, { marginTop: 12 }]}
+                                        onPress={() => { setShowPayout(!showPayout); setPayoutMsg(null); }}>
+                                        <Text style={s.primaryBtnText}>
+                                            {showPayout ? "Cancel" : `Request Payout · ₹${available.toFixed(2)}`}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ) : null;
+                            })()}
+                            {showPayout && (
+                                <View style={{ marginTop: 12, gap: 10 }}>
+                                    <View style={{ flexDirection: "row", gap: 8 }}>
+                                        {(["upi", "bank", "paypal"] as const).map((m) => (
+                                            <TouchableOpacity
+                                                key={m}
+                                                style={[{ flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, alignItems: "center" },
+                                                    payoutMethod === m
+                                                        ? { borderColor: colors.primary, backgroundColor: "rgba(99,102,241,0.2)" }
+                                                        : { borderColor: "rgba(255,255,255,0.15)" }]}
+                                                onPress={() => setPayoutMethod(m)}>
+                                                <Text style={{ color: payoutMethod === m ? colors.primary : colors.textSecondary, fontSize: 12, fontWeight: "700" }}>
+                                                    {m.toUpperCase()}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                    <TextInput
+                                        style={[s.input, { color: colors.textPrimary }]}
+                                        value={payoutDetails}
+                                        onChangeText={setPayoutDetails}
+                                        placeholder={payoutMethod === "upi" ? "UPI ID" : payoutMethod === "bank" ? "Account number" : "PayPal email"}
+                                        placeholderTextColor={colors.textSecondary}
+                                    />
+                                    <TextInput
+                                        style={[s.input, { color: colors.textPrimary }]}
+                                        value={payoutAmount}
+                                        onChangeText={setPayoutAmount}
+                                        placeholder="Amount"
+                                        placeholderTextColor={colors.textSecondary}
+                                        keyboardType="numeric"
+                                    />
+                                    {payoutMsg && (
+                                        <Text style={{ color: payoutMsg.ok ? "#34d399" : "#f87171", fontSize: 12 }}>
+                                            {payoutMsg.text}
+                                        </Text>
+                                    )}
+                                    <TouchableOpacity
+                                        style={[s.primaryBtn, payoutLoading && { opacity: 0.6 }]}
+                                        onPress={requestPayout}
+                                        disabled={payoutLoading || !payoutDetails.trim() || !payoutAmount}>
+                                        {payoutLoading
+                                            ? <ActivityIndicator color="#fff" size="small" />
+                                            : <Text style={s.primaryBtnText}>Submit Request</Text>}
+                                    </TouchableOpacity>
+                                </View>
+                            )}
                         </View>
                     )}
                 </ScrollView>
@@ -1361,5 +1464,10 @@ function styles(colors: any) {
         durationBtnText: { fontSize: 13, color: colors.textSecondary, fontWeight: "600" },
         durationBtnTextActive: { color: colors.primary },
         errorText: { color: "#f87171", fontSize: 13, marginBottom: 8 },
+        input: {
+            backgroundColor: colors.surfaceSoft, borderRadius: 12,
+            paddingHorizontal: 14, paddingVertical: 12,
+            borderWidth: 1, borderColor: colors.border, fontSize: 14,
+        },
     });
 }
