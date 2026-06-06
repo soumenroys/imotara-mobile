@@ -17,9 +17,12 @@ import { buildApiUrl } from "../../config/api";
 import { fetchWithTimeout } from "../../lib/fetchWithTimeout";
 import { supabase } from "../../lib/supabase/client";
 
-// Wraps fetch with a 12-second timeout so Connect API calls never hang indefinitely
-// on Vercel cold starts or flaky mobile connections.
+// Standard Connect API calls — 12-second timeout.
 const cfetch = (url: string, init: RequestInit = {}) => fetchWithTimeout(url, init, 12_000);
+
+// Payment API calls (Razorpay order creation + verify) — 30-second timeout.
+// These hit the Razorpay external API (1-3 s) on top of Vercel cold start.
+const pfetch = (url: string, init: RequestInit = {}) => fetchWithTimeout(url, init, 30_000);
 import { useRoute, useNavigation } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
@@ -705,7 +708,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
         if (!termsAccepted) { setTopupError("Please accept the Wallet Terms to continue"); return; }
         setTopupLoading(true); setTopupError("");
         try {
-            const res = await cfetch(buildApiUrl("/api/connect/wallet/topup/create"), {
+            const res = await pfetch(buildApiUrl("/api/connect/wallet/topup/create"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ amount: amt, terms_accepted: true }),
@@ -724,7 +727,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                 theme: { color: "#6366f1" },
             });
 
-            const verifyRes = await cfetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
+            const verifyRes = await pfetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({
@@ -760,7 +763,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             const body = isUpi
                 ? { upi_id: refundUpi }
                 : { bank_name: refundBank.name, account_number: refundBank.account, ifsc_code: refundBank.ifsc, account_holder: refundBank.holder };
-            const res = await cfetch(buildApiUrl("/api/connect/wallet/refund-request"), {
+            const res = await pfetch(buildApiUrl("/api/connect/wallet/refund-request"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify(body),
@@ -1376,7 +1379,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
         if (!termsAccepted) { setError("Please accept the Wallet Terms to continue"); return; }
         setLoading(true); setError("");
         try {
-            const res = await cfetch(buildApiUrl("/api/connect/wallet/topup/create"), {
+            const res = await pfetch(buildApiUrl("/api/connect/wallet/topup/create"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ amount: topupAmt, terms_accepted: true }),
@@ -1395,7 +1398,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
                 theme: { color: "#6366f1" },
             });
 
-            const vRes = await cfetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
+            const vRes = await pfetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({
