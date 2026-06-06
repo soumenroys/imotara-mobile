@@ -257,6 +257,12 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "link_key",          emoji: "🔗", title: "Chat link key",            tip: "Set a custom link key in Settings → Advanced to sync history across devices without full sign-in.", category: "settings" },
   { id: "version",           emoji: "📱", title: "App version",              tip: "Your current version and build number are at the bottom of Settings → Advanced.", category: "settings" },
   { id: "notifications",     emoji: "🔔", title: "Notification types",       tip: "Imotara only sends check-in reminders you set up — no marketing, no alerts.", category: "settings" },
+  { id: "child_safe_mode",   emoji: "🧒", title: "Child-safe mode",          tip: "Families can enable Child-safe Mode in Settings to filter adult themes and mature content — requires Family or EDU plan.", category: "settings" },
+  { id: "family_profiles",   emoji: "👨‍👩‍👧‍👦", title: "Family profiles",        tip: "Family plan users can create up to 6 separate profiles — each with its own companion, history, and settings.", category: "settings" },
+  { id: "connect_what",      emoji: "🤝", title: "Imotara Connect",          tip: "Book a live session with a verified counsellor or wellness coach via Imotara Connect — available in the Connect tab.", category: "settings" },
+  { id: "connect_wallet",    emoji: "💳", title: "Connect Wallet",           tip: "Top up your Connect Wallet before booking a session — sessions are billed per minute from your balance.", category: "settings" },
+  { id: "connect_rate",      emoji: "⏱️", title: "Per-minute billing",       tip: "Each companion sets their own rate (e.g. ₹8/min). The clock starts when they accept your call — end anytime.", category: "settings" },
+  { id: "connect_apply",     emoji: "🧑‍💼", title: "Become a companion",      tip: "Professionals can apply to join Imotara Connect as a verified companion — set your own rate and hours.", category: "settings" },
 
 ];
 
