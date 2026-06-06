@@ -104,6 +104,25 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
     INR: "₹", USD: "$", EUR: "€", GBP: "£", AED: "د.إ", SGD: "S$", AUD: "A$",
 };
 
+const CHAT_LANGUAGES = [
+    { code: "en", label: "English",    flag: "🇬🇧" },
+    { code: "hi", label: "Hindi",      flag: "🇮🇳" },
+    { code: "bn", label: "Bengali",    flag: "🇧🇩" },
+    { code: "mr", label: "Marathi",    flag: "🇮🇳" },
+    { code: "ta", label: "Tamil",      flag: "🇮🇳" },
+    { code: "te", label: "Telugu",     flag: "🇮🇳" },
+    { code: "gu", label: "Gujarati",   flag: "🇮🇳" },
+    { code: "pa", label: "Punjabi",    flag: "🇮🇳" },
+    { code: "kn", label: "Kannada",    flag: "🇮🇳" },
+    { code: "ml", label: "Malayalam",  flag: "🇮🇳" },
+    { code: "ur", label: "Urdu",       flag: "🇵🇰" },
+    { code: "ar", label: "Arabic",     flag: "🇸🇦" },
+    { code: "es", label: "Spanish",    flag: "🇪🇸" },
+    { code: "fr", label: "French",     flag: "🇫🇷" },
+    { code: "de", label: "German",     flag: "🇩🇪" },
+    { code: "pt", label: "Portuguese", flag: "🇵🇹" },
+] as const;
+
 const CRISIS_LINES = [
     { country: "India", name: "iCall", phone: "9152987821" },
     { country: "India", name: "Vandrevala Foundation", phone: "18602662345" },
@@ -1522,6 +1541,12 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [elapsedSecs, setElapsedSecs] = useState(0);
     const [nowTick, setNowTick] = useState(() => new Date());
     const [panelOpen, setPanelOpen] = useState(true);
+    // Translation state
+    const [chatLang, setChatLang] = useState("");
+    const [translations, setTranslations] = useState<Map<string, string>>(new Map());
+    const [translating, setTranslating] = useState<Set<string>>(new Set());
+    const [showLangPicker, setShowLangPicker] = useState(false);
+    const chatLangRef = useRef("");
     const flatRef = useRef<FlatList>(null);
     const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1537,6 +1562,38 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             .then(({ data }) => { if (data) setMessages(data); });
     }, [session.id]);
 
+    // Translation helpers
+    async function translateMessage(msgId: string, text: string, lang: string) {
+        const key = `${msgId}::${lang}`;
+        setTranslating((prev) => { const s = new Set(prev); s.add(msgId); return s; });
+        try {
+            const res = await fetch(buildApiUrl("/api/connect/translate"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken ?? ""}` },
+                body: JSON.stringify({ text, targetLang: lang }),
+            });
+            const d = await res.json();
+            if (d.ok && d.translatedText && d.translatedText.trim() !== text.trim()) {
+                setTranslations((prev) => new Map(prev).set(key, d.translatedText));
+            }
+        } catch { /* silent */ }
+        finally {
+            setTranslating((prev) => { const s = new Set(prev); s.delete(msgId); return s; });
+        }
+    }
+
+    function handleLangChange(lang: string) {
+        chatLangRef.current = lang;
+        setChatLang(lang);
+        setShowLangPicker(false);
+        if (lang) {
+            setMessages((msgs) => {
+                msgs.forEach((m) => { if (!translations.has(`${m.id}::${lang}`)) translateMessage(m.id, m.content, lang); });
+                return msgs;
+            });
+        }
+    }
+
     // Realtime subscription
     useEffect(() => {
         const channel = supabase.channel(`connect:session:${session.id}`)
@@ -1546,6 +1603,19 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             }, (payload) => {
                 const msg = payload.new as Message;
                 setMessages((prev) => prev.find((m) => m.id === msg.id) ? prev : [...prev, msg]);
+                if (chatLangRef.current) {
+                    const lang = chatLangRef.current;
+                    const key = `${msg.id}::${lang}`;
+                    fetch(buildApiUrl("/api/connect/translate"), {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken ?? ""}` },
+                        body: JSON.stringify({ text: msg.content, targetLang: lang }),
+                    }).then((r) => r.json()).then((d) => {
+                        if (d.ok && d.translatedText && d.translatedText.trim() !== msg.content.trim()) {
+                            setTranslations((prev) => new Map(prev).set(key, d.translatedText));
+                        }
+                    }).catch(() => {});
+                }
             })
             .on("postgres_changes", {
                 event: "UPDATE", schema: "public",
@@ -1672,6 +1742,13 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                         <Text style={{ color: isLow ? "#f87171" : "#34d399", fontSize: 9 }}>{panelOpen ? "▲" : "▼"}</Text>
                     </TouchableOpacity>
                 )}
+                {/* Language picker button */}
+                <TouchableOpacity
+                    onPress={() => setShowLangPicker(true)}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5, borderWidth: 1, borderColor: chatLang ? "rgba(96,165,250,0.4)" : "rgba(255,255,255,0.1)", backgroundColor: chatLang ? "rgba(96,165,250,0.15)" : "rgba(255,255,255,0.04)" }}>
+                    <Text style={{ fontSize: 13 }}>🌐</Text>
+                    {chatLang && <Text style={{ fontSize: 10, fontWeight: "700", color: "#60a5fa" }}>{chatLang.toUpperCase()}</Text>}
+                </TouchableOpacity>
                 <TouchableOpacity style={s.emergencyBtn} onPress={() => setShowEmergency(true)}>
                     <Ionicons name="call" size={16} color="#f87171" />
                 </TouchableOpacity>
@@ -1748,6 +1825,10 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: true })}
                 renderItem={({ item: m }) => {
                     const isMe = m.sender_id === userId;
+                    const transKey = chatLang ? `${m.id}::${chatLang}` : null;
+                    const translatedText = transKey ? translations.get(transKey) : undefined;
+                    const isTranslating  = chatLang ? translating.has(m.id) : false;
+                    const langLabel      = CHAT_LANGUAGES.find((l) => l.code === chatLang);
                     return (
                         <View style={{ alignItems: isMe ? "flex-end" : "flex-start" }}>
                             <View style={{
@@ -1761,6 +1842,32 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                                 <Text style={{ color: isMe ? "#fff" : colors.textPrimary, fontSize: 14, lineHeight: 20 }}>
                                     {m.content}
                                 </Text>
+
+                                {/* Translation */}
+                                {chatLang && (
+                                    <View style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: isMe ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)" }}>
+                                        {isTranslating && !translatedText ? (
+                                            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                                                <ActivityIndicator size={10} color={isMe ? "rgba(255,255,255,0.5)" : colors.textSecondary} />
+                                                <Text style={{ fontSize: 10, color: isMe ? "rgba(255,255,255,0.5)" : colors.textSecondary }}>Translating…</Text>
+                                            </View>
+                                        ) : translatedText ? (
+                                            <>
+                                                <Text style={{ fontSize: 10, color: isMe ? "rgba(255,255,255,0.45)" : colors.textSecondary, marginBottom: 2 }}>
+                                                    🌐 {langLabel?.flag} {langLabel?.label}
+                                                </Text>
+                                                <Text style={{ fontSize: 13, lineHeight: 18, fontStyle: "italic", color: isMe ? "rgba(255,255,255,0.88)" : colors.textPrimary, opacity: 0.85 }}>
+                                                    {translatedText}
+                                                </Text>
+                                            </>
+                                        ) : (
+                                            <Text style={{ fontSize: 10, color: isMe ? "rgba(255,255,255,0.35)" : colors.textSecondary }}>
+                                                — same language
+                                            </Text>
+                                        )}
+                                    </View>
+                                )}
+
                                 <Text style={{ fontSize: 10, opacity: 0.6, color: isMe ? "#fff" : colors.textSecondary, marginTop: 4 }}>
                                     {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                 </Text>
@@ -1804,6 +1911,59 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     <Text style={{ color: colors.textSecondary, fontSize: 12 }}>End session</Text>
                 </TouchableOpacity>
             )}
+
+            {/* Language picker modal */}
+            <Modal visible={showLangPicker} transparent animationType="slide" onRequestClose={() => setShowLangPicker(false)}>
+                <View style={s.modalBackdrop}>
+                    <View style={[s.modalSheet, { backgroundColor: colors.surface, maxHeight: "80%" }]}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                            <View>
+                                <Text style={[s.cardBio, { fontSize: 10, color: "#60a5fa", fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 2 }]}>
+                                    🌐 Chat Translation
+                                </Text>
+                                <Text style={[s.cardName, { fontSize: 17 }]}>Choose your language</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setShowLangPicker(false)}>
+                                <Ionicons name="close" size={20} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={[s.cardBio, { marginBottom: 10, fontSize: 12 }]}>
+                            Messages will show original text + your language translation side by side.
+                        </Text>
+
+                        {/* Off option */}
+                        <TouchableOpacity
+                            style={[s.card, { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }]}
+                            onPress={() => handleLangChange("")}>
+                            <Text style={s.cardBio}>Off — show original only</Text>
+                            {!chatLang && <Text style={{ color: colors.primary, fontWeight: "700" }}>✓</Text>}
+                        </TouchableOpacity>
+
+                        {/* Language grid */}
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                {CHAT_LANGUAGES.map((l) => (
+                                    <TouchableOpacity
+                                        key={l.code}
+                                        onPress={() => handleLangChange(l.code)}
+                                        style={{
+                                            flexDirection: "row", alignItems: "center", gap: 6,
+                                            paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
+                                            borderWidth: 1,
+                                            borderColor: chatLang === l.code ? "#60a5fa" : colors.border,
+                                            backgroundColor: chatLang === l.code ? "rgba(96,165,250,0.15)" : "rgba(255,255,255,0.04)",
+                                        }}>
+                                        <Text style={{ fontSize: 16 }}>{l.flag}</Text>
+                                        <Text style={{ fontSize: 13, color: chatLang === l.code ? "#60a5fa" : colors.textPrimary, fontWeight: chatLang === l.code ? "700" : "400" }}>
+                                            {l.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Emergency modal */}
             <EmergencyModal visible={showEmergency} onClose={() => setShowEmergency(false)} colors={colors} />
