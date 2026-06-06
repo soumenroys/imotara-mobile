@@ -186,6 +186,7 @@ export default function ConnectScreen() {
     if (view.name === "register") {
         return <RegisterView colors={colors} insets={insets}
             accessToken={accessToken}
+            userEmail={user?.email ?? null}
             onBack={() => setView({ name: "browse" })}
             onSuccess={() => setView({ name: "dashboard" })} />;
     }
@@ -295,6 +296,13 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
 
     return (
         <View style={{ flex: 1 }}>
+            {/* Sign-in banner for unauthenticated users */}
+            {!accessToken && (
+                <View style={{ marginHorizontal: 12, marginTop: 10, marginBottom: 4, borderRadius: 12, borderWidth: 1, borderColor: "rgba(139,92,246,0.35)", backgroundColor: "rgba(139,92,246,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10 }}>
+                    <Text style={{ fontSize: 13, color: "#c4b5fd", flex: 1 }}>🔒 Sign in to book a session</Text>
+                </View>
+            )}
+
             {/* Category chips */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 2, gap: 8, flexDirection: "row" }}>
@@ -2114,8 +2122,9 @@ function RegCheckbox({ value, onPress, label, colors }: { value: boolean; onPres
     );
 }
 
-function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
+function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSuccess }: {
     colors: any; insets: any; accessToken: string | null;
+    userEmail: string | null;
     onBack: () => void; onSuccess: () => void;
 }) {
     const TOTAL_STEPS = 5;
@@ -2352,6 +2361,19 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                 <Text style={s.headerTitle}>Become a Companion ({step}/{TOTAL_STEPS})</Text>
                 <View style={{ width: 36 }} />
             </View>
+
+            {/* Signed-in indicator + sign-out */}
+            {userEmail && (
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: "#34d399" }} />
+                        <Text style={{ fontSize: 11, color: "#6ee7b7" }} numberOfLines={1}>{userEmail}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => { supabase.auth.signOut(); onBack(); }}>
+                        <Text style={{ fontSize: 11, color: colors.textSecondary, textDecorationLine: "underline" }}>Sign out</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
 
             <View style={{ height: 3, backgroundColor: colors.border }}>
                 <View style={{ height: 3, width: `${(step / TOTAL_STEPS) * 100}%` as any, backgroundColor: colors.primary }} />
