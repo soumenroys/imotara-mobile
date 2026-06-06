@@ -121,6 +121,10 @@ type SettingsContextValue = {
     teenMode: boolean;
     setTeenMode: (value: boolean) => void;
 
+    /** Applies strict content filters for child safety. Requires Family/EDU/Enterprise tier. */
+    childSafeMode: boolean;
+    setChildSafeMode: (value: boolean) => void;
+
     /** Show "Synced to cloud" / "On this device only" badges on messages. Default false. */
     showSyncBadge: boolean;
     setShowSyncBadge: (value: boolean) => void;
@@ -235,6 +239,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const [companionPanelEnabled, _setCompanionPanelEnabled] = useState(true);
     const [planPanelEnabled, _setPlanPanelEnabled] = useState(true);
     const [teenMode, _setTeenMode] = useState(false);
+    const [childSafeMode, _setChildSafeMode] = useState(false);
     const [showSyncBadge, _setShowSyncBadge] = useState(false); // default: hidden
     const [companionReactionsEnabled, _setCompanionReactionsEnabled] = useState(true); // default: on
     const [featureTipsEnabled, _setFeatureTipsEnabled] = useState(true); // default: visible
@@ -448,6 +453,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             _setTeenMode(safeBool((parsed as any).teenMode, false));
                         }
 
+                        if ("childSafeMode" in parsed) {
+                            _setChildSafeMode(safeBool((parsed as any).childSafeMode, false));
+                        }
+
                         if ("showSyncBadge" in parsed) {
                             _setShowSyncBadge(safeBool((parsed as any).showSyncBadge, false));
                         }
@@ -595,6 +604,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             companionPanelEnabled,
             planPanelEnabled,
             teenMode,
+            childSafeMode,
             showSyncBadge,
             companionReactionsEnabled,
             featureTipsEnabled,
@@ -651,6 +661,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     const setTeenMode = (value: boolean) => {
         _setTeenMode(!!value);
+    };
+
+    const setChildSafeMode = (value: boolean) => {
+        _setChildSafeMode(!!value);
     };
 
     const setShowSyncBadge = (value: boolean) => {
@@ -771,6 +785,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setChatLinkKey,
                 teenMode,
                 setTeenMode,
+                childSafeMode,
+                setChildSafeMode,
                 showSyncBadge,
                 setShowSyncBadge,
                 companionReactionsEnabled,

@@ -366,6 +366,8 @@ function SettingsScreenContent() {
         setPlanPanelEnabled,
         teenMode,
         setTeenMode,
+        childSafeMode,
+        setChildSafeMode,
         showSyncBadge,
         setShowSyncBadge,
         companionReactionsEnabled,
@@ -420,6 +422,8 @@ function SettingsScreenContent() {
     const replyCadenceGate    = gate("REPLY_CADENCE",     licenseTier);
     const companionLetterGate = gate("COMPANION_LETTER",  licenseTier);
     const growthArcGate       = gate("GROWTH_ARC",        licenseTier);
+    const childSafeModeGate   = gate("CHILD_SAFE_MODE",   licenseTier);
+    const multiProfileGate    = gate("MULTI_PROFILE",     licenseTier);
     // ─────────────────────────────────────────────────────────────────────────
 
     // ✅ QA hardening: avoid setState after leaving screen
@@ -4680,6 +4684,42 @@ function SettingsScreenContent() {
                         }}
                     >
                         Shows age-appropriate reflections with peer-supportive language and enhanced safety filters.
+                    </Text>
+                </AppSurface>
+
+                {/* Child-safe mode — gated: Family/EDU/Enterprise */}
+                <AppSurface style={{ marginBottom: 16, opacity: childSafeModeGate.enabled ? 1 : 0.6 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>
+                            Child-safe Mode
+                        </Text>
+                        <Switch
+                            value={childSafeMode && childSafeModeGate.enabled}
+                            onValueChange={(v) => { if (childSafeModeGate.enabled) setChildSafeMode(v); }}
+                            trackColor={{ false: colors.border, true: "#10b981" }}
+                            thumbColor="#ffffff"
+                            disabled={!childSafeModeGate.enabled}
+                        />
+                    </View>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
+                        Applies strict content filters — removes adult themes, violence, and scary content from all reflections.
+                    </Text>
+                    {!childSafeModeGate.enabled && (
+                        <Text style={{ fontSize: 11, color: "#fbbf24", marginTop: 2 }}>
+                            {childSafeModeGate.reason ?? "Requires Family, EDU, or Enterprise plan."}
+                        </Text>
+                    )}
+                </AppSurface>
+
+                {/* Family Profiles — gated: Family plan */}
+                <AppSurface style={{ marginBottom: 16, opacity: multiProfileGate.enabled ? 1 : 0.6 }}>
+                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>
+                        Family Profiles
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
+                        {multiProfileGate.enabled
+                            ? "Manage separate profiles for each family member. Coming soon — full profile switcher with per-profile history."
+                            : (multiProfileGate.reason ?? "Upgrade to the Family plan to create separate profiles for each family member.")}
                     </Text>
                 </AppSurface>
 
