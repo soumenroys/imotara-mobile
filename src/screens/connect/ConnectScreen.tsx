@@ -360,11 +360,16 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
                                         </TouchableOpacity>
                                     </View>
                                 </View>
+                                {c.role_category && (
+                                    <Text style={{ fontSize: 10, color: "#a78bfa", marginTop: 2 }}>
+                                        {ROLE_CATEGORIES.find(r => r.key === c.role_category)?.icon ?? ""} {ROLE_CATEGORIES.find(r => r.key === c.role_category)?.label ?? c.role_category}
+                                    </Text>
+                                )}
                                 <Text style={[s.ratingText, { marginTop: 2 }]}>
                                     ★ {c.rating_avg > 0 ? c.rating_avg.toFixed(1) : "New"} · {c.sessions_completed} sessions
                                 </Text>
                                 {c.bio && (
-                                    <Text style={[s.cardBio, { marginTop: 4 }]} numberOfLines={2}>{c.bio}</Text>
+                                    <Text style={[s.cardBio, { marginTop: 4 }]} numberOfLines={3}>{c.bio}</Text>
                                 )}
                                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
                                     {c.expertise_tags.slice(0, 3).map((t) => (
@@ -718,7 +723,21 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                         {c.is_online && <View style={[s.onlineDot, { width: 14, height: 14, bottom: 2, right: 2 }]} />}
                     </View>
                     <Text style={[s.cardName, { fontSize: 20 }]}>{c.display_name}</Text>
-                    <Text style={[s.ratingText, { fontSize: 13 }]}>
+                    {c.role_category && (
+                        <Text style={{ fontSize: 12, color: "#a78bfa", marginTop: 2 }}>
+                            {ROLE_CATEGORIES.find(r => r.key === c.role_category)?.icon ?? ""} {ROLE_CATEGORIES.find(r => r.key === c.role_category)?.label ?? c.role_category}
+                        </Text>
+                    )}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
+                        {c.is_busy ? (
+                            <Text style={{ fontSize: 12, color: "#fb923c", backgroundColor: "rgba(251,146,60,0.15)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>In Session</Text>
+                        ) : c.is_online ? (
+                            <Text style={{ fontSize: 12, color: "#34d399", backgroundColor: "rgba(52,211,153,0.12)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>● Online now</Text>
+                        ) : (
+                            <Text style={{ fontSize: 12, color: "#94a3b8", backgroundColor: "rgba(148,163,184,0.1)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>Offline</Text>
+                        )}
+                    </View>
+                    <Text style={[s.ratingText, { fontSize: 13, marginTop: 4 }]}>
                         ★ {c.rating_avg > 0 ? c.rating_avg.toFixed(1) : "New"} · {c.sessions_completed} sessions
                     </Text>
                 </View>
