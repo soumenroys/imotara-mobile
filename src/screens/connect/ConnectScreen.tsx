@@ -2270,7 +2270,12 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             const res = await fetch(buildApiUrl(`/api/connect/sessions/${sessionId}`), {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-                body: JSON.stringify({ action }),
+                body: JSON.stringify({
+                    action,
+                    ...(action === "accept" && {
+                        consultant_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    }),
+                }),
             });
             const d = await res.json();
             if (d.ok) {
