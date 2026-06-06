@@ -15,7 +15,10 @@ import { useColors } from "../../theme/ThemeContext";
 import { useAuth } from "../../auth/AuthContext";
 import { buildApiUrl } from "../../config/api";
 import { supabase } from "../../lib/supabase/client";
-import { useRoute } from "@react-navigation/native";
+import { useRoute, useNavigation } from "@react-navigation/native";
+import * as FileSystem from "expo-file-system/legacy";
+import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Consultant {
@@ -26,6 +29,8 @@ interface Consultant {
     bio: string | null;
     expertise_tags: string[];
     languages: string[];
+    session_types: string[];
+    role_category: string;
     rate_per_min: number;
     currency_code: string;
     is_online: boolean;
@@ -81,15 +86,40 @@ const CRISIS_LINES = [
     { country: "Australia", name: "Lifeline", phone: "131114" },
 ];
 
+const SESSION_TYPE_OPTIONS = [
+    { key: "chat",  label: "Text / Chat", icon: "💬" },
+    { key: "audio", label: "Audio Call",  icon: "🎙️" },
+    { key: "video", label: "Video Call",  icon: "📹" },
+] as const;
+
 const EXPERTISE_OPTIONS = [
-    "Anxiety", "Depression", "Stress", "Relationships", "Grief", "Trauma",
-    "Career", "Self-esteem", "Parenting", "Life transitions", "Mindfulness", "Sleep",
+    "Stress & Anxiety", "Loneliness", "Grief & Loss", "Relationship Issues",
+    "Work & Career Pressure", "Self-Esteem", "Family Conflicts", "Life Transitions",
+    "Emotional Regulation", "Mindfulness", "General Wellness",
 ];
 
+const ROLE_CATEGORIES = [
+    { key: "wellness_companion", label: "Wellness Companion", icon: "🧘", phase: 1 },
+    { key: "friend",             label: "Friend",             icon: "🤝", phase: 2 },
+    { key: "dad",                label: "Dad",                icon: "👨", phase: 2 },
+    { key: "mom",                label: "Mom",                icon: "👩", phase: 2 },
+    { key: "sister",             label: "Sister",             icon: "👧", phase: 2 },
+    { key: "brother",            label: "Brother",            icon: "👦", phase: 2 },
+    { key: "grandfather",        label: "Grandfather",        icon: "👴", phase: 2 },
+    { key: "grandmother",        label: "Grandmother",        icon: "👵", phase: 2 },
+    { key: "yoga_instructor",    label: "Yoga Instructor",    icon: "🧘", phase: 3 },
+    { key: "fitness_companion",  label: "Fitness Companion",  icon: "💪", phase: 3 },
+] as const;
+
 const LANGUAGE_OPTIONS = [
-    "English", "Hindi", "Bengali", "Tamil", "Telugu", "Kannada",
-    "Malayalam", "Marathi", "Gujarati", "Punjabi", "Urdu", "French",
-    "Spanish", "German", "Arabic", "Mandarin",
+    { code: "en", label: "English" },   { code: "hi", label: "Hindi" },
+    { code: "bn", label: "Bengali" },   { code: "mr", label: "Marathi" },
+    { code: "ta", label: "Tamil" },     { code: "te", label: "Telugu" },
+    { code: "gu", label: "Gujarati" },  { code: "pa", label: "Punjabi" },
+    { code: "kn", label: "Kannada" },   { code: "ml", label: "Malayalam" },
+    { code: "ur", label: "Urdu" },      { code: "ar", label: "Arabic" },
+    { code: "es", label: "Spanish" },   { code: "fr", label: "French" },
+    { code: "de", label: "German" },    { code: "pt", label: "Portuguese" },
 ];
 
 // ── View type ──────────────────────────────────────────────────────────────────
@@ -107,13 +137,14 @@ export default function ConnectScreen() {
     const insets = useSafeAreaInsets();
     const { accessToken, user } = useAuth();
     const route = useRoute<any>();
-
+    const navigation = useNavigation<any>();
     const [view, setView] = useState<ConnectView>({ name: "browse" });
 
     // Navigate directly to register when launched from "Join Imotara Movement" in Settings
     useEffect(() => {
         if (route.params?.startRegister) {
             setView({ name: "register" });
+            navigation.setParams({ startRegister: undefined });
         }
     }, [route.params?.startRegister]);
 
@@ -207,13 +238,15 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
     const [loading, setLoading] = useState(true);
     const [filterOnline, setFilterOnline] = useState(false);
     const [filterTag, setFilterTag] = useState("");
+    const [filterCategory, setFilterCategory] = useState("");
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
     const [favLoading, setFavLoading] = useState<string | null>(null);
     const s = styles(colors);
 
     useEffect(() => {
         const params = new URLSearchParams();
-        if (filterOnline) params.set("online", "true");
+        if (filterOnline)   params.set("online", "true");
+        if (filterCategory) params.set("category", filterCategory);
         const authHeaders: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
         Promise.all([
             fetch(buildApiUrl(`/api/connect/consultants?${params}`), { headers: authHeaders }).then((r) => r.json()),
@@ -227,7 +260,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
             })
             .catch(() => {})
             .finally(() => setLoading(false));
-    }, [accessToken, filterOnline]);
+    }, [accessToken, filterOnline, filterCategory]);
 
     async function toggleFavorite(consultantId: string) {
         if (!accessToken) return;
@@ -262,15 +295,36 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
 
     return (
         <View style={{ flex: 1 }}>
-            {/* Quick filters */}
+            {/* Category chips */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, gap: 8, flexDirection: "row" }}>
+                contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 2, gap: 8, flexDirection: "row" }}>
+                <TouchableOpacity
+                    style={[s.filterChip, !filterCategory && s.filterChipActive]}
+                    onPress={() => setFilterCategory("")}>
+                    <Text style={[s.filterChipText, !filterCategory && s.filterChipTextActive]}>All</Text>
+                </TouchableOpacity>
+                {ROLE_CATEGORIES.map((rc) => (
+                    <TouchableOpacity
+                        key={rc.key}
+                        disabled={rc.phase > 1}
+                        style={[s.filterChip, filterCategory === rc.key && s.filterChipActive, rc.phase > 1 && { opacity: 0.4 }]}
+                        onPress={() => rc.phase === 1 && setFilterCategory((v) => (v === rc.key ? "" : rc.key))}>
+                        <Text style={[s.filterChipText, filterCategory === rc.key && s.filterChipTextActive]}>
+                            {rc.icon} {rc.label}{rc.phase > 1 ? " · Soon" : ""}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
+
+            {/* Specialty + online filters */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 6, gap: 8, flexDirection: "row" }}>
                 <TouchableOpacity
                     style={[s.filterChip, filterOnline && s.filterChipActive]}
                     onPress={() => setFilterOnline((v) => !v)}>
                     <Text style={[s.filterChipText, filterOnline && s.filterChipTextActive]}>🟢 Online only</Text>
                 </TouchableOpacity>
-                {["Anxiety", "Stress", "Relationships", "Grief", "Career", "Mindfulness"].map((tag) => (
+                {["Stress & Anxiety", "Loneliness", "Grief & Loss", "Relationship Issues", "Work & Career Pressure", "Mindfulness"].map((tag) => (
                     <TouchableOpacity
                         key={tag}
                         style={[s.filterChip, filterTag === tag && s.filterChipActive]}
@@ -691,7 +745,35 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 {c.languages.length > 0 && (
                     <View style={s.card}>
                         <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Languages</Text>
-                        <Text style={s.cardBio}>{c.languages.join(", ")}</Text>
+                        <Text style={s.cardBio}>{c.languages.map(code => LANGUAGE_OPTIONS.find(l => l.code === code)?.label ?? code).join(", ")}</Text>
+                    </View>
+                )}
+
+                {/* Session types */}
+                {(c.session_types ?? []).length > 0 && (
+                    <View style={s.card}>
+                        <Text style={[s.cardBio, { marginBottom: 8, fontWeight: "600" }]}>Session Types</Text>
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                            {(c.session_types ?? []).map((t) => (
+                                <View key={t} style={{
+                                    flexDirection: "row", alignItems: "center", gap: 6,
+                                    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+                                    borderWidth: 1,
+                                    borderColor: t === "chat" ? "rgba(96,165,250,0.4)" : t === "audio" ? "rgba(251,191,36,0.4)" : "rgba(167,139,250,0.4)",
+                                    backgroundColor: t === "chat" ? "rgba(96,165,250,0.1)" : t === "audio" ? "rgba(251,191,36,0.1)" : "rgba(167,139,250,0.1)",
+                                }}>
+                                    <Text style={{ fontSize: 13 }}>
+                                        {t === "chat" ? "💬" : t === "audio" ? "🎙️" : "📹"}
+                                    </Text>
+                                    <Text style={{
+                                        fontSize: 12, fontWeight: "600",
+                                        color: t === "chat" ? "#60a5fa" : t === "audio" ? "#fbbf24" : "#a78bfa",
+                                    }}>
+                                        {t === "chat" ? "Text / Chat" : t === "audio" ? "Audio Call" : "Video Call"}
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
                     </View>
                 )}
 
@@ -924,7 +1006,8 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         id: session.consultant_id,
         display_name: session.connect_consultants?.display_name ?? "Companion",
         gender: null, photo_url: null, bio: null,
-        expertise_tags: [], languages: [],
+        expertise_tags: [], languages: [], session_types: [],
+        role_category: "wellness_companion",
         rate_per_min: session.connect_consultants?.rate_per_min ?? 10,
         currency_code: session.currency_code ?? "INR",
         is_online: true, is_busy: false, rating_avg: 0, rating_count: 0,
@@ -1769,6 +1852,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                                                 </View>
                                                 <Text style={[s.cardBio, { fontSize: 12, flex: 1 }]}>
                                                     {displayName} · {new Date(h.created_at).toLocaleDateString()} · {h.type} · {Math.round(h.minutes_used ?? 0)} min
+                                                    {h.rate_per_min ? ` · ${CURRENCY_SYMBOLS[earnings?.earned_currency ?? "INR"] ?? "₹"}${(h.rate_per_min * (h.minutes_used ?? 0) * 0.80).toFixed(2)} earned` : ""}
                                                 </Text>
                                                 {h.rating != null && (
                                                     <Text style={{ color: "#fbbf24", fontWeight: "700", fontSize: 13 }}>★ {h.rating}</Text>
@@ -1908,9 +1992,13 @@ const AVAIL_TIMEZONES_REG = [
     "America/Sao_Paulo", "Australia/Sydney", "Pacific/Auckland",
 ];
 
+const DAYS_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTHS_OF_YEAR = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"];
+const YEAR_OPTIONS = ["2025", "2026", "2027", "2028", "Ongoing"];
 
-interface AvailSlot { days: string[]; start: string; end: string; timezone: string; }
+interface AvailWindow { days: string[]; months: string[]; start: string; end: string; timezone: string; year: string; }
 
 function ChipSelector({ label, options, selected, onToggle, colors }: {
     label: string; options: string[]; selected: string[];
@@ -1929,6 +2017,31 @@ function ChipSelector({ label, options, selected, onToggle, colors }: {
                             style={[s.filterChip, active && s.filterChipActive]}
                             onPress={() => onToggle(opt)}>
                             <Text style={[s.filterChipText, active && s.filterChipTextActive]}>{opt}</Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        </View>
+    );
+}
+
+function LangChipSelector({ label, selected, onToggle, colors }: {
+    label: string; selected: string[];
+    onToggle: (code: string) => void; colors: any;
+}) {
+    const s = styles(colors);
+    return (
+        <View style={{ marginBottom: 16 }}>
+            <Text style={[s.cardBio, { marginBottom: 8, fontWeight: "600" }]}>{label}</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {LANGUAGE_OPTIONS.map((opt) => {
+                    const active = selected.includes(opt.code);
+                    return (
+                        <TouchableOpacity
+                            key={opt.code}
+                            style={[s.filterChip, active && s.filterChipActive]}
+                            onPress={() => onToggle(opt.code)}>
+                            <Text style={[s.filterChipText, active && s.filterChipTextActive]}>{opt.label}</Text>
                         </TouchableOpacity>
                     );
                 })}
@@ -1993,33 +2106,54 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
     // Step 1
     const [displayName, setDisplayName] = useState("");
     const [gender, setGender] = useState("");
+    const [roleCategory, setRoleCategory] = useState("wellness_companion");
     const [contactEmail, setContactEmail] = useState("");
     const [contactPhone, setContactPhone] = useState("");
     const [countryCode, setCountryCode] = useState("+91");
     const [websiteUrl, setWebsiteUrl] = useState("");
     const [socialLinks, setSocialLinks] = useState<string[]>(["", ""]);
     const [photoUrl, setPhotoUrl] = useState("");
+    const [photoLocalUri, setPhotoLocalUri] = useState<string | null>(null);
+    const [photoUploading, setPhotoUploading] = useState(false);
     const [expertiseTags, setExpertiseTags] = useState<string[]>([]);
     const [languages, setLanguages] = useState<string[]>([]);
+    const [sessionTypes, setSessionTypes] = useState<string[]>([]);
     const [dialPickerOpen, setDialPickerOpen] = useState(false);
 
     // Step 2
     const [bio, setBio] = useState("");
     const [ratePerMin, setRatePerMin] = useState("10");
     const [currencyCode, setCurrencyCode] = useState("INR");
-    const [availSlots, setAvailSlots] = useState<AvailSlot[]>([
-        { days: [], start: "09:00", end: "21:00", timezone: "Asia/Kolkata" },
+    const [availSlots, setAvailSlots] = useState<AvailWindow[]>([
+        { days: [], months: [], start: "09:00", end: "21:00", timezone: "Asia/Kolkata", year: "Ongoing" },
     ]);
     const [tzPickerIdx, setTzPickerIdx] = useState<number | null>(null);
 
-    // Step 3
+    // Step 3 — payout
     const [payoutMethod, setPayoutMethod] = useState<"upi" | "paypal" | "bank_in" | "bank_int" | "">("");
     const [upiId, setUpiId] = useState("");
     const [paypalEmail, setPaypalEmail] = useState("");
     const [bankAcc, setBankAcc] = useState("");
     const [bankIfsc, setBankIfsc] = useState("");
+    const [bankHolder, setBankHolder] = useState("");
+    const [bankName, setBankName] = useState("");
     const [bankSwift, setBankSwift] = useState("");
     const [bankIban, setBankIban] = useState("");
+
+    // Step 3 — document uploads
+    type DocKey = "selfie" | "photo_id" | "address_proof" | "age_proof" | "eligibility";
+    const DOC_FIELDS: { key: DocKey; label: string; hint: string }[] = [
+        { key: "selfie",       label: "Verification Selfie *",          hint: "Clear selfie holding your photo ID" },
+        { key: "photo_id",     label: "Government Photo ID *",          hint: "Passport, Aadhaar, Driver's License, or National ID" },
+        { key: "address_proof",label: "Proof of Address *",             hint: "Utility bill, bank statement, or official letter (≤3 months old)" },
+        { key: "age_proof",    label: "Proof of Age *",                 hint: "Birth certificate or ID showing date of birth" },
+        { key: "eligibility",  label: "Eligibility / Qualification (optional)", hint: "Certificate, training record, or any relevant qualification" },
+    ];
+    const [docs, setDocs] = useState<Record<DocKey, { path: string; name: string } | null>>({
+        selfie: null, photo_id: null, address_proof: null, age_proof: null, eligibility: null,
+    });
+    const [docUploading, setDocUploading] = useState<DocKey | null>(null);
+    const [selfieFromProfile, setSelfieFromProfile] = useState(false);
 
     // Step 4
     const [consent1, setConsent1] = useState(false);
@@ -2059,9 +2193,60 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
     function buildPayoutInfo() {
         if (payoutMethod === "upi")      return { method: "upi",      upi_id: upiId.trim() };
         if (payoutMethod === "paypal")   return { method: "paypal",   paypal_email: paypalEmail.trim() };
-        if (payoutMethod === "bank_in")  return { method: "bank_in",  account_number: bankAcc.trim(), ifsc: bankIfsc.trim() };
-        if (payoutMethod === "bank_int") return { method: "bank_int", swift: bankSwift.trim(), iban: bankIban.trim() };
+        if (payoutMethod === "bank_in")  return { method: "bank_in",  account_number: bankAcc.trim(), ifsc_code: bankIfsc.trim(), account_holder: bankHolder.trim(), bank_name: bankName.trim() };
+        if (payoutMethod === "bank_int") return { method: "bank_int", swift_code: bankSwift.trim(), iban: bankIban.trim(), account_holder: bankHolder.trim(), bank_name: bankName.trim() };
         return null;
+    }
+
+    async function pickAndUploadPhoto() {
+        try {
+            const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!perm.granted) { Alert.alert("Permission required", "Allow photo library access to upload a profile photo."); return; }
+            const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: "images", allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+            if (result.canceled || !result.assets[0]) return;
+            const asset = result.assets[0];
+            setPhotoLocalUri(asset.uri);
+            setPhotoUploading(true);
+            const uploadResult = await FileSystem.uploadAsync(buildApiUrl("/api/connect/upload-photo"), asset.uri, {
+                httpMethod: "POST",
+                uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+                fieldName: "file",
+                headers: { Authorization: `Bearer ${accessToken ?? ""}` },
+            });
+            const data = JSON.parse(uploadResult.body);
+            if (data.url) setPhotoUrl(data.url);
+            else Alert.alert("Upload failed", data.error ?? "Could not upload photo");
+        } catch {
+            Alert.alert("Upload failed", "Please try again.");
+        } finally {
+            setPhotoUploading(false);
+        }
+    }
+
+    async function pickAndUploadDoc(key: DocKey) {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "application/pdf"], copyToCacheDirectory: true });
+            if (result.canceled || !result.assets?.[0]) return;
+            const asset = result.assets[0];
+            setDocUploading(key);
+            const uploadResult = await FileSystem.uploadAsync(buildApiUrl("/api/connect/upload-doc"), asset.uri, {
+                httpMethod: "POST",
+                uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+                fieldName: "file",
+                parameters: { doc_type: key },
+                headers: { Authorization: `Bearer ${accessToken ?? ""}` },
+            });
+            const data = JSON.parse(uploadResult.body);
+            if (data.path) {
+                setDocs(prev => ({ ...prev, [key]: { path: data.path, name: asset.name ?? key } }));
+            } else {
+                Alert.alert("Upload failed", data.error ?? "Could not upload document");
+            }
+        } catch {
+            Alert.alert("Upload failed", "Please try again.");
+        } finally {
+            setDocUploading(null);
+        }
     }
 
     async function submit() {
@@ -2074,27 +2259,42 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
             const filteredSocials = socialLinks.filter((l) => l.trim().length > 0);
             const availWindows = availSlots
                 .filter((sl) => sl.days.length > 0)
-                .map((sl) => ({ days: sl.days, start: sl.start, end: sl.end, timezone: sl.timezone }));
+                .map((sl) => ({ days: sl.days, months: sl.months, start: sl.start, end: sl.end, timezone: sl.timezone, year: sl.year }));
+            const availNote = availWindows.length > 0
+                ? availWindows.map(w => `${w.days.join(", ")} ${w.start}–${w.end} ${w.timezone}${w.months.length > 0 ? ` (${w.months.slice(0,3).join(", ")}${w.months.length > 3 ? "..." : ""})` : ""}`).join("; ")
+                : null;
+            const verificationDocs: Record<string, unknown> = {};
+            for (const field of DOC_FIELDS) {
+                if (field.key === "selfie" && selfieFromProfile) {
+                    verificationDocs[field.key] = { same_as_profile: true };
+                } else if (docs[field.key]) {
+                    verificationDocs[field.key] = { path: docs[field.key]!.path };
+                }
+            }
             const res = await fetch(buildApiUrl("/api/connect/consultant/register"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({
-                    display_name:        displayName.trim(),
+                    display_name:         displayName.trim(),
                     gender,
-                    contact_email:       contactEmail.trim() || null,
-                    contact_phone:       fullPhone || null,
-                    website_url:         websiteUrl.trim() || null,
-                    social_links:        filteredSocials.length > 0 ? filteredSocials : null,
-                    photo_url:           photoUrl.trim() || null,
-                    bio:                 bio.trim(),
-                    expertise_tags:      expertiseTags,
+                    role_category:        roleCategory,
+                    contact_email:        contactEmail.trim() || null,
+                    contact_phone:        fullPhone || null,
+                    website_url:          websiteUrl.trim() || null,
+                    social_links:         filteredSocials.length > 0 ? filteredSocials : null,
+                    photo_url:            photoUrl.trim() || null,
+                    bio:                  bio.trim(),
+                    expertise_tags:       expertiseTags,
                     languages,
-                    rate_per_min:        parseFloat(ratePerMin),
-                    currency_code:       currencyCode,
+                    session_types:        sessionTypes,
+                    rate_per_min:         parseFloat(ratePerMin),
+                    currency_code:        currencyCode,
                     availability_windows: availWindows.length > 0 ? availWindows : null,
-                    payout_info:         buildPayoutInfo(),
-                    coc_agreed:          true,
-                    digital_signature:   digitalSig.trim(),
+                    availability_note:    availNote,
+                    payout_info:          buildPayoutInfo(),
+                    verification_docs:    Object.keys(verificationDocs).length > 0 ? verificationDocs : null,
+                    coc_agreed:           true,
+                    digital_signature:    digitalSig.trim(),
                 }),
             });
             const d = await res.json();
@@ -2107,14 +2307,18 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
         }
     }
 
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim());
     const step1Valid = displayName.trim().length > 0 && gender.length > 0 &&
-        expertiseTags.length > 0 && languages.length > 0;
-    const step2Valid = bio.trim().length >= 10 && bio.trim().length <= 500 && parseFloat(ratePerMin) > 0;
+        expertiseTags.length > 0 && languages.length > 0 && sessionTypes.length > 0 &&
+        contactEmail.trim().length > 0 && emailValid && contactPhone.trim().length > 0;
+    const step2Valid = bio.trim().length >= 30 && bio.trim().length <= 500 && parseFloat(ratePerMin) > 0;
+    const requiredDocs = (["selfie", "photo_id", "address_proof", "age_proof"] as DocKey[]);
+    const docsValid = requiredDocs.every(k => k === "selfie" ? (selfieFromProfile || docs.selfie !== null) : docs[k] !== null);
     let step3Valid = false;
-    if (payoutMethod === "upi")           step3Valid = upiId.trim().length > 0;
-    else if (payoutMethod === "paypal")   step3Valid = paypalEmail.trim().length > 0;
-    else if (payoutMethod === "bank_in")  step3Valid = bankAcc.trim().length > 0 && bankIfsc.trim().length > 0;
-    else if (payoutMethod === "bank_int") step3Valid = bankSwift.trim().length > 0 && bankIban.trim().length > 0;
+    if (payoutMethod === "upi")           step3Valid = upiId.trim().length > 0 && docsValid;
+    else if (payoutMethod === "paypal")   step3Valid = paypalEmail.trim().length > 0 && docsValid;
+    else if (payoutMethod === "bank_in")  step3Valid = bankAcc.trim().length > 0 && bankIfsc.trim().length > 0 && bankHolder.trim().length > 0 && bankName.trim().length > 0 && docsValid;
+    else if (payoutMethod === "bank_int") step3Valid = bankSwift.trim().length > 0 && bankIban.trim().length > 0 && bankHolder.trim().length > 0 && bankName.trim().length > 0 && docsValid;
     const step4Valid = consent1 && consent2 && consent3 && consent4 && consent5;
     const step5Valid = agreeInfoTrue && digitalSig.trim().length > 0;
 
@@ -2157,11 +2361,44 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                             </View>
                         </View>
 
-                        <TField label="Contact Email" value={contactEmail} onChange={setContactEmail}
+                        {/* Role Category */}
+                        <View style={{ marginBottom: 12 }}>
+                            <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Role Category *</Text>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 8 }}>
+                                The relationship type you will offer. Only Wellness Companion is available now.
+                            </Text>
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                {ROLE_CATEGORIES.map((rc) => {
+                                    const active = roleCategory === rc.key;
+                                    const locked = rc.phase > 1;
+                                    return (
+                                        <TouchableOpacity
+                                            key={rc.key}
+                                            disabled={locked}
+                                            onPress={() => !locked && setRoleCategory(rc.key)}
+                                            style={[
+                                                s.durationBtn,
+                                                active && s.durationBtnActive,
+                                                locked && { opacity: 0.35 },
+                                                { paddingHorizontal: 12, paddingVertical: 7 },
+                                            ]}>
+                                            <Text style={[s.durationBtnText, active && s.durationBtnTextActive, { fontSize: 12 }]}>
+                                                {rc.icon} {rc.label}{locked ? " · Soon" : ""}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </View>
+
+                        <TField label="Contact Email *" value={contactEmail} onChange={setContactEmail}
                             placeholder="your@email.com" keyboard="email-address" colors={colors} />
+                        {contactEmail.length > 0 && !emailValid && (
+                            <Text style={{ fontSize: 11, color: "#ef4444", marginTop: -8, marginBottom: 8 }}>Enter a valid email address</Text>
+                        )}
 
                         <View style={{ marginBottom: 12 }}>
-                            <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Contact Phone</Text>
+                            <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Contact Phone *</Text>
                             <View style={{ flexDirection: "row", gap: 8 }}>
                                 <TouchableOpacity onPress={() => setDialPickerOpen(true)}
                                     style={[s.messageInput, { paddingHorizontal: 10, minWidth: 88, justifyContent: "center", alignItems: "center", flexDirection: "row", gap: 4 }]}>
@@ -2206,17 +2443,69 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                             )}
                         </View>
 
-                        <TField label="Profile Photo URL (optional)" value={photoUrl} onChange={setPhotoUrl}
-                            placeholder="https://… (upload via web after registration)" keyboard="url" colors={colors} />
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={[s.cardBio, { marginBottom: 8, fontWeight: "600" }]}>Profile Photo (optional)</Text>
+                            <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                                {(photoLocalUri || photoUrl) ? (
+                                    <Image source={{ uri: photoLocalUri ?? photoUrl }}
+                                        style={{ width: 72, height: 72, borderRadius: 36, borderWidth: 2, borderColor: colors.primary }} />
+                                ) : (
+                                    <View style={{ width: 72, height: 72, borderRadius: 36, borderWidth: 2, borderColor: colors.border, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+                                        <Ionicons name="person-outline" size={32} color={colors.textSecondary} />
+                                    </View>
+                                )}
+                                <View style={{ flex: 1, gap: 8 }}>
+                                    <TouchableOpacity
+                                        style={[s.durationBtn, photoUploading && { opacity: 0.5 }]}
+                                        disabled={photoUploading}
+                                        onPress={pickAndUploadPhoto}>
+                                        {photoUploading
+                                            ? <ActivityIndicator size="small" color={colors.primary} />
+                                            : <Text style={s.durationBtnText}>📷 Choose from Gallery</Text>}
+                                    </TouchableOpacity>
+                                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>Square photo recommended (1:1)</Text>
+                                </View>
+                            </View>
+                        </View>
 
                         <ChipSelector label="Specialties *" options={EXPERTISE_OPTIONS}
                             selected={expertiseTags}
                             onToggle={(v) => setExpertiseTags(prev => prev.includes(v) ? prev.filter(x=>x!==v) : [...prev,v])}
                             colors={colors} />
-                        <ChipSelector label="Languages Spoken *" options={LANGUAGE_OPTIONS}
-                            selected={languages}
-                            onToggle={(v) => setLanguages(prev => prev.includes(v) ? prev.filter(x=>x!==v) : [...prev,v])}
+                        <LangChipSelector label="Languages Spoken *" selected={languages}
+                            onToggle={(code) => setLanguages(prev => prev.includes(code) ? prev.filter(x=>x!==code) : [...prev,code])}
                             colors={colors} />
+
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={[s.cardBio, { marginBottom: 8, fontWeight: "600" }]}>
+                                Session Types * <Text style={{ fontWeight: "400", color: colors.textSecondary }}>(choose all you can offer)</Text>
+                            </Text>
+                            {SESSION_TYPE_OPTIONS.map((opt) => {
+                                const active = sessionTypes.includes(opt.key);
+                                return (
+                                    <TouchableOpacity
+                                        key={opt.key}
+                                        style={{
+                                            flexDirection: "row", alignItems: "center", gap: 12,
+                                            borderWidth: 1.5, borderRadius: 14,
+                                            borderColor: active ? colors.primary : colors.border,
+                                            backgroundColor: active ? "rgba(139,92,246,0.10)" : "transparent",
+                                            paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
+                                        }}
+                                        onPress={() => setSessionTypes(prev =>
+                                            prev.includes(opt.key) ? prev.filter(x => x !== opt.key) : [...prev, opt.key]
+                                        )}>
+                                        <Text style={{ fontSize: 24 }}>{opt.icon}</Text>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ fontSize: 14, fontWeight: "600", color: active ? colors.primary : colors.textPrimary }}>
+                                                {opt.label}
+                                            </Text>
+                                        </View>
+                                        {active && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
 
                         <TouchableOpacity style={[s.primaryBtn, !step1Valid && { opacity: 0.5 }]}
                             disabled={!step1Valid} onPress={() => { setError(""); setStep(2); }}>
@@ -2230,31 +2519,44 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                     <View>
                         <Text style={[s.cardName, { marginBottom: 16 }]}>Step 2 — Bio & Availability</Text>
 
-                        <TField label="Bio * (10–500 chars)" value={bio} onChange={setBio}
+                        <TField label="Bio * (30–500 chars)" value={bio} onChange={setBio}
                             placeholder="Tell users about your background and approach" multiline colors={colors} />
                         {bio.length > 0 && (
-                            <Text style={{ fontSize: 11, color: bio.length > 500 ? "#ef4444" : colors.textSecondary, marginTop: -8, marginBottom: 8 }}>
-                                {bio.length}/500
+                            <Text style={{ fontSize: 11, color: bio.length > 500 ? "#ef4444" : bio.length < 30 ? "#f97316" : colors.textSecondary, marginTop: -8, marginBottom: 8 }}>
+                                {bio.length}/500{bio.length < 30 ? ` (min 30)` : ""}
                             </Text>
                         )}
 
-                        <View style={{ marginBottom: 12 }}>
+                        <View style={{ marginBottom: 4 }}>
                             <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Rate per minute *</Text>
-                            <View style={{ flexDirection: "row", gap: 8 }}>
+                            <View style={{ flexDirection: "row", gap: 8, marginBottom: 6 }}>
                                 <TextInput style={[s.messageInput, { flex: 1 }]}
                                     value={ratePerMin} onChangeText={setRatePerMin}
                                     keyboardType="numeric" placeholderTextColor={colors.textSecondary} />
-                                <View style={{ flexDirection: "row", gap: 6 }}>
-                                    {["INR","USD","EUR","GBP"].map((c) => (
-                                        <TouchableOpacity key={c}
-                                            style={[s.durationBtn, currencyCode===c && s.durationBtnActive]}
-                                            onPress={() => setCurrencyCode(c)}>
-                                            <Text style={[s.durationBtnText, currencyCode===c && s.durationBtnTextActive]}>{c}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
+                            </View>
+                            <Text style={[s.cardBio, { marginBottom: 6, fontSize: 11 }]}>Currency</Text>
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                                {["INR","USD","EUR","GBP","AED","SGD","AUD"].map((c) => (
+                                    <TouchableOpacity key={c}
+                                        style={[s.durationBtn, currencyCode===c && s.durationBtnActive]}
+                                        onPress={() => setCurrencyCode(c)}>
+                                        <Text style={[s.durationBtnText, currencyCode===c && s.durationBtnTextActive]}>{c}</Text>
+                                    </TouchableOpacity>
+                                ))}
                             </View>
                         </View>
+
+                        {parseFloat(ratePerMin) > 0 && (
+                            <View style={[s.card, { marginBottom: 16, backgroundColor: "rgba(52,211,153,0.08)", borderColor: "rgba(52,211,153,0.25)" }]}>
+                                <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Earnings preview (80% platform share)</Text>
+                                <Text style={{ fontSize: 15, color: "#34d399", fontWeight: "700" }}>
+                                    {CURRENCY_SYMBOLS[currencyCode] ?? currencyCode}{(parseFloat(ratePerMin) * 0.8).toFixed(2)}/min
+                                </Text>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                                    30-min session ≈ {CURRENCY_SYMBOLS[currencyCode] ?? currencyCode}{(parseFloat(ratePerMin) * 0.8 * 30).toFixed(0)}
+                                </Text>
+                            </View>
+                        )}
 
                         <Text style={[s.cardBio, { marginBottom: 8, fontWeight: "600" }]}>Availability Windows</Text>
                         {availSlots.map((slot, idx) => (
@@ -2267,8 +2569,9 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                                         </TouchableOpacity>
                                     )}
                                 </View>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>Days</Text>
                                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                                    {DAYS_SHORT.map((d) => {
+                                    {DAYS_FULL.map((d, di) => {
                                         const active = slot.days.includes(d);
                                         return (
                                             <TouchableOpacity key={d}
@@ -2278,7 +2581,39 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                                                     n[idx]={...slot, days: active ? slot.days.filter(x=>x!==d) : [...slot.days,d]};
                                                     setAvailSlots(n);
                                                 }}>
-                                                <Text style={[s.filterChipText, active && s.filterChipTextActive]}>{d}</Text>
+                                                <Text style={[s.filterChipText, active && s.filterChipTextActive]}>{DAYS_SHORT[di]}</Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>Months (leave empty = all year)</Text>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                                    {MONTHS_OF_YEAR.map((m) => {
+                                        const active = slot.months.includes(m);
+                                        return (
+                                            <TouchableOpacity key={m}
+                                                style={[s.filterChip, active && s.filterChipActive]}
+                                                onPress={() => {
+                                                    const n=[...availSlots];
+                                                    n[idx]={...slot, months: active ? slot.months.filter(x=>x!==m) : [...slot.months,m]};
+                                                    setAvailSlots(n);
+                                                }}>
+                                                <Text style={[s.filterChipText, active && s.filterChipTextActive]}>{m.slice(0,3)}</Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>Year</Text>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                                    {YEAR_OPTIONS.map((y) => {
+                                        const active = slot.year === y;
+                                        return (
+                                            <TouchableOpacity key={y}
+                                                style={[s.filterChip, active && s.filterChipActive]}
+                                                onPress={() => {
+                                                    const n=[...availSlots]; n[idx]={...slot, year: y}; setAvailSlots(n);
+                                                }}>
+                                                <Text style={[s.filterChipText, active && s.filterChipTextActive]}>{y}</Text>
                                             </TouchableOpacity>
                                         );
                                     })}
@@ -2307,7 +2642,7 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                         ))}
                         {availSlots.length < 5 && (
                             <TouchableOpacity style={[s.durationBtn, { alignSelf: "flex-start", marginBottom: 16 }]}
-                                onPress={() => setAvailSlots([...availSlots, { days:[], start:"09:00", end:"21:00", timezone:"Asia/Kolkata" }])}>
+                                onPress={() => setAvailSlots([...availSlots, { days:[], months:[], start:"09:00", end:"21:00", timezone:"Asia/Kolkata", year:"Ongoing" }])}>
                                 <Text style={s.durationBtnText}>+ Add Window</Text>
                             </TouchableOpacity>
                         )}
@@ -2319,18 +2654,62 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                     </View>
                 )}
 
-                {/* ── STEP 3: Payout Details ────────────────────────────── */}
+                {/* ── STEP 3: Identity Documents & Payout ──────────────── */}
                 {step === 3 && (
                     <View>
-                        <Text style={[s.cardName, { marginBottom: 16 }]}>Step 3 — Payout Details</Text>
+                        <Text style={[s.cardName, { marginBottom: 16 }]}>Step 3 — Identity & Payout</Text>
 
-                        <View style={[s.card, { marginBottom: 16 }]}>
-                            <Text style={[s.cardBio, { fontSize: 12 }]}>
-                                🔒 Document verification (selfie, photo ID, address proof) is completed during admin review — you do not need to upload documents now.
-                            </Text>
-                        </View>
+                        {/* Document Uploads */}
+                        <Text style={[s.cardBio, { fontWeight: "700", marginBottom: 4 }]}>Identity Verification *</Text>
+                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 12 }}>
+                            Documents are encrypted and only reviewed by Imotara's Trust & Safety team.
+                        </Text>
 
-                        <Text style={[s.cardBio, { marginBottom: 12, fontWeight: "600" }]}>Payout Method *</Text>
+                        {DOC_FIELDS.map((field) => {
+                            const uploaded = field.key === "selfie" && selfieFromProfile ? true : docs[field.key] !== null;
+                            const isUploading = docUploading === field.key;
+                            return (
+                                <View key={field.key} style={[s.card, { marginBottom: 10, padding: 12 }]}>
+                                    <Text style={[s.cardBio, { fontWeight: "600", marginBottom: 2 }]}>{field.label}</Text>
+                                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 8 }}>{field.hint}</Text>
+
+                                    {field.key === "selfie" && (
+                                        <TouchableOpacity
+                                            style={{ flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 8 }}
+                                            onPress={() => setSelfieFromProfile(!selfieFromProfile)}>
+                                            <View style={{
+                                                width: 20, height: 20, borderRadius: 4, borderWidth: 2,
+                                                borderColor: selfieFromProfile ? colors.primary : colors.border,
+                                                backgroundColor: selfieFromProfile ? colors.primary : "transparent",
+                                                alignItems: "center", justifyContent: "center",
+                                            }}>
+                                                {selfieFromProfile && <Ionicons name="checkmark" size={12} color="#fff" />}
+                                            </View>
+                                            <Text style={{ fontSize: 12, color: colors.textPrimary }}>Use my profile photo as selfie</Text>
+                                        </TouchableOpacity>
+                                    )}
+
+                                    {!(field.key === "selfie" && selfieFromProfile) && (
+                                        <TouchableOpacity
+                                            style={[s.durationBtn, uploaded && s.durationBtnActive, isUploading && { opacity: 0.6 }, { alignSelf: "flex-start" }]}
+                                            disabled={isUploading}
+                                            onPress={() => pickAndUploadDoc(field.key)}>
+                                            {isUploading
+                                                ? <ActivityIndicator size="small" color={colors.primary} />
+                                                : <Text style={[s.durationBtnText, uploaded && s.durationBtnTextActive]}>
+                                                    {uploaded ? `✓ ${docs[field.key]?.name ?? "Uploaded"}` : "📎 Upload File"}
+                                                  </Text>}
+                                        </TouchableOpacity>
+                                    )}
+                                    {field.key === "selfie" && selfieFromProfile && (
+                                        <Text style={{ fontSize: 12, color: "#34d399" }}>✓ Using profile photo</Text>
+                                    )}
+                                </View>
+                            );
+                        })}
+
+                        {/* Payout Method */}
+                        <Text style={[s.cardBio, { marginBottom: 12, fontWeight: "700", marginTop: 8 }]}>Payout Method *</Text>
                         {([ ["upi","🇮🇳 UPI (India)"], ["paypal","🌐 PayPal"], ["bank_in","🏦 Bank Transfer (India)"], ["bank_int","🌍 International Bank Wire"] ] as [string,string][]).map(([v, lbl]) => (
                             <TouchableOpacity key={v}
                                 style={[s.durationBtn, payoutMethod===v && s.durationBtnActive, { marginBottom: 8, alignSelf: "stretch", justifyContent: "flex-start", paddingHorizontal: 14 }]}
@@ -2347,12 +2726,20 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                                 placeholder="paypal@email.com" keyboard="email-address" colors={colors} />
                         )}
                         {payoutMethod === "bank_in" && (<>
+                            <TField label="Account Holder Name *" value={bankHolder} onChange={setBankHolder}
+                                placeholder="Full name as on bank account" colors={colors} />
+                            <TField label="Bank Name *" value={bankName} onChange={setBankName}
+                                placeholder="e.g. HDFC Bank" colors={colors} />
                             <TField label="Account Number *" value={bankAcc} onChange={setBankAcc}
                                 placeholder="Bank account number" keyboard="numeric" colors={colors} />
                             <TField label="IFSC Code *" value={bankIfsc} onChange={setBankIfsc}
                                 placeholder="e.g. HDFC0001234" colors={colors} />
                         </>)}
                         {payoutMethod === "bank_int" && (<>
+                            <TField label="Account Holder Name *" value={bankHolder} onChange={setBankHolder}
+                                placeholder="Full name as on bank account" colors={colors} />
+                            <TField label="Bank Name *" value={bankName} onChange={setBankName}
+                                placeholder="e.g. Barclays Bank" colors={colors} />
                             <TField label="SWIFT / BIC *" value={bankSwift} onChange={setBankSwift}
                                 placeholder="e.g. HDFCINBB" colors={colors} />
                             <TField label="IBAN *" value={bankIban} onChange={setBankIban}
@@ -2387,15 +2774,15 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
 
                         <Text style={[s.cardBio, { fontWeight: "700", marginBottom: 12 }]}>I confirm *</Text>
                         <RegCheckbox value={consent1} onPress={()=>setConsent1(!consent1)} colors={colors}
-                            label="I am 18 years or older and legally permitted to provide peer support in my jurisdiction." />
+                            label="I confirm that I am 18 years of age or older. I understand that minors are not permitted to register as companions." />
                         <RegCheckbox value={consent2} onPress={()=>setConsent2(!consent2)} colors={colors}
-                            label="I have read and fully agree to the Code of Conduct above." />
+                            label="I have read, understood, and agree to abide by the Imotara Wellness Companion Code of Conduct in its entirety." />
                         <RegCheckbox value={consent3} onPress={()=>setConsent3(!consent3)} colors={colors}
-                            label="I have read and agree to the Platform Disclaimer above." />
+                            label="I have read and accept the Platform Disclaimer and Limitation of Liability, and agree that Imotara bears no responsibility for outcomes of sessions I conduct." />
                         <RegCheckbox value={consent4} onPress={()=>setConsent4(!consent4)} colors={colors}
-                            label="I consent to Imotara using my profile and anonymised session metrics for platform improvement and promotion." />
+                            label="I understand and acknowledge that Imotara Connect is a peer support platform only — not a medical, clinical, or therapeutic service — and I will clearly communicate this to users during sessions." />
                         <RegCheckbox value={consent5} onPress={()=>setConsent5(!consent5)} colors={colors}
-                            label="I agree to Imotara's Terms of Service and Privacy Policy." />
+                            label="I accept full responsibility for declaring and paying all applicable taxes on earnings received through Imotara in my jurisdiction, and indemnify Imotara against any tax-related claims." />
 
                         <TouchableOpacity style={[s.primaryBtn, !step4Valid && { opacity: 0.5 }]}
                             disabled={!step4Valid} onPress={() => { setError(""); setStep(5); }}>
@@ -2411,6 +2798,14 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
 
                         <View style={[s.card, { marginBottom: 16 }]}>
                             <Text style={[s.cardBio, { fontWeight: "700", marginBottom: 10 }]}>Application Summary</Text>
+
+                            {(photoLocalUri || photoUrl) && (
+                                <View style={{ alignItems: "center", marginBottom: 12 }}>
+                                    <Image source={{ uri: photoLocalUri ?? photoUrl }}
+                                        style={{ width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: colors.primary }} />
+                                </View>
+                            )}
+
                             <RRow label="Display Name"   value={displayName}                                                colors={colors} />
                             <RRow label="Gender"         value={gender}                                                      colors={colors} />
                             <RRow label="Contact Email"  value={contactEmail}                                                colors={colors} />
@@ -2418,11 +2813,41 @@ function RegisterView({ colors, insets, accessToken, onBack, onSuccess }: {
                             <RRow label="Website"        value={websiteUrl}                                                  colors={colors} />
                             <RRow label="Social Links"   value={socialLinks.filter(Boolean).join(", ")}                     colors={colors} />
                             <RRow label="Specialties"    value={expertiseTags.join(", ")}                                   colors={colors} />
-                            <RRow label="Languages"      value={languages.join(", ")}                                       colors={colors} />
+                            <RRow label="Languages"      value={languages.map(code => LANGUAGE_OPTIONS.find(l=>l.code===code)?.label ?? code).join(", ")} colors={colors} />
+                            <RRow label="Session Types"  value={sessionTypes.map(k => SESSION_TYPE_OPTIONS.find(o=>o.key===k)?.label ?? k).join(", ")} colors={colors} />
                             <RRow label="Bio"            value={bio.length > 120 ? bio.slice(0,120)+"…" : bio}              colors={colors} />
-                            <RRow label="Rate"           value={`${ratePerMin} ${currencyCode}/min`}                        colors={colors} />
-                            <RRow label="Availability"   value={availSlots.filter(sl=>sl.days.length>0).map(sl=>`${sl.days.join(",")} ${sl.start}–${sl.end} (${sl.timezone})`).join(" | ")} colors={colors} />
+                            <RRow label="Rate"           value={`${ratePerMin} ${currencyCode}/min (you earn ${(parseFloat(ratePerMin)*0.8).toFixed(2)})`} colors={colors} />
+                            <RRow label="Availability"   value={availSlots.filter(sl=>sl.days.length>0).map(sl=>`${sl.days.map(d=>d.slice(0,3)).join(",")} ${sl.start}–${sl.end} (${sl.timezone})`).join(" | ")} colors={colors} />
                             <RRow label="Payout Method"  value={payoutMethod}                                               colors={colors} />
+                        </View>
+
+                        <View style={[s.card, { marginBottom: 16 }]}>
+                            <Text style={[s.cardBio, { fontWeight: "700", marginBottom: 8 }]}>Documents</Text>
+                            {DOC_FIELDS.map((field) => {
+                                const uploaded = field.key === "selfie" && selfieFromProfile ? true : docs[field.key] !== null;
+                                return (
+                                    <View key={field.key} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                        <Text style={{ fontSize: 14, color: uploaded ? "#34d399" : "#ef4444" }}>{uploaded ? "✓" : "✗"}</Text>
+                                        <Text style={{ fontSize: 13, color: colors.textPrimary, flex: 1 }}>{field.label.replace(" *","")}</Text>
+                                    </View>
+                                );
+                            })}
+                        </View>
+
+                        <View style={[s.card, { marginBottom: 16 }]}>
+                            <Text style={[s.cardBio, { fontWeight: "700", marginBottom: 8 }]}>Legal Agreements</Text>
+                            {[
+                                { done: consent1, label: "Age confirmation (18+)" },
+                                { done: consent2, label: "Code of Conduct" },
+                                { done: consent3, label: "Platform Disclaimer" },
+                                { done: consent4, label: "Peer-support acknowledgement" },
+                                { done: consent5, label: "Tax responsibility" },
+                            ].map((item, i) => (
+                                <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                    <Text style={{ fontSize: 14, color: item.done ? "#34d399" : "#ef4444" }}>{item.done ? "✓" : "✗"}</Text>
+                                    <Text style={{ fontSize: 13, color: colors.textPrimary }}>{item.label}</Text>
+                                </View>
+                            ))}
                         </View>
 
                         <View style={[s.card, { marginBottom: 16, backgroundColor: "rgba(251,191,36,0.10)", borderColor: "rgba(251,191,36,0.30)" }]}>
