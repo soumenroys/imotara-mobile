@@ -52,7 +52,36 @@ interface Session {
     scheduled_note: string | null;
     currency_code: string | null;
     created_at: string;
+    started_at: string | null;
+    amount_charged: number | null;
+    rate_per_min: number | null;
+    user_timezone: string | null;
+    consultant_timezone: string | null;
     connect_consultants: { display_name: string; photo_url: string | null; rate_per_min?: number } | null;
+}
+
+function tzLabel(tz: string): string {
+    try {
+        const parts = Intl.DateTimeFormat("en", { timeZoneName: "short", timeZone: tz }).formatToParts(new Date());
+        return parts.find((p) => p.type === "timeZoneName")?.value ?? tz;
+    } catch { return tz; }
+}
+
+function formatDuration(secs: number): string {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function formatClock(date: Date, tz: string): string {
+    try {
+        return date.toLocaleString("en-IN", {
+            timeZone: tz, weekday: "short", day: "numeric", month: "short",
+            hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+        });
+    } catch { return date.toLocaleString(); }
 }
 
 interface Message {
@@ -62,14 +91,12 @@ interface Message {
     created_at: string;
 }
 
-interface Transaction {
+interface WalletTx {
     id: string;
-    type: "recharge" | "session";
-    consultant_name: string;
-    consultant_id: string;
-    minutes: number;
-    amount: number | null;
-    currency_code: string | null;
+    type: "topup" | "deduction" | "refund" | "session" | "dormancy_marked";
+    amount: number;
+    currency_code: string;
+    description: string;
     created_at: string;
 }
 
@@ -217,7 +244,8 @@ export default function ConnectScreen() {
             </View>
 
             {tab === "browse" && <BrowseTab colors={colors} accessToken={accessToken}
-                onSelectConsultant={(c) => setView({ name: "profile", consultant: c })} />}
+                onSelectConsultant={(c) => setView({ name: "profile", consultant: c })}
+                onOpenWallet={() => setView({ name: "wallet" })} />}
             {tab === "sessions" && <SessionsTab colors={colors} accessToken={accessToken}
                 onSelectSession={(s) => setView({ name: "chat", session: s })} />}
             {tab === "wallet" && <WalletTab colors={colors} accessToken={accessToken} />}
@@ -231,17 +259,21 @@ export default function ConnectScreen() {
 }
 
 // ── Browse Tab ─────────────────────────────────────────────────────────────────
-function BrowseTab({ colors, accessToken, onSelectConsultant }: {
+function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
     colors: any; accessToken: string | null;
     onSelectConsultant: (c: Consultant) => void;
+    onOpenWallet: () => void;
 }) {
     const [consultants, setConsultants] = useState<Consultant[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterOnline, setFilterOnline] = useState(false);
     const [filterTag, setFilterTag] = useState("");
     const [filterCategory, setFilterCategory] = useState("");
+    const [sort, setSort] = useState<"rating" | "price_asc" | "price_desc" | "sessions">("rating");
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
     const [favLoading, setFavLoading] = useState<string | null>(null);
+    const [walletBalance, setWalletBalance] = useState<number | null>(null);
+    const [walletCurrency, setWalletCurrency] = useState("INR");
     const s = styles(colors);
 
     useEffect(() => {
@@ -254,10 +286,14 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
             accessToken
                 ? fetch(buildApiUrl("/api/connect/favorites"), { headers: authHeaders }).then((r) => r.json())
                 : Promise.resolve({ ok: false, favorites: [] }),
+            accessToken
+                ? fetch(buildApiUrl("/api/connect/wallet"), { headers: authHeaders }).then((r) => r.json())
+                : Promise.resolve({ ok: false }),
         ])
-            .then(([cd, fd]) => {
+            .then(([cd, fd, wd]) => {
                 if (cd.ok) setConsultants(cd.consultants ?? []);
                 if (fd.ok) setFavorites(new Set(fd.favorites ?? []));
+                if (wd.ok) { setWalletBalance(Number(wd.wallet_balance ?? 0)); setWalletCurrency(wd.wallet_currency ?? "INR"); }
             })
             .catch(() => {})
             .finally(() => setLoading(false));
@@ -282,9 +318,17 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
         finally { setFavLoading(null); }
     }
 
-    const displayed = filterTag
-        ? consultants.filter((c) => c.expertise_tags.includes(filterTag))
-        : consultants;
+    const displayed = consultants
+        .filter((c) => !filterTag || c.expertise_tags.includes(filterTag))
+        .sort((a, b) => {
+            if (sort === "rating")     return (b.rating_avg || 0) - (a.rating_avg || 0);
+            if (sort === "price_asc")  return a.rate_per_min - b.rate_per_min;
+            if (sort === "price_desc") return b.rate_per_min - a.rate_per_min;
+            if (sort === "sessions")   return b.sessions_completed - a.sessions_completed;
+            return 0;
+        });
+
+    const sym = CURRENCY_SYMBOLS[walletCurrency] ?? "₹";
 
     if (loading) return <View style={s.center}><ActivityIndicator color={colors.primary} /></View>;
     if (consultants.length === 0) return (
@@ -296,6 +340,19 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
 
     return (
         <View style={{ flex: 1 }}>
+            {/* Wallet balance bar */}
+            {accessToken && walletBalance !== null && (
+                <TouchableOpacity
+                    onPress={onOpenWallet}
+                    style={{ marginHorizontal: 12, marginTop: 10, marginBottom: 2, borderRadius: 12, borderWidth: 1, borderColor: "rgba(139,92,246,0.3)", backgroundColor: "rgba(139,92,246,0.08)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 9 }}>
+                    <Text style={{ fontSize: 13, color: "#a78bfa" }}>💰 Wallet balance</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={{ fontSize: 15, fontWeight: "700", color: "#a78bfa" }}>{sym}{walletBalance.toFixed(2)}</Text>
+                        <Text style={{ fontSize: 11, color: "#a78bfa", opacity: 0.7 }}>+ Add →</Text>
+                    </View>
+                </TouchableOpacity>
+            )}
+
             {/* Sign-in banner for unauthenticated users */}
             {!accessToken && (
                 <View style={{ marginHorizontal: 12, marginTop: 10, marginBottom: 4, borderRadius: 12, borderWidth: 1, borderColor: "rgba(139,92,246,0.35)", backgroundColor: "rgba(139,92,246,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10 }}>
@@ -338,6 +395,24 @@ function BrowseTab({ colors, accessToken, onSelectConsultant }: {
                         style={[s.filterChip, filterTag === tag && s.filterChipActive]}
                         onPress={() => setFilterTag((v) => (v === tag ? "" : tag))}>
                         <Text style={[s.filterChipText, filterTag === tag && s.filterChipTextActive]}>{tag}</Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
+
+            {/* Sort row */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 6, gap: 8, flexDirection: "row" }}>
+                {([
+                    { key: "rating",     label: "⭐ Top rated" },
+                    { key: "price_asc",  label: "Price ↑" },
+                    { key: "price_desc", label: "Price ↓" },
+                    { key: "sessions",   label: "Most sessions" },
+                ] as const).map((opt) => (
+                    <TouchableOpacity
+                        key={opt.key}
+                        style={[s.filterChip, sort === opt.key && s.filterChipActive]}
+                        onPress={() => setSort(opt.key)}>
+                        <Text style={[s.filterChipText, sort === opt.key && s.filterChipTextActive]}>{opt.label}</Text>
                     </TouchableOpacity>
                 ))}
             </ScrollView>
@@ -539,12 +614,33 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
 }
 
 // ── Wallet Tab ─────────────────────────────────────────────────────────────────
+const TOPUP_PRESETS = [1000, 2000, 5000, 10000];
+
 function WalletTab({ colors, accessToken }: { colors: any; accessToken: string | null }) {
-    const [wallets, setWallets] = useState<{ consultant_id: string; display_name: string; currency_code: string; balance_minutes: number; photo_url: string | null; gender: string | null }[]>([]);
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [walletBalance, setWalletBalance] = useState(0);
+    const [walletStatus, setWalletStatus] = useState("active");
+    const [expiresAt, setExpiresAt] = useState<string | null>(null);
+    const [daysUntilExpiry, setDaysUntilExpiry] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
+
+    const [topupAmount, setTopupAmount] = useState(1000);
+    const [customAmount, setCustomAmount] = useState("");
+    const [isCustom, setIsCustom] = useState(false);
+    const [termsAccepted, setTermsAccepted] = useState(false);
+    const [topupLoading, setTopupLoading] = useState(false);
+    const [topupError, setTopupError] = useState("");
+
+    const [showRefund, setShowRefund] = useState(false);
+    const [refundMethod, setRefundMethod] = useState<"upi" | "bank">("upi");
+    const [refundUpi, setRefundUpi] = useState("");
+    const [refundBank, setRefundBank] = useState({ name: "", account: "", ifsc: "", holder: "" });
+    const [refundLoading, setRefundLoading] = useState(false);
+    const [refundResult, setRefundResult] = useState<{ ok: boolean; ref?: string; error?: string } | null>(null);
+
+    const [transactions, setTransactions] = useState<WalletTx[]>([]);
     const [showHistory, setShowHistory] = useState(false);
     const [historyLoading, setHistoryLoading] = useState(false);
+
     const s = styles(colors);
 
     useEffect(() => {
@@ -553,7 +649,12 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             headers: { Authorization: `Bearer ${accessToken}` },
         })
             .then((r) => r.json())
-            .then((d) => setWallets(d.wallets ?? []))
+            .then((d) => {
+                setWalletBalance(d.wallet_balance ?? 0);
+                setWalletStatus(d.wallet_status ?? "active");
+                setExpiresAt(d.expires_at ?? null);
+                setDaysUntilExpiry(d.days_until_expiry ?? null);
+            })
             .catch(() => {})
             .finally(() => setLoading(false));
     }, [accessToken]);
@@ -572,40 +673,294 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
         finally { setHistoryLoading(false); }
     }
 
+    async function handleTopUp() {
+        const amt = isCustom ? parseFloat(customAmount) : topupAmount;
+        if (!accessToken || isNaN(amt) || amt < 1) { setTopupError("Enter a valid amount"); return; }
+        if (!termsAccepted) { setTopupError("Please accept the Wallet Terms to continue"); return; }
+        setTopupLoading(true); setTopupError("");
+        try {
+            const res = await fetch(buildApiUrl("/api/connect/wallet/topup/create"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ amount: amt, terms_accepted: true }),
+            });
+            const d = await res.json();
+            if (!d.ok) { setTopupError(d.error ?? "Failed to create order"); setTopupLoading(false); return; }
+
+            const RazorpayCheckout = require("react-native-razorpay").default;
+            const paymentData = await RazorpayCheckout.open({
+                key: d.razorpay_key_id ?? process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID,
+                order_id: d.razorpay_order_id,
+                amount: String(d.amount_paise),
+                currency: "INR",
+                name: "Imotara Wallet",
+                description: `Add ₹${amt} to your wallet`,
+                theme: { color: "#6366f1" },
+            });
+
+            const verifyRes = await fetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({
+                    razorpay_order_id:   paymentData.razorpay_order_id,
+                    razorpay_payment_id: paymentData.razorpay_payment_id,
+                    razorpay_signature:  paymentData.razorpay_signature,
+                }),
+            });
+            const v = await verifyRes.json();
+            if (!v.ok) { setTopupError(v.error ?? "Verification failed"); return; }
+            setWalletBalance(v.new_balance);
+            setWalletStatus("active");
+            setTransactions([]);
+            Alert.alert("Success", `₹${v.amount_credited} added to your wallet!`);
+        } catch (err: any) {
+            if (err?.code !== 0 && !String(err?.description ?? "").toLowerCase().includes("cancel")) {
+                setTopupError(String(err?.message ?? "Payment failed"));
+            }
+        } finally {
+            setTopupLoading(false);
+        }
+    }
+
+    async function handleRefundRequest() {
+        if (!accessToken) return;
+        const isUpi = refundMethod === "upi";
+        if (isUpi && !refundUpi.trim()) { Alert.alert("Error", "Please enter your UPI ID"); return; }
+        if (!isUpi && (!refundBank.account || !refundBank.ifsc || !refundBank.holder)) {
+            Alert.alert("Error", "Please fill in all bank details"); return;
+        }
+        setRefundLoading(true);
+        try {
+            const body = isUpi
+                ? { upi_id: refundUpi }
+                : { bank_name: refundBank.name, account_number: refundBank.account, ifsc_code: refundBank.ifsc, account_holder: refundBank.holder };
+            const res = await fetch(buildApiUrl("/api/connect/wallet/refund-request"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify(body),
+            });
+            const d = await res.json();
+            setRefundResult({ ok: d.ok, ref: d.reference_number, error: d.error });
+        } catch {
+            setRefundResult({ ok: false, error: "Request failed. Please try again." });
+        } finally {
+            setRefundLoading(false);
+        }
+    }
+
     if (loading) return <View style={s.center}><ActivityIndicator color={colors.primary} /></View>;
     if (!accessToken) return (
         <View style={s.center}><Text style={s.emptyText}>Sign in to view your wallet.</Text></View>
     );
 
+    const isDormant = walletStatus === "dormant";
+    const isRefundRequested = walletStatus === "refund_requested";
+
+    // Shared top-up form used in both active and dormant states
+    function TopUpForm({ label }: { label: string }) {
+        return (
+            <View style={s.card}>
+                <Text style={[s.cardName, { marginBottom: 12 }]}>{label}</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                    {TOPUP_PRESETS.map((p) => (
+                        <TouchableOpacity key={p}
+                            style={[s.durationBtn, !isCustom && topupAmount === p && s.durationBtnActive, { paddingHorizontal: 14 }]}
+                            onPress={() => { setIsCustom(false); setTopupAmount(p); setTopupError(""); }}>
+                            <Text style={[s.durationBtnText, !isCustom && topupAmount === p && s.durationBtnTextActive]}>
+                                ₹{p.toLocaleString("en-IN")}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity
+                        style={[s.durationBtn, isCustom && s.durationBtnActive, { paddingHorizontal: 14 }]}
+                        onPress={() => { setIsCustom(true); setTopupError(""); }}>
+                        <Text style={[s.durationBtnText, isCustom && s.durationBtnTextActive]}>Custom</Text>
+                    </TouchableOpacity>
+                </View>
+                {isCustom && (
+                    <TextInput
+                        style={[s.messageInput, { marginBottom: 10 }]}
+                        value={customAmount}
+                        onChangeText={setCustomAmount}
+                        placeholder="Enter amount (₹)"
+                        placeholderTextColor={colors.textSecondary}
+                        keyboardType="numeric"
+                    />
+                )}
+                <TouchableOpacity
+                    style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 10 }}
+                    onPress={() => setTermsAccepted((v) => !v)}
+                    activeOpacity={0.7}>
+                    <View style={{
+                        width: 20, height: 20, borderRadius: 4, borderWidth: 1.5,
+                        borderColor: termsAccepted ? colors.primary : colors.border,
+                        backgroundColor: termsAccepted ? colors.primary : "transparent",
+                        alignItems: "center", justifyContent: "center", marginTop: 2,
+                    }}>
+                        {termsAccepted && <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>✓</Text>}
+                    </View>
+                    <Text style={[s.cardBio, { fontSize: 12, flex: 1 }]}>
+                        I accept the{" "}
+                        <Text style={{ color: colors.primary, textDecorationLine: "underline" }}
+                            onPress={() => Linking.openURL("https://imotara.com/connect/wallet-terms")}>
+                            Wallet Terms & Policy
+                        </Text>
+                        {" "}including the 2-year inactivity and dormancy rules.
+                    </Text>
+                </TouchableOpacity>
+                {topupError !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{topupError}</Text>}
+                <TouchableOpacity
+                    style={[s.primaryBtn, (topupLoading || !termsAccepted) && { opacity: 0.5 }]}
+                    onPress={handleTopUp}
+                    disabled={topupLoading || !termsAccepted}>
+                    {topupLoading
+                        ? <ActivityIndicator color="#fff" />
+                        : <Text style={s.primaryBtnText}>
+                            {isDormant ? "Reactivate & Add " : "Add "}
+                            ₹{isCustom ? (customAmount || "0") : topupAmount.toLocaleString("en-IN")} to Wallet
+                        </Text>}
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
     return (
         <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+            {/* Balance card */}
             <View style={[s.card, { padding: 20, alignItems: "center" }]}>
-                <Text style={[s.cardBio, { marginBottom: 4 }]}>Total balance</Text>
-                <Text style={[s.cardName, { fontSize: 32, color: colors.primary }]}>
-                    {wallets.reduce((a, w) => a + (w.balance_minutes ?? 0), 0).toFixed(0)} min
+                <Text style={[s.cardBio, { marginBottom: 4 }]}>Imotara Wallet Balance</Text>
+                <Text style={[s.cardName, { fontSize: 36, color: colors.primary }]}>
+                    ₹{walletBalance.toFixed(2)}
                 </Text>
+                {expiresAt && !isDormant && (
+                    <Text style={[s.cardBio, { fontSize: 11, marginTop: 4 }]}>
+                        Active until {new Date(expiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                    </Text>
+                )}
             </View>
-            {wallets.map((w, i) => (
-                <View key={i} style={[s.card, { flexDirection: "row", alignItems: "center", gap: 12 }]}>
-                    <View style={[s.avatar, { width: 40, height: 40, borderRadius: 20 }]}>
-                        {w.photo_url
-                            ? <Image source={{ uri: w.photo_url }} style={{ width: 40, height: 40, borderRadius: 20 }} />
-                            : <Text style={{ fontSize: 22 }}>{w.gender === "female" ? "👩" : "👨"}</Text>}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                        <Text style={s.cardName}>{w.display_name}</Text>
-                        <Text style={s.cardBio}>{w.currency_code}</Text>
-                    </View>
-                    <Text style={[s.cardName, { color: colors.primary }]}>{(w.balance_minutes ?? 0).toFixed(0)} min</Text>
+
+            {/* Expiry warning (≤30 days) */}
+            {daysUntilExpiry !== null && daysUntilExpiry <= 30 && !isDormant && (
+                <View style={[s.card, { backgroundColor: "rgba(245,158,11,0.12)", borderColor: "rgba(245,158,11,0.35)", borderWidth: 1 }]}>
+                    <Text style={{ color: "#f59e0b", fontWeight: "700", fontSize: 13 }}>
+                        ⚠ Wallet expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? "s" : ""}
+                    </Text>
+                    <Text style={[s.cardBio, { fontSize: 12, marginTop: 4 }]}>
+                        Top up or book a session to reset the 2-year inactivity clock.
+                    </Text>
                 </View>
-            ))}
+            )}
+
+            {/* Dormant notice */}
+            {isDormant && (
+                <View style={[s.card, { backgroundColor: "rgba(239,68,68,0.1)", borderColor: "rgba(239,68,68,0.3)", borderWidth: 1 }]}>
+                    <Text style={{ color: "#ef4444", fontWeight: "700", fontSize: 13 }}>Wallet Dormant</Text>
+                    <Text style={[s.cardBio, { fontSize: 12, marginTop: 4 }]}>
+                        2 years of inactivity. Your ₹{walletBalance.toFixed(2)} is safe — reactivate with a top-up or request a cash refund below.
+                    </Text>
+                </View>
+            )}
+
+            {/* Refund-requested notice */}
+            {isRefundRequested && (
+                <View style={[s.card, { backgroundColor: "rgba(99,102,241,0.1)", borderColor: "rgba(99,102,241,0.3)", borderWidth: 1 }]}>
+                    <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 13 }}>Refund Request Submitted</Text>
+                    <Text style={[s.cardBio, { fontSize: 12, marginTop: 4 }]}>
+                        Processing in progress. You'll receive an email confirmation within 7 business days.
+                    </Text>
+                </View>
+            )}
+
+            {/* Top-up form */}
+            {!isRefundRequested && (
+                <TopUpForm label={isDormant ? "Reactivate Wallet" : "Add Money to Wallet"} />
+            )}
+
+            {/* Dormant refund panel */}
+            {isDormant && !isRefundRequested && (
+                <View style={s.card}>
+                    <TouchableOpacity
+                        style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}
+                        onPress={() => setShowRefund((v) => !v)}
+                        activeOpacity={0.7}>
+                        <Text style={[s.cardName, { fontSize: 14 }]}>💸 Request Refund Instead</Text>
+                        <Text style={s.cardBio}>{showRefund ? "▲" : "▼"}</Text>
+                    </TouchableOpacity>
+
+                    {showRefund && (
+                        <View style={{ marginTop: 12 }}>
+                            {refundResult ? (
+                                refundResult.ok ? (
+                                    <View style={{ alignItems: "center", gap: 8 }}>
+                                        <Text style={{ color: "#34d399", fontWeight: "700", fontSize: 15 }}>Refund Request Sent!</Text>
+                                        <Text style={s.cardBio}>Reference: {refundResult.ref}</Text>
+                                        <Text style={[s.cardBio, { textAlign: "center", fontSize: 12 }]}>
+                                            We'll process your refund within 7 business days.
+                                        </Text>
+                                    </View>
+                                ) : (
+                                    <Text style={s.errorText}>{refundResult.error}</Text>
+                                )
+                            ) : (
+                                <>
+                                    <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+                                        {(["upi", "bank"] as const).map((m) => (
+                                            <TouchableOpacity key={m}
+                                                style={[s.durationBtn, refundMethod === m && s.durationBtnActive, { flex: 1 }]}
+                                                onPress={() => setRefundMethod(m)}>
+                                                <Text style={[s.durationBtnText, refundMethod === m && s.durationBtnTextActive]}>
+                                                    {m === "upi" ? "UPI" : "Bank Transfer"}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                    {refundMethod === "upi" ? (
+                                        <TextInput
+                                            style={[s.messageInput, { marginBottom: 10 }]}
+                                            value={refundUpi}
+                                            onChangeText={setRefundUpi}
+                                            placeholder="UPI ID (e.g. name@bank)"
+                                            placeholderTextColor={colors.textSecondary}
+                                            autoCapitalize="none"
+                                        />
+                                    ) : (
+                                        <>
+                                            <TextInput style={[s.messageInput, { marginBottom: 8 }]} value={refundBank.name} onChangeText={(v) => setRefundBank((b) => ({ ...b, name: v }))} placeholder="Bank name" placeholderTextColor={colors.textSecondary} />
+                                            <TextInput style={[s.messageInput, { marginBottom: 8 }]} value={refundBank.account} onChangeText={(v) => setRefundBank((b) => ({ ...b, account: v }))} placeholder="Account number" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
+                                            <TextInput style={[s.messageInput, { marginBottom: 8 }]} value={refundBank.ifsc} onChangeText={(v) => setRefundBank((b) => ({ ...b, ifsc: v.toUpperCase() }))} placeholder="IFSC code" placeholderTextColor={colors.textSecondary} autoCapitalize="characters" />
+                                            <TextInput style={[s.messageInput, { marginBottom: 10 }]} value={refundBank.holder} onChangeText={(v) => setRefundBank((b) => ({ ...b, holder: v }))} placeholder="Account holder name" placeholderTextColor={colors.textSecondary} />
+                                        </>
+                                    )}
+                                    <TouchableOpacity
+                                        style={[s.primaryBtn, refundLoading && { opacity: 0.6 }]}
+                                        onPress={handleRefundRequest}
+                                        disabled={refundLoading}>
+                                        {refundLoading
+                                            ? <ActivityIndicator color="#fff" />
+                                            : <Text style={s.primaryBtnText}>Submit Refund Request</Text>}
+                                    </TouchableOpacity>
+                                </>
+                            )}
+                        </View>
+                    )}
+                </View>
+            )}
+
+            {/* Policy summary */}
             <View style={[s.card, { padding: 14 }]}>
-                <Text style={s.cardBio}>
-                    Recharge from the Browse tab — select a companion and tap "Talk Now".
+                <Text style={[s.cardBio, { fontSize: 12 }]}>
+                    ✦ Balance active for 2 years from last top-up or session{"\n"}
+                    ✦ 6 email reminders before dormancy{"\n"}
+                    ✦ Dormant balance preserved — never zeroed{"\n"}
+                    ✦ 1-year grace refund period after dormancy
+                </Text>
+                <Text style={{ color: colors.primary, fontSize: 11, marginTop: 6, textDecorationLine: "underline" }}
+                    onPress={() => Linking.openURL("https://imotara.com/connect/wallet-terms")}>
+                    Full Wallet Terms & Policy →
                 </Text>
             </View>
 
-            {/* Transaction History */}
+            {/* Transaction history */}
             <TouchableOpacity style={s.card} onPress={loadHistory} activeOpacity={0.75}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                     <Text style={[s.cardName, { fontSize: 14 }]}>🕓 Transaction History</Text>
@@ -622,34 +977,34 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                     ) : transactions.length === 0 ? (
                         <Text style={[s.cardBio, { textAlign: "center", paddingVertical: 16 }]}>No transactions yet.</Text>
                     ) : (
-                        transactions.map((t) => (
-                            <View key={t.id} style={[s.card, { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }]}>
-                                <View style={{
-                                    width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center",
-                                    backgroundColor: t.type === "recharge" ? "rgba(52,211,153,0.15)" : "rgba(248,113,113,0.15)",
-                                }}>
-                                    <Text style={{ fontSize: 14 }}>{t.type === "recharge" ? "+" : "-"}</Text>
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[s.cardName, { fontSize: 13 }]}>
-                                        {t.type === "recharge" ? "Recharged" : "Session"} · {t.consultant_name}
-                                    </Text>
-                                    <Text style={[s.cardBio, { fontSize: 11 }]}>
-                                        {new Date(t.created_at).toLocaleDateString()}
-                                    </Text>
-                                </View>
-                                <View style={{ alignItems: "flex-end" }}>
-                                    <Text style={{ fontSize: 13, fontWeight: "700", color: t.type === "recharge" ? "#34d399" : "#f87171" }}>
-                                        {t.type === "recharge" ? "+" : "-"}{t.minutes} min
-                                    </Text>
-                                    {t.amount != null && t.currency_code && (
-                                        <Text style={[s.cardBio, { fontSize: 11 }]}>
-                                            {CURRENCY_SYMBOLS[t.currency_code] ?? t.currency_code}{t.amount.toFixed(2)}
+                        transactions.map((t) => {
+                            const isCredit = t.type === "topup" || t.type === "refund";
+                            const isDormantEvt = t.type === "dormancy_marked";
+                            return (
+                                <View key={t.id} style={[s.card, { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }]}>
+                                    <View style={{
+                                        width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center",
+                                        backgroundColor: isCredit ? "rgba(52,211,153,0.15)" : isDormantEvt ? "rgba(245,158,11,0.15)" : "rgba(248,113,113,0.15)",
+                                    }}>
+                                        <Text style={{ fontSize: 13 }}>
+                                            {t.type === "topup" ? "↑" : t.type === "refund" ? "↩" : isDormantEvt ? "⏸" : "↓"}
                                         </Text>
-                                    )}
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[s.cardName, { fontSize: 13 }]}>{t.description}</Text>
+                                        <Text style={[s.cardBio, { fontSize: 11 }]}>
+                                            {new Date(t.created_at).toLocaleDateString("en-IN")}
+                                        </Text>
+                                    </View>
+                                    <Text style={{
+                                        fontSize: 13, fontWeight: "700",
+                                        color: isCredit ? "#34d399" : isDormantEvt ? "#f59e0b" : "#f87171",
+                                    }}>
+                                        {isCredit ? "+" : isDormantEvt ? "" : "-"}₹{t.amount.toFixed(2)}
+                                    </Text>
                                 </View>
-                            </View>
-                        ))
+                            );
+                        })
                     )}
                 </View>
             )}
@@ -663,25 +1018,47 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     accessToken: string | null; userId: string | null;
     onBack: () => void; onStartSession: (s: Session) => void;
 }) {
-    const [rechargeVisible, setRechargeVisible] = useState(false);
+    const [topUpVisible, setTopUpVisible] = useState(false);
+    const [walletBalance, setWalletBalance] = useState(0);
+    const [walletCurrency, setWalletCurrency] = useState("INR");
     const [loading, setLoading] = useState(false);
     const [scheduleVisible, setScheduleVisible] = useState(false);
     const [scheduleNote, setScheduleNote] = useState("");
     const [scheduleDate, setScheduleDate] = useState("");
+    const [scheduleTime, setScheduleTime] = useState("");
+    const [scheduleDuration, setScheduleDuration] = useState(30);
     const [scheduleLoading, setScheduleLoading] = useState(false);
     const s = styles(colors);
     const sym = CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code;
+
+    useEffect(() => {
+        if (!accessToken) return;
+        fetch(buildApiUrl("/api/connect/wallet"), { headers: { Authorization: `Bearer ${accessToken}` } })
+            .then((r) => r.json())
+            .then((d) => { if (d.ok) { setWalletBalance(Number(d.wallet_balance ?? 0)); setWalletCurrency(d.wallet_currency ?? "INR"); } })
+            .catch(() => {});
+    }, [accessToken]);
 
     async function startSession(sessionType: "instant" | "scheduled" = "instant", note?: string) {
         if (!accessToken) { Alert.alert("Sign in required", "Please sign in to start a session."); return; }
         if (sessionType === "instant") setLoading(true);
         else setScheduleLoading(true);
         try {
-            const body: Record<string, unknown> = { consultant_id: c.id, type: sessionType };
+            const body: Record<string, unknown> = {
+                consultant_id: c.id,
+                type: sessionType,
+                user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            };
             if (note) body.scheduled_note = note;
             if (sessionType === "scheduled" && scheduleDate.trim()) {
-                const parsed = new Date(scheduleDate.trim());
-                if (!isNaN(parsed.getTime())) body.scheduled_at = parsed.toISOString();
+                const dateTimeStr = scheduleTime.trim()
+                    ? `${scheduleDate.trim()}T${scheduleTime.trim()}`
+                    : scheduleDate.trim();
+                const parsed = new Date(dateTimeStr);
+                if (!isNaN(parsed.getTime())) {
+                    body.scheduled_at = parsed.toISOString();
+                    body.scheduled_duration_min = scheduleDuration;
+                }
             }
             const res = await fetch(buildApiUrl("/api/connect/sessions"), {
                 method: "POST",
@@ -691,7 +1068,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
             const d = await res.json();
             if (!d.ok) {
                 if (d.error?.includes("Insufficient balance")) {
-                    setRechargeVisible(true);
+                    setTopUpVisible(true);
                 } else if (d.redirect && d.existing_session_id) {
                     // existing session — navigate there
                     onStartSession({ id: d.existing_session_id, connect_consultants: null, status: "pending", type: sessionType, user_id: userId ?? "", consultant_id: c.id, minutes_used: 0, scheduled_note: note ?? null, currency_code: c.currency_code, created_at: new Date().toISOString() } as Session);
@@ -752,10 +1129,21 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 
                 {c.bio && <View style={s.card}><Text style={s.cardBio}>{c.bio}</Text></View>}
 
-                {/* Rate */}
-                <View style={[s.card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
-                    <Text style={s.cardName}>Rate</Text>
-                    <Text style={[s.rateText, { fontSize: 18 }]}>{sym}{c.rate_per_min}/min</Text>
+                {/* Rate + wallet balance */}
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                    <View style={[s.card, { flex: 1, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
+                        <Text style={s.cardName}>Rate</Text>
+                        <Text style={[s.rateText, { fontSize: 18 }]}>{sym}{c.rate_per_min}/min</Text>
+                    </View>
+                    {accessToken && (
+                        <TouchableOpacity
+                            onPress={() => setTopUpVisible(true)}
+                            style={{ borderRadius: 14, borderWidth: 1, borderColor: "rgba(139,92,246,0.3)", backgroundColor: "rgba(139,92,246,0.08)", paddingHorizontal: 14, paddingVertical: 10, alignItems: "center", justifyContent: "center", gap: 2 }}>
+                            <Text style={{ fontSize: 10, color: "#a78bfa", fontWeight: "700" }}>Wallet</Text>
+                            <Text style={{ fontSize: 14, fontWeight: "700", color: "#a78bfa" }}>{CURRENCY_SYMBOLS[walletCurrency] ?? "₹"}{walletBalance.toFixed(0)}</Text>
+                            <Text style={{ fontSize: 9, color: "#a78bfa", opacity: 0.7 }}>+ Add</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* Tags */}
@@ -836,37 +1224,80 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 </TouchableOpacity>
             </ScrollView>
 
-            {/* Recharge modal */}
-            <RechargeModal
-                visible={rechargeVisible}
-                consultant={c}
+            {/* Wallet top-up modal */}
+            <WalletTopUpModal
+                visible={topUpVisible}
                 accessToken={accessToken}
-                onClose={() => setRechargeVisible(false)}
-                onSuccess={() => { setRechargeVisible(false); startSession("instant"); }}
+                walletBalance={walletBalance}
+                walletCurrency={walletCurrency}
+                onClose={() => setTopUpVisible(false)}
+                onSuccess={(newBal) => { setWalletBalance(newBal); setTopUpVisible(false); startSession("instant"); }}
                 colors={colors}
             />
 
             {/* Schedule session modal */}
             <Modal visible={scheduleVisible} transparent animationType="slide" onRequestClose={() => setScheduleVisible(false)}>
-                <View style={s.modalBackdrop}>
+                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+                <ScrollView contentContainerStyle={s.modalBackdrop} keyboardShouldPersistTaps="handled">
                     <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
-                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 16 }}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                             <Text style={[s.cardName, { fontSize: 18 }]}>Request a Meeting</Text>
                             <TouchableOpacity onPress={() => setScheduleVisible(false)}>
                                 <Ionicons name="close" size={20} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
-                        <Text style={[s.cardBio, { marginBottom: 10 }]}>
-                            Let {c.display_name} know your preferred time or what you'd like to discuss:
-                        </Text>
-                        <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Preferred Date & Time</Text>
+
+                        {/* Date */}
+                        <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Preferred Date</Text>
                         <TextInput
-                            style={[s.messageInput, { marginBottom: 12 }]}
+                            style={[s.messageInput, { marginBottom: 10 }]}
                             value={scheduleDate}
                             onChangeText={setScheduleDate}
-                            placeholder="YYYY-MM-DD HH:MM  (e.g. 2026-06-10 18:00)"
+                            placeholder="YYYY-MM-DD  (e.g. 2026-06-15)"
                             placeholderTextColor={colors.textSecondary}
+                            keyboardType="numbers-and-punctuation"
                         />
+
+                        {/* Time */}
+                        <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Preferred Time</Text>
+                        <TextInput
+                            style={[s.messageInput, { marginBottom: 10 }]}
+                            value={scheduleTime}
+                            onChangeText={setScheduleTime}
+                            placeholder="HH:MM  24h (e.g. 18:30)"
+                            placeholderTextColor={colors.textSecondary}
+                            keyboardType="numbers-and-punctuation"
+                        />
+
+                        {/* Duration chips */}
+                        <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Duration</Text>
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                            {([15, 30, 45, 60, 90, 120] as const).map((d) => (
+                                <TouchableOpacity key={d}
+                                    style={[s.durationBtn, scheduleDuration === d && s.durationBtnActive]}
+                                    onPress={() => setScheduleDuration(d)}>
+                                    <Text style={[s.durationBtnText, scheduleDuration === d && s.durationBtnTextActive]}>
+                                        {d < 60 ? `${d} min` : d === 60 ? "1 hr" : d === 90 ? "1.5 hrs" : "2 hrs"}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        {/* Cost estimate */}
+                        {scheduleDate.trim().length > 0 && (
+                            <View style={[s.card, { gap: 4, marginBottom: 12 }]}>
+                                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                                    <Text style={s.cardBio}>{sym}{c.rate_per_min}/min × {scheduleDuration} min</Text>
+                                    <Text style={[s.cardBio, { fontWeight: "700" }]}>{sym}{(c.rate_per_min * scheduleDuration).toFixed(0)}</Text>
+                                </View>
+                                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                                    <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>Est. cost (max)</Text>
+                                    <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>{sym}{(c.rate_per_min * scheduleDuration).toFixed(0)}</Text>
+                                </View>
+                            </View>
+                        )}
+
+                        {/* Note */}
                         <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Message (optional)</Text>
                         <TextInput
                             style={[s.messageInput, { minHeight: 80, marginBottom: 16 }]}
@@ -886,34 +1317,43 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                                 : <Text style={s.primaryBtnText}>Send Request</Text>}
                         </TouchableOpacity>
                     </View>
-                </View>
+                </ScrollView>
+                </KeyboardAvoidingView>
             </Modal>
         </View>
     );
 }
 
-// ── Recharge Modal ─────────────────────────────────────────────────────────────
-const PRESET_MINUTES = [15, 30, 60];
-
-function RechargeModal({ visible, consultant: c, accessToken, onClose, onSuccess, colors }: {
-    visible: boolean; consultant: Consultant; accessToken: string | null;
-    onClose: () => void; onSuccess: (minutes: number) => void; colors: any;
+// ── Wallet Top-Up Modal ────────────────────────────────────────────────────────
+function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency, onClose, onSuccess, colors }: {
+    visible: boolean;
+    accessToken: string | null;
+    walletBalance: number;
+    walletCurrency: string;
+    onClose: () => void;
+    onSuccess: (newBalance: number) => void;
+    colors: any;
 }) {
-    const [minutes, setMinutes] = useState(30);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
+    const [selectedAmt, setSelectedAmt] = useState(1000);
+    const [customAmt, setCustomAmt]     = useState("");
+    const [isCustom, setIsCustom]       = useState(false);
+    const [termsAccepted, setTerms]     = useState(false);
+    const [loading, setLoading]         = useState(false);
+    const [error, setError]             = useState("");
     const s = styles(colors);
-    const sym = CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code;
-    const total = c.rate_per_min * minutes;
+    const sym = CURRENCY_SYMBOLS[walletCurrency] ?? "₹";
+    const topupAmt = isCustom ? Math.max(1, parseFloat(customAmt) || 0) : selectedAmt;
 
     async function handlePay() {
         if (!accessToken) return;
+        if (topupAmt < 1) { setError("Please enter a valid amount"); return; }
+        if (!termsAccepted) { setError("Please accept the Wallet Terms to continue"); return; }
         setLoading(true); setError("");
         try {
-            const res = await fetch(buildApiUrl("/api/connect/wallet/recharge/create"), {
+            const res = await fetch(buildApiUrl("/api/connect/wallet/topup/create"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-                body: JSON.stringify({ consultant_id: c.id, minutes }),
+                body: JSON.stringify({ amount: topupAmt, terms_accepted: true }),
             });
             const d = await res.json();
             if (!d.ok) { setError(d.error ?? "Failed to create order"); setLoading(false); return; }
@@ -924,12 +1364,12 @@ function RechargeModal({ visible, consultant: c, accessToken, onClose, onSuccess
                 order_id: d.razorpay_order_id,
                 amount: String(d.amount_paise),
                 currency: "INR",
-                name: "Imotara Connect",
-                description: `${minutes} min with ${c.display_name}`,
+                name: "Imotara Wallet",
+                description: `Add ${sym}${topupAmt} to your wallet`,
                 theme: { color: "#6366f1" },
             });
 
-            const verifyRes = await fetch(buildApiUrl("/api/connect/wallet/recharge/verify"), {
+            const vRes = await fetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({
@@ -938,13 +1378,12 @@ function RechargeModal({ visible, consultant: c, accessToken, onClose, onSuccess
                     razorpay_signature:  paymentData.razorpay_signature,
                 }),
             });
-            const v = await verifyRes.json();
+            const v = await vRes.json();
             if (!v.ok) { setError(v.error ?? "Verification failed"); return; }
-            onSuccess(minutes);
+            Alert.alert("Success", `${sym}${v.amount_credited} added to your wallet!`);
+            onSuccess(Number(v.new_balance ?? 0));
         } catch (err: any) {
-            if (err?.code === 0 || String(err?.description ?? "").toLowerCase().includes("cancel")) {
-                onClose();
-            } else {
+            if (err?.code !== 0 && !String(err?.description ?? "").toLowerCase().includes("cancel")) {
                 setError(String(err?.message ?? "Payment failed"));
             }
         } finally {
@@ -956,50 +1395,105 @@ function RechargeModal({ visible, consultant: c, accessToken, onClose, onSuccess
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
             <View style={s.modalBackdrop}>
                 <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 16 }}>
-                        <Text style={[s.cardName, { fontSize: 18 }]}>Add Session Time</Text>
+                    {/* Header */}
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                        <View>
+                            <Text style={[s.cardBio, { fontSize: 10, color: "#a78bfa", fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 2 }]}>
+                                Imotara Wallet
+                            </Text>
+                            <Text style={[s.cardName, { fontSize: 18 }]}>Add Balance</Text>
+                        </View>
                         <TouchableOpacity onPress={onClose}>
                             <Ionicons name="close" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
 
-                    <Text style={[s.cardBio, { marginBottom: 8 }]}>Duration</Text>
-                    <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
-                        {PRESET_MINUTES.map((m) => (
-                            <TouchableOpacity key={m}
-                                style={[s.durationBtn, minutes === m && s.durationBtnActive]}
-                                onPress={() => setMinutes(m)}>
-                                <Text style={[s.durationBtnText, minutes === m && s.durationBtnTextActive]}>
-                                    {m}m
+                    {/* Current balance */}
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderRadius: 12, borderWidth: 1, borderColor: "rgba(139,92,246,0.25)", backgroundColor: "rgba(139,92,246,0.08)", paddingHorizontal: 14, paddingVertical: 10, marginBottom: 14 }}>
+                        <Text style={[s.cardBio, { color: "#a78bfa" }]}>💰 Current balance</Text>
+                        <Text style={{ fontSize: 18, fontWeight: "700", color: "#a78bfa" }}>{sym}{walletBalance.toFixed(2)}</Text>
+                    </View>
+
+                    {/* Preset amounts */}
+                    <Text style={[s.cardBio, { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }]}>Choose amount</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                        {TOPUP_PRESETS.map((p) => (
+                            <TouchableOpacity key={p}
+                                style={[s.durationBtn, !isCustom && selectedAmt === p && s.durationBtnActive, { paddingHorizontal: 14 }]}
+                                onPress={() => { setIsCustom(false); setSelectedAmt(p); setError(""); }}>
+                                <Text style={[s.durationBtnText, !isCustom && selectedAmt === p && s.durationBtnTextActive]}>
+                                    {sym}{(p / 1000).toFixed(0)}K
                                 </Text>
                             </TouchableOpacity>
                         ))}
+                        <TouchableOpacity
+                            style={[s.durationBtn, isCustom && s.durationBtnActive, { paddingHorizontal: 14 }]}
+                            onPress={() => { setIsCustom(true); setError(""); }}>
+                            <Text style={[s.durationBtnText, isCustom && s.durationBtnTextActive]}>Custom</Text>
+                        </TouchableOpacity>
                     </View>
 
-                    <View style={[s.card, { gap: 6 }]}>
+                    {isCustom && (
+                        <TextInput
+                            style={[s.messageInput, { marginBottom: 10 }]}
+                            value={customAmt}
+                            onChangeText={setCustomAmt}
+                            placeholder={`Amount in ${walletCurrency}`}
+                            placeholderTextColor={colors.textSecondary}
+                            keyboardType="numeric"
+                        />
+                    )}
+
+                    {/* Summary */}
+                    <View style={[s.card, { gap: 4, marginBottom: 12 }]}>
                         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                            <Text style={s.cardBio}>{minutes} min × {sym}{c.rate_per_min}/min</Text>
-                            <Text style={s.cardBio}>{sym}{total.toFixed(2)}</Text>
+                            <Text style={s.cardBio}>Top-up amount</Text>
+                            <Text style={[s.cardBio, { fontWeight: "700", color: colors.textPrimary }]}>{sym}{topupAmt.toFixed(2)}</Text>
                         </View>
                         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                            <Text style={[s.cardBio, { opacity: 0.6 }]}>Platform fee (20%)</Text>
-                            <Text style={[s.cardBio, { opacity: 0.6 }]}>{sym}{(total * 0.2).toFixed(2)}</Text>
-                        </View>
-                        <View style={{ flexDirection: "row", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6 }}>
-                            <Text style={s.cardName}>Total</Text>
-                            <Text style={s.cardName}>{sym}{total.toFixed(2)}</Text>
+                            <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>New balance after top-up</Text>
+                            <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>{sym}{(walletBalance + topupAmt).toFixed(2)}</Text>
                         </View>
                     </View>
 
-                    {error !== "" && <Text style={s.errorText}>{error}</Text>}
+                    {/* Consent */}
+                    <TouchableOpacity
+                        style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 }}
+                        onPress={() => setTerms((v) => !v)}
+                        activeOpacity={0.7}>
+                        <View style={{
+                            width: 18, height: 18, borderRadius: 3, borderWidth: 1.5,
+                            borderColor: termsAccepted ? colors.primary : colors.border,
+                            backgroundColor: termsAccepted ? colors.primary : "transparent",
+                            alignItems: "center", justifyContent: "center", marginTop: 2,
+                        }}>
+                            {termsAccepted && <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>✓</Text>}
+                        </View>
+                        <Text style={[s.cardBio, { fontSize: 11, flex: 1 }]}>
+                            I agree to the{" "}
+                            <Text style={{ color: colors.primary, textDecorationLine: "underline" }}
+                                onPress={() => Linking.openURL("https://imotara.com/connect/wallet-terms")}>
+                                Wallet Terms
+                            </Text>
+                            . Balance is valid for 2 years of inactivity and is non-transferable.
+                        </Text>
+                    </TouchableOpacity>
 
-                    <TouchableOpacity style={[s.primaryBtn, { marginTop: 16 }, loading && { opacity: 0.6 }]}
-                        onPress={handlePay} disabled={loading}>
+                    {error !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{error}</Text>}
+
+                    <TouchableOpacity
+                        style={[s.primaryBtn, (loading || topupAmt < 1) && { opacity: 0.5 }]}
+                        onPress={handlePay}
+                        disabled={loading || topupAmt < 1}>
                         {loading
                             ? <ActivityIndicator color="#fff" />
-                            : <Text style={s.primaryBtnText}>Pay {sym}{total.toFixed(2)}</Text>
+                            : <Text style={s.primaryBtnText}>Add {sym}{topupAmt.toFixed(0)} to Wallet</Text>
                         }
                     </TouchableOpacity>
+
+                    <Text style={[s.cardBio, { fontSize: 10, textAlign: "center", marginTop: 8, opacity: 0.5 }]}>
+                        Secured by Razorpay · Balance used across all Connect sessions
+                    </Text>
                 </View>
             </View>
         </Modal>
@@ -1023,23 +1517,16 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [showTopUp, setShowTopUp] = useState(false);
     const [rating, setRating] = useState(0);
     const [reviewText, setReviewText] = useState("");
+    // Dual panel state
+    const [walletBal, setWalletBal] = useState<number | null>(null);
+    const [elapsedSecs, setElapsedSecs] = useState(0);
+    const [nowTick, setNowTick] = useState(() => new Date());
+    const [panelOpen, setPanelOpen] = useState(true);
     const flatRef = useRef<FlatList>(null);
     const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const s = styles(colors);
-
-    // Synthetic consultant object for RechargeModal — uses actual rate/currency from session
-    const consultantForRecharge: Consultant = {
-        id: session.consultant_id,
-        display_name: session.connect_consultants?.display_name ?? "Companion",
-        gender: null, photo_url: null, bio: null,
-        expertise_tags: [], languages: [], session_types: [],
-        role_category: "wellness_companion",
-        rate_per_min: session.connect_consultants?.rate_per_min ?? 10,
-        currency_code: session.currency_code ?? "INR",
-        is_online: true, is_busy: false, rating_avg: 0, rating_count: 0,
-        sessions_completed: 0, availability_note: null, availability_windows: null,
-    };
 
     // Load messages
     useEffect(() => {
@@ -1105,6 +1592,26 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         return () => { if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; } };
     }, [remaining]);
 
+    // Wallet balance fetch
+    useEffect(() => {
+        if (!accessToken) return;
+        fetch(buildApiUrl("/api/connect/wallet"), {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        }).then((r) => r.json()).then((d) => { if (d.ok) setWalletBal(Number(d.wallet_balance ?? 0)); }).catch(() => {});
+    }, [accessToken]);
+
+    // Live 1-second clock + elapsed counter
+    useEffect(() => {
+        clockRef.current = setInterval(() => {
+            const tick = new Date();
+            setNowTick(tick);
+            if (session.started_at && status === "active") {
+                setElapsedSecs(Math.max(0, Math.floor((tick.getTime() - new Date(session.started_at).getTime()) / 1000)));
+            }
+        }, 1000);
+        return () => { if (clockRef.current) clearInterval(clockRef.current); };
+    }, [session.started_at, status]);
+
     async function send() {
         const text = input.trim();
         if (!text || sending) return;
@@ -1129,6 +1636,16 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const isCompleted = status === "completed";
     const isPending = status === "pending";
     const isConsultantView = session.user_id !== userId;
+    const sym = CURRENCY_SYMBOLS[session.currency_code ?? "INR"] ?? "₹";
+    const rate = Number(session.rate_per_min ?? session.connect_consultants?.rate_per_min ?? 0);
+    const consumed = (elapsedSecs / 60) * rate;
+    const isLow = displaySeconds !== null && displaySeconds <= 120 && isActive;
+
+    const userTz = session.user_timezone || "Asia/Kolkata";
+    const consultantTz = session.consultant_timezone || "Asia/Kolkata";
+    const myTz = isConsultantView ? consultantTz : userTz;
+    const theirTz = isConsultantView ? userTz : consultantTz;
+    const theirLabel = isConsultantView ? "User" : (session.connect_consultants?.display_name ?? "Companion");
 
     return (
         <KeyboardAvoidingView
@@ -1145,17 +1662,53 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     <Text style={s.headerTitle}>{session.connect_consultants?.display_name ?? "Companion"}</Text>
                     <Text style={[s.cardBio, { fontSize: 11 }]}>{isActive ? "Active" : isPending ? "Waiting…" : status}</Text>
                 </View>
-                {isActive && displaySeconds !== null && (
-                    <View style={{ backgroundColor: displaySeconds <= 120 ? "rgba(248,113,113,0.2)" : "rgba(52,211,153,0.2)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
-                        <Text style={{ color: displaySeconds <= 120 ? "#f87171" : "#34d399", fontSize: 12, fontWeight: "600", fontVariant: ["tabular-nums"] }}>
-                            {Math.floor(displaySeconds / 60)}:{(displaySeconds % 60).toString().padStart(2, "0")}
+                {isActive && (
+                    <TouchableOpacity
+                        onPress={() => setPanelOpen((v) => !v)}
+                        style={{ backgroundColor: isLow ? "rgba(248,113,113,0.2)" : "rgba(52,211,153,0.2)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <Text style={{ color: isLow ? "#f87171" : "#34d399", fontSize: 11, fontWeight: "600" }}>
+                            {formatDuration(elapsedSecs)}
                         </Text>
-                    </View>
+                        <Text style={{ color: isLow ? "#f87171" : "#34d399", fontSize: 9 }}>{panelOpen ? "▲" : "▼"}</Text>
+                    </TouchableOpacity>
                 )}
                 <TouchableOpacity style={s.emergencyBtn} onPress={() => setShowEmergency(true)}>
                     <Ionicons name="call" size={16} color="#f87171" />
                 </TouchableOpacity>
             </View>
+
+            {/* ── Dual session panel ── */}
+            {(isActive || isCompleted) && panelOpen && (
+                <View style={{ backgroundColor: "rgba(9,9,11,0.85)", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)", padding: 10 }}>
+                    {/* Metrics */}
+                    <View style={{ flexDirection: "row", gap: 6, marginBottom: 6 }}>
+                        {[
+                            { label: "Elapsed",   value: formatDuration(elapsedSecs),                          bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)",  text: "#f59e0b" },
+                            { label: "Remaining", value: displaySeconds !== null ? formatDuration(displaySeconds) : "—", bg: isLow ? "rgba(248,113,113,0.12)" : "rgba(52,211,153,0.12)", border: isLow ? "rgba(248,113,113,0.3)" : "rgba(52,211,153,0.3)", text: isLow ? "#f87171" : "#34d399" },
+                            { label: "Used",      value: `${sym}${consumed.toFixed(2)}`,                       bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.3)", text: "#f87171" },
+                            { label: "Balance",   value: walletBal !== null ? `${sym}${walletBal.toFixed(2)}` : "—", bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.3)", text: "#a78bfa" },
+                        ].map((m) => (
+                            <View key={m.label} style={{ flex: 1, backgroundColor: m.bg, borderWidth: 1, borderColor: m.border, borderRadius: 10, padding: 6, alignItems: "center" }}>
+                                <Text style={{ fontSize: 8, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, color: m.text, opacity: 0.7, marginBottom: 2 }}>{m.label}</Text>
+                                <Text style={{ fontSize: 12, fontWeight: "700", color: m.text, fontVariant: ["tabular-nums"] }}>{m.value}</Text>
+                            </View>
+                        ))}
+                    </View>
+                    {/* Dual clocks */}
+                    {[
+                        { emoji: "🙋", label: `You · ${tzLabel(myTz)}`,        tz: myTz    },
+                        { emoji: isConsultantView ? "👤" : "🧑‍💼", label: `${theirLabel} · ${tzLabel(theirTz)}`, tz: theirTz },
+                    ].map((c) => (
+                        <View key={c.tz} style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, marginBottom: 4 }}>
+                            <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 8, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, color: colors.textSecondary, marginBottom: 1 }}>{c.label}</Text>
+                                <Text style={{ fontSize: 11, color: colors.textPrimary, fontVariant: ["tabular-nums"] }}>{formatClock(nowTick, c.tz)}</Text>
+                            </View>
+                        </View>
+                    ))}
+                </View>
+            )}
 
             <Text style={[s.disclaimer, { textAlign: "center", paddingVertical: 6 }]}>
                 Peer wellness support — not professional care
@@ -1284,17 +1837,16 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 </View>
             </Modal>
 
-            {/* Mid-session top-up modal */}
-            {showTopUp && (
-                <RechargeModal
-                    visible={showTopUp}
-                    consultant={consultantForRecharge}
-                    accessToken={accessToken}
-                    onClose={() => setShowTopUp(false)}
-                    onSuccess={() => setShowTopUp(false)}
-                    colors={colors}
-                />
-            )}
+            {/* Mid-session wallet top-up */}
+            <WalletTopUpModal
+                visible={showTopUp}
+                accessToken={accessToken}
+                walletBalance={walletBal ?? 0}
+                walletCurrency={session.currency_code ?? "INR"}
+                onClose={() => setShowTopUp(false)}
+                onSuccess={(newBal) => { setWalletBal(newBal); setShowTopUp(false); }}
+                colors={colors}
+            />
         </KeyboardAvoidingView>
     );
 }
