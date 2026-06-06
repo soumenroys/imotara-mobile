@@ -14,7 +14,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useColors } from "../../theme/ThemeContext";
 import { useAuth } from "../../auth/AuthContext";
 import { buildApiUrl } from "../../config/api";
+import { fetchWithTimeout } from "../../lib/fetchWithTimeout";
 import { supabase } from "../../lib/supabase/client";
+
+// Wraps fetch with a 12-second timeout so Connect API calls never hang indefinitely
+// on Vercel cold starts or flaky mobile connections.
+const cfetch = (url: string, init: RequestInit = {}) => fetchWithTimeout(url, init, 12_000);
 import { useRoute, useNavigation } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
@@ -300,21 +305,23 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
         if (filterOnline)   params.set("online", "true");
         if (filterCategory) params.set("category", filterCategory);
         const authHeaders: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
-        Promise.all([
-            fetch(buildApiUrl(`/api/connect/consultants?${params}`), { headers: authHeaders }).then((r) => r.json()),
+        Promise.allSettled([
+            cfetch(buildApiUrl(`/api/connect/consultants?${params}`), { headers: authHeaders }).then((r) => r.json()),
             accessToken
-                ? fetch(buildApiUrl("/api/connect/favorites"), { headers: authHeaders }).then((r) => r.json())
+                ? cfetch(buildApiUrl("/api/connect/favorites"), { headers: authHeaders }).then((r) => r.json())
                 : Promise.resolve({ ok: false, favorites: [] }),
             accessToken
-                ? fetch(buildApiUrl("/api/connect/wallet"), { headers: authHeaders }).then((r) => r.json())
+                ? cfetch(buildApiUrl("/api/connect/wallet"), { headers: authHeaders }).then((r) => r.json())
                 : Promise.resolve({ ok: false }),
         ])
-            .then(([cd, fd, wd]) => {
+            .then(([cdR, fdR, wdR]) => {
+                const cd = cdR.status === "fulfilled" ? cdR.value : { ok: false };
+                const fd = fdR.status === "fulfilled" ? fdR.value : { ok: false, favorites: [] };
+                const wd = wdR.status === "fulfilled" ? wdR.value : { ok: false };
                 if (cd.ok) setConsultants(cd.consultants ?? []);
                 if (fd.ok) setFavorites(new Set(fd.favorites ?? []));
                 if (wd.ok) { setWalletBalance(Number(wd.wallet_balance ?? 0)); setWalletCurrency(wd.wallet_currency ?? "INR"); }
             })
-            .catch(() => {})
             .finally(() => setLoading(false));
     }, [accessToken, filterOnline, filterCategory]);
 
@@ -323,7 +330,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
         const isFav = favorites.has(consultantId);
         setFavLoading(consultantId);
         try {
-            await fetch(buildApiUrl("/api/connect/favorites"), {
+            await cfetch(buildApiUrl("/api/connect/favorites"), {
                 method: isFav ? "DELETE" : "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ consultant_id: consultantId }),
@@ -539,7 +546,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
 
     useEffect(() => {
         if (!accessToken) { setLoading(false); return; }
-        fetch(buildApiUrl("/api/connect/sessions"), {
+        cfetch(buildApiUrl("/api/connect/sessions"), {
             headers: { Authorization: `Bearer ${accessToken}` },
         })
             .then((r) => r.json())
@@ -552,7 +559,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
         if (!accessToken) return;
         setCancelling(id);
         try {
-            const res = await fetch(buildApiUrl(`/api/connect/sessions/${id}`), {
+            const res = await cfetch(buildApiUrl(`/api/connect/sessions/${id}`), {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ action: "cancel" }),
@@ -664,7 +671,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
 
     useEffect(() => {
         if (!accessToken) { setLoading(false); return; }
-        fetch(buildApiUrl("/api/connect/wallet"), {
+        cfetch(buildApiUrl("/api/connect/wallet"), {
             headers: { Authorization: `Bearer ${accessToken}` },
         })
             .then((r) => r.json())
@@ -683,7 +690,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
         setShowHistory(true);
         setHistoryLoading(true);
         try {
-            const res = await fetch(buildApiUrl("/api/connect/wallet/history"), {
+            const res = await cfetch(buildApiUrl("/api/connect/wallet/history"), {
                 headers: { Authorization: `Bearer ${accessToken ?? ""}` },
             });
             const d = await res.json();
@@ -698,7 +705,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
         if (!termsAccepted) { setTopupError("Please accept the Wallet Terms to continue"); return; }
         setTopupLoading(true); setTopupError("");
         try {
-            const res = await fetch(buildApiUrl("/api/connect/wallet/topup/create"), {
+            const res = await cfetch(buildApiUrl("/api/connect/wallet/topup/create"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ amount: amt, terms_accepted: true }),
@@ -717,7 +724,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                 theme: { color: "#6366f1" },
             });
 
-            const verifyRes = await fetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
+            const verifyRes = await cfetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({
@@ -753,7 +760,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             const body = isUpi
                 ? { upi_id: refundUpi }
                 : { bank_name: refundBank.name, account_number: refundBank.account, ifsc_code: refundBank.ifsc, account_holder: refundBank.holder };
-            const res = await fetch(buildApiUrl("/api/connect/wallet/refund-request"), {
+            const res = await cfetch(buildApiUrl("/api/connect/wallet/refund-request"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify(body),
@@ -1052,7 +1059,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 
     useEffect(() => {
         if (!accessToken) return;
-        fetch(buildApiUrl("/api/connect/wallet"), { headers: { Authorization: `Bearer ${accessToken}` } })
+        cfetch(buildApiUrl("/api/connect/wallet"), { headers: { Authorization: `Bearer ${accessToken}` } })
             .then((r) => r.json())
             .then((d) => { if (d.ok) { setWalletBalance(Number(d.wallet_balance ?? 0)); setWalletCurrency(d.wallet_currency ?? "INR"); } })
             .catch(() => {});
@@ -1079,7 +1086,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     body.scheduled_duration_min = scheduleDuration;
                 }
             }
-            const res = await fetch(buildApiUrl("/api/connect/sessions"), {
+            const res = await cfetch(buildApiUrl("/api/connect/sessions"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify(body),
@@ -1369,7 +1376,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
         if (!termsAccepted) { setError("Please accept the Wallet Terms to continue"); return; }
         setLoading(true); setError("");
         try {
-            const res = await fetch(buildApiUrl("/api/connect/wallet/topup/create"), {
+            const res = await cfetch(buildApiUrl("/api/connect/wallet/topup/create"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ amount: topupAmt, terms_accepted: true }),
@@ -1388,7 +1395,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
                 theme: { color: "#6366f1" },
             });
 
-            const vRes = await fetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
+            const vRes = await cfetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({
@@ -1567,7 +1574,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         const key = `${msgId}::${lang}`;
         setTranslating((prev) => { const s = new Set(prev); s.add(msgId); return s; });
         try {
-            const res = await fetch(buildApiUrl("/api/connect/translate"), {
+            const res = await cfetch(buildApiUrl("/api/connect/translate"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken ?? ""}` },
                 body: JSON.stringify({ text, targetLang: lang }),
@@ -1606,7 +1613,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 if (chatLangRef.current) {
                     const lang = chatLangRef.current;
                     const key = `${msg.id}::${lang}`;
-                    fetch(buildApiUrl("/api/connect/translate"), {
+                    cfetch(buildApiUrl("/api/connect/translate"), {
                         method: "POST",
                         headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken ?? ""}` },
                         body: JSON.stringify({ text: msg.content, targetLang: lang }),
@@ -1637,7 +1644,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         }
         tickRef.current = setInterval(async () => {
             if (!accessToken) return;
-            const res = await fetch(buildApiUrl(`/api/connect/sessions/${session.id}/tick`), {
+            const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/tick`), {
                 method: "POST",
                 headers: { Authorization: `Bearer ${accessToken}` },
             }).catch(() => null);
@@ -1665,7 +1672,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     // Wallet balance fetch
     useEffect(() => {
         if (!accessToken) return;
-        fetch(buildApiUrl("/api/connect/wallet"), {
+        cfetch(buildApiUrl("/api/connect/wallet"), {
             headers: { Authorization: `Bearer ${accessToken}` },
         }).then((r) => r.json()).then((d) => { if (d.ok) setWalletBal(Number(d.wallet_balance ?? 0)); }).catch(() => {});
     }, [accessToken]);
@@ -1693,7 +1700,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
 
     async function submitReview() {
         if (rating === 0 || !accessToken) return;
-        const res = await fetch(buildApiUrl(`/api/connect/sessions/${session.id}/review`), {
+        const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/review`), {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
             body: JSON.stringify({ rating, review_text: reviewText || null }),
@@ -1900,7 +1907,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             {isActive && (
                 <TouchableOpacity style={{ alignItems: "center", paddingVertical: 8, paddingBottom: insets.bottom || 4 }}
                     onPress={() => {
-                        fetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
+                        cfetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
                             method: "PATCH",
                             headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                             body: JSON.stringify({ action: "complete" }),
@@ -2088,7 +2095,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
         if (!accessToken || !profile) return;
         setAvailSaving(true);
         try {
-            await fetch(buildApiUrl("/api/connect/consultant/profile"), {
+            await cfetch(buildApiUrl("/api/connect/consultant/profile"), {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ availability_windows: profile.availability_windows ?? [] }),
@@ -2104,7 +2111,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
         setNoteContent(""); setNoteSaved(false);
         if (!accessToken) return;
         try {
-            const res = await fetch(buildApiUrl(`/api/connect/sessions/${sessionId}/notes`), {
+            const res = await cfetch(buildApiUrl(`/api/connect/sessions/${sessionId}/notes`), {
                 headers: { Authorization: `Bearer ${accessToken}` },
             });
             const d = await res.json();
@@ -2116,7 +2123,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
         if (!accessToken) return;
         setNoteSaving(true);
         try {
-            await fetch(buildApiUrl(`/api/connect/sessions/${sessionId}/notes`), {
+            await cfetch(buildApiUrl(`/api/connect/sessions/${sessionId}/notes`), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ content: noteContent }),
@@ -2136,7 +2143,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                 onPress: async () => {
                     setBlockingId(userId);
                     try {
-                        await fetch(buildApiUrl("/api/connect/blocks"), {
+                        await cfetch(buildApiUrl("/api/connect/blocks"), {
                             method: "POST",
                             headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                             body: JSON.stringify({ blocked_user_id: userId, reason: "Reported by companion" }),
@@ -2155,7 +2162,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
         setPayoutLoading(true);
         setPayoutMsg(null);
         try {
-            const res = await fetch(buildApiUrl("/api/connect/consultant/payout"), {
+            const res = await cfetch(buildApiUrl("/api/connect/consultant/payout"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({
@@ -2183,9 +2190,9 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
     const load = useCallback(async () => {
         if (!accessToken) { setLoading(false); return; }
         const [pRes, eRes, sRes] = await Promise.all([
-            fetch(buildApiUrl("/api/connect/consultant/profile"), { headers: { Authorization: `Bearer ${accessToken}` } }),
-            fetch(buildApiUrl("/api/connect/consultant/earnings"), { headers: { Authorization: `Bearer ${accessToken}` } }),
-            fetch(buildApiUrl("/api/connect/consultant/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } }),
+            cfetch(buildApiUrl("/api/connect/consultant/profile"), { headers: { Authorization: `Bearer ${accessToken}` } }),
+            cfetch(buildApiUrl("/api/connect/consultant/earnings"), { headers: { Authorization: `Bearer ${accessToken}` } }),
+            cfetch(buildApiUrl("/api/connect/consultant/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } }),
         ]);
         const [p, e, s] = await Promise.all([pRes.json(), eRes.json(), sRes.json()]);
         if (p.ok) setProfile(p.consultant);
@@ -2203,7 +2210,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
     useEffect(() => {
         if (!accessToken) return;
         const t = setInterval(() => {
-            fetch(buildApiUrl("/api/connect/consultant/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } })
+            cfetch(buildApiUrl("/api/connect/consultant/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } })
                 .then((r) => r.json())
                 .then((d) => {
                     if (d.ok) {
@@ -2254,7 +2261,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
         setShowHistory(true);
         setHistoryLoading(true);
         try {
-            const res = await fetch(buildApiUrl("/api/connect/consultant/sessions?status=history"), {
+            const res = await cfetch(buildApiUrl("/api/connect/consultant/sessions?status=history"), {
                 headers: { Authorization: `Bearer ${accessToken ?? ""}` },
             });
             const d = await res.json();
@@ -2267,7 +2274,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
         if (!accessToken) return;
         setActionLoading(sessionId);
         try {
-            const res = await fetch(buildApiUrl(`/api/connect/sessions/${sessionId}`), {
+            const res = await cfetch(buildApiUrl(`/api/connect/sessions/${sessionId}`), {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({
@@ -2293,7 +2300,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
     async function toggleOnline() {
         if (!accessToken || !profile) return;
         setToggling(true);
-        const res = await fetch(buildApiUrl("/api/connect/consultant/status"), {
+        const res = await cfetch(buildApiUrl("/api/connect/consultant/status"), {
             method: "PATCH",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
             body: JSON.stringify({ is_online: !profile.is_online }),
@@ -3016,7 +3023,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                     verificationDocs[field.key] = { path: docs[field.key]!.path };
                 }
             }
-            const res = await fetch(buildApiUrl("/api/connect/consultant/register"), {
+            const res = await cfetch(buildApiUrl("/api/connect/consultant/register"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({
