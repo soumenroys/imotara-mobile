@@ -938,6 +938,12 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                         "Encrypted account storage",
                                         "GDPR & data deletion request",
                                         "Community docs & FAQ",
+                                        "Imotara Connect — browse & book human wellness companions",
+                                        "Imotara Wallet — prepaid session balance",
+                                        "Real-time session translation",
+                                        "Scheduled sessions & companion favourites",
+                                        "Session notes & ratings",
+                                        "Connect session history — 7 days",
                                     ],
                                 },
                                 {
@@ -962,6 +968,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                         "Custom notification schedule",
                                         "Session token management",
                                         "Email & priority support",
+                                        "Connect session history — 90 days",
                                     ],
                                 },
                                 {
@@ -980,6 +987,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                         "Listen to letters (TTS)",
                                         "React & reply to letters",
                                         "Long-term growth arc narrative",
+                                        "Unlimited Connect session history",
                                     ],
                                 },
                                 {
