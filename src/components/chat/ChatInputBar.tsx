@@ -184,9 +184,10 @@ export function ChatInputBar({
             paddingVertical: 10,
             borderRadius: 999,
             backgroundColor: colors.primary,
+            flexShrink: 0,
           }}
         >
-          <Text style={{ color: "#fff", fontWeight: "700" }}>Send</Text>
+          <Text style={{ color: "#fff", fontWeight: "700" }} allowFontScaling={false}>Send</Text>
         </TouchableOpacity>
       </View>
       </View>{/* end iPad centering wrapper */}

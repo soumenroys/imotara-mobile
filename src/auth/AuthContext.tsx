@@ -191,9 +191,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
 
             // result.type === "dismiss" or "cancel":
-            // On Android the relay page fired imotara:// as a system intent; the browser
-            // closed and the Linking handler above will call setSession asynchronously.
-            // On iOS this means the user manually closed the browser — no session.
+            // On Android (including Realme/ColorOS) the relay page fires imotara:// as a system
+            // intent — the browser closes and the Linking handler sets the session asynchronously.
+            // Poll briefly so we can return success: true if the session arrives quickly.
+            if (Platform.OS === "android") {
+                const deadline = Date.now() + 5000;
+                while (Date.now() < deadline) {
+                    await new Promise(r => setTimeout(r, 700));
+                    const { data: { session: s } } = await supabase.auth.getSession();
+                    if (s) return { success: true };
+                }
+            }
+            // iOS: user manually closed the browser — no session.
             return { success: false };
         } catch (err) {
             console.warn("[Auth] Google sign-in error:", err);

@@ -640,6 +640,8 @@ function SettingsScreenContent() {
     const [feedbackType, setFeedbackType] = React.useState<"feedback" | "bug">("feedback");
     const [feedbackText, setFeedbackText] = React.useState("");
     const [feedbackStatus, setFeedbackStatus] = React.useState<string | null>(null);
+    const feedbackStatusTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    React.useEffect(() => () => { if (feedbackStatusTimerRef.current) clearTimeout(feedbackStatusTimerRef.current); }, []);
 
     // Account deletion
     const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
@@ -1827,6 +1829,8 @@ function SettingsScreenContent() {
             await Linking.openURL(url);
             setFeedbackText("");
             setFeedbackStatus("Email app opened. Just tap Send to submit your feedback.");
+            if (feedbackStatusTimerRef.current) clearTimeout(feedbackStatusTimerRef.current);
+            feedbackStatusTimerRef.current = setTimeout(() => setFeedbackStatus(null), 6000);
         } catch {
             setFeedbackStatus("Could not open email app. Please email info@imotara.com directly.");
         }

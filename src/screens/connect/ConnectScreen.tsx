@@ -2425,6 +2425,10 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
         const amount = parseFloat(payoutAmount);
         if (!accessToken) { setPayoutMsg({ ok: false, text: "Sign in required to request a payout." }); return; }
         if (!amount || amount <= 0) { setPayoutMsg({ ok: false, text: "Enter a valid positive amount." }); return; }
+        const currency = (earnings?.earned_currency ?? "INR").toUpperCase();
+        const minPayout = currency === "USD" ? 10 : 500;
+        const minLabel  = currency === "USD" ? "$10" : "₹500";
+        if (amount < minPayout) { setPayoutMsg({ ok: false, text: `Minimum payout is ${minLabel}.` }); return; }
         if (!payoutDetails.trim()) { setPayoutMsg({ ok: false, text: "Enter your payment details (UPI ID, account number, or PayPal email)." }); return; }
         setPayoutLoading(true);
         setPayoutMsg(null);
@@ -2783,6 +2787,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                                             {noteSaved && <Text style={{ color: "#34d399", fontSize: 11 }}>Saved ✓</Text>}
                                             <TouchableOpacity
+                                                activeOpacity={0.75}
                                                 style={[styles(colors).primaryBtn, { paddingHorizontal: 16, paddingVertical: 8 }, noteSaving && { opacity: 0.6 }]}
                                                 onPress={() => saveNote(s.id)}
                                                 disabled={noteSaving}>
@@ -3033,6 +3038,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                                                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                                                             {noteSaved && <Text style={{ color: "#34d399", fontSize: 11 }}>Saved ✓</Text>}
                                                             <TouchableOpacity
+                                                                activeOpacity={0.75}
                                                                 style={[s.primaryBtn, { paddingHorizontal: 16, paddingVertical: 8 }, noteSaving && { opacity: 0.6 }]}
                                                                 onPress={() => saveNote(h.id)}
                                                                 disabled={noteSaving}>
@@ -3820,7 +3826,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                             </View>
                         ))}
                         {availSlots.length < 5 && (
-                            <TouchableOpacity style={[s.durationBtn, { alignSelf: "flex-start", marginBottom: 16, paddingHorizontal: 16 }]}
+                            <TouchableOpacity style={[s.durationBtn, { alignSelf: "flex-start", marginBottom: 16, marginHorizontal: 2, paddingHorizontal: 16 }]}
                                 onPress={() => setAvailSlots([...availSlots, { days:[], months:[], start:"09:00", end:"21:00", timezone:"Asia/Kolkata", year:"Ongoing" }])}>
                                 <Text style={s.durationBtnText}>+ Add Window</Text>
                             </TouchableOpacity>
@@ -4180,6 +4186,7 @@ function styles(colors: any) {
             paddingHorizontal: 12, paddingVertical: 10, borderRadius: 20,
             borderWidth: 1.5, borderColor: colors.border,
             backgroundColor: colors.surfaceSoft,
+            minHeight: 36,
         },
         filterChipActive: {
             borderColor: colors.primary,

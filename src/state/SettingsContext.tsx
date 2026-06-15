@@ -369,6 +369,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event, session) => {
                 if (!session?.user?.id) return;
+
+                // Auto-populate chatLinkKey with the user's auth ID on first sign-in
+                // so cloud history pull works cross-device without manual setup.
+                // Read from AsyncStorage directly to avoid stale closure state.
+                try {
+                    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+                    const existingKey = raw ? (JSON.parse(raw) as any)?.chatLinkKey : null;
+                    if (!existingKey?.trim()) {
+                        _setChatLinkKey(session.user.id.slice(0, 80));
+                    }
+                } catch {
+                    // Non-fatal — chatLinkKey will remain empty and pull will be skipped this session
+                }
+
                 try {
                     const { data: licRow } = await supabase
                         .from("licenses")

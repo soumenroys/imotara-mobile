@@ -227,10 +227,10 @@ export default function RootNavigator() {
                             paddingBottom: insets.bottom > 0 ? insets.bottom : 4,
                             height: 56 + (insets.bottom > 0 ? insets.bottom : 4),
                         },
-                        tabBarHideOnKeyboard: true,
+                        tabBarHideOnKeyboard: Platform.OS === "android",
                         tabBarVisibilityAnimationConfig: {
-                            hide: { animation: "timing", config: { duration: 180 } },
-                            show: { animation: "timing", config: { duration: 220, delay: 60 } },
+                            hide: { animation: "timing", config: { duration: 150 } },
+                            show: { animation: "timing", config: { duration: 200, delay: 40 } },
                         },
                         gestureEnabled: true,
                         tabBarActiveTintColor: colors.primary,

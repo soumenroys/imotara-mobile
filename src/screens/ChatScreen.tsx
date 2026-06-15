@@ -1511,8 +1511,9 @@ export default function ChatScreen() {
         if (companionPanelVisibleRef.current || planPanelVisibleRef.current) return false;
         const horiz = Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5;
         if (!horiz) return false;
-        if (gs.dx > 20 && companionPanelEnabledRef.current)  { swipeDirectionRef.current = "right"; return true; }
-        if (gs.dx < -20 && planPanelEnabledRef.current)      { swipeDirectionRef.current = "left";  return true; }
+        // Skip if swipe starts within 30px of left edge — that's the iOS native back gesture zone.
+        if (gs.dx > 20 && companionPanelEnabledRef.current && gs.x0 > 30) { swipeDirectionRef.current = "right"; return true; }
+        if (gs.dx < -20 && planPanelEnabledRef.current)                    { swipeDirectionRef.current = "left";  return true; }
         return false;
       },
       onPanResponderGrant: () => {
@@ -4664,7 +4665,7 @@ export default function ChatScreen() {
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ fontSize: 13, color: colors.textPrimary }}>Welcome back 👋</Text>
                 <TouchableOpacity onPress={() => showCapsuleMenu("Return greeting", () => { setReturnGreetingEnabled(false); AsyncStorage.setItem(RETURN_GREETING_ENABLED_KEY, "0").catch(() => {}); }, () => setShowReturnGreeting(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="ellipsis-vertical" size={16} color={colors.textSecondary} />
+                  <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
               <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
@@ -4687,7 +4688,7 @@ export default function ChatScreen() {
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   style={{ marginLeft: 8 }}
                 >
-                  <Ionicons name="ellipsis-vertical" size={16} color={colors.textSecondary} />
+                  <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -4708,7 +4709,7 @@ export default function ChatScreen() {
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ fontSize: 11, color: colors.textSecondary }}>Mood glimpse</Text>
                 <TouchableOpacity onPress={() => showCapsuleMenu("Mood glimpse", () => { setMoodGlimpseEnabled(false); AsyncStorage.setItem(MOOD_GLIMPSE_ENABLED_KEY, "0").catch(() => {}); }, () => setMoodGlimpseDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="ellipsis-vertical" size={16} color={colors.textSecondary} />
+                  <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
               <Text
@@ -5118,7 +5119,7 @@ export default function ChatScreen() {
             Writing to <Text style={{ fontWeight: "700" }}>{unsentLetterSetup.recipientName}</Text> — Imotara will respond in their voice.
           </Text>
           <TouchableOpacity onPress={() => showCapsuleMenu("Unsent Letter mode", () => setUnsentLetterSetup(null), () => setUnsentLetterSetup(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="ellipsis-vertical" size={16} color={isDark ? "rgba(167,139,250,0.6)" : "rgba(109,40,217,0.5)"} />
+            <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(167,139,250,0.6)" : "rgba(109,40,217,0.5)"} />
           </TouchableOpacity>
         </View>
       )}
@@ -5136,7 +5137,7 @@ export default function ChatScreen() {
             Grief &amp; Loss space — Imotara will hold this with you, without rushing.
           </Text>
           <TouchableOpacity onPress={() => showCapsuleMenu("Grief & Loss mode", () => setGriefMode(false), () => setGriefMode(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="ellipsis-vertical" size={16} color={isDark ? "rgba(253,164,175,0.6)" : "rgba(159,18,57,0.5)"} />
+            <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(253,164,175,0.6)" : "rgba(159,18,57,0.5)"} />
           </TouchableOpacity>
         </View>
       )}
@@ -5170,7 +5171,7 @@ export default function ChatScreen() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity onPress={() => showCapsuleMenu("Trial countdown", () => { setTrialBannerEnabled(false); AsyncStorage.setItem(TRIAL_BANNER_ENABLED_KEY, "0").catch(() => {}); }, dismissTrialBanner)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="ellipsis-vertical" size={16} color={colors.textSecondary} />
+              <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
         );
@@ -5234,7 +5235,7 @@ export default function ChatScreen() {
             <Text style={{ fontSize: 11, color: isDark ? "#a78bfa" : "#ffffff", fontWeight: "700" }}>Try it →</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => showCapsuleMenu("Unsent Letter hint", () => { setUnsentHintEnabled(false); AsyncStorage.setItem(UNSENT_HINT_ENABLED_KEY, "0").catch(() => {}); }, () => setShowUnsentHint(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="More options" accessibilityRole="button">
-            <Ionicons name="ellipsis-vertical" size={16} color={isDark ? "rgba(148,163,184,0.6)" : "rgba(91,33,182,0.5)"} />
+            <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(148,163,184,0.6)" : "rgba(91,33,182,0.5)"} />
           </TouchableOpacity>
         </View>
       )}
@@ -5255,7 +5256,7 @@ export default function ChatScreen() {
                 <Text style={{ fontSize: 12, fontWeight: "700", color: isDark ? "#fbbf24" : "#b45309", textDecorationLine: "underline" }}>Undo</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => showCapsuleMenu("Message undo", () => { setUndoSettingEnabled(false); AsyncStorage.setItem("imotara.undo.enabled.v1", "0").catch(() => {}); }, () => setPendingUndo(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="ellipsis-vertical" size={16} color={isDark ? "rgba(253,230,138,0.5)" : "rgba(146,64,14,0.5)"} />
+                <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(253,230,138,0.5)" : "rgba(146,64,14,0.5)"} />
               </TouchableOpacity>
             </View>
           </View>
@@ -5264,7 +5265,7 @@ export default function ChatScreen() {
 
       {/* Sentiment seed chips — shown when chat has messages and input is empty */}
       {sentimentChipsEnabled && !sentimentChipsDismissedSession && messages.length > 0 && input.trim() === "" && (
-        <View style={{ flexDirection: "row", paddingHorizontal: 12, paddingBottom: 6, alignItems: "center" }}>
+        <View style={{ flexDirection: "row", paddingHorizontal: 12, paddingBottom: 6, alignItems: "flex-start" }}>
           <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
             {(SENTIMENT_SEEDS_BY_LANG[toneContext?.user?.preferredLang ?? "en"] ?? SENTIMENT_SEEDS_BY_LANG.en).map((seed) => (
               <TouchableOpacity
@@ -5282,7 +5283,7 @@ export default function ChatScreen() {
             ))}
           </View>
           <TouchableOpacity onPress={() => showCapsuleMenu("Sentiment chips", () => { setSentimentChipsEnabled(false); AsyncStorage.setItem("imotara.sentiment.chips.enabled.v1", "0").catch(() => {}); }, () => setSentimentChipsDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ paddingLeft: 6 }}>
-            <Ionicons name="ellipsis-vertical" size={16} color={isDark ? "rgba(161,161,170,0.5)" : "rgba(71,85,105,0.5)"} />
+            <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(161,161,170,0.5)" : "rgba(71,85,105,0.5)"} />
           </TouchableOpacity>
         </View>
       )}
