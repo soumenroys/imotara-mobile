@@ -13,7 +13,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useColors, useTheme } from "../theme/ThemeContext";
-import { loadPendingInsights, clearPendingInsight, type InsightPayload } from "../lib/pendingInsights";
+import { loadPendingInsights, clearPendingInsight, clearBadge, type InsightPayload } from "../lib/pendingInsights";
 import { CompanionInsightCard } from "../components/imotara/CompanionInsightCard";
 import { useSettings } from "../state/SettingsContext";
 import { useAuth } from "../auth/AuthContext";
@@ -134,9 +134,9 @@ function FeelSection({
           />
           <TouchableOpacity
             onPress={handleSave}
-            style={{ borderRadius: 999, paddingVertical: 10, backgroundColor: EMOTION_META[selected.bucket].color.replace(/[\d.]+\)$/, "0.85)"), alignItems: "center" }}
+            style={{ borderRadius: 999, paddingVertical: 10, paddingHorizontal: 20, backgroundColor: colors.primary, alignItems: "center" }}
           >
-            <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>Log check-in</Text>
+            <Text style={{ fontSize: 14, fontWeight: "700", color: "#0f172a" }}>Log check-in</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1102,7 +1102,7 @@ function ChallengeWidget({ colors }: { colors: any }) {
   const prompt = CHALLENGE_PROMPTS_MOBILE[currentDay] ?? CHALLENGE_PROMPTS_MOBILE[29];
 
   return (
-    <View style={{ borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 14, marginBottom: 12 }}>
+    <View style={{ borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 14, marginBottom: 12, marginTop: 4 }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <View>
           <Text style={{ fontSize: 9, fontWeight: "700", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 2 }}>30-Day Challenge</Text>
@@ -1290,11 +1290,11 @@ function TrendsScreenContent() {
   useFocusEffect(
     useCallback(() => {
       loadPendingInsights().then(setPendingInsights).catch(() => {});
+      clearBadge().catch(() => {});
     }, [])
   );
 
-  // Badge clears automatically as user dismisses cards via clearPendingInsight()
-  // No separate write needed — avoids race condition with card dismissals.
+  // Badge resets when user visits Trends — cards remain visible until individually dismissed.
   const [featureTipDismissed, setFeatureTipDismissed] = useState(false);
   const { accessToken } = useAuth();
 
@@ -1560,6 +1560,7 @@ function TrendsScreenContent() {
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: 16 }}
+      keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor="#38bdf8" colors={["#38bdf8"]} />}
     >
       {/* Hourly feature discovery tip */}

@@ -200,7 +200,7 @@ const LICENSE_TIER_KEY = "imotara_license_tier_v1";
 // EXPO_PUBLIC_IMOTARA_FREE_DAYS to the duration (default 90).
 const LAUNCH_CLOUD_SYNC_FREE_FOR_ALL = (() => {
     const raw = process.env.EXPO_PUBLIC_IMOTARA_LAUNCH_DATE;
-    if (!raw) return true; // default to true for backwards compatibility
+    if (!raw) return true; // no launch date set → soft-launch free-for-all (matches web LICENSE_MODE=off)
 
     const launchMs = Date.parse(raw);
     if (Number.isNaN(launchMs)) return true;
@@ -1194,7 +1194,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     );
 
     // Detect potential duplicates: same sender + text fingerprint + timestamps within 60s, different IDs
-    const potentialDuplicates: Array<[HistoryItem, HistoryItem]> = (() => {
+    const potentialDuplicates = useMemo((): Array<[HistoryItem, HistoryItem]> => {
         const dupes: Array<[HistoryItem, HistoryItem]> = [];
         const sorted = [...history].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
         for (let i = 0; i < sorted.length - 1; i++) {
@@ -1210,7 +1210,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             }
         }
         return dupes;
-    })();
+    }, [history]);
 
     useEffect(() => {
         clearAutoSyncTimer();

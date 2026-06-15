@@ -60,8 +60,10 @@ export function ChatInputBar({
             fontSize: 11,
             color: colors.textSecondary,
             textAlign: "center",
-            marginBottom: 6,
+            marginBottom: 10,
+            marginTop: 2,
             fontStyle: "italic",
+            lineHeight: 16,
           }}
         >
           {firstTimeTip}
@@ -86,15 +88,18 @@ export function ChatInputBar({
         <View
           style={{
             flex: 1,
+            flexShrink: 1,
+            minWidth: 0,
             marginRight: 8,
-            borderRadius: 999,
+            borderRadius: 20,
             borderWidth: 1,
             borderColor: colors.border,
             backgroundColor: colors.surfaceSoft,
             paddingHorizontal: 12,
-            paddingVertical: 6,
+            paddingVertical: 4,
             minHeight: 40,
             justifyContent: "center",
+            overflow: "hidden",
           }}
         >
           <TextInput
@@ -146,6 +151,7 @@ export function ChatInputBar({
                 ? "rgba(239,68,68,0.6)"
                 : colors.border,
             marginRight: 6,
+            marginBottom: 0,
             alignItems: "center",
             justifyContent: "center",
           }}

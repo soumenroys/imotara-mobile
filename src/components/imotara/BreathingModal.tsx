@@ -485,12 +485,14 @@ export function BreathingModal({ visible, onClose }: Props) {
           {/* Control button */}
           <TouchableOpacity
             onPress={running ? stopExercise : startExercise}
+            activeOpacity={0.65}
             style={{
-              backgroundColor: running ? "rgba(239, 68, 68, 0.18)" : "rgba(56, 189, 248, 0.18)",
-              borderWidth: 1,
-              borderColor: running ? "rgba(239, 68, 68, 0.5)" : colors.primary,
+              backgroundColor: running ? "rgba(239, 68, 68, 0.30)" : "rgba(56, 189, 248, 0.30)",
+              borderWidth: 1.5,
+              borderColor: running ? "rgba(239, 68, 68, 0.7)" : colors.primary,
               borderRadius: 12,
               paddingVertical: 14,
+              paddingHorizontal: 20,
               alignItems: "center",
             }}
           >

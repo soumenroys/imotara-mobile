@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useColors } from "../../theme/ThemeContext";
 import { useAuth } from "../../auth/AuthContext";
+import { useSettings } from "../../state/SettingsContext";
 import { buildApiUrl } from "../../config/api";
 import { fetchWithTimeout } from "../../lib/fetchWithTimeout";
 import { supabase } from "../../lib/supabase/client";
@@ -141,9 +142,9 @@ const CRISIS_LINES = [
 ];
 
 const SESSION_TYPE_OPTIONS = [
-    { key: "chat",  label: "Text / Chat", icon: "💬" },
-    { key: "audio", label: "Audio Call",  icon: "🎙️" },
-    { key: "video", label: "Video Call",  icon: "📹" },
+    { key: "chat",  label: "Text / Chat", icon: "💬", phase: 1 },
+    { key: "audio", label: "Audio Call",  icon: "🎙️", phase: 3 },
+    { key: "video", label: "Video Call",  icon: "📹", phase: 3 },
 ] as const;
 
 const EXPERTISE_OPTIONS = [
@@ -190,6 +191,7 @@ export default function ConnectScreen() {
     const colors = useColors();
     const insets = useSafeAreaInsets();
     const { accessToken, user } = useAuth();
+    const { toneContext } = useSettings();
     const route = useRoute<any>();
     const navigation = useNavigation<any>();
     const [view, setView] = useState<ConnectView>({ name: "browse" });
@@ -202,7 +204,41 @@ export default function ConnectScreen() {
         }
     }, [route.params?.startRegister]);
 
+    // Handle tap on a push notification for a new session request — open the dashboard.
+    useEffect(() => {
+        if (Platform.OS === "web") return;
+        let sub: any;
+        try {
+            const Notifications = require("expo-notifications");
+            sub = Notifications.addNotificationResponseReceivedListener((response: any) => {
+                const data = response?.notification?.request?.content?.data;
+                if (data?.type === "session_request") {
+                    setView({ name: "dashboard" });
+                }
+            });
+        } catch { /* expo-notifications unavailable */ }
+        return () => { sub?.remove?.(); };
+    }, []);
+
     const s = styles(colors);
+
+    // Age gate — mirrors web /connect/age-restricted redirect.
+    // Connect is a paid adult counselling marketplace; under-18 access is blocked.
+    const userAgeRange = toneContext?.user?.ageRange;
+    if (userAgeRange === "under_13" || userAgeRange === "13_17") {
+        return (
+            <View style={[s.container, { paddingTop: insets.top + 32, alignItems: "center", justifyContent: "center", padding: 32 }]}>
+                <Text style={{ fontSize: 40, marginBottom: 16 }}>🔒</Text>
+                <Text style={[s.cardName, { fontSize: 20, textAlign: "center", marginBottom: 12 }]}>
+                    Age Restriction
+                </Text>
+                <Text style={[s.cardBio, { textAlign: "center", lineHeight: 22 }]}>
+                    Imotara Connect is available for users 18 and older.{"\n\n"}
+                    Please explore the rest of the Imotara app for AI wellness support.
+                </Text>
+            </View>
+        );
+    }
 
     function header(title: string, onBack?: () => void) {
         return (
@@ -328,6 +364,25 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
             .finally(() => setLoading(false));
     }, [accessToken, filterOnline, filterCategory]);
 
+    // Bug #98 fix: realtime subscription to keep is_online status accurate
+    useEffect(() => {
+        const channel = supabase
+            .channel("connect:consultants:online")
+            .on(
+                "postgres_changes",
+                { event: "UPDATE", schema: "public", table: "connect_consultants", filter: undefined },
+                (payload) => {
+                    const updated = payload.new as { id?: string; is_online?: boolean };
+                    if (!updated?.id || typeof updated.is_online !== "boolean") return;
+                    setConsultants((prev) =>
+                        prev.map((c) => (c.id === updated.id ? { ...c, is_online: updated.is_online as boolean } : c))
+                    );
+                }
+            )
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, []);
+
     async function toggleFavorite(consultantId: string) {
         if (!accessToken) return;
         const isFav = favorites.has(consultantId);
@@ -391,7 +446,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
 
             {/* Category chips */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 2, gap: 8, flexDirection: "row" }}>
+                contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6, gap: 8, flexDirection: "row", alignItems: "center" }}>
                 <TouchableOpacity
                     style={[s.filterChip, !filterCategory && s.filterChipActive]}
                     onPress={() => setFilterCategory("")}>
@@ -412,7 +467,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
 
             {/* Specialty + online filters */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 6, gap: 8, flexDirection: "row" }}>
+                contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 6, gap: 8, flexDirection: "row", alignItems: "center" }}>
                 <TouchableOpacity
                     style={[s.filterChip, filterOnline && s.filterChipActive]}
                     onPress={() => setFilterOnline((v) => !v)}>
@@ -430,7 +485,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
 
             {/* Sort row */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 6, gap: 8, flexDirection: "row" }}>
+                contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 2, paddingBottom: 8, gap: 8, flexDirection: "row", alignItems: "center" }}>
                 {([
                     { key: "rating",     label: "⭐ Top rated" },
                     { key: "price_asc",  label: "Price ↑" },
@@ -453,10 +508,12 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 renderItem={({ item: c }) => (
                     <TouchableOpacity style={s.card} onPress={() => onSelectConsultant(c)} activeOpacity={0.75}>
                         <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
-                            <View style={s.avatar}>
-                                {c.photo_url
-                                    ? <Image source={{ uri: c.photo_url }} style={s.avatarImg} />
-                                    : <Text style={{ fontSize: 28 }}>{c.gender === "female" ? "👩" : "👨"}</Text>}
+                            <View style={{ position: "relative" }}>
+                                <View style={s.avatar}>
+                                    {c.photo_url
+                                        ? <Image source={{ uri: c.photo_url }} style={s.avatarImg} />
+                                        : <Text style={{ fontSize: 28 }}>{c.gender === "female" ? "👩" : "👨"}</Text>}
+                                </View>
                                 {c.is_online && <View style={s.onlineDot} />}
                             </View>
                             <View style={{ flex: 1 }}>
@@ -472,23 +529,26 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                                         </TouchableOpacity>
                                     </View>
                                 </View>
-                                {c.role_category && (
-                                    <Text style={{ fontSize: 10, color: "#a78bfa", marginTop: 2 }}>
-                                        {ROLE_CATEGORIES.find(r => r.key === c.role_category)?.icon ?? ""} {ROLE_CATEGORIES.find(r => r.key === c.role_category)?.label ?? c.role_category}
-                                    </Text>
-                                )}
+                                {c.role_category && (() => {
+                                    const rc = ROLE_CATEGORIES.find(r => r.key === c.role_category);
+                                    return rc ? (
+                                        <Text style={{ fontSize: 10, color: "#a78bfa", marginTop: 2 }} numberOfLines={1}>
+                                            {rc.icon} {rc.label}
+                                        </Text>
+                                    ) : null;
+                                })()}
                                 <Text style={[s.ratingText, { marginTop: 2 }]}>
                                     ★ {c.rating_avg > 0 ? c.rating_avg.toFixed(1) : "New"} · {c.sessions_completed} sessions
                                 </Text>
                                 {c.bio && (
                                     <Text style={[s.cardBio, { marginTop: 4 }]} numberOfLines={3}>{c.bio}</Text>
                                 )}
-                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 6, paddingBottom: 2 }}>
                                     {c.expertise_tags.slice(0, 3).map((t) => (
                                         <Text key={t} style={s.tag}>{t}</Text>
                                     ))}
                                 </View>
-                                <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8, alignItems: "center" }}>
+                                <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 10, alignItems: "center" }}>
                                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                                         <Text style={[s.cardBio, { fontSize: 11, color: c.is_online ? "#34d399" : "#94a3b8" }]}>
                                             {c.is_online ? "● Online" : "○ Offline"}
@@ -525,7 +585,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
         const date = new Date(item.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
         const duration = item.minutes_used > 0 ? `${Math.round(item.minutes_used)} min` : "< 1 min";
         const sym = CURRENCY_SYMBOLS[item.currency_code ?? "INR"] ?? "₹";
-        const cost = "—";
+        const cost = item.amount_charged != null ? `${sym}${Number(item.amount_charged).toFixed(2)}` : "—";
         return [
             `Imotara Connect — Session Summary`,
             `Date: ${date}`,
@@ -793,17 +853,17 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
                     {TOPUP_PRESETS.map((p) => (
                         <TouchableOpacity key={p}
-                            style={[s.durationBtn, !isCustom && topupAmount === p && s.durationBtnActive, { paddingHorizontal: 14 }]}
+                            style={[s.durationBtn, !isCustom && topupAmount === p && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
                             onPress={() => { setIsCustom(false); setTopupAmount(p); setTopupError(""); }}>
-                            <Text style={[s.durationBtnText, !isCustom && topupAmount === p && s.durationBtnTextActive]}>
+                            <Text style={[s.durationBtnText, !isCustom && topupAmount === p && s.durationBtnTextActive]} numberOfLines={1}>
                                 ₹{p.toLocaleString("en-IN")}
                             </Text>
                         </TouchableOpacity>
                     ))}
                     <TouchableOpacity
-                        style={[s.durationBtn, isCustom && s.durationBtnActive, { paddingHorizontal: 14 }]}
+                        style={[s.durationBtn, isCustom && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
                         onPress={() => { setIsCustom(true); setTopupError(""); }}>
-                        <Text style={[s.durationBtnText, isCustom && s.durationBtnTextActive]}>Custom</Text>
+                        <Text style={[s.durationBtnText, isCustom && s.durationBtnTextActive]} numberOfLines={1}>Custom</Text>
                     </TouchableOpacity>
                 </View>
                 {isCustom && (
@@ -1129,19 +1189,24 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
             <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
                 {/* Avatar + name */}
                 <View style={{ alignItems: "center", gap: 10 }}>
-                    <View style={[s.avatar, { width: 80, height: 80, borderRadius: 40 }]}>
-                        {c.photo_url
-                            ? <Image source={{ uri: c.photo_url }} style={{ width: 80, height: 80, borderRadius: 40 }} />
-                            : <Text style={{ fontSize: 44 }}>{c.gender === "female" ? "👩" : "👨"}</Text>
-                        }
+                    <View style={{ position: "relative" }}>
+                        <View style={[s.avatar, { width: 80, height: 80, borderRadius: 40 }]}>
+                            {c.photo_url
+                                ? <Image source={{ uri: c.photo_url }} style={{ width: 80, height: 80, borderRadius: 40 }} />
+                                : <Text style={{ fontSize: 44 }}>{c.gender === "female" ? "👩" : "👨"}</Text>
+                            }
+                        </View>
                         {c.is_online && <View style={[s.onlineDot, { width: 14, height: 14, bottom: 2, right: 2 }]} />}
                     </View>
                     <Text style={[s.cardName, { fontSize: 20 }]}>{c.display_name}</Text>
-                    {c.role_category && (
-                        <Text style={{ fontSize: 12, color: "#a78bfa", marginTop: 2 }}>
-                            {ROLE_CATEGORIES.find(r => r.key === c.role_category)?.icon ?? ""} {ROLE_CATEGORIES.find(r => r.key === c.role_category)?.label ?? c.role_category}
-                        </Text>
-                    )}
+                    {c.role_category && (() => {
+                        const rc = ROLE_CATEGORIES.find(r => r.key === c.role_category);
+                        return rc ? (
+                            <Text style={{ fontSize: 12, color: "#a78bfa", marginTop: 2 }} numberOfLines={1}>
+                                {rc.icon} {rc.label}
+                            </Text>
+                        ) : null;
+                    })()}
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
                         {c.is_busy ? (
                             <Text style={{ fontSize: 12, color: "#fb923c", backgroundColor: "rgba(251,146,60,0.15)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>In Session</Text>
@@ -1221,10 +1286,21 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     </View>
                 )}
 
-                {c.availability_note && (
+                {(c.availability_windows?.length || c.availability_note) && (
                     <View style={s.card}>
-                        <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Availability</Text>
-                        <Text style={s.cardBio}>{c.availability_note}</Text>
+                        <Text style={[s.cardBio, { marginBottom: 8, fontWeight: "600" }]}>Availability</Text>
+                        {c.availability_windows && c.availability_windows.length > 0 ? (
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                                {c.availability_windows.map((w: { day: string; start: string; end: string }, i: number) => (
+                                    <View key={i} style={{ backgroundColor: "rgba(139,92,246,0.12)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, flexDirection: "row", alignItems: "center", gap: 4 }}>
+                                        <Text style={[s.cardBio, { fontSize: 12, color: colors.primary }]}>🕐</Text>
+                                        <Text style={[s.cardBio, { fontSize: 12 }]}>{w.day} {w.start}–{w.end}</Text>
+                                    </View>
+                                ))}
+                            </View>
+                        ) : (
+                            <Text style={s.cardBio}>{c.availability_note}</Text>
+                        )}
                     </View>
                 )}
 
@@ -1264,11 +1340,19 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 colors={colors}
             />
 
-            {/* Schedule session modal */}
+            {/* Schedule session modal — keyboard-aware bottom sheet */}
             <Modal visible={scheduleVisible} transparent animationType="slide" onRequestClose={() => setScheduleVisible(false)}>
-                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-                <ScrollView contentContainerStyle={s.modalBackdrop} keyboardShouldPersistTaps="handled">
-                    <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === "ios" ? "padding" : "height"}
+                    style={{ flex: 1 }}
+                >
+                    {/* Tap-to-dismiss backdrop */}
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)" }}
+                        onPress={() => setScheduleVisible(false)}
+                    />
+                    <View style={[s.modalSheet, { backgroundColor: colors.surface, maxHeight: "90%" }]}>
                         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                             <Text style={[s.cardName, { fontSize: 18 }]}>Request a Meeting</Text>
                             <TouchableOpacity onPress={() => setScheduleVisible(false)}>
@@ -1276,77 +1360,85 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                             </TouchableOpacity>
                         </View>
 
-                        {/* Date */}
-                        <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Preferred Date</Text>
-                        <TextInput
-                            style={[s.messageInput, { marginBottom: 10 }]}
-                            value={scheduleDate}
-                            onChangeText={setScheduleDate}
-                            placeholder="YYYY-MM-DD  (e.g. 2026-06-15)"
-                            placeholderTextColor={colors.textSecondary}
-                            keyboardType="numbers-and-punctuation"
-                        />
+                        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                            {/* Date */}
+                            <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Preferred Date</Text>
+                            <TextInput
+                                style={[s.messageInput, { marginBottom: 12, flex: 0, minHeight: 52, fontSize: 15 }]}
+                                value={scheduleDate}
+                                onChangeText={setScheduleDate}
+                                placeholder="YYYY-MM-DD  (e.g. 2026-06-15)"
+                                placeholderTextColor={colors.textSecondary}
+                                keyboardType="numbers-and-punctuation"
+                            />
 
-                        {/* Time */}
-                        <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Preferred Time</Text>
-                        <TextInput
-                            style={[s.messageInput, { marginBottom: 10 }]}
-                            value={scheduleTime}
-                            onChangeText={setScheduleTime}
-                            placeholder="HH:MM  24h (e.g. 18:30)"
-                            placeholderTextColor={colors.textSecondary}
-                            keyboardType="numbers-and-punctuation"
-                        />
+                            {/* Time */}
+                            <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Preferred Time</Text>
+                            <TextInput
+                                style={[s.messageInput, { marginBottom: 12, flex: 0, minHeight: 52, fontSize: 15 }]}
+                                value={scheduleTime}
+                                onChangeText={setScheduleTime}
+                                placeholder="HH:MM  24-hour  (e.g. 18:30)"
+                                placeholderTextColor={colors.textSecondary}
+                                keyboardType="numbers-and-punctuation"
+                            />
 
-                        {/* Duration chips */}
-                        <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Duration</Text>
-                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                            {([15, 30, 45, 60, 90, 120] as const).map((d) => (
-                                <TouchableOpacity key={d}
-                                    style={[s.durationBtn, scheduleDuration === d && s.durationBtnActive]}
-                                    onPress={() => setScheduleDuration(d)}>
-                                    <Text style={[s.durationBtnText, scheduleDuration === d && s.durationBtnTextActive]}>
-                                        {d < 60 ? `${d} min` : d === 60 ? "1 hr" : d === 90 ? "1.5 hrs" : "2 hrs"}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-
-                        {/* Cost estimate */}
-                        {scheduleDate.trim().length > 0 && (
-                            <View style={[s.card, { gap: 4, marginBottom: 12 }]}>
-                                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                                    <Text style={s.cardBio}>{sym}{c.rate_per_min}/min × {scheduleDuration} min</Text>
-                                    <Text style={[s.cardBio, { fontWeight: "700" }]}>{sym}{(c.rate_per_min * scheduleDuration).toFixed(0)}</Text>
-                                </View>
-                                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                                    <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>Est. cost (max)</Text>
-                                    <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>{sym}{(c.rate_per_min * scheduleDuration).toFixed(0)}</Text>
-                                </View>
+                            {/* Duration chips */}
+                            <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Duration</Text>
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                                {([15, 30, 45, 60, 90, 120] as const).map((d) => (
+                                    <TouchableOpacity key={d}
+                                        style={[s.durationBtn, scheduleDuration === d && s.durationBtnActive]}
+                                        onPress={() => setScheduleDuration(d)}>
+                                        <Text style={[s.durationBtnText, scheduleDuration === d && s.durationBtnTextActive]}>
+                                            {d < 60 ? `${d} min` : d === 60 ? "1 hr" : d === 90 ? "1.5 hrs" : "2 hrs"}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
                             </View>
-                        )}
 
-                        {/* Note */}
-                        <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Message (optional)</Text>
-                        <TextInput
-                            style={[s.messageInput, { minHeight: 80, marginBottom: 16 }]}
-                            value={scheduleNote}
-                            onChangeText={setScheduleNote}
-                            placeholder="e.g. Would love to talk about anxiety management…"
-                            placeholderTextColor={colors.textSecondary}
-                            multiline
-                            maxLength={300}
-                        />
-                        <TouchableOpacity
-                            style={[s.primaryBtn, scheduleLoading && { opacity: 0.6 }]}
-                            onPress={() => startSession("scheduled", scheduleNote)}
-                            disabled={scheduleLoading}>
-                            {scheduleLoading
-                                ? <ActivityIndicator color="#fff" />
-                                : <Text style={s.primaryBtnText}>Send Request</Text>}
-                        </TouchableOpacity>
+                            {/* Cost estimate */}
+                            {scheduleDate.trim().length > 0 && (
+                                <View style={[s.card, { gap: 4, marginBottom: 12 }]}>
+                                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                                        <Text style={s.cardBio}>{sym}{c.rate_per_min}/min × {scheduleDuration} min</Text>
+                                        <Text style={[s.cardBio, { fontWeight: "700" }]}>{sym}{(c.rate_per_min * scheduleDuration).toFixed(0)}</Text>
+                                    </View>
+                                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                                        <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>Est. cost (max)</Text>
+                                        <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>{sym}{(c.rate_per_min * scheduleDuration).toFixed(0)}</Text>
+                                    </View>
+                                </View>
+                            )}
+
+                            {/* Note */}
+                            <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Message</Text>
+                            <TextInput
+                                style={[s.messageInput, { minHeight: 88, marginBottom: 16, flex: 0 }]}
+                                value={scheduleNote}
+                                onChangeText={setScheduleNote}
+                                placeholder="e.g. Would love to talk about anxiety management…"
+                                placeholderTextColor={colors.textSecondary}
+                                multiline
+                                maxLength={300}
+                                textAlignVertical="top"
+                            />
+                            <TouchableOpacity
+                                style={[s.primaryBtn, { marginBottom: 8 }, scheduleLoading && { opacity: 0.6 }]}
+                                onPress={() => {
+                                    if (!scheduleNote.trim()) {
+                                        Alert.alert("Message required", "Please add a message describing what you would like to discuss.");
+                                        return;
+                                    }
+                                    startSession("scheduled", scheduleNote);
+                                }}
+                                disabled={scheduleLoading}>
+                                {scheduleLoading
+                                    ? <ActivityIndicator color="#fff" />
+                                    : <Text style={s.primaryBtnText}>Send Request</Text>}
+                            </TouchableOpacity>
+                        </ScrollView>
                     </View>
-                </ScrollView>
                 </KeyboardAvoidingView>
             </Modal>
         </View>
@@ -1448,17 +1540,17 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
                     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
                         {TOPUP_PRESETS.map((p) => (
                             <TouchableOpacity key={p}
-                                style={[s.durationBtn, !isCustom && selectedAmt === p && s.durationBtnActive, { paddingHorizontal: 14 }]}
+                                style={[s.durationBtn, !isCustom && selectedAmt === p && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
                                 onPress={() => { setIsCustom(false); setSelectedAmt(p); setError(""); }}>
-                                <Text style={[s.durationBtnText, !isCustom && selectedAmt === p && s.durationBtnTextActive]}>
+                                <Text style={[s.durationBtnText, !isCustom && selectedAmt === p && s.durationBtnTextActive]} numberOfLines={1}>
                                     {sym}{(p / 1000).toFixed(0)}K
                                 </Text>
                             </TouchableOpacity>
                         ))}
                         <TouchableOpacity
-                            style={[s.durationBtn, isCustom && s.durationBtnActive, { paddingHorizontal: 14 }]}
+                            style={[s.durationBtn, isCustom && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
                             onPress={() => { setIsCustom(true); setError(""); }}>
-                            <Text style={[s.durationBtnText, isCustom && s.durationBtnTextActive]}>Custom</Text>
+                            <Text style={[s.durationBtnText, isCustom && s.durationBtnTextActive]} numberOfLines={1}>Custom</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -1529,6 +1621,131 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
     );
 }
 
+// ── Session Recharge Modal ──────────────────────────────────────────────────────
+// Adds more per-consultant session minutes mid-session via Razorpay.
+// This is the correct mid-session "add time" flow — NOT the general INR wallet topup.
+function SessionRechargeModal({ visible, accessToken, consultantId, consultantName, currencyCode, ratePerMin, onClose, onSuccess, colors }: {
+    visible: boolean;
+    accessToken: string | null;
+    consultantId: string;
+    consultantName: string;
+    currencyCode: string;
+    ratePerMin: number;
+    onClose: () => void;
+    onSuccess: () => void;
+    colors: any;
+}) {
+    const PRESETS = [15, 30, 60];
+    const [selectedMin, setSelectedMin] = useState(30);
+    const [loading, setLoading]         = useState(false);
+    const [error, setError]             = useState("");
+    const s   = styles(colors);
+    const sym = CURRENCY_SYMBOLS[currencyCode] ?? "₹";
+
+    async function handlePay() {
+        if (!accessToken) return;
+        setLoading(true); setError("");
+        try {
+            const res = await pfetch(buildApiUrl("/api/connect/wallet/recharge/create"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ consultant_id: consultantId, minutes: selectedMin }),
+            });
+            const d = await res.json();
+            if (!d.ok) { setError(d.error ?? "Failed to create order"); setLoading(false); return; }
+
+            const RazorpayCheckout = require("react-native-razorpay").default;
+            const paymentData = await RazorpayCheckout.open({
+                key:      d.razorpay_key_id ?? process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID,
+                order_id: d.razorpay_order_id,
+                amount:   String(d.amount_paise),
+                currency: currencyCode,
+                name:     "Imotara Connect",
+                description: `Add ${selectedMin} min with ${consultantName}`,
+                theme: { color: "#6366f1" },
+            });
+
+            const vRes = await pfetch(buildApiUrl("/api/connect/wallet/recharge/verify"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({
+                    razorpay_order_id:   paymentData.razorpay_order_id,
+                    razorpay_payment_id: paymentData.razorpay_payment_id,
+                    razorpay_signature:  paymentData.razorpay_signature,
+                }),
+            });
+            const v = await vRes.json();
+            if (!v.ok) { setError(v.error ?? "Verification failed"); return; }
+            Alert.alert("Time Added", `${selectedMin} minutes added to your session!`);
+            onSuccess();
+        } catch (err: any) {
+            if (err?.code !== 0 && !String(err?.description ?? "").toLowerCase().includes("cancel")) {
+                setError(String(err?.message ?? "Payment failed"));
+            }
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    return (
+        <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+            <View style={s.modalBackdrop}>
+                <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                        <View>
+                            <Text style={[s.cardBio, { fontSize: 10, color: "#f87171", fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 2 }]}>
+                                Add Session Time
+                            </Text>
+                            <Text style={[s.cardName, { fontSize: 18 }]}>Extend with {consultantName}</Text>
+                        </View>
+                        <TouchableOpacity onPress={onClose}>
+                            <Ionicons name="close" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <Text style={[s.cardBio, { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }]}>Choose duration</Text>
+                    <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+                        {PRESETS.map((min) => {
+                            const cost = (min * ratePerMin).toFixed(2);
+                            const active = selectedMin === min;
+                            return (
+                                <TouchableOpacity key={min}
+                                    onPress={() => setSelectedMin(min)}
+                                    style={{ flex: 1, borderRadius: 10, borderWidth: 1.5, borderColor: active ? "#6366f1" : "rgba(255,255,255,0.12)", backgroundColor: active ? "rgba(99,102,241,0.15)" : "rgba(255,255,255,0.04)", paddingVertical: 12, alignItems: "center" }}>
+                                    <Text style={{ fontSize: 16, fontWeight: "700", color: active ? "#818cf8" : colors.textPrimary }}>{min} min</Text>
+                                    <Text style={{ fontSize: 11, color: active ? "#a5b4fc" : colors.textSecondary, marginTop: 2 }}>{sym}{cost}</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    <View style={{ borderRadius: 10, borderWidth: 1, borderColor: "rgba(248,113,113,0.25)", backgroundColor: "rgba(248,113,113,0.08)", padding: 12, marginBottom: 14 }}>
+                        <Text style={{ color: "#f87171", fontSize: 13, fontWeight: "600" }}>
+                            Total: {sym}{(selectedMin * ratePerMin).toFixed(2)} for {selectedMin} minutes
+                        </Text>
+                        <Text style={[s.cardBio, { fontSize: 11, marginTop: 4 }]}>
+                            Payment goes directly to your consultant's session balance. Minutes are available immediately after payment.
+                        </Text>
+                    </View>
+
+                    {error !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{error}</Text>}
+                    <TouchableOpacity
+                        style={[s.primaryBtn, loading && { opacity: 0.5 }]}
+                        onPress={handlePay}
+                        disabled={loading}>
+                        {loading
+                            ? <ActivityIndicator color="#fff" />
+                            : <Text style={s.primaryBtnText}>Pay {sym}{(selectedMin * ratePerMin).toFixed(2)} via Razorpay</Text>}
+                    </TouchableOpacity>
+                    <Text style={[s.cardBio, { fontSize: 10, textAlign: "center", marginTop: 8, opacity: 0.5 }]}>
+                        Secured by Razorpay · Extends your time with this companion
+                    </Text>
+                </View>
+            </View>
+        </Modal>
+    );
+}
+
 // ── Chat View ──────────────────────────────────────────────────────────────────
 function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     session: Session; colors: any; insets: any;
@@ -1543,11 +1760,11 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [status, setStatus] = useState(session.status);
     const [showEmergency, setShowEmergency] = useState(false);
     const [showReview, setShowReview] = useState(false);
-    const [showTopUp, setShowTopUp] = useState(false);
+
     const [rating, setRating] = useState(0);
     const [reviewText, setReviewText] = useState("");
-    // Dual panel state
-    const [walletBal, setWalletBal] = useState<number | null>(null);
+    // Dual panel state — walletBal removed (was showing unrelated general INR wallet)
+    const [showRecharge, setShowRecharge] = useState(false);
     const [elapsedSecs, setElapsedSecs] = useState(0);
     const [nowTick, setNowTick] = useState(() => new Date());
     const [panelOpen, setPanelOpen] = useState(true);
@@ -1672,13 +1889,8 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         return () => { if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; } };
     }, [remaining]);
 
-    // Wallet balance fetch
-    useEffect(() => {
-        if (!accessToken) return;
-        cfetch(buildApiUrl("/api/connect/wallet"), {
-            headers: { Authorization: `Bearer ${accessToken}` },
-        }).then((r) => r.json()).then((d) => { if (d.ok) setWalletBal(Number(d.wallet_balance ?? 0)); }).catch(() => {});
-    }, [accessToken]);
+    // Wallet balance fetch removed — session billing is per-consultant recharge minutes,
+    // not the general imotara_wallets INR balance. Balance shown via `remaining * rate`.
 
     // Live 1-second clock + elapsed counter
     useEffect(() => {
@@ -1773,7 +1985,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                             { label: "Elapsed",   value: formatDuration(elapsedSecs),                          bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)",  text: "#f59e0b" },
                             { label: "Remaining", value: displaySeconds !== null ? formatDuration(displaySeconds) : "—", bg: isLow ? "rgba(248,113,113,0.12)" : "rgba(52,211,153,0.12)", border: isLow ? "rgba(248,113,113,0.3)" : "rgba(52,211,153,0.3)", text: isLow ? "#f87171" : "#34d399" },
                             { label: "Used",      value: `${sym}${consumed.toFixed(2)}`,                       bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.3)", text: "#f87171" },
-                            { label: "Balance",   value: walletBal !== null ? `${sym}${walletBal.toFixed(2)}` : "—", bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.3)", text: "#a78bfa" },
+                            { label: "Balance",   value: remaining !== null ? `${sym}${(remaining * rate).toFixed(2)}` : "—", bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.3)", text: "#a78bfa" },
                         ].map((m) => (
                             <View key={m.label} style={{ flex: 1, backgroundColor: m.bg, borderWidth: 1, borderColor: m.border, borderRadius: 10, padding: 6, alignItems: "center" }}>
                                 <Text style={{ fontSize: 8, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, color: m.text, opacity: 0.7, marginBottom: 2 }}>{m.label}</Text>
@@ -1809,7 +2021,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             {isActive && displaySeconds !== null && displaySeconds <= 120 && displaySeconds > 0 && (
                 <TouchableOpacity
                     style={{ backgroundColor: "rgba(248,113,113,0.08)", padding: 10 }}
-                    onPress={() => setShowTopUp(true)}>
+                    onPress={() => setShowRecharge(true)}>
                     <Text style={{ textAlign: "center", color: "#f87171", fontSize: 12, fontWeight: "600" }}>
                         Less than 2 minutes remaining — tap to add more time
                     </Text>
@@ -2007,14 +2219,16 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 </View>
             </Modal>
 
-            {/* Mid-session wallet top-up */}
-            <WalletTopUpModal
-                visible={showTopUp}
+            {/* Mid-session per-consultant minute recharge — extends session time */}
+            <SessionRechargeModal
+                visible={showRecharge}
                 accessToken={accessToken}
-                walletBalance={walletBal ?? 0}
-                walletCurrency={session.currency_code ?? "INR"}
-                onClose={() => setShowTopUp(false)}
-                onSuccess={(newBal) => { setWalletBal(newBal); setShowTopUp(false); }}
+                consultantId={session.consultant_id}
+                consultantName={session.connect_consultants?.display_name ?? "Companion"}
+                currencyCode={session.currency_code ?? "INR"}
+                ratePerMin={rate}
+                onClose={() => setShowRecharge(false)}
+                onSuccess={() => setShowRecharge(false)}
                 colors={colors}
             />
         </KeyboardAvoidingView>
@@ -2057,6 +2271,24 @@ function EmergencyModal({ visible, onClose, colors }: { visible: boolean; onClos
     );
 }
 
+// Registers the device's Expo push token with the server so the consultant
+// receives push notifications when a new session request arrives.
+async function registerConnectPushToken(token: string | null) {
+    if (!token || Platform.OS === "web") return;
+    try {
+        const Notifications = require("expo-notifications");
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (status !== "granted") return;
+        const { data: pushToken } = await Notifications.getExpoPushTokenAsync();
+        if (!pushToken) return;
+        await pfetch(buildApiUrl("/api/connect/consultant/profile"), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ expo_push_token: pushToken }),
+        });
+    } catch { /* non-critical — push is best-effort */ }
+}
+
 // ── Dashboard View ─────────────────────────────────────────────────────────────
 function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onRegister }: {
     colors: any; insets: any; accessToken: string | null;
@@ -2075,7 +2307,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
     const [toggling, setToggling]           = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [showPayout, setShowPayout]       = useState(false);
-    const [payoutMethod, setPayoutMethod]   = useState<"upi" | "bank" | "paypal">("upi");
+    const [payoutMethod, setPayoutMethod]   = useState<"upi" | "bank" | "bank_in" | "bank_int" | "paypal">("upi");
     const [payoutDetails, setPayoutDetails] = useState("");
     const [payoutAmount, setPayoutAmount]   = useState("");
     const [payoutLoading, setPayoutLoading] = useState(false);
@@ -2085,6 +2317,11 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
     // Availability windows
     const [editingAvail, setEditingAvail] = useState(false);
     const [availSaving, setAvailSaving]   = useState(false);
+    // Rate editing
+    const [editingRate, setEditingRate]   = useState(false);
+    const [newRate, setNewRate]           = useState("");
+    const [rateSaving, setRateSaving]     = useState(false);
+    const [rateMsg, setRateMsg]           = useState<{ ok: boolean; text: string } | null>(null);
     // Session notes
     const [openNoteId, setOpenNoteId]     = useState<string | null>(null);
     const [noteContent, setNoteContent]   = useState("");
@@ -2106,6 +2343,31 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             setEditingAvail(false);
         } catch { /* silent */ }
         finally { setAvailSaving(false); }
+    }
+
+    async function saveRate() {
+        const rate = parseFloat(newRate);
+        if (!accessToken || isNaN(rate) || rate <= 0) {
+            setRateMsg({ ok: false, text: "Enter a valid positive rate." });
+            return;
+        }
+        setRateSaving(true); setRateMsg(null);
+        try {
+            const res = await pfetch(buildApiUrl("/api/connect/consultant/profile"), {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ rate_per_min: rate }),
+            });
+            const d = await res.json();
+            if (d.ok) {
+                setProfile((p: any) => p ? { ...p, rate_per_min: rate } : p);
+                setRateMsg({ ok: true, text: "Rate updated successfully." });
+                setEditingRate(false);
+            } else {
+                setRateMsg({ ok: false, text: d.error ?? "Failed to update rate." });
+            }
+        } catch { setRateMsg({ ok: false, text: "Network error." }); }
+        finally { setRateSaving(false); }
     }
 
     async function openNote(sessionId: string) {
@@ -2161,7 +2423,9 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
 
     async function requestPayout() {
         const amount = parseFloat(payoutAmount);
-        if (!amount || amount <= 0 || !payoutDetails.trim() || !accessToken) return;
+        if (!accessToken) { setPayoutMsg({ ok: false, text: "Sign in required to request a payout." }); return; }
+        if (!amount || amount <= 0) { setPayoutMsg({ ok: false, text: "Enter a valid positive amount." }); return; }
+        if (!payoutDetails.trim()) { setPayoutMsg({ ok: false, text: "Enter your payment details (UPI ID, account number, or PayPal email)." }); return; }
         setPayoutLoading(true);
         setPayoutMsg(null);
         try {
@@ -2172,8 +2436,9 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                     amount,
                     currency_code:  earnings?.earned_currency ?? "INR",
                     payout_method:  payoutMethod,
-                    payout_details: payoutMethod === "upi"   ? { upi_id: payoutDetails }
-                                  : payoutMethod === "bank"   ? { account_number: payoutDetails }
+                    payout_details: payoutMethod === "upi"      ? { upi_id: payoutDetails }
+                                  : payoutMethod === "bank_in"  ? { account_number: payoutDetails }
+                                  : payoutMethod === "bank_int" ? { account_number: payoutDetails }
                                   : { paypal_email: payoutDetails },
                 }),
             });
@@ -2198,7 +2463,12 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             cfetch(buildApiUrl("/api/connect/consultant/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } }),
         ]);
         const [p, e, s] = await Promise.all([pRes.json(), eRes.json(), sRes.json()]);
-        if (p.ok) setProfile(p.consultant);
+        if (p.ok) {
+            setProfile(p.consultant);
+            if (p.consultant?.status === "approved") {
+                void registerConnectPushToken(accessToken);
+            }
+        }
         if (e.ok) setEarnings(e);
         if (s.ok) {
             setIncoming(s.sessions ?? []);
@@ -2407,10 +2677,62 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                                     <Text style={{ color: colors.primary, fontSize: 13, fontWeight: "600" }}>+ Add slot</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
+                                    activeOpacity={0.65}
                                     style={[s.primaryBtn, { flex: 1, paddingVertical: 8 }, availSaving && { opacity: 0.6 }]}
                                     onPress={saveAvailability}
                                     disabled={availSaving}>
                                     {availSaving
+                                        ? <ActivityIndicator color="#0f172a" size="small" />
+                                        : <Text style={s.primaryBtnText}>Save</Text>}
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Rate Editing */}
+                    <TouchableOpacity
+                        style={[s.card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}
+                        onPress={() => { setEditingRate((v) => !v); setNewRate(String(profile.rate_per_min ?? "")); setRateMsg(null); }}>
+                        <Text style={[s.cardBio, { fontWeight: "700" }]}>💰 Rate per Minute
+                            {profile.rate_per_min != null
+                                ? ` (${CURRENCY_SYMBOLS[profile.currency_code ?? "INR"] ?? profile.currency_code ?? ""}${Number(profile.rate_per_min).toFixed(2)}/min)`
+                                : ""}
+                        </Text>
+                        <Text style={s.cardBio}>{editingRate ? "▲" : "▼"}</Text>
+                    </TouchableOpacity>
+                    {editingRate && (
+                        <View style={s.card}>
+                            <Text style={[s.cardBio, { marginBottom: 10, opacity: 0.7 }]}>
+                                Update your per-minute rate. New sessions will use this rate; ongoing sessions are unaffected.
+                            </Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                <Text style={[s.cardBio, { opacity: 0.7 }]}>{profile.currency_code ?? "INR"}</Text>
+                                <TextInput
+                                    style={[s.messageInput, { flex: 1, height: 40, marginBottom: 0 }]}
+                                    value={newRate}
+                                    onChangeText={setNewRate}
+                                    keyboardType="decimal-pad"
+                                    placeholder="e.g. 5.00"
+                                    placeholderTextColor={colors.textSecondary}
+                                />
+                                <Text style={[s.cardBio, { opacity: 0.7 }]}>/ min</Text>
+                            </View>
+                            {rateMsg && (
+                                <Text style={{ color: rateMsg.ok ? "#34d399" : "#f87171", fontSize: 12, marginBottom: 8 }}>
+                                    {rateMsg.text}
+                                </Text>
+                            )}
+                            <View style={{ flexDirection: "row", gap: 8 }}>
+                                <TouchableOpacity
+                                    style={[{ flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, alignItems: "center" }]}
+                                    onPress={() => { setEditingRate(false); setRateMsg(null); }}>
+                                    <Text style={{ color: colors.textSecondary, fontSize: 13 }}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[s.primaryBtn, { flex: 1, paddingVertical: 8 }, rateSaving && { opacity: 0.6 }]}
+                                    onPress={saveRate}
+                                    disabled={rateSaving}>
+                                    {rateSaving
                                         ? <ActivityIndicator color="#fff" size="small" />
                                         : <Text style={s.primaryBtnText}>Save</Text>}
                                 </TouchableOpacity>
@@ -2420,16 +2742,58 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
 
                     {/* Active sessions */}
                     {active.map((s) => (
-                        <View key={s.id} style={[styles(colors).card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
-                            <View>
-                                <Text style={[styles(colors).cardName, { color: "#34d399" }]}>Session in progress</Text>
-                                <Text style={styles(colors).cardBio}>{s.type} · {(s.minutes_used ?? 0).toFixed(0)} min used</Text>
+                        <View key={s.id} style={styles(colors).card}>
+                            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles(colors).cardName, { color: "#34d399" }]}>Session in progress</Text>
+                                    <Text style={styles(colors).cardBio}>{s.type} · {(s.minutes_used ?? 0).toFixed(0)} min used</Text>
+                                </View>
+                                <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                                    <TouchableOpacity
+                                        style={{ paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: "rgba(139,92,246,0.35)", backgroundColor: "rgba(139,92,246,0.08)" }}
+                                        onPress={() => openNote(s.id)}>
+                                        <Text style={{ color: "#a78bfa", fontSize: 12, fontWeight: "600" }}>
+                                            {openNoteId === s.id ? "Close" : "📝 Notes"}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles(colors).primaryBtn, { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: "rgba(52,211,153,0.8)" }]}
+                                        onPress={() => onJoinSession({ ...s, connect_consultants: null })}>
+                                        <Text style={styles(colors).primaryBtnText}>Rejoin</Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
-                            <TouchableOpacity
-                                style={[styles(colors).primaryBtn, { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: "rgba(52,211,153,0.8)" }]}
-                                onPress={() => onJoinSession({ ...s, connect_consultants: null })}>
-                                <Text style={styles(colors).primaryBtnText}>Rejoin</Text>
-                            </TouchableOpacity>
+                            {/* Inline notes editor */}
+                            {openNoteId === s.id && (
+                                <View style={{ marginTop: 12 }}>
+                                    <Text style={[styles(colors).cardBio, { fontSize: 10, marginBottom: 4, opacity: 0.6 }]}>
+                                        🔒 Private — only visible to you
+                                    </Text>
+                                    <TextInput
+                                        style={[styles(colors).messageInput, { minHeight: 80, marginBottom: 8 }]}
+                                        value={noteContent}
+                                        onChangeText={setNoteContent}
+                                        placeholder="Add a private note about this session..."
+                                        placeholderTextColor={colors.textSecondary}
+                                        multiline
+                                        maxLength={2000}
+                                    />
+                                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                                        <Text style={[styles(colors).cardBio, { fontSize: 10 }]}>{noteContent.length}/2000</Text>
+                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                            {noteSaved && <Text style={{ color: "#34d399", fontSize: 11 }}>Saved ✓</Text>}
+                                            <TouchableOpacity
+                                                style={[styles(colors).primaryBtn, { paddingHorizontal: 16, paddingVertical: 8 }, noteSaving && { opacity: 0.6 }]}
+                                                onPress={() => saveNote(s.id)}
+                                                disabled={noteSaving}>
+                                                {noteSaving
+                                                    ? <ActivityIndicator color="#fff" size="small" />
+                                                    : <Text style={[styles(colors).primaryBtnText, { fontSize: 13 }]}>Save</Text>}
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                </View>
+                            )}
                         </View>
                     ))}
 
@@ -2524,30 +2888,44 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                                             {showPayout ? "Cancel" : `Request Payout · ${CURRENCY_SYMBOLS[earnings.earned_currency ?? "INR"] ?? "₹"}${available.toFixed(2)}`}
                                         </Text>
                                     </TouchableOpacity>
-                                ) : null;
+                                ) : (
+                                    <Text style={{ color: colors.textSecondary, fontSize: 12, textAlign: "center", marginTop: 12 }}>
+                                        {(earnings.pending_payout ?? 0) > 0
+                                            ? "All earnings are pending payout processing."
+                                            : "No balance available to withdraw yet."}
+                                    </Text>
+                                );
                             })()}
                             {showPayout && (
                                 <View style={{ marginTop: 12, gap: 10 }}>
                                     <View style={{ flexDirection: "row", gap: 8 }}>
-                                        {(["upi", "bank", "paypal"] as const).map((m) => (
-                                            <TouchableOpacity
-                                                key={m}
-                                                style={[{ flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, alignItems: "center" },
-                                                    payoutMethod === m
-                                                        ? { borderColor: colors.primary, backgroundColor: "rgba(99,102,241,0.2)" }
-                                                        : { borderColor: "rgba(255,255,255,0.15)" }]}
-                                                onPress={() => setPayoutMethod(m)}>
-                                                <Text style={{ color: payoutMethod === m ? colors.primary : colors.textSecondary, fontSize: 12, fontWeight: "700" }}>
-                                                    {m.toUpperCase()}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
+                                        {(["upi", "bank_in", "bank_int", "paypal"] as const).map((m) => {
+                                            const label = m === "upi" ? "UPI" : m === "bank_in" ? "India Bank" : m === "bank_int" ? "Intl Wire" : "PayPal";
+                                            return (
+                                                <TouchableOpacity
+                                                    key={m}
+                                                    style={[{ flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, alignItems: "center" },
+                                                        payoutMethod === m
+                                                            ? { borderColor: colors.primary, backgroundColor: "rgba(99,102,241,0.2)" }
+                                                            : { borderColor: "rgba(255,255,255,0.15)" }]}
+                                                    onPress={() => setPayoutMethod(m)}>
+                                                    <Text style={{ color: payoutMethod === m ? colors.primary : colors.textSecondary, fontSize: 11, fontWeight: "700" }}>
+                                                        {label}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
                                     </View>
                                     <TextInput
                                         style={[s.input, { color: colors.textPrimary }]}
                                         value={payoutDetails}
                                         onChangeText={setPayoutDetails}
-                                        placeholder={payoutMethod === "upi" ? "UPI ID" : payoutMethod === "bank" ? "Account number" : "PayPal email"}
+                                        placeholder={
+                                            payoutMethod === "upi"      ? "UPI ID (e.g. name@bank)" :
+                                            payoutMethod === "bank_in"  ? "Indian account number" :
+                                            payoutMethod === "bank_int" ? "IBAN / account number" :
+                                            "PayPal email"
+                                        }
                                         placeholderTextColor={colors.textSecondary}
                                     />
                                     <TextInput
@@ -2606,7 +2984,11 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                                                 </View>
                                                 <Text style={[s.cardBio, { fontSize: 12, flex: 1 }]}>
                                                     {displayName} · {new Date(h.created_at).toLocaleDateString()} · {h.type} · {Math.round(h.minutes_used ?? 0)} min
-                                                    {h.rate_per_min ? ` · ${CURRENCY_SYMBOLS[earnings?.earned_currency ?? "INR"] ?? "₹"}${(h.rate_per_min * (h.minutes_used ?? 0) * 0.80).toFixed(2)} earned` : ""}
+                                                    {(() => {
+                                                        const rate = (h.rate_per_min as number | null | undefined) || earnings?.rate_per_min;
+                                                        const earned = rate ? rate * (h.minutes_used ?? 0) * 0.80 : null;
+                                                        return earned != null ? ` · ${CURRENCY_SYMBOLS[earnings?.earned_currency ?? "INR"] ?? "₹"}${earned.toFixed(2)} earned` : "";
+                                                    })()}
                                                 </Text>
                                                 {h.rating != null && (
                                                     <Text style={{ color: "#fbbf24", fontWeight: "700", fontSize: 13 }}>★ {h.rating}</Text>
@@ -3063,10 +3445,14 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
     }
 
     const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim());
-    const step1Valid = displayName.trim().length > 0 && gender.length > 0 &&
+    const displayNameValid = displayName.trim().length >= 2 && displayName.trim().length <= 60
+        && /^[\p{L}\p{M}\s'\-.]+$/u.test(displayName.trim());
+    const phoneValid = /^\d{5,15}$/.test(contactPhone.trim());
+    const rateNum = parseFloat(ratePerMin);
+    const step1Valid = displayNameValid && gender.length > 0 &&
         expertiseTags.length > 0 && languages.length > 0 && sessionTypes.length > 0 &&
-        contactEmail.trim().length > 0 && emailValid && contactPhone.trim().length > 0;
-    const step2Valid = bio.trim().length >= 30 && bio.trim().length <= 500 && parseFloat(ratePerMin) > 0;
+        contactEmail.trim().length > 0 && emailValid && phoneValid;
+    const step2Valid = bio.trim().length >= 30 && bio.trim().length <= 500 && rateNum > 0 && rateNum <= 10000;
     const requiredDocs = (["selfie", "photo_id", "address_proof", "age_proof"] as DocKey[]);
     const docsValid = requiredDocs.every(k => k === "selfie" ? (selfieFromProfile || docs.selfie !== null) : docs[k] !== null);
     let step3Valid = false;
@@ -3079,7 +3465,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
 
     return (
         <KeyboardAvoidingView style={[s.container, { paddingTop: insets.top }]}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            behavior={Platform.OS === "ios" ? "padding" : "height"}>
 
             <View style={s.header}>
                 <TouchableOpacity onPress={step > 1 ? () => { setStep(step - 1); setError(""); } : onBack} style={s.backBtn}>
@@ -3092,9 +3478,9 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
             {/* Signed-in indicator + sign-out */}
             {userEmail && (
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: "#34d399" }} />
-                        <Text style={{ fontSize: 11, color: "#6ee7b7" }} numberOfLines={1}>{userEmail}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1, marginRight: 8 }}>
+                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: "#34d399", flexShrink: 0 }} />
+                        <Text style={{ fontSize: 11, color: "#6ee7b7", flex: 1 }} numberOfLines={1}>{userEmail}</Text>
                     </View>
                     <TouchableOpacity onPress={() => { supabase.auth.signOut(); onBack(); }}>
                         <Text style={{ fontSize: 11, color: colors.textSecondary, textDecorationLine: "underline" }}>Sign out</Text>
@@ -3115,6 +3501,13 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
 
                         <TField label="Display Name *" value={displayName} onChange={setDisplayName}
                             placeholder="Your name as shown to users" colors={colors} />
+                        {displayName.trim().length > 0 && !displayNameValid && (
+                            <Text style={{ fontSize: 11, color: "#ef4444", marginTop: -8, marginBottom: 8 }}>
+                                {displayName.trim().length < 2 ? "Name must be at least 2 characters" :
+                                 displayName.trim().length > 60 ? "Name must be 60 characters or fewer" :
+                                 "Name must contain only letters, spaces, hyphens, apostrophes, or dots"}
+                            </Text>
+                        )}
 
                         <View style={{ marginBottom: 12 }}>
                             <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Gender *</Text>
@@ -3148,7 +3541,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                                                 s.durationBtn,
                                                 active && s.durationBtnActive,
                                                 locked && { opacity: 0.35 },
-                                                { paddingHorizontal: 12, paddingVertical: 7 },
+                                                { flex: 0, paddingHorizontal: 12, paddingVertical: 7 },
                                             ]}>
                                             <Text style={[s.durationBtnText, active && s.durationBtnTextActive, { fontSize: 12 }]}>
                                                 {rc.icon} {rc.label}{locked ? " · Soon" : ""}
@@ -3180,6 +3573,11 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                                     placeholder="Phone number" placeholderTextColor={colors.textSecondary}
                                     keyboardType="phone-pad" />
                             </View>
+                            {contactPhone.trim().length > 0 && !phoneValid && (
+                                <Text style={{ fontSize: 11, color: "#ef4444", marginTop: 4 }}>
+                                    Enter digits only, 5–15 characters (no spaces or dashes)
+                                </Text>
+                            )}
                         </View>
 
                         <TField label="Website (optional)" value={websiteUrl} onChange={setWebsiteUrl}
@@ -3249,24 +3647,27 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                                 Session Types * <Text style={{ fontWeight: "400", color: colors.textSecondary }}>(choose all you can offer)</Text>
                             </Text>
                             {SESSION_TYPE_OPTIONS.map((opt) => {
-                                const active = sessionTypes.includes(opt.key);
+                                const locked = (opt as any).phase > 1;
+                                const active = !locked && sessionTypes.includes(opt.key);
                                 return (
                                     <TouchableOpacity
                                         key={opt.key}
+                                        disabled={locked}
                                         style={{
                                             flexDirection: "row", alignItems: "center", gap: 12,
                                             borderWidth: 1.5, borderRadius: 14,
                                             borderColor: active ? colors.primary : colors.border,
                                             backgroundColor: active ? "rgba(139,92,246,0.10)" : "transparent",
                                             paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
+                                            opacity: locked ? 0.45 : 1,
                                         }}
-                                        onPress={() => setSessionTypes(prev =>
+                                        onPress={() => !locked && setSessionTypes(prev =>
                                             prev.includes(opt.key) ? prev.filter(x => x !== opt.key) : [...prev, opt.key]
                                         )}>
                                         <Text style={{ fontSize: 24 }}>{opt.icon}</Text>
                                         <View style={{ flex: 1 }}>
                                             <Text style={{ fontSize: 14, fontWeight: "600", color: active ? colors.primary : colors.textPrimary }}>
-                                                {opt.label}
+                                                {opt.label}{locked ? " · Coming soon" : ""}
                                             </Text>
                                         </View>
                                         {active && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
@@ -3302,6 +3703,16 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                                     value={ratePerMin} onChangeText={setRatePerMin}
                                     keyboardType="numeric" placeholderTextColor={colors.textSecondary} />
                             </View>
+                            {ratePerMin.trim().length > 0 && (rateNum <= 0 || isNaN(rateNum)) && (
+                                <Text style={{ fontSize: 11, color: "#ef4444", marginTop: -2, marginBottom: 6 }}>
+                                    Rate must be greater than 0
+                                </Text>
+                            )}
+                            {ratePerMin.trim().length > 0 && rateNum > 10000 && (
+                                <Text style={{ fontSize: 11, color: "#ef4444", marginTop: -2, marginBottom: 6 }}>
+                                    Rate cannot exceed 10,000 per minute
+                                </Text>
+                            )}
                             <Text style={[s.cardBio, { marginBottom: 6, fontSize: 11 }]}>Currency</Text>
                             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
                                 {["INR","USD","EUR","GBP","AED","SGD","AUD"].map((c) => (
@@ -3314,14 +3725,14 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                             </View>
                         </View>
 
-                        {parseFloat(ratePerMin) > 0 && (
+                        {rateNum > 0 && rateNum <= 10000 && (
                             <View style={[s.card, { marginBottom: 16, backgroundColor: "rgba(52,211,153,0.08)", borderColor: "rgba(52,211,153,0.25)" }]}>
                                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Earnings preview (80% platform share)</Text>
                                 <Text style={{ fontSize: 15, color: "#34d399", fontWeight: "700" }}>
-                                    {CURRENCY_SYMBOLS[currencyCode] ?? currencyCode}{(parseFloat(ratePerMin) * 0.8).toFixed(2)}/min
+                                    {CURRENCY_SYMBOLS[currencyCode] ?? currencyCode}{(rateNum * 0.8).toFixed(2)}/min
                                 </Text>
                                 <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-                                    30-min session ≈ {CURRENCY_SYMBOLS[currencyCode] ?? currencyCode}{(parseFloat(ratePerMin) * 0.8 * 30).toFixed(0)}
+                                    30-min session ≈ {CURRENCY_SYMBOLS[currencyCode] ?? currencyCode}{(rateNum * 0.8 * 30).toFixed(0)}
                                 </Text>
                             </View>
                         )}
@@ -3386,16 +3797,16 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                                         );
                                     })}
                                 </View>
-                                <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+                                <View style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}>
                                     <View style={{ flex: 1 }}>
-                                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 2 }}>Start (HH:MM)</Text>
-                                        <TextInput style={s.messageInput} value={slot.start}
+                                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>Start (HH:MM)</Text>
+                                        <TextInput style={[s.messageInput, { flex: 1, minHeight: 48 }]} value={slot.start}
                                             onChangeText={(v) => { const n=[...availSlots]; n[idx]={...slot,start:v}; setAvailSlots(n); }}
                                             placeholder="09:00" placeholderTextColor={colors.textSecondary} />
                                     </View>
                                     <View style={{ flex: 1 }}>
-                                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 2 }}>End (HH:MM)</Text>
-                                        <TextInput style={s.messageInput} value={slot.end}
+                                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>End (HH:MM)</Text>
+                                        <TextInput style={[s.messageInput, { flex: 1, minHeight: 48 }]} value={slot.end}
                                             onChangeText={(v) => { const n=[...availSlots]; n[idx]={...slot,end:v}; setAvailSlots(n); }}
                                             placeholder="21:00" placeholderTextColor={colors.textSecondary} />
                                     </View>
@@ -3409,7 +3820,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                             </View>
                         ))}
                         {availSlots.length < 5 && (
-                            <TouchableOpacity style={[s.durationBtn, { alignSelf: "flex-start", marginBottom: 16 }]}
+                            <TouchableOpacity style={[s.durationBtn, { alignSelf: "flex-start", marginBottom: 16, paddingHorizontal: 16 }]}
                                 onPress={() => setAvailSlots([...availSlots, { days:[], months:[], start:"09:00", end:"21:00", timezone:"Asia/Kolkata", year:"Ongoing" }])}>
                                 <Text style={s.durationBtnText}>+ Add Window</Text>
                             </TouchableOpacity>
@@ -3757,8 +4168,8 @@ function styles(colors: any) {
             borderWidth: 2, borderColor: colors.background,
         },
         badge: {
-            fontSize: 11, fontWeight: "600", paddingHorizontal: 7, paddingVertical: 2,
-            borderRadius: 10,
+            fontSize: 11, fontWeight: "600", paddingHorizontal: 7, paddingVertical: 3,
+            borderRadius: 10, textAlign: "center", textAlignVertical: "center",
         },
         tag: {
             fontSize: 11, backgroundColor: colors.primaryTint,
@@ -3766,7 +4177,7 @@ function styles(colors: any) {
             paddingHorizontal: 8, paddingVertical: 3,
         },
         filterChip: {
-            paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+            paddingHorizontal: 12, paddingVertical: 10, borderRadius: 20,
             borderWidth: 1.5, borderColor: colors.border,
             backgroundColor: colors.surfaceSoft,
         },
@@ -3783,7 +4194,7 @@ function styles(colors: any) {
             backgroundColor: colors.primary, borderRadius: 12,
             paddingVertical: 14, alignItems: "center",
         },
-        primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+        primaryBtnText: { color: "#0f172a", fontWeight: "700", fontSize: 15 },
         inputRow: {
             flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingTop: 8,
             borderTopWidth: 1, borderTopColor: colors.border,
@@ -3812,6 +4223,7 @@ function styles(colors: any) {
         modalSheet: {
             borderTopLeftRadius: 20, borderTopRightRadius: 20,
             padding: 24,
+            paddingBottom: 40,
         },
         durationBtn: {
             flex: 1, paddingVertical: 10, borderRadius: 10,

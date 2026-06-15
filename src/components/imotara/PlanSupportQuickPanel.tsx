@@ -4,6 +4,7 @@ import {
   Animated, Easing, Modal, View, Text, TouchableOpacity,
   ScrollView, Switch, PanResponder, Dimensions, Alert, Linking, Platform,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors, useTheme } from "../../theme/ThemeContext";
 import IOSTipJar from "./IOSTipJar";
@@ -43,6 +44,7 @@ type Props = {
   emotionInsightsEnabled: boolean;
   setEmotionInsightsEnabled: (v: boolean) => void;
   refreshLicense: () => Promise<void>;
+  setLicenseTier: (tier: LicenseTier) => void;
 };
 
 // ── small layout helpers ──────────────────────────────────────────────────────
@@ -69,7 +71,7 @@ export function PlanSupportQuickPanel({
   visible, onClose,
   licenseTier, licenseExpiresAt,
   emotionInsightsEnabled, setEmotionInsightsEnabled,
-  refreshLicense,
+  refreshLicense, setLicenseTier,
 }: Props) {
   const colors = useColors();
   const { isDark } = useTheme();
@@ -288,6 +290,11 @@ export function PlanSupportQuickPanel({
             onPurchaseComplete={async () => {
               setShowUpgrade(false);
               await refreshLicense().catch(() => {});
+              try {
+                const raw = await AsyncStorage.getItem("imotara_license_tier_v1");
+                const VALID = ["FREE", "PLUS", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"];
+                if (raw && VALID.includes(raw)) setLicenseTier(raw as LicenseTier);
+              } catch { /* fail-open */ }
             }}
           />
         )}

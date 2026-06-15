@@ -57,3 +57,9 @@ export async function getBadgeCount(): Promise<number> {
     return 0;
   }
 }
+
+export async function clearBadge(): Promise<void> {
+  try {
+    await AsyncStorage.setItem(BADGE_KEY, "0");
+  } catch {}
+}

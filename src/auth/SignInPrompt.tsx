@@ -14,7 +14,9 @@ import {
     Platform,
     Pressable,
     Linking,
+    ActivityIndicator,
 } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "./AuthContext";
 
@@ -32,7 +34,9 @@ export function SignInPrompt({ messageCount }: Props) {
         useAuth();
     const [visible, setVisible] = useState(false);
     const [dismissed, setDismissed] = useState(true); // start hidden until loaded
-    const [signingIn, setSigningIn] = useState(false);
+    const [signingInGoogle, setSigningInGoogle] = useState(false);
+    const [signingInApple, setSigningInApple] = useState(false);
+    const signingIn = signingInGoogle || signingInApple;
     const slideAnim = React.useRef(new Animated.Value(300)).current;
 
     // Load dismissed flag
@@ -71,14 +75,14 @@ export function SignInPrompt({ messageCount }: Props) {
 
     const handleGoogle = async () => {
         if (signingIn) return;
-        setSigningIn(true);
-        try { await signInWithGoogle(); await handleDismiss(); } finally { setSigningIn(false); }
+        setSigningInGoogle(true);
+        try { await signInWithGoogle(); await handleDismiss(); } finally { setSigningInGoogle(false); }
     };
 
     const handleApple = async () => {
         if (signingIn) return;
-        setSigningIn(true);
-        try { await signInWithApple(); await handleDismiss(); } finally { setSigningIn(false); }
+        setSigningInApple(true);
+        try { await signInWithApple(); await handleDismiss(); } finally { setSigningInApple(false); }
     };
 
     if (!visible) return null;
@@ -109,23 +113,33 @@ export function SignInPrompt({ messageCount }: Props) {
 
                         {/* Google button */}
                         <TouchableOpacity
-                            style={[styles.googleBtn, signingIn && { opacity: 0.5 }]}
+                            style={[styles.googleBtn, signingInApple && { opacity: 0.45 }]}
                             onPress={handleGoogle}
                             disabled={signingIn}
                             activeOpacity={0.8}
                         >
-                            <Text style={styles.googleBtnText}>{signingIn ? "Signing in…" : "Continue with Google"}</Text>
+                            {signingInGoogle ? (
+                                <ActivityIndicator size="small" color="#1a1a2e" style={{ marginRight: 8 }} />
+                            ) : (
+                                <MaterialCommunityIcons name="google" size={20} color="#4285F4" style={{ marginRight: 8 }} />
+                            )}
+                            <Text style={styles.googleBtnText}>{signingInGoogle ? "Signing in…" : "Continue with Google"}</Text>
                         </TouchableOpacity>
 
                         {/* Apple button — iOS only */}
                         {Platform.OS === "ios" && appleSignInAvailable && (
                             <TouchableOpacity
-                                style={[styles.appleBtn, signingIn && { opacity: 0.5 }]}
+                                style={[styles.appleBtn, signingInGoogle && { opacity: 0.45 }]}
                                 onPress={handleApple}
                                 disabled={signingIn}
                                 activeOpacity={0.8}
                             >
-                                <Text style={styles.appleBtnText}>{signingIn ? "Signing in…" : " Continue with Apple"}</Text>
+                                {signingInApple ? (
+                                    <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                                ) : (
+                                    <MaterialCommunityIcons name="apple" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+                                )}
+                                <Text style={styles.appleBtnText}>{signingInApple ? "Signing in…" : "Continue with Apple"}</Text>
                             </TouchableOpacity>
                         )}
 
@@ -195,7 +209,9 @@ const styles = StyleSheet.create({
         backgroundColor: "#fff",
         borderRadius: 12,
         paddingVertical: 14,
+        flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
         marginBottom: 12,
     },
     googleBtnText: {
@@ -207,7 +223,9 @@ const styles = StyleSheet.create({
         backgroundColor: "#000",
         borderRadius: 12,
         paddingVertical: 14,
+        flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
         marginBottom: 12,
     },
     appleBtnText: {

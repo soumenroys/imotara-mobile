@@ -100,10 +100,15 @@ export default function IOSTipJar() {
         );
     }
 
+    // Deduplicate by id and sort to match IOS_TIP_SKUS order
+    const sortedProducts = IOS_TIP_SKUS
+        .map((sku) => products.find((p) => p.id === sku || p.id.endsWith(`.${sku}`)))
+        .filter((p): p is NonNullable<typeof p> => p != null);
+
     return (
         <View>
             <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                {products.map((product) => {
+                {sortedProducts.map((product) => {
                     const isBusy = purchasing === product.id;
                     return (
                         <TouchableOpacity

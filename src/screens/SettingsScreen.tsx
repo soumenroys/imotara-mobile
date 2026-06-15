@@ -291,16 +291,17 @@ export default function SettingsScreen() {
     useFocusEffect(
         useCallback(() => {
             setScreenReady(false);
+            let cancelled = false;
             const timer = setTimeout(() => {
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
-                        setScreenReady(true);
+                        if (!cancelled) setScreenReady(true);
                     });
                 });
             }, 300);
             return () => {
+                cancelled = true;
                 clearTimeout(timer);
-                setScreenReady(false);
             };
         }, [])
     );
@@ -443,6 +444,9 @@ function SettingsScreenContent() {
         donate: boolean;
     }>({ testRemote: false, pushOnly: false, syncNow: false, donate: false });
 
+    // Per-button donate loading state (null = idle, otherwise the preset id being processed)
+    const [donatingId, setDonatingId] = React.useState<string | null>(null);
+
     // ─── Profile sync (Supabase cross-device) ────────────────────────────────
     // Capture initial toneContext to decide whether to pull from server on mount.
     // Updated on sign-out so a subsequent sign-in (different user, same device session)
@@ -453,23 +457,35 @@ function SettingsScreenContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [accessToken]);
 
-    // Pull: on mount, if local profile is empty/default, fetch from server
+    // Pull: on sign-in, fetch profile from server and merge with local (server fills empty fields)
     React.useEffect(() => {
         if (!accessToken) return;
         const base = getApiBaseUrl();
         if (!base) return;
-        // Only guard on the user's own name — companion always defaults to "Imotara", so
-        // checking companion?.name would make hasLocal permanently truthy and the server
-        // pull would never happen (breaks name sync when signing in on a new device).
-        const hasLocalUserName = !!(initialToneRef.current?.user?.name?.trim());
-        if (hasLocalUserName) return; // user already has a local name — don't overwrite
         fetchWithTimeout(`${base}/api/profile/sync`, { headers: { Authorization: `Bearer ${accessToken}` } }, 12_000)
             .then((r) => (r.ok ? r.json() : null))
             .then((data) => {
                 if (!mountedRef.current) return;
-                const tc = data?.toneContext;
-                const hasServer = tc?.user?.name || tc?.companion?.name || tc?.user?.preferredLang;
-                if (hasServer) setToneContext(tc);
+                const srv = data?.toneContext;
+                if (!srv) return;
+                // Merge: local value wins if non-empty, server fills empty fields
+                const local = toneContext ?? {};
+                setToneContext({
+                    user: {
+                        name:          local?.user?.name?.trim()          || srv?.user?.name          || undefined,
+                        preferredLang: local?.user?.preferredLang         || srv?.user?.preferredLang || undefined,
+                        ageTone:       local?.user?.ageTone               || srv?.user?.ageTone       || undefined,
+                        gender:        local?.user?.gender                || srv?.user?.gender        || undefined,
+                        responseStyle: local?.user?.responseStyle         || srv?.user?.responseStyle || undefined,
+                    },
+                    companion: {
+                        enabled:      local?.companion?.enabled !== undefined ? local.companion.enabled : srv?.companion?.enabled,
+                        name:         local?.companion?.name?.trim()      || srv?.companion?.name      || undefined,
+                        relationship: local?.companion?.relationship      || srv?.companion?.relationship || undefined,
+                        ageTone:      local?.companion?.ageTone           || srv?.companion?.ageTone   || undefined,
+                        gender:       local?.companion?.gender            || srv?.companion?.gender    || undefined,
+                    },
+                });
             })
             .catch(() => {}); // silent — sync is best-effort
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -829,11 +845,13 @@ function SettingsScreenContent() {
         })();
     }, []);
 
-    // C-3: Show timestamps toggle (mobile)
+    // C-3: Show timestamps toggle (mobile) — default ON
     const SHOW_TIMESTAMPS_KEY = "imotara.chat.showTimestamps.v1";
-    const [showChatTimestamps, setShowChatTimestamps] = React.useState(false);
+    const [showChatTimestamps, setShowChatTimestamps] = React.useState(true);
     React.useEffect(() => {
-        AsyncStorage.getItem(SHOW_TIMESTAMPS_KEY).then((v) => setShowChatTimestamps(v === "1")).catch(() => {});
+        AsyncStorage.getItem(SHOW_TIMESTAMPS_KEY)
+            .then((v) => setShowChatTimestamps(v === null ? true : v === "1"))
+            .catch(() => {});
     }, []);
     const handleShowTimestampsToggle = async (val: boolean) => {
         setShowChatTimestamps(val);
@@ -1773,18 +1791,24 @@ function SettingsScreenContent() {
         }
     };
 
-    const handleDonate = async (preset: { label: string; amount: number }) => {
-        if (busyRef.current.donate) return;
-        busyRef.current.donate = true;
+    const handleDonate = async (preset: { id: string; label: string; amount: number }) => {
+        if (donatingId) return;
+        setDonatingId(preset.id);
 
         try {
             const base = getApiBaseUrl();
             const donateUrl = `${base}/donate`;
-            await Linking.openURL(donateUrl);
+            // Use in-app browser on Android so the user stays in the app context
+            // instead of being sent to the system browser.
+            await WebBrowser.openBrowserAsync(donateUrl, {
+                toolbarColor: "#18181b",
+                controlsColor: "#6366f1",
+                presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+            });
         } catch {
             Alert.alert("Error", "Could not open donation page. Please try again.", [{ text: "OK" }]);
         } finally {
-            busyRef.current.donate = false;
+            setDonatingId(null);
         }
     };
 
@@ -1927,7 +1951,7 @@ function SettingsScreenContent() {
     const isAnySyncBusy =
         busyRef.current.pushOnly ||
         busyRef.current.syncNow ||
-        busyRef.current.donate ||
+        !!donatingId ||
         (typeof storeIsSyncing === "boolean" ? storeIsSyncing : false);
 
     // ✅ Licensing display + optional debug switching
@@ -2194,7 +2218,9 @@ function SettingsScreenContent() {
                     ) : (
                         /* Android: show Razorpay preset price buttons */
                         <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                            {DONATION_UI_PRESETS.map((p) => (
+                            {DONATION_UI_PRESETS.map((p) => {
+                                const isBusy = donatingId === p.id;
+                                return (
                                 <TouchableOpacity
                                     key={p.id}
                                     onPress={() =>
@@ -2202,9 +2228,9 @@ function SettingsScreenContent() {
                                             id: p.id,
                                             label: p.label || formatINRFromPaise(p.amount),
                                             amount: p.amount,
-                                        } as any)
+                                        })
                                     }
-                                    disabled={busyRef.current.donate}
+                                    disabled={!!donatingId}
                                     style={{
                                         paddingHorizontal: 14,
                                         paddingVertical: 9,
@@ -2215,14 +2241,19 @@ function SettingsScreenContent() {
                                         backgroundColor: "rgba(56, 189, 248, 0.12)",
                                         marginRight: 8,
                                         marginBottom: 8,
-                                        opacity: busyRef.current.donate ? 0.6 : 1,
+                                        opacity: donatingId && !isBusy ? 0.5 : 1,
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        gap: 6,
                                     }}
                                 >
+                                    {isBusy && <ActivityIndicator size="small" color={colors.primary} />}
                                     <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>
                                         {p.label}
                                     </Text>
                                 </TouchableOpacity>
-                            ))}
+                                );
+                            })}
                             <Text
                                 style={{
                                     fontSize: 11,
@@ -2530,7 +2561,7 @@ function SettingsScreenContent() {
                                     borderRadius: 16,
                                     backgroundColor: hex,
                                     borderWidth: accent === key ? 3 : 1.5,
-                                    borderColor: accent === key ? colors.textPrimary : "transparent",
+                                    borderColor: accent === key ? colors.textPrimary : (isDark ? "transparent" : "rgba(0,0,0,0.15)"),
                                     shadowColor: hex,
                                     shadowOpacity: accent === key ? 0.7 : 0,
                                     shadowRadius: 6,

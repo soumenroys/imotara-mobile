@@ -948,28 +948,27 @@ function smoothScrollToBottom(ref: React.RefObject<FlatList | null>) {
  */
 function isFirstBotReplyOfSession(
   message: ChatMessage,
-  index: number,
-  messages: ChatMessage[],
+  prevMessage: ChatMessage | null,
+  prevPrevMessage: ChatMessage | null,
+  isFirstInList: boolean,
 ): boolean {
   if (message.from !== "bot") return false;
 
-  const prev = messages[index - 1];
-  if (!prev || prev.from !== "user") return false;
+  if (!prevMessage || prevMessage.from !== "user") return false;
 
-  if (index - 1 === 0) return true;
+  if (isFirstInList) return true;
 
-  const beforeUser = messages[index - 2];
-  if (!beforeUser) return true;
+  if (!prevPrevMessage) return true;
 
-  const gap = prev.timestamp - (beforeUser.timestamp ?? 0);
+  const gap = prevMessage.timestamp - (prevPrevMessage.timestamp ?? 0);
   return gap > SESSION_GAP_MS;
 }
 
 // ── MessageBubble component ─────────────────────────────────────────────────────
 type MessageBubbleProps = {
   message: ChatMessage;
-  index: number;
-  messages: ChatMessage[];
+  prevMessage: ChatMessage | null;
+  prevPrevMessage: ChatMessage | null;
   colors: ColorPalette;
   searchMatchIds: Set<string>;
   searchActiveMatchId: string | null;
@@ -996,8 +995,8 @@ type MessageBubbleProps = {
 
 function MessageBubble({
   message,
-  index,
-  messages,
+  prevMessage,
+  prevPrevMessage,
   colors,
   searchMatchIds,
   searchActiveMatchId,
@@ -1027,7 +1026,7 @@ function MessageBubble({
   const isSearchMatch = searchMatchIds.has(message.id);
   const isActiveMatch = searchActiveMatchId === message.id;
   const isBookmarked = bookmarks.has(message.id);
-  const showContinuityNote = isFirstBotReplyOfSession(message, index, messages);
+  const showContinuityNote = isFirstBotReplyOfSession(message, prevMessage, prevPrevMessage, prevMessage === null);
 
   let bubbleBorderColor: string;
   let statusLabel: string;
@@ -1096,9 +1095,9 @@ function MessageBubble({
     }
   }
 
-  const prev = messages[index - 1];
+  const prev = prevMessage;
   const extraTopSpace =
-    isUser && index > 0 && messages[index - 1].from === "user"
+    isUser && prevMessage?.from === "user"
       ? { marginTop: 4 }
       : {};
 
@@ -1192,9 +1191,8 @@ function MessageBubble({
       {!isUser && message.cloudAttempted && message.source === "local" && (
         <TouchableOpacity
           onPress={() => {
-            const prevMsg = messages[index - 1];
-            if (prevMsg?.from !== "user") return;
-            onRetry(message.id, prevMsg.text);
+            if (prevMessage?.from !== "user") return;
+            onRetry(message.id, prevMessage.text);
           }}
           style={{ alignSelf: "flex-start", marginTop: 6, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: "rgba(251,191,36,0.4)", backgroundColor: "rgba(251,191,36,0.08)" }}
         >
@@ -1356,9 +1354,25 @@ function MessageBubble({
         );
       })()}
 
+      {/* Companion reaction badge — shown below user message when Imotara reacted */}
+      {isUser && reactions.get(message.id) && (
+        <View style={{ alignItems: "flex-end", marginRight: 4, marginBottom: 4 }}>
+          <View style={{
+            backgroundColor: colors.surfaceSoft,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: colors.border,
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+          }}>
+            <Text style={{ fontSize: 16 }}>{reactions.get(message.id)}</Text>
+          </View>
+        </View>
+      )}
+
       {/* Crisis safety card */}
       {!isUser && (() => {
-        const prevMsg = messages[index - 1];
+        const prevMsg = prevMessage;
         if (!prevMsg || prevMsg.from !== "user") return null;
         const tier = detectMobileCrisisTier(prevMsg.text);
         const minTier: CrisisTier = crisisThreshold === "sensitive" ? 1 : crisisThreshold === "conservative" ? 2 : 1;
@@ -1438,6 +1452,35 @@ function MessageBubble({
   );
 }
 
+const MemoMessageBubble = React.memo(MessageBubble, (prev, next) => {
+  if (prev.message !== next.message) return false;
+  if (prev.prevMessage !== next.prevMessage) return false;
+  if (prev.prevPrevMessage !== next.prevPrevMessage) return false;
+  if (prev.colors !== next.colors) return false;
+  if (prev.speakingMessageId !== next.speakingMessageId) {
+    const wasPlaying = prev.speakingMessageId === prev.message.id;
+    const isPlaying = next.speakingMessageId === next.message.id;
+    if (wasPlaying !== isPlaying) return false;
+  }
+  if (prev.reactions.get(prev.message.id) !== next.reactions.get(next.message.id)) return false;
+  if (prev.bookmarks.has(prev.message.id) !== next.bookmarks.has(next.message.id)) return false;
+  if (prev.dismissedCrisisCards.has(prev.message.id) !== next.dismissedCrisisCards.has(next.message.id)) return false;
+  const wasSearchMatch = prev.searchMatchIds.has(prev.message.id);
+  const isSearchMatch = next.searchMatchIds.has(next.message.id);
+  if (wasSearchMatch !== isSearchMatch) return false;
+  if (prev.searchActiveMatchId !== next.searchActiveMatchId) {
+    const wasActive = prev.searchActiveMatchId === prev.message.id;
+    const isActive = next.searchActiveMatchId === next.message.id;
+    if (wasActive !== isActive) return false;
+  }
+  if (prev.showTimestamps !== next.showTimestamps) return false;
+  if (prev.showSyncBadge !== next.showSyncBadge) return false;
+  if (prev.companionName !== next.companionName) return false;
+  if (prev.companionAvatarSource !== next.companionAvatarSource) return false;
+  if (prev.crisisThreshold !== next.crisisThreshold) return false;
+  return true;
+});
+
 export default function ChatScreen() {
   const colors = useColors();
   const { isDark, toggleTheme } = useTheme();
@@ -1506,6 +1549,10 @@ export default function ChatScreen() {
   // ✅ Bookmarks state — key computation + load/save effects defined after useSettings() below
   const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
+  const displayMessages = useMemo(
+    () => showBookmarksOnly ? messages.filter((m) => bookmarks.has(m.id)) : messages,
+    [showBookmarksOnly, messages, bookmarks]
+  );
 
   // ✅ TTS state
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
@@ -1741,9 +1788,15 @@ export default function ChatScreen() {
   const [undoSettingEnabled, setUndoSettingEnabled] = useState(true);
   const [moodGlimpseDismissedSession, setMoodGlimpseDismissedSession] = useState(false);
   useEffect(() => {
-    AsyncStorage.getItem("imotara.sentiment.chips.enabled.v1").then((v) => setSentimentChipsEnabled(v !== "0")).catch(() => {});
-    AsyncStorage.getItem("imotara.weekly.recap.enabled.v1").then((v) => setWeeklyRecapSettingEnabled(v !== "0")).catch(() => {});
-    AsyncStorage.getItem("imotara.undo.enabled.v1").then((v) => setUndoSettingEnabled(v === "1")).catch(() => {});
+    void Promise.all([
+      AsyncStorage.getItem("imotara.sentiment.chips.enabled.v1"),
+      AsyncStorage.getItem("imotara.weekly.recap.enabled.v1"),
+      AsyncStorage.getItem("imotara.undo.enabled.v1"),
+    ]).then(([v1, v2, v3]) => {
+      setSentimentChipsEnabled(v1 !== "0");
+      setWeeklyRecapSettingEnabled(v2 !== "0");
+      setUndoSettingEnabled(v3 === "1");
+    }).catch(() => {});
   }, []);
 
   // Permanent capsule visibility flags — written "0" by "Dismiss forever", re-enabled from Settings
@@ -1767,15 +1820,27 @@ export default function ChatScreen() {
   const [sessionGreetingEnabled, setSessionGreetingEnabled] = useState(true);
   const [sessionGreeting, setSessionGreeting] = useState<string | null>(null);
   useEffect(() => {
-    AsyncStorage.getItem(DAILY_CHECKIN_ENABLED_KEY).then((v) => setDailyCheckinEnabled(v !== "0")).catch(() => {});
-    AsyncStorage.getItem(COLLECTIVE_PULSE_ENABLED_KEY).then((v) => setCollectivePulseEnabled(v !== "0")).catch(() => {});
-    AsyncStorage.getItem(TONE_REFLECTION_ENABLED_KEY).then((v) => setToneReflectionEnabled(v !== "0")).catch(() => {});
-    AsyncStorage.getItem(RETURN_GREETING_ENABLED_KEY).then((v) => setReturnGreetingEnabled(v !== "0")).catch(() => {});
-    AsyncStorage.getItem(MOOD_GLIMPSE_ENABLED_KEY).then((v) => setMoodGlimpseEnabled(v !== "0")).catch(() => {});
-    AsyncStorage.getItem(MILESTONE_ENABLED_KEY).then((v) => setMilestoneEnabled(v !== "0")).catch(() => {});
-    AsyncStorage.getItem(UNSENT_HINT_ENABLED_KEY).then((v) => setUnsentHintEnabled(v !== "0")).catch(() => {});
-    AsyncStorage.getItem(TRIAL_BANNER_ENABLED_KEY).then((v) => setTrialBannerEnabled(v !== "0")).catch(() => {});
-    AsyncStorage.getItem(SESSION_GREETING_KEY).then((v) => setSessionGreetingEnabled(v !== "0")).catch(() => {});
+    void Promise.all([
+      AsyncStorage.getItem(DAILY_CHECKIN_ENABLED_KEY),
+      AsyncStorage.getItem(COLLECTIVE_PULSE_ENABLED_KEY),
+      AsyncStorage.getItem(TONE_REFLECTION_ENABLED_KEY),
+      AsyncStorage.getItem(RETURN_GREETING_ENABLED_KEY),
+      AsyncStorage.getItem(MOOD_GLIMPSE_ENABLED_KEY),
+      AsyncStorage.getItem(MILESTONE_ENABLED_KEY),
+      AsyncStorage.getItem(UNSENT_HINT_ENABLED_KEY),
+      AsyncStorage.getItem(TRIAL_BANNER_ENABLED_KEY),
+      AsyncStorage.getItem(SESSION_GREETING_KEY),
+    ]).then(([v1, v2, v3, v4, v5, v6, v7, v8, v9]) => {
+      setDailyCheckinEnabled(v1 !== "0");
+      setCollectivePulseEnabled(v2 !== "0");
+      setToneReflectionEnabled(v3 !== "0");
+      setReturnGreetingEnabled(v4 !== "0");
+      setMoodGlimpseEnabled(v5 !== "0");
+      setMilestoneEnabled(v6 !== "0");
+      setUnsentHintEnabled(v7 !== "0");
+      setTrialBannerEnabled(v8 !== "0");
+      setSessionGreetingEnabled(v9 !== "0");
+    }).catch(() => {});
   }, []);
 
   // NF-5: Anonymous Collective Pulse
@@ -1880,17 +1945,19 @@ export default function ChatScreen() {
     }).catch(() => { });
   }, []);
 
-  const addReaction = (messageId: string, emoji: string) => {
-    setReactions((prev) => {
-      const next = new Map(prev);
-      // Toggle off if same emoji tapped again
-      if (next.get(messageId) === emoji) next.delete(messageId);
-      else next.set(messageId, emoji);
-      AsyncStorage.setItem(REACTIONS_KEY, JSON.stringify(Object.fromEntries(next))).catch(() => {});
-      return next;
+  const addReaction = useCallback((messageId: string, emoji: string) => {
+    // Batch both state updates in a single React render to prevent UI jitter on Android.
+    React.startTransition(() => {
+      setReactions((prev) => {
+        const next = new Map(prev);
+        if (next.get(messageId) === emoji) next.delete(messageId);
+        else next.set(messageId, emoji);
+        AsyncStorage.setItem(REACTIONS_KEY, JSON.stringify(Object.fromEntries(next))).catch(() => {});
+        return next;
+      });
+      setActionMessage(null);
     });
-    setActionMessage(null);
-  };
+  }, []);
 
 
   // ✅ Read store once, but allow optional newer helpers safely (no behavior loss)
@@ -1914,6 +1981,7 @@ export default function ChatScreen() {
     pauseAutoSync,
     resumeAutoSync,
     licenseTier,
+    setLicenseTier,
   } = store;
 
   const {
@@ -2103,10 +2171,12 @@ export default function ChatScreen() {
     AsyncStorage.setItem(TRIAL_BANNER_DISMISSED_KEY, "never").catch(() => { });
   }
 
-  // C-3: Show timestamps toggle (reads setting from AsyncStorage)
-  const [showMsgTimestamps, setShowMsgTimestamps] = useState(false);
+  // C-3: Show timestamps — default ON; user can hide via Settings
+  const [showMsgTimestamps, setShowMsgTimestamps] = useState(true);
   useEffect(() => {
-    AsyncStorage.getItem("imotara.chat.showTimestamps.v1").then((v) => setShowMsgTimestamps(v === "1")).catch(() => {});
+    AsyncStorage.getItem("imotara.chat.showTimestamps.v1")
+      .then((v) => setShowMsgTimestamps(v === null ? true : v === "1"))
+      .catch(() => {});
   }, []);
 
   // ── Auth: get Supabase session token for mobile API calls ──────────────────
@@ -2263,9 +2333,10 @@ export default function ChatScreen() {
   // ✅ RN-safe typing (fixes TS issues in many RN setups)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Message undo — 5-second window before API call fires
+  // Message undo — undo button shows immediately, abort cancels in-flight request
   const [pendingUndo, setPendingUndo] = useState<{ messageId: string } | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoAbortRef = useRef<AbortController | null>(null);
 
   // ✅ 80/20: prevent double-send / overlapping async flows
   const isSendingRef = useRef(false);
@@ -3000,13 +3071,23 @@ export default function ChatScreen() {
       }
     }
 
-    // 5-second undo window before API call fires (skipped if undo disabled in Settings)
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    if (undoSettingEnabled) setPendingUndo({ messageId: userMessage.id });
-    undoTimerRef.current = setTimeout(() => {
-      setPendingUndo(null);
-      undoTimerRef.current = null;
-      if (!mountedRef.current) return;
+    // Undo: show button immediately; 5s dismiss timer runs concurrently with API call
+    undoAbortRef.current?.abort();
+    const undoAbortCtrl = new AbortController();
+    undoAbortRef.current = undoAbortCtrl;
+
+    if (undoSettingEnabled) {
+      setPendingUndo({ messageId: userMessage.id });
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = setTimeout(() => {
+        setPendingUndo(null);
+        undoTimerRef.current = null;
+        if (undoAbortRef.current === undoAbortCtrl) undoAbortRef.current = null;
+      }, 5000);
+    }
+
+    // API call starts immediately — no undo delay
+    if (!mountedRef.current) return;
 
     setIsTyping(true);
     typingStartedAtRef.current = Date.now();
@@ -3165,7 +3246,9 @@ export default function ChatScreen() {
               (accumulated) => {
                 if (!mountedRef.current) return;
                 if (!streamingMsgIdRef.current) {
-                  // First token — create streaming message and hide typing indicator
+                  // First token — dismiss undo window (too late to undo) and show reply
+                  if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
+                  if (undoAbortRef.current === undoAbortCtrl) { setPendingUndo(null); undoAbortRef.current = null; }
                   const newId = `b-stream-${Date.now()}`;
                   streamingMsgIdRef.current = newId;
                   const streamMsg: ChatMessage = {
@@ -3184,7 +3267,11 @@ export default function ChatScreen() {
                 }
               },
               Math.min(apiTimeoutMs, 25_000),
+              undoAbortCtrl.signal,
             );
+
+            // If user pressed Undo — discard everything silently
+            if (undoAbortCtrl.signal.aborted) return;
 
             if (streamResult.ok && streamResult.text.trim().length > 0) {
               // Streaming succeeded — ensure final text is applied
@@ -3574,9 +3661,12 @@ export default function ChatScreen() {
             const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
             const l = toneContext?.user?.preferredLang ?? "en";
             setSpeakingMessageId(botMessage.id);
-            speakMessage(botMessage.id, botMessage.text, g, l, () => setSpeakingMessageId(null), ttsRate, ttsPitch);
+            speakMessage(botMessage.id, botMessage.text, g, l, () => setSpeakingMessageId(null), ttsRate, ttsPitch, accessToken ?? undefined);
           }
         } catch (error) {
+          // Undo abort — discard silently, no local fallback
+          if (undoAbortCtrl.signal.aborted) return;
+
           debugWarn("Imotara mobile AI error:", error);
 
           // Surface a brief, actionable toast based on error type
@@ -3673,7 +3763,7 @@ export default function ChatScreen() {
             const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
             const l = toneContext?.user?.preferredLang ?? "en";
             setSpeakingMessageId(botMessage.id);
-            speakMessage(botMessage.id, botMessage.text, g, l, () => setSpeakingMessageId(null), ttsRate, ttsPitch);
+            speakMessage(botMessage.id, botMessage.text, g, l, () => setSpeakingMessageId(null), ttsRate, ttsPitch, accessToken ?? undefined);
           }
         } finally {
           if (!mountedRef.current) return;
@@ -3687,7 +3777,6 @@ export default function ChatScreen() {
         }
       })();
     }, 800);
-    }, undoSettingEnabled ? 5000 : 0); // undo timer — 0ms when undo disabled
   };
 
   function handleUndo() {
@@ -3696,9 +3785,19 @@ export default function ChatScreen() {
       clearTimeout(undoTimerRef.current);
       undoTimerRef.current = null;
     }
+    // Abort any in-flight request so the AI reply is cancelled immediately
+    undoAbortRef.current?.abort();
+    undoAbortRef.current = null;
     const { messageId } = pendingUndo;
     setPendingUndo(null);
     isSendingRef.current = false;
+    setIsTyping(false);
+    setTypingStatus("idle");
+    // Remove streaming placeholder if first token already arrived
+    if (streamingMsgIdRef.current) {
+      setMessages((prev) => prev.filter((m) => m.id !== streamingMsgIdRef.current));
+      streamingMsgIdRef.current = null;
+    }
     setMessages((prev) => prev.filter((m) => m.id !== messageId));
     deleteFromHistory(messageId);
   }
@@ -3983,7 +4082,7 @@ export default function ChatScreen() {
                 setSpeakingMessageId(null);
               } else {
                 setSpeakingMessageId(id);
-                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null), ttsRate, ttsPitch);
+                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null), ttsRate, ttsPitch, accessToken ?? undefined);
               }
               setActionMessage(null);
             }}
@@ -4222,9 +4321,6 @@ export default function ChatScreen() {
               onPress={() => { setUnsentLetterSetup(null); startNewThread(); }}
               style={{
                 width: 34, height: 34, borderRadius: 999,
-                borderWidth: 1,
-                borderColor: "rgba(99,102,241,0.5)",
-                backgroundColor: "rgba(99,102,241,0.12)",
                 alignItems: "center", justifyContent: "center",
               }}
               accessibilityRole="button"
@@ -4246,7 +4342,7 @@ export default function ChatScreen() {
               accessibilityRole="button"
               accessibilityLabel="More options"
             >
-              <Ionicons name="ellipsis-horizontal" size={16} color={colors.textSecondary} />
+              <Ionicons name="ellipsis-horizontal" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
 
           </View>
@@ -4388,9 +4484,12 @@ export default function ChatScreen() {
 
         <FlatList
           ref={scrollViewRef}
-          data={showBookmarksOnly ? messages.filter((m) => bookmarks.has(m.id)) : messages}
+          data={displayMessages}
           keyExtractor={(item) => item.id}
-          renderItem={({ item: message, index }) => message.isQuotaNotice ? (
+          renderItem={({ item: message, index }) => {
+            const prevMsg = index > 0 ? displayMessages[index - 1] ?? null : null;
+            const prevPrevMsg = index > 1 ? displayMessages[index - 2] ?? null : null;
+            return message.isQuotaNotice ? (
             <View style={{ marginHorizontal: 16, marginVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: "rgba(139,92,246,0.30)", backgroundColor: colors.surface, padding: 16 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Text style={{ fontSize: 16 }}>✨</Text>
@@ -4407,10 +4506,10 @@ export default function ChatScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            <MessageBubble
+            <MemoMessageBubble
               message={message}
-              index={index}
-              messages={messages}
+              prevMessage={prevMsg}
+              prevPrevMessage={prevPrevMsg}
               colors={colors}
               searchMatchIds={searchMatchIds}
               searchActiveMatchId={searchActiveMatchId}
@@ -4435,7 +4534,7 @@ export default function ChatScreen() {
                   : toneContext?.user?.gender as string | undefined;
                 const lang = toneContext?.user?.preferredLang ?? "en";
                 setSpeakingMessageId(id);
-                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null), ttsRate, ttsPitch);
+                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null), ttsRate, ttsPitch, accessToken ?? undefined);
               }}
               onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); }}
               onBookmark={handleToggleBookmark}
@@ -4445,7 +4544,11 @@ export default function ChatScreen() {
               reactionsSet={chatReactionsSet}
               crisisThreshold={crisisThresholdSetting}
             />
-          )}
+          );}}
+          initialNumToRender={15}
+          maxToRenderPerBatch={8}
+          windowSize={10}
+          removeClippedSubviews={false}
           contentContainerStyle={{
             paddingHorizontal: 14,
             paddingTop: messages.length <= 2 ? 20 : 4,
@@ -4561,7 +4664,7 @@ export default function ChatScreen() {
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ fontSize: 13, color: colors.textPrimary }}>Welcome back 👋</Text>
                 <TouchableOpacity onPress={() => showCapsuleMenu("Return greeting", () => { setReturnGreetingEnabled(false); AsyncStorage.setItem(RETURN_GREETING_ENABLED_KEY, "0").catch(() => {}); }, () => setShowReturnGreeting(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="ellipsis-vertical" size={14} color={colors.textSecondary} />
+                  <Ionicons name="ellipsis-vertical" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
               <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
@@ -4584,7 +4687,7 @@ export default function ChatScreen() {
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   style={{ marginLeft: 8 }}
                 >
-                  <Ionicons name="ellipsis-vertical" size={14} color={colors.textSecondary} />
+                  <Ionicons name="ellipsis-vertical" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -4605,7 +4708,7 @@ export default function ChatScreen() {
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ fontSize: 11, color: colors.textSecondary }}>Mood glimpse</Text>
                 <TouchableOpacity onPress={() => showCapsuleMenu("Mood glimpse", () => { setMoodGlimpseEnabled(false); AsyncStorage.setItem(MOOD_GLIMPSE_ENABLED_KEY, "0").catch(() => {}); }, () => setMoodGlimpseDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="ellipsis-vertical" size={14} color={colors.textSecondary} />
+                  <Ionicons name="ellipsis-vertical" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
               <Text
@@ -4987,10 +5090,10 @@ export default function ChatScreen() {
               paddingVertical: 8,
               borderRadius: 999,
               shadowColor: "#000",
-              shadowOpacity: 0.25,
-              shadowOffset: { width: 0, height: 2 },
-              shadowRadius: 4,
-              elevation: 4,
+              shadowOpacity: 0.12,
+              shadowOffset: { width: 0, height: 1 },
+              shadowRadius: 2,
+              elevation: 2,
             }}
           >
             <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
@@ -5015,7 +5118,7 @@ export default function ChatScreen() {
             Writing to <Text style={{ fontWeight: "700" }}>{unsentLetterSetup.recipientName}</Text> — Imotara will respond in their voice.
           </Text>
           <TouchableOpacity onPress={() => showCapsuleMenu("Unsent Letter mode", () => setUnsentLetterSetup(null), () => setUnsentLetterSetup(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(167,139,250,0.6)" : "rgba(109,40,217,0.5)"} />
+            <Ionicons name="ellipsis-vertical" size={16} color={isDark ? "rgba(167,139,250,0.6)" : "rgba(109,40,217,0.5)"} />
           </TouchableOpacity>
         </View>
       )}
@@ -5033,7 +5136,7 @@ export default function ChatScreen() {
             Grief &amp; Loss space — Imotara will hold this with you, without rushing.
           </Text>
           <TouchableOpacity onPress={() => showCapsuleMenu("Grief & Loss mode", () => setGriefMode(false), () => setGriefMode(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(253,164,175,0.6)" : "rgba(159,18,57,0.5)"} />
+            <Ionicons name="ellipsis-vertical" size={16} color={isDark ? "rgba(253,164,175,0.6)" : "rgba(159,18,57,0.5)"} />
           </TouchableOpacity>
         </View>
       )}
@@ -5067,7 +5170,7 @@ export default function ChatScreen() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity onPress={() => showCapsuleMenu("Trial countdown", () => { setTrialBannerEnabled(false); AsyncStorage.setItem(TRIAL_BANNER_ENABLED_KEY, "0").catch(() => {}); }, dismissTrialBanner)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="ellipsis-vertical" size={14} color={colors.textSecondary} />
+              <Ionicons name="ellipsis-vertical" size={16} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
         );
@@ -5131,7 +5234,7 @@ export default function ChatScreen() {
             <Text style={{ fontSize: 11, color: isDark ? "#a78bfa" : "#ffffff", fontWeight: "700" }}>Try it →</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => showCapsuleMenu("Unsent Letter hint", () => { setUnsentHintEnabled(false); AsyncStorage.setItem(UNSENT_HINT_ENABLED_KEY, "0").catch(() => {}); }, () => setShowUnsentHint(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="More options" accessibilityRole="button">
-            <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(148,163,184,0.6)" : "rgba(91,33,182,0.5)"} />
+            <Ionicons name="ellipsis-vertical" size={16} color={isDark ? "rgba(148,163,184,0.6)" : "rgba(91,33,182,0.5)"} />
           </TouchableOpacity>
         </View>
       )}
@@ -5152,7 +5255,7 @@ export default function ChatScreen() {
                 <Text style={{ fontSize: 12, fontWeight: "700", color: isDark ? "#fbbf24" : "#b45309", textDecorationLine: "underline" }}>Undo</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => showCapsuleMenu("Message undo", () => { setUndoSettingEnabled(false); AsyncStorage.setItem("imotara.undo.enabled.v1", "0").catch(() => {}); }, () => setPendingUndo(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(253,230,138,0.5)" : "rgba(146,64,14,0.5)"} />
+                <Ionicons name="ellipsis-vertical" size={16} color={isDark ? "rgba(253,230,138,0.5)" : "rgba(146,64,14,0.5)"} />
               </TouchableOpacity>
             </View>
           </View>
@@ -5161,23 +5264,25 @@ export default function ChatScreen() {
 
       {/* Sentiment seed chips — shown when chat has messages and input is empty */}
       {sentimentChipsEnabled && !sentimentChipsDismissedSession && messages.length > 0 && input.trim() === "" && (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 12, paddingBottom: 6, alignItems: "center" }}>
-          {(SENTIMENT_SEEDS_BY_LANG[toneContext?.user?.preferredLang ?? "en"] ?? SENTIMENT_SEEDS_BY_LANG.en).map((seed) => (
-            <TouchableOpacity
-              key={seed}
-              onPress={() => handleInputChange(seed)}
-              style={{
-                borderRadius: 20, borderWidth: 1,
-                borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.12)",
-                backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                paddingHorizontal: 10, paddingVertical: 4,
-              }}
-            >
-              <Text style={{ fontSize: 11, color: isDark ? "rgba(161,161,170,0.9)" : "rgba(71,85,105,0.9)" }}>{seed}</Text>
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity onPress={() => showCapsuleMenu("Sentiment chips", () => { setSentimentChipsEnabled(false); AsyncStorage.setItem("imotara.sentiment.chips.enabled.v1", "0").catch(() => {}); }, () => setSentimentChipsDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="ellipsis-vertical" size={14} color={isDark ? "rgba(161,161,170,0.4)" : "rgba(71,85,105,0.4)"} />
+        <View style={{ flexDirection: "row", paddingHorizontal: 12, paddingBottom: 6, alignItems: "center" }}>
+          <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {(SENTIMENT_SEEDS_BY_LANG[toneContext?.user?.preferredLang ?? "en"] ?? SENTIMENT_SEEDS_BY_LANG.en).map((seed) => (
+              <TouchableOpacity
+                key={seed}
+                onPress={() => handleInputChange(seed)}
+                style={{
+                  borderRadius: 20, borderWidth: 1,
+                  borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.12)",
+                  backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                  paddingHorizontal: 10, paddingVertical: 4,
+                }}
+              >
+                <Text style={{ fontSize: 11, color: isDark ? "rgba(161,161,170,0.9)" : "rgba(71,85,105,0.9)" }}>{seed}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity onPress={() => showCapsuleMenu("Sentiment chips", () => { setSentimentChipsEnabled(false); AsyncStorage.setItem("imotara.sentiment.chips.enabled.v1", "0").catch(() => {}); }, () => setSentimentChipsDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ paddingLeft: 6 }}>
+            <Ionicons name="ellipsis-vertical" size={16} color={isDark ? "rgba(161,161,170,0.5)" : "rgba(71,85,105,0.5)"} />
           </TouchableOpacity>
         </View>
       )}
@@ -5500,6 +5605,11 @@ export default function ChatScreen() {
           onPurchaseComplete={async () => {
             setShowUpgradeSheet(false);
             await refreshLicense().catch(() => {});
+            try {
+              const raw = await AsyncStorage.getItem("imotara_license_tier_v1");
+              const VALID = ["FREE", "PLUS", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"];
+              if (raw && VALID.includes(raw) && setLicenseTier) setLicenseTier(raw as any);
+            } catch { /* fail-open */ }
           }}
         />
       )}
@@ -5525,6 +5635,7 @@ export default function ChatScreen() {
         emotionInsightsEnabled={emotionInsightsEnabled}
         setEmotionInsightsEnabled={setEmotionInsightsEnabled}
         refreshLicense={refreshLicense}
+        setLicenseTier={setLicenseTier}
       />
     </View>
     </KeyboardAvoidingView>

@@ -5,6 +5,7 @@
 //             Falls back to Razorpay if Google Play Billing unavailable (not recommended for new installs).
 
 import React, { useEffect, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     Modal,
     View,
@@ -205,6 +206,10 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     const [period, setPeriod] = useState<PlanPeriod>("monthly");
     const [purchasing, setPurchasing] = useState<string | null>(null);
     const [restoring, setRestoring] = useState(false);
+    // freshTier: read from AsyncStorage when the sheet opens to avoid stale HistoryContext tier.
+    // SettingsContext.onAuthStateChange writes the authoritative tier to AsyncStorage, but
+    // HistoryContext (which owns licenseTier state) doesn't re-read after that update.
+    const [freshTier, setFreshTier] = useState<string | null>(currentTier ?? null);
     const [signingIn, setSigningIn] = useState(false);
     const [userEmail, setUserEmail] = useState<string | undefined>();
     const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null); // null = loading
@@ -234,9 +239,18 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
             setIsSignedIn(!!session?.access_token);
             isSignedInRef.current = !!session?.access_token;
             accessTokenRef.current = session?.access_token ?? null;
+
+            // Read the freshest tier from AsyncStorage — avoids the stale React state
+            // in HistoryContext when SettingsContext has already written a newer tier.
+            try {
+                const stored = await AsyncStorage.getItem("imotara_license_tier_v1");
+                setFreshTier(stored ?? currentTier ?? null);
+            } catch {
+                setFreshTier(currentTier ?? null);
+            }
         }
         checkSession();
-    }, [visible]);
+    }, [visible, currentTier]);
 
     // Keep isSignedIn in sync with the global auth state (handles async deep-link OAuth)
     useEffect(() => {
@@ -298,10 +312,13 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                 }
 
                 if (!accessToken) {
-                    console.log("[IAP] no session — showing sign in required");
+                    console.log("[IAP] no session — finishing transaction then showing sign in required");
+                    // Finish the transaction BEFORE returning so the purchase doesn't stay
+                    // stuck in a pending state. The user can restore it after signing in.
+                    try { await finishTransaction({ purchase, isConsumable: isTokenPack }); } catch { /* ignore */ }
                     Alert.alert(
                         "Sign in required",
-                        "Please sign in and re-open the app to activate your purchase. Your payment is safe.",
+                        "Please sign in and re-open the app to activate your purchase. Your payment is safe — tap 'Restore purchases' after signing in.",
                     );
                     return;
                 }
@@ -321,6 +338,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                         accessToken,
                     );
                     if (!androidResult.ok) {
+                        // Finish the transaction even on failure so Play doesn't auto-refund
+                        // unacknowledged purchases after 3 days.
+                        try { await finishTransaction({ purchase, isConsumable: isTokenPack }); } catch { /* ignore */ }
                         Alert.alert("Verification failed", androidResult.error ?? "Try again or tap Restore purchases.");
                         return;
                     }
@@ -589,6 +609,15 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         }
         setPurchasing(productId);
         purchaseOutcomeHandledRef.current = false;
+        // Safety net: if onPurchaseSuccess/onPurchaseError never fires (GMS missing,
+        // Play sheet closed without event), clear the spinner after 60 s.
+        purchaseTimeoutRef.current = setTimeout(() => {
+            setPurchasing(null);
+            Alert.alert(
+                "Taking longer than expected",
+                "Your purchase may have been received. Tap 'Restore previous plan' below to activate it.",
+            );
+        }, 60_000);
         try {
             const isSubscription = ANDROID_SUBSCRIPTION_SET.has(productId);
             if (isSubscription) {
@@ -596,8 +625,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
             } else {
                 await requestPurchase({ type: "in-app", request: { android: { skus: [productId] } } });
             }
-            // Result handled in onPurchaseSuccess — setPurchasing(null) called in finally there
+            // Result handled in onPurchaseSuccess — purchaseTimeoutRef cleared + setPurchasing(null) there
         } catch (err: any) {
+            if (purchaseTimeoutRef.current) { clearTimeout(purchaseTimeoutRef.current); purchaseTimeoutRef.current = null; }
             const msg = String(err?.message ?? err ?? "");
             if (!msg.toLowerCase().includes("cancel")) {
                 Alert.alert("Purchase failed", msg || "Please try again.");
@@ -701,8 +731,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                         <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>
                             Current plan:{" "}
                             <Text style={{ fontWeight: "600", color: colors.textPrimary }}>
-                                {currentTier
-                                    ? currentTier.charAt(0).toUpperCase() + currentTier.slice(1).toLowerCase()
+                                {freshTier
+                                    ? (String(freshTier).toUpperCase() === "PREMIUM" ? "Pro"
+                                        : freshTier.charAt(0).toUpperCase() + freshTier.slice(1).toLowerCase())
                                     : "Free"}
                             </Text>
                         </Text>
@@ -774,7 +805,11 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                     ? iosPrice(sku, plan.priceInr)
                                     : `₹${plan.priceInr}`;
 
-                                const isCurrent = currentTier && plan.tier.toUpperCase() === String(currentTier).toUpperCase();
+                                // Mobile stores "pro" as "PREMIUM" — normalise before comparing.
+                                // Use freshTier (read from AsyncStorage on open) to avoid stale
+                                // React state from HistoryContext when the session tier has changed.
+                                const planKey = plan.tier === "pro" ? "PREMIUM" : plan.tier.toUpperCase();
+                                const isCurrent = freshTier && planKey === String(freshTier).toUpperCase();
                                 return (
                                     <View key={plan.id} style={{
                                         flex: 1, borderRadius: 16, padding: 16,
@@ -816,19 +851,23 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                             </Text>
                                         ))}
                                         <TouchableOpacity
-                                            onPress={() => handlePlanPress(plan)}
-                                            disabled={!!purchasing}
+                                            onPress={() => { if (!isCurrent) handlePlanPress(plan); }}
+                                            disabled={!!purchasing || !!isCurrent}
                                             style={{
                                                 marginTop: 16, paddingVertical: 10, borderRadius: 10,
-                                                backgroundColor: isPro ? "#6366f1" : "rgba(99,102,241,0.2)",
+                                                backgroundColor: isCurrent
+                                                    ? colors.surfaceSoft
+                                                    : isPro ? "#6366f1" : "rgba(99,102,241,0.2)",
                                                 alignItems: "center",
-                                                opacity: purchasing && !isBusy ? 0.5 : 1,
+                                                opacity: (purchasing && !isBusy) ? 0.5 : 1,
+                                                borderWidth: isCurrent ? 1 : 0,
+                                                borderColor: isCurrent ? colors.primary : undefined,
                                             }}
                                         >
                                             {isBusy
                                                 ? <ActivityIndicator size="small" color={isPro ? "#fff" : "#a5b4fc"} />
-                                                : <Text style={{ fontSize: 13, fontWeight: "700", color: isPro ? "#fff" : "#a5b4fc" }}>
-                                                    {Platform.OS === "ios" ? "Subscribe" : "Pay with Razorpay"}
+                                                : <Text style={{ fontSize: 13, fontWeight: "700", color: isCurrent ? colors.primary : isPro ? "#fff" : "#a5b4fc" }}>
+                                                    {isCurrent ? "Current plan" : "Subscribe"}
                                                 </Text>
                                             }
                                         </TouchableOpacity>
@@ -1133,7 +1172,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                         <Text style={{ fontSize: 11, color: colors.textSecondary, textAlign: "center", marginTop: 8 }}>
                             {Platform.OS === "ios"
                                 ? "Subscriptions auto-renew monthly or annually at the price shown. Cancel anytime in iOS Settings → Subscriptions."
-                                : "Secure payment via Razorpay. No subscription — pay once per period."}
+                                : "Subscriptions auto-renew monthly or annually at the price shown. Cancel anytime in Google Play → Subscriptions."}
                         </Text>
                         {Platform.OS === "ios" && (
                             <View style={{ flexDirection: "row", justifyContent: "center", gap: 16, marginTop: 10 }}>

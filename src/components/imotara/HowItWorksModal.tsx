@@ -8,9 +8,9 @@ import {
   TouchableOpacity,
   Modal,
   ScrollView,
-  SafeAreaView,
   Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useColors } from "../../theme/ThemeContext";
 
@@ -55,6 +55,7 @@ type Props = {
 
 export function HowItWorksModal({ visible, onClose }: Props) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
 
   return (
     <Modal
@@ -63,7 +64,7 @@ export function HowItWorksModal({ visible, onClose }: Props) {
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
         {/* Header */}
         <View
           style={{
@@ -191,7 +192,7 @@ export function HowItWorksModal({ visible, onClose }: Props) {
             </Text>
           </View>
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }

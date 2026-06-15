@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "../../theme/ThemeContext";
 import type { ColorPalette } from "../../theme/colors";
 
@@ -73,6 +74,7 @@ type Props = {
 
 export function OnboardingModal({ visible, onComplete }: Props) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
@@ -185,7 +187,7 @@ export function OnboardingModal({ visible, onComplete }: Props) {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1, backgroundColor: colors.background }}
       >
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: Math.max(insets.top + 20, 60), paddingBottom: Math.max(insets.bottom + 16, 20) }]}>
           {/* Progress dots */}
           <View style={styles.dotsRow}>
             {Array.from({ length: totalSteps }).map((_, i) => (
@@ -307,7 +309,7 @@ function makeStyles(colors: ColorPalette) {
       borderRadius: 14,
       paddingVertical: 16,
       alignItems: "center" as const,
-      marginBottom: 8,
+      marginBottom: 12,
     },
     buttonText: {
       fontSize: 16,

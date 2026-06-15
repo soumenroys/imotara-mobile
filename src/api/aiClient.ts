@@ -403,18 +403,21 @@ export async function streamChatReply(
   accessToken: string | undefined,
   onToken: (accumulated: string) => void,
   timeoutMs: number = 25_000,
+  abortSignal?: AbortSignal,
 ): Promise<{ ok: boolean; text: string }> {
   const url = `${IMOTARA_API_BASE_URL}/api/chat-reply?stream=1`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  abortSignal?.addEventListener("abort", () => ctrl.abort(), { once: true });
 
-  // RAF batching — flush at most once per animation frame to avoid excessive re-renders
+  // Batching — flush deferred via setTimeout(0) so it works whether or not the
+  // app is foregrounded (requestAnimationFrame doesn't fire when backgrounded in Hermes).
   let pendingAccumulated = "";
-  let rafHandle: ReturnType<typeof requestAnimationFrame> | null = null;
+  let rafHandle: ReturnType<typeof setTimeout> | null = null;
   const flush = () => {
-    if (rafHandle) cancelAnimationFrame(rafHandle);
+    if (rafHandle) clearTimeout(rafHandle);
     const snap = pendingAccumulated;
-    rafHandle = requestAnimationFrame(() => onToken(snap));
+    rafHandle = setTimeout(() => onToken(snap), 0);
   };
 
   try {
@@ -447,7 +450,7 @@ export async function streamChatReply(
         if (!line.startsWith("data: ")) continue;
         const data = line.slice(6).trim();
         if (data === "[DONE]") {
-          if (rafHandle) cancelAnimationFrame(rafHandle);
+          if (rafHandle) clearTimeout(rafHandle);
           onToken(accumulated);
           clearTimeout(timer);
           return { ok: accumulated.length > 10, text: accumulated };
@@ -464,11 +467,11 @@ export async function streamChatReply(
       }
     }
 
-    if (rafHandle) cancelAnimationFrame(rafHandle);
+    if (rafHandle) clearTimeout(rafHandle);
     clearTimeout(timer);
     return { ok: accumulated.length > 10, text: accumulated };
   } catch {
-    if (rafHandle) cancelAnimationFrame(rafHandle);
+    if (rafHandle) clearTimeout(rafHandle);
     return { ok: false, text: "" };
   } finally {
     clearTimeout(timer);

@@ -167,16 +167,18 @@ export function UnsentLetterModal({ visible, colors, onStart, onCancel }: Props)
             <TouchableOpacity
               onPress={handleStart}
               disabled={!recipientName.trim()}
+              activeOpacity={0.65}
               style={{
                 paddingVertical: 14,
+                paddingHorizontal: 20,
                 borderRadius: 14,
-                backgroundColor: recipientName.trim() ? "rgba(167,139,250,0.18)" : colors.surfaceSoft,
-                borderWidth: 1,
-                borderColor: recipientName.trim() ? "rgba(167,139,250,0.5)" : colors.border,
+                backgroundColor: recipientName.trim() ? "rgba(167,139,250,0.30)" : colors.surfaceSoft,
+                borderWidth: 1.5,
+                borderColor: recipientName.trim() ? "rgba(167,139,250,0.7)" : colors.border,
                 alignItems: "center",
               }}
             >
-              <Text style={{ fontSize: 15, fontWeight: "700", color: recipientName.trim() ? "#a78bfa" : colors.textSecondary }}>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: recipientName.trim() ? "#a78bfa" : colors.textPrimary, opacity: recipientName.trim() ? 1 : 0.55 }}>
                 Begin writing
               </Text>
             </TouchableOpacity>

@@ -260,9 +260,14 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "child_safe_mode",   emoji: "🧒", title: "Child-safe mode",          tip: "Families can enable Child-safe Mode in Settings to filter adult themes and mature content — requires Family or EDU plan.", category: "settings" },
   { id: "family_profiles",   emoji: "👨‍👩‍👧‍👦", title: "Family profiles",        tip: "Family plan users can create up to 6 separate profiles — each with its own companion, history, and settings.", category: "settings" },
   { id: "connect_what",      emoji: "🤝", title: "Imotara Connect",          tip: "Book a live session with a verified counsellor or wellness coach via Imotara Connect — available in the Connect tab.", category: "settings" },
-  { id: "connect_wallet",    emoji: "💳", title: "Connect Wallet",           tip: "Top up your Connect Wallet before booking a session — sessions are billed per minute from your balance.", category: "settings" },
+  { id: "connect_wallet",    emoji: "💳", title: "Connect Wallet",           tip: "Top up your Connect Wallet (₹1,000–₹10,000) before booking a session — sessions are billed per minute from your balance.", category: "settings" },
   { id: "connect_rate",      emoji: "⏱️", title: "Per-minute billing",       tip: "Each companion sets their own rate (e.g. ₹8/min). The clock starts when they accept your call — end anytime.", category: "settings" },
+  { id: "connect_dormancy",  emoji: "🏦", title: "Wallet never expires",     tip: "Your Connect Wallet balance stays active for 2 years and is never zeroed — even dormant balances are preserved with a 1-year grace refund period.", category: "settings" },
+  { id: "connect_safety",    emoji: "🛡️", title: "End sessions anytime",     tip: "You can end a Connect session at any moment — you're billed only for the minutes used. A low-balance warning appears before funds run out.", category: "settings" },
+  { id: "connect_browse",    emoji: "🔍", title: "Browse companions",        tip: "Filter companions in the Browse tab by language, specialty (grief, anxiety, career), and availability — find the right fit before you book.", category: "settings" },
+  { id: "connect_schedule",  emoji: "📅", title: "Schedule sessions",        tip: "Can't talk now? Tap 'Schedule' on any companion profile to book a future slot — both you and the companion get a reminder before it starts.", category: "settings" },
   { id: "connect_apply",     emoji: "🧑‍💼", title: "Become a companion",      tip: "Professionals can apply to join Imotara Connect as a verified companion — set your own rate and hours.", category: "settings" },
+  { id: "org_plan",          emoji: "🏢", title: "Team & Org plans",         tip: "Deploy Imotara across your organisation — ₹1,999/seat/yr for companies, ₹999 for educational institutions, ₹799 for NGOs. Self-serve at imotara.com/pricing/corporate.", category: "settings" },
 
 ];
 

@@ -1020,6 +1020,55 @@ function HistoryScreenContent() {
                     </View>
                 );
             })()}
+            {/* Emotion filter chips pinned above the list — always visible when scrolling */}
+            {historyTab === "messages" && viewMode === "list" && (
+                <View style={{ backgroundColor: colors.background, paddingHorizontal: 16, paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: colors.border }}>
+                    <View style={{ flexDirection: "row", gap: 6 }}>
+                        {(() => {
+                            const isAllActive = selectedEmotionFilter === "all";
+                            return (
+                                <TouchableOpacity
+                                    onPress={() => setSelectedEmotionFilter("all")}
+                                    style={{
+                                        flexDirection: "row", alignItems: "center", gap: 4,
+                                        borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5,
+                                        borderWidth: 1,
+                                        borderColor: isAllActive ? "rgba(56,189,248,0.6)" : colors.border,
+                                        backgroundColor: isAllActive ? "rgba(56,189,248,0.15)" : "rgba(148,163,184,0.08)",
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 11, color: isAllActive ? "#38bdf8" : colors.textSecondary, fontWeight: isAllActive ? "600" : "400" }}>
+                                        All
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })()}
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
+                            {EMOTION_FILTER_OPTIONS.slice(1).map((opt) => {
+                                const isActive = selectedEmotionFilter === opt.emoji;
+                                return (
+                                    <TouchableOpacity
+                                        key={opt.emoji}
+                                        onPress={() => setSelectedEmotionFilter(isActive ? "all" : opt.emoji)}
+                                        style={{
+                                            flexDirection: "row", alignItems: "center", gap: 4,
+                                            borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5,
+                                            borderWidth: 1,
+                                            borderColor: isActive ? "rgba(56,189,248,0.6)" : colors.border,
+                                            backgroundColor: isActive ? "rgba(56,189,248,0.15)" : "rgba(148,163,184,0.08)",
+                                        }}
+                                    >
+                                        <Text style={{ fontSize: 12 }}>{opt.emoji}</Text>
+                                        <Text style={{ fontSize: 11, color: isActive ? "#38bdf8" : colors.textSecondary, fontWeight: isActive ? "600" : "400" }}>
+                                            {opt.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
+                </View>
+            )}
             <FlatList
                 ref={scrollRef}
                 data={flatItems}
@@ -1031,7 +1080,7 @@ function HistoryScreenContent() {
                 }
                 contentContainerStyle={{
                     paddingHorizontal: 16,
-                    paddingVertical: 12,
+                    paddingTop: 16,
                     paddingBottom: 80,
                 }}
                 onScroll={(e) => {
@@ -1068,7 +1117,9 @@ function HistoryScreenContent() {
                 }
                 ListEmptyComponent={isEmpty ? (
                     <View style={{ alignItems: "center", paddingTop: 40 }}>
-                        <Ionicons name="chatbubble-ellipses-outline" size={32} color={colors.textSecondary} style={{ marginBottom: 16 }} />
+                        <View style={{ marginBottom: 16 }}>
+                            <Ionicons name="chatbubble-ellipses-outline" size={36} color={colors.textSecondary} />
+                        </View>
                         <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, textAlign: "center", marginBottom: 8 }}>
                             Nothing here yet
                         </Text>
@@ -1126,7 +1177,7 @@ function HistoryScreenContent() {
                                             </TouchableOpacity>
 
                                             {threadList.length === 0 && (
-                                                <Text style={{ fontSize: 13, color: "rgba(165,180,252,0.7)", textAlign: "center", paddingVertical: 16, fontStyle: "italic" }}>When you{"'"}re ready to talk, I{"'"}m here.</Text>
+                                                <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", paddingVertical: 16, fontStyle: "italic" }}>When you{"'"}re ready to talk, I{"'"}m here.</Text>
                                             )}
 
                                             {[...threadList].reverse().map((thread: any) => {
@@ -1176,7 +1227,7 @@ function HistoryScreenContent() {
                                                         )}
                                                         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 6, marginLeft: 24 }}>
                                                             <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                                                                {threadMessages.length} message{threadMessages.length !== 1 ? "s" : ""} · {new Date(thread.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                                                {threadMessages.length} message{threadMessages.length !== 1 ? "s" : ""} · {lastMsg ? new Date(lastMsg.timestamp).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : new Date(thread.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                                                             </Text>
                                                             <View style={{ flexDirection: "row", gap: 8 }}>
                                                                 <TouchableOpacity onPress={() => { setRenamingThreadId(thread.id); setRenameText(thread.title); }}>
@@ -1331,31 +1382,6 @@ function HistoryScreenContent() {
                                     ))}
                                 </View>
 
-                                {/* Emotion filter chips */}
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8, marginBottom: 4 }} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
-                                    {EMOTION_FILTER_OPTIONS.map((opt) => {
-                                        const isActive = selectedEmotionFilter === opt.emoji;
-                                        return (
-                                            <TouchableOpacity
-                                                key={opt.emoji}
-                                                onPress={() => setSelectedEmotionFilter(isActive ? "all" : opt.emoji)}
-                                                style={{
-                                                    flexDirection: "row", alignItems: "center", gap: 4,
-                                                    borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5,
-                                                    borderWidth: 1,
-                                                    borderColor: isActive ? "rgba(56,189,248,0.6)" : colors.border,
-                                                    backgroundColor: isActive ? "rgba(56,189,248,0.15)" : "rgba(148,163,184,0.08)",
-                                                }}
-                                            >
-                                                {opt.emoji !== "all" && <Text style={{ fontSize: 12 }}>{opt.emoji}</Text>}
-                                                <Text style={{ fontSize: 11, color: isActive ? "#38bdf8" : colors.textSecondary, fontWeight: isActive ? "600" : "400" }}>
-                                                    {opt.label}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </ScrollView>
-
                                 <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginTop: 8, gap: 8 }}>
                                     <TouchableOpacity
                                         onPress={() => {
@@ -1460,9 +1486,9 @@ function HistoryScreenContent() {
                                                                 { text: "Cancel", style: "cancel" },
                                                             ])}
                                                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                                            style={{ paddingRight: 14, paddingVertical: 12 }}
+                                                            style={{ paddingLeft: 6, paddingRight: 14, paddingVertical: 12 }}
                                                         >
-                                                            <Ionicons name="ellipsis-vertical" size={14} color={colors.textSecondary} />
+                                                            <Ionicons name="ellipsis-vertical" size={16} color={colors.textPrimary} style={{ opacity: 0.55 }} />
                                                         </TouchableOpacity>
                                                         </View>
 
@@ -1710,7 +1736,7 @@ function HistoryScreenContent() {
                             )}
                             {emotionHeader && (
                                 <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4, marginBottom: 2, alignSelf: "flex-start" }}>
-                                    <Ionicons name={emotionHeader.iconName as any} size={11} color={colors.textSecondary} />
+                                    <Ionicons name={emotionHeader.iconName as any} size={13} color={colors.textSecondary} />
                                     <Text style={{ fontSize: 11, color: colors.textSecondary }}>{emotionHeader.label}</Text>
                                 </View>
                             )}

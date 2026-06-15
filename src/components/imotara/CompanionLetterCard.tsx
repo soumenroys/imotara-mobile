@@ -11,6 +11,7 @@ import type { ColorPalette } from "../../theme/colors";
 import type { CompanionLetter } from "../../lib/imotara/companionLetter";
 import { updateLetterInteraction } from "../../lib/imotara/companionLetter";
 import { speakMessage, stopSpeaking } from "../../lib/tts/mobileTTS";
+import { useAuth } from "../../auth/AuthContext";
 
 const EMOJI_REACTIONS = ["❤️", "🥰", "💕", "💜", "💛", "🌟", "✨", "🫂", "🙏", "🕊️"];
 
@@ -31,6 +32,7 @@ export default function CompanionLetterCard({
   onUpdate,
   defaultExpanded = false,
 }: Props) {
+  const { accessToken } = useAuth();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [speaking, setSpeaking] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
@@ -44,23 +46,29 @@ export default function CompanionLetterCard({
     day: "numeric", month: "long", year: "numeric",
   });
 
-  const handleTTS = useCallback(() => {
+  const handleTTS = useCallback(async () => {
     if (speaking) {
       stopSpeaking();
       setSpeaking(false);
       return;
     }
     setSpeaking(true);
-    speakMessage(
-      `letter-${letter.id}`,
-      letter.body,
-      companionGender,
-      lang,
-      () => setSpeaking(false),
-      1.0,
-      1.0,
-    );
-  }, [speaking, letter, companionGender, lang]);
+    try {
+      await speakMessage(
+        `letter-${letter.id}`,
+        letter.body,
+        companionGender,
+        lang,
+        () => setSpeaking(false),
+        1.0,
+        1.0,
+        accessToken ?? undefined,
+      );
+    } catch {
+      setSpeaking(false);
+      Alert.alert("Audio unavailable", "Could not play the letter. Please try again.");
+    }
+  }, [speaking, letter, companionGender, lang, accessToken]);
 
   const handleReact = useCallback(async (emoji: string) => {
     const next = reaction === emoji ? undefined : emoji;

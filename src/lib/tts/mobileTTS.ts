@@ -57,8 +57,9 @@ const PREVIEW_TEXT_BY_LANG: Record<string, string> = {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let _speakingId:  string | null      = null;
-let _soundObject: Audio.Sound | null = null;
+let _speakingId:  string | null          = null;
+let _soundObject: Audio.Sound | null     = null;
+let _fetchAbort:  AbortController | null = null; // cancels in-flight TTS API fetch
 
 // ── Native voice availability ─────────────────────────────────────────────────
 
@@ -106,6 +107,8 @@ function apiBase(): string {
 }
 
 async function stopAll(): Promise<void> {
+    _fetchAbort?.abort();
+    _fetchAbort = null;
     Speech.stop();
     if (_soundObject) {
         await _soundObject.unloadAsync().catch(() => {});
@@ -152,6 +155,7 @@ export async function speakMessage(
     onDone?: () => void,
     rate = 0.95,
     pitch = 1.0,
+    accessToken?: string,
 ): Promise<void> {
     const isSpeaking = await Speech.isSpeakingAsync();
     if (isSpeaking || _soundObject) {
@@ -165,11 +169,29 @@ export async function speakMessage(
     // Always use Azure Neural TTS — native Speech.speak() ignores gender,
     // so the companion voice setting would be silently overridden by the device default.
     try {
-        const res = await fetchWithTimeout(
-            `${apiBase()}/api/tts`,
-            { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: stripMarkdown(text), lang, gender: gender ?? "neutral" }) },
-            20_000,
-        );
+        // Create a combined abort controller: stops on user-cancel OR 20s timeout.
+        _fetchAbort?.abort();
+        const abort   = new AbortController();
+        _fetchAbort   = abort;
+        const timer   = setTimeout(() => abort.abort(), 20_000);
+
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+
+        let res: Response;
+        try {
+            res = await fetch(
+                `${apiBase()}/api/tts`,
+                { method: "POST", headers, body: JSON.stringify({ text: stripMarkdown(text), lang, gender: gender ?? "neutral" }), signal: abort.signal },
+            );
+        } finally {
+            clearTimeout(timer);
+        }
+
+        // If stop was called while fetching, bail out now.
+        if (_fetchAbort !== abort) return;
+        _fetchAbort = null;
+
         if (!res.ok) throw new Error(`TTS API ${res.status}`);
         const arrayBuf = await res.arrayBuffer();
         const base64   = Buffer.from(arrayBuf).toString("base64");
@@ -179,9 +201,20 @@ export async function speakMessage(
             encoding: FileSystem.EncodingType.Base64,
         });
         await playSound(tmpPath, onDone, rate);
-    } catch (err) {
+    } catch (err: unknown) {
+        // User-initiated stop: abort throws DOMException "AbortError" — don't fall back.
+        if (err instanceof Error && err.name === "AbortError") {
+            _speakingId = null;
+            return;
+        }
         console.warn("[mobileTTS] Azure TTS failed, falling back to native:", err);
-        // Offline fallback — gender not honored but at least something plays
+        // Ensure audio plays even in silent mode before using native TTS
+        await Audio.setAudioModeAsync({
+            allowsRecordingIOS:         false,
+            playsInSilentModeIOS:       true,
+            playThroughEarpieceAndroid: false,
+            staysActiveInBackground:    false,
+        }).catch(() => {});
         Speech.speak(text, {
             language: toBCP47(lang),
             pitch:    isFinite(pitch) ? pitch : 1.0,
@@ -226,6 +259,14 @@ export async function speakPreview(
             // fall through to native TTS
         }
     }
+
+    // Ensure audio plays even in silent mode before using native TTS
+    await Audio.setAudioModeAsync({
+        allowsRecordingIOS:         false,
+        playsInSilentModeIOS:       true,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground:    false,
+    }).catch(() => {});
 
     if (hasCustomName) {
         // Custom name greeting is English text — always use English TTS so the

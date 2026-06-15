@@ -155,13 +155,11 @@ export default function RootNavigator() {
 
     // --- Onboarding ---
     const [onboardingVisible, setOnboardingVisible] = useState(false);
-    const [onboardingChecked, setOnboardingChecked] = useState(false);
     const [trendsBadge, setTrendsBadge] = useState(0);
 
     useEffect(() => {
         AsyncStorage.getItem(ONBOARDING_KEY).then((val) => {
             if (!val) setOnboardingVisible(true);
-            setOnboardingChecked(true);
         });
     }, []);
 
@@ -210,12 +208,11 @@ export default function RootNavigator() {
         }
     };
 
-    if (!onboardingChecked) return null;
-
     return (
         <View style={{ flex: 1, backgroundColor: isDark ? "#1e293b" : "#e2e8f0" }}>
             <NavigationContainer linking={linking}>
                 <Tab.Navigator
+                    backBehavior="history"
                     screenOptions={({ route }) => ({
                         headerStyle: {
                             backgroundColor: colors.background,
@@ -227,8 +224,15 @@ export default function RootNavigator() {
                         tabBarStyle: {
                             backgroundColor: colors.surfaceSoft,
                             borderTopColor: colors.border,
+                            paddingBottom: insets.bottom > 0 ? insets.bottom : 4,
+                            height: 56 + (insets.bottom > 0 ? insets.bottom : 4),
                         },
                         tabBarHideOnKeyboard: true,
+                        tabBarVisibilityAnimationConfig: {
+                            hide: { animation: "timing", config: { duration: 180 } },
+                            show: { animation: "timing", config: { duration: 220, delay: 60 } },
+                        },
+                        gestureEnabled: true,
                         tabBarActiveTintColor: colors.primary,
                         tabBarInactiveTintColor: colors.textSecondary,
                         animation: "fade",
