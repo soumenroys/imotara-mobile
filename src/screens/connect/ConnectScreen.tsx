@@ -49,6 +49,7 @@ interface Consultant {
     sessions_completed: number;
     availability_note: string | null;
     availability_windows: Array<{ day: string; start: string; end: string }> | null;
+    preferred_lang?: string;
 }
 
 interface Session {
@@ -66,6 +67,9 @@ interface Session {
     rate_per_min: number | null;
     user_timezone: string | null;
     consultant_timezone: string | null;
+    translation_enabled?: boolean;
+    user_lang?: string | null;
+    consultant_lang?: string | null;
     connect_consultants: { display_name: string; photo_url: string | null; rate_per_min?: number } | null;
 }
 
@@ -97,6 +101,7 @@ interface Message {
     id: string;
     sender_id: string;
     content: string;
+    translated_content?: string | null;
     created_at: string;
 }
 
@@ -1117,8 +1122,14 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     const [scheduleTime, setScheduleTime] = useState("");
     const [scheduleDuration, setScheduleDuration] = useState(30);
     const [scheduleLoading, setScheduleLoading] = useState(false);
+    const [userLang, setUserLang] = useState("en");
+    const [translationEnabled, setTranslationEnabled] = useState(false);
     const s = styles(colors);
     const sym = CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code;
+    const consultantLang = c.preferred_lang ?? "en";
+    const langsMatch = userLang === consultantLang;
+    const translationSurcharge = (translationEnabled && !langsMatch) ? c.rate_per_min * 0.10 : 0;
+    const effectiveRate = c.rate_per_min + translationSurcharge;
 
     useEffect(() => {
         if (!accessToken) return;
@@ -1128,7 +1139,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
             .catch(() => {});
     }, [accessToken]);
 
-    async function startSession(sessionType: "instant" | "scheduled" = "instant", note?: string) {
+    async function startSession(sessionType: "instant" | "scheduled" = "instant", note?: string, translationRequested = false) {
         if (!accessToken) { Alert.alert("Sign in required", "Please sign in to start a session."); return; }
         if (sessionType === "instant") setLoading(true);
         else setScheduleLoading(true);
@@ -1137,6 +1148,8 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 consultant_id: c.id,
                 type: sessionType,
                 user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                user_lang: userLang,
+                translation_requested: translationRequested,
             };
             if (note) body.scheduled_note = note;
             if (sessionType === "scheduled" && scheduleDate.trim()) {
@@ -1311,7 +1324,20 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 {/* Talk Now */}
                 <TouchableOpacity
                     style={[s.primaryBtn, (loading || !c.is_online) && { opacity: 0.6 }]}
-                    onPress={() => startSession("instant")}
+                    onPress={() => {
+                        if (!langsMatch) {
+                            Alert.alert(
+                                "Enable Translation?",
+                                `Your language and your counselor's language differ. Enable auto-translation for this session?\n\n+10% per-minute rate · 1–3s delay · Machine translation`,
+                                [
+                                    { text: "No, English only", style: "cancel", onPress: () => startSession("instant", undefined, false) },
+                                    { text: "Yes, enable (+10%)", onPress: () => startSession("instant", undefined, true) },
+                                ]
+                            );
+                        } else {
+                            startSession("instant");
+                        }
+                    }}
                     disabled={loading || !c.is_online}
                 >
                     {loading
@@ -1397,6 +1423,56 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                                 ))}
                             </View>
 
+                            {/* Language & Translation */}
+                            <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Your Language</Text>
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                                {[
+                                    { code: "en", label: "English" }, { code: "hi", label: "Hindi" },
+                                    { code: "bn", label: "Bengali" }, { code: "mr", label: "Marathi" },
+                                    { code: "ta", label: "Tamil" }, { code: "te", label: "Telugu" },
+                                    { code: "gu", label: "Gujarati" }, { code: "pa", label: "Punjabi" },
+                                    { code: "kn", label: "Kannada" }, { code: "ml", label: "Malayalam" },
+                                    { code: "ur", label: "Urdu" }, { code: "ar", label: "Arabic" },
+                                    { code: "es", label: "Spanish" }, { code: "fr", label: "French" },
+                                    { code: "de", label: "German" }, { code: "pt", label: "Portuguese" },
+                                ].map((l) => (
+                                    <TouchableOpacity
+                                        key={l.code}
+                                        onPress={() => { setUserLang(l.code); setTranslationEnabled(false); }}
+                                        style={{
+                                            paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+                                            backgroundColor: userLang === l.code ? "rgba(139,92,246,0.25)" : "rgba(255,255,255,0.06)",
+                                            borderWidth: 1, borderColor: userLang === l.code ? "rgba(139,92,246,0.6)" : "rgba(255,255,255,0.1)",
+                                        }}
+                                    >
+                                        <Text style={[s.cardBio, { fontSize: 12, color: userLang === l.code ? "#a78bfa" : undefined }]}>{l.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            {!langsMatch && (
+                                <TouchableOpacity
+                                    onPress={() => setTranslationEnabled((v) => !v)}
+                                    style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}
+                                >
+                                    <View style={{
+                                        width: 20, height: 20, borderRadius: 4, borderWidth: 1.5,
+                                        borderColor: translationEnabled ? "#a78bfa" : "rgba(255,255,255,0.3)",
+                                        backgroundColor: translationEnabled ? "rgba(139,92,246,0.3)" : "transparent",
+                                        alignItems: "center", justifyContent: "center",
+                                    }}>
+                                        {translationEnabled && <Text style={{ color: "#a78bfa", fontSize: 12, fontWeight: "700" }}>✓</Text>}
+                                    </View>
+                                    <Text style={[s.cardBio, { flex: 1 }]}>Enable auto-translation (+10% per-minute rate)</Text>
+                                </TouchableOpacity>
+                            )}
+                            {translationEnabled && !langsMatch && (
+                                <View style={{ backgroundColor: "rgba(245,158,11,0.1)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(245,158,11,0.25)", padding: 10, marginBottom: 12 }}>
+                                    <Text style={[s.cardBio, { fontSize: 11, color: "#fbbf24", lineHeight: 16 }]}>
+                                        Machine translation · 1–3s delay per message · Nuance may be lost · Adds 10% to session cost
+                                    </Text>
+                                </View>
+                            )}
+
                             {/* Cost estimate */}
                             {scheduleDate.trim().length > 0 && (
                                 <View style={[s.card, { gap: 4, marginBottom: 12 }]}>
@@ -1404,9 +1480,15 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                                         <Text style={s.cardBio}>{sym}{c.rate_per_min}/min × {scheduleDuration} min</Text>
                                         <Text style={[s.cardBio, { fontWeight: "700" }]}>{sym}{(c.rate_per_min * scheduleDuration).toFixed(0)}</Text>
                                     </View>
+                                    {translationEnabled && !langsMatch && (
+                                        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                                            <Text style={[s.cardBio, { fontSize: 11, color: "#a78bfa" }]}>Translation (+10%)</Text>
+                                            <Text style={[s.cardBio, { fontSize: 11, color: "#a78bfa" }]}>{sym}{(translationSurcharge * scheduleDuration).toFixed(0)}</Text>
+                                        </View>
+                                    )}
                                     <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                                         <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>Est. cost (max)</Text>
-                                        <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>{sym}{(c.rate_per_min * scheduleDuration).toFixed(0)}</Text>
+                                        <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>{sym}{(effectiveRate * scheduleDuration).toFixed(0)}</Text>
                                     </View>
                                 </View>
                             )}
@@ -1430,7 +1512,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                                         Alert.alert("Message required", "Please add a message describing what you would like to discuss.");
                                         return;
                                     }
-                                    startSession("scheduled", scheduleNote);
+                                    startSession("scheduled", scheduleNote, translationEnabled && !langsMatch);
                                 }}
                                 disabled={scheduleLoading}>
                                 {scheduleLoading
@@ -1783,10 +1865,10 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     // Load messages
     useEffect(() => {
         supabase.from("connect_messages")
-            .select("id, sender_id, content, created_at")
+            .select("id, sender_id, content, translated_content, created_at")
             .eq("session_id", session.id)
             .order("created_at", { ascending: true })
-            .then(({ data }) => { if (data) setMessages(data); });
+            .then(({ data }) => { if (data) setMessages(data as Message[]); });
     }, [session.id]);
 
     // Translation helpers
@@ -1908,8 +1990,19 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         const text = input.trim();
         if (!text || sending) return;
         setSending(true); setInput("");
-        await supabase.from("connect_messages").insert({ session_id: session.id, sender_id: userId, content: text })
-            .then(({ error }) => { if (error) setInput(text); });
+        try {
+            if (session.translation_enabled) {
+                const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/messages`), {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken ?? ""}` },
+                    body: JSON.stringify({ content: text }),
+                });
+                if (!res.ok) setInput(text);
+            } else {
+                const { error } = await supabase.from("connect_messages").insert({ session_id: session.id, sender_id: userId, content: text });
+                if (error) setInput(text);
+            }
+        } catch { setInput(text); }
         setSending(false);
     }
 
@@ -1964,13 +2057,15 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                         <Text style={{ color: isLow ? "#f87171" : "#34d399", fontSize: 9 }}>{panelOpen ? "▲" : "▼"}</Text>
                     </TouchableOpacity>
                 )}
-                {/* Language picker button */}
-                <TouchableOpacity
-                    onPress={() => setShowLangPicker(true)}
-                    style={{ flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5, borderWidth: 1, borderColor: chatLang ? "rgba(96,165,250,0.4)" : "rgba(255,255,255,0.1)", backgroundColor: chatLang ? "rgba(96,165,250,0.15)" : "rgba(255,255,255,0.04)" }}>
-                    <Text style={{ fontSize: 13 }}>🌐</Text>
-                    {chatLang && <Text style={{ fontSize: 10, fontWeight: "700", color: "#60a5fa" }}>{chatLang.toUpperCase()}</Text>}
-                </TouchableOpacity>
+                {/* Language picker button — hidden when session-level translation is active */}
+                {!session.translation_enabled && (
+                    <TouchableOpacity
+                        onPress={() => setShowLangPicker(true)}
+                        style={{ flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5, borderWidth: 1, borderColor: chatLang ? "rgba(96,165,250,0.4)" : "rgba(255,255,255,0.1)", backgroundColor: chatLang ? "rgba(96,165,250,0.15)" : "rgba(255,255,255,0.04)" }}>
+                        <Text style={{ fontSize: 13 }}>🌐</Text>
+                        {chatLang && <Text style={{ fontSize: 10, fontWeight: "700", color: "#60a5fa" }}>{chatLang.toUpperCase()}</Text>}
+                    </TouchableOpacity>
+                )}
                 <TouchableOpacity style={s.emergencyBtn} onPress={() => setShowEmergency(true)}>
                     <Ionicons name="call" size={16} color="#f87171" />
                 </TouchableOpacity>
@@ -2012,6 +2107,11 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             <Text style={[s.disclaimer, { textAlign: "center", paddingVertical: 6 }]}>
                 Peer wellness support — not professional care
             </Text>
+            {session.translation_enabled && (
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "rgba(59,130,246,0.08)", borderBottomWidth: 1, borderBottomColor: "rgba(59,130,246,0.15)", paddingVertical: 6 }}>
+                    <Text style={{ fontSize: 10, color: "#60a5fa" }}>🌐 Auto-translation active — 1–3s delay · Machine translation</Text>
+                </View>
+            )}
 
             {isPending && (
                 <Text style={{ textAlign: "center", color: "#fbbf24", fontSize: 12, padding: 8, backgroundColor: "rgba(251,191,36,0.08)" }}>
@@ -2047,6 +2147,41 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: true })}
                 renderItem={({ item: m }) => {
                     const isMe = m.sender_id === userId;
+
+                    // Session-level translation: show pre-translated content from DB
+                    if (session.translation_enabled) {
+                        const primaryText   = isMe ? m.content : (m.translated_content ?? m.content);
+                        const secondaryText = isMe ? m.translated_content : m.content;
+                        return (
+                            <View style={{ alignItems: isMe ? "flex-end" : "flex-start" }}>
+                                <View style={{
+                                    maxWidth: "78%",
+                                    backgroundColor: isMe ? colors.primary : colors.surfaceSoft,
+                                    borderRadius: 16,
+                                    borderBottomRightRadius: isMe ? 4 : 16,
+                                    borderBottomLeftRadius: isMe ? 16 : 4,
+                                    paddingHorizontal: 14, paddingVertical: 10,
+                                }}>
+                                    <Text style={{ color: isMe ? "#fff" : colors.textPrimary, fontSize: 14, lineHeight: 20 }}>{primaryText}</Text>
+                                    {secondaryText && secondaryText !== primaryText && (
+                                        <View style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: isMe ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)" }}>
+                                            <Text style={{ fontSize: 10, color: isMe ? "rgba(255,255,255,0.45)" : colors.textSecondary, marginBottom: 2 }}>
+                                                🌐 {isMe ? "Their language" : "Original"}
+                                            </Text>
+                                            <Text style={{ fontSize: 13, lineHeight: 18, fontStyle: "italic", color: isMe ? "rgba(255,255,255,0.8)" : colors.textPrimary, opacity: 0.8 }}>
+                                                {secondaryText}
+                                            </Text>
+                                        </View>
+                                    )}
+                                    <Text style={{ fontSize: 10, opacity: 0.6, color: isMe ? "#fff" : colors.textSecondary, marginTop: 4 }}>
+                                        {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                    </Text>
+                                </View>
+                            </View>
+                        );
+                    }
+
+                    // Standard (manual) translation via globe picker
                     const transKey = chatLang ? `${m.id}::${chatLang}` : null;
                     const translatedText = transKey ? translations.get(transKey) : undefined;
                     const isTranslating  = chatLang ? translating.has(m.id) : false;
@@ -2065,7 +2200,6 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                                     {m.content}
                                 </Text>
 
-                                {/* Translation */}
                                 {chatLang && (
                                     <View style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: isMe ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)" }}>
                                         {isTranslating && !translatedText ? (

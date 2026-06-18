@@ -544,8 +544,9 @@ export async function callImotaraAI(
     // which caused short robotic replies like "I'm here with you." for all questions.
     const chatReplyUrl = `${IMOTARA_API_BASE_URL}/api/chat-reply`;
     try {
-      // Resolve language: explicit switch request > script/Roman detection > profile preference > "en"
-      // Explicit wins so user can override a locked profile language mid-conversation.
+      // Resolve language: explicit switch request > profile preference > script/Roman detection > "en"
+      // Profile preference wins over script detection so that a user who changed their setting
+      // to English gets English replies even when they type in Bengali/Hindi script.
       const _explicitLang = detectExplicitLangRequest(message);
       const _scriptLang = detectLangFromScript(message);
       const _detectedLang = _scriptLang !== "en" ? _scriptLang : detectLangFromRomanHints(message);
@@ -553,7 +554,7 @@ export async function callImotaraAI(
         opts?.preferredLanguage ||
         (toneContext?.user?.preferredLang as string | undefined);
       const chatReplyLang =
-        _explicitLang || (_detectedLang !== "en" ? _detectedLang : (_profileLang || "en"));
+        _explicitLang || _profileLang || (_detectedLang !== "en" ? _detectedLang : "en");
 
       // Inject user's name (from Settings) as a system message so GPT can
       // personalize naturally without waiting for Supabase memory lookup.
