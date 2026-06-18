@@ -1124,6 +1124,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     const [scheduleLoading, setScheduleLoading] = useState(false);
     const [userLang, setUserLang] = useState("en");
     const [translationEnabled, setTranslationEnabled] = useState(false);
+    const [pendingTranslation, setPendingTranslation] = useState(false);
     const s = styles(colors);
     const sym = CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code;
     const consultantLang = c.preferred_lang ?? "en";
@@ -1170,10 +1171,11 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
             const d = await res.json();
             if (!d.ok) {
                 if (d.error?.includes("Insufficient balance")) {
+                    setPendingTranslation(translationRequested);
                     setTopUpVisible(true);
                 } else if (d.redirect && d.existing_session_id) {
                     // existing session — navigate there
-                    onStartSession({ id: d.existing_session_id, connect_consultants: null, status: "pending", type: sessionType, user_id: userId ?? "", consultant_id: c.id, minutes_used: 0, scheduled_note: note ?? null, currency_code: c.currency_code, created_at: new Date().toISOString() } as Session);
+                    onStartSession({ id: d.existing_session_id, connect_consultants: null, status: "pending", type: sessionType, user_id: userId ?? "", consultant_id: c.id, minutes_used: 0, scheduled_note: note ?? null, currency_code: c.currency_code, created_at: new Date().toISOString(), translation_enabled: undefined, user_lang: null, consultant_lang: null } as Session);
                 } else {
                     Alert.alert("Error", d.error ?? "Could not start session");
                 }
@@ -1362,7 +1364,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 walletBalance={walletBalance}
                 walletCurrency={walletCurrency}
                 onClose={() => setTopUpVisible(false)}
-                onSuccess={(newBal) => { setWalletBalance(newBal); setTopUpVisible(false); startSession("instant"); }}
+                onSuccess={(newBal) => { setWalletBalance(newBal); setTopUpVisible(false); startSession("instant", undefined, pendingTranslation); }}
                 colors={colors}
             />
 
@@ -1992,12 +1994,14 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         setSending(true); setInput("");
         try {
             if (session.translation_enabled) {
+                if (!accessToken) { setInput(text); setSending(false); return; }
                 const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/messages`), {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken ?? ""}` },
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                     body: JSON.stringify({ content: text }),
                 });
-                if (!res.ok) setInput(text);
+                const d = await res.json();
+                if (!res.ok || !d.ok) setInput(text);
             } else {
                 const { error } = await supabase.from("connect_messages").insert({ session_id: session.id, sender_id: userId, content: text });
                 if (error) setInput(text);
