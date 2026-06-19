@@ -343,6 +343,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
     onOpenWallet: () => void;
 }) {
     const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
+    const [isSigningIn, setIsSigningIn] = useState(false);
     const [consultants, setConsultants] = useState<Consultant[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterOnline, setFilterOnline] = useState(false);
@@ -458,9 +459,10 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 <View style={{ marginHorizontal: 12, marginTop: 10, marginBottom: 4, borderRadius: 12, borderWidth: 1, borderColor: "rgba(139,92,246,0.35)", backgroundColor: "rgba(139,92,246,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10 }}>
                     <Text style={{ fontSize: 13, color: "#c4b5fd", flex: 1 }}>🔒 Sign in to book a session</Text>
                     <TouchableOpacity
-                        onPress={async () => { try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
-                        style={{ backgroundColor: "rgba(139,92,246,0.7)", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, marginLeft: 10 }}>
-                        <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Sign in</Text>
+                        disabled={isSigningIn}
+                        onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                        style={{ backgroundColor: "rgba(139,92,246,0.7)", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, marginLeft: 10, opacity: isSigningIn ? 0.5 : 1 }}>
+                        {isSigningIn ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Sign in</Text>}
                     </TouchableOpacity>
                 </View>
             )}
@@ -591,6 +593,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
     onSelectSession: (s: Session) => void;
 }) {
     const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
+    const [isSigningIn, setIsSigningIn] = useState(false);
     const [sessions, setSessions] = useState<Session[]>([]);
     const [loading, setLoading] = useState(true);
     const [cancelling, setCancelling] = useState<string | null>(null);
@@ -661,15 +664,17 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
             <Text style={[s.emptyText, { marginBottom: 6 }]}>Sign in to view your sessions</Text>
             <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", marginBottom: 24, opacity: 0.7 }}>Your past and upcoming sessions with companions will appear here.</Text>
             <TouchableOpacity
-                onPress={async () => { try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
-                style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%" }}>
-                <Text style={{ fontSize: 18 }}>G</Text>
-                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Google</Text>
+                disabled={isSigningIn}
+                onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", opacity: isSigningIn ? 0.5 : 1 }}>
+                {isSigningIn ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={{ fontSize: 18 }}>G</Text>}
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>{isSigningIn ? "Signing in…" : "Continue with Google"}</Text>
             </TouchableOpacity>
             {appleSignInAvailable && (
                 <TouchableOpacity
-                    onPress={async () => { try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
-                    style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10 }}>
+                    disabled={isSigningIn}
+                    onPress={async () => { setIsSigningIn(true); try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10, opacity: isSigningIn ? 0.5 : 1 }}>
                     <Text style={{ fontSize: 18 }}></Text>
                     <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Apple</Text>
                 </TouchableOpacity>
@@ -742,6 +747,7 @@ const TOPUP_PRESETS = [1000, 2000, 5000, 10000];
 
 function WalletTab({ colors, accessToken }: { colors: any; accessToken: string | null }) {
     const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
+    const [isSigningIn, setIsSigningIn] = useState(false);
     const [walletBalance, setWalletBalance] = useState(0);
     const [walletStatus, setWalletStatus] = useState("active");
     const [expiresAt, setExpiresAt] = useState<string | null>(null);
@@ -880,15 +886,17 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             <Text style={[s.emptyText, { marginBottom: 6 }]}>Sign in to use your Wallet</Text>
             <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", marginBottom: 24, opacity: 0.7 }}>Add funds and pay for sessions with your Imotara Wallet.</Text>
             <TouchableOpacity
-                onPress={async () => { try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
-                style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%" }}>
-                <Text style={{ fontSize: 18 }}>G</Text>
-                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Google</Text>
+                disabled={isSigningIn}
+                onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", opacity: isSigningIn ? 0.5 : 1 }}>
+                {isSigningIn ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={{ fontSize: 18 }}>G</Text>}
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>{isSigningIn ? "Signing in…" : "Continue with Google"}</Text>
             </TouchableOpacity>
             {appleSignInAvailable && (
                 <TouchableOpacity
-                    onPress={async () => { try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
-                    style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10 }}>
+                    disabled={isSigningIn}
+                    onPress={async () => { setIsSigningIn(true); try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10, opacity: isSigningIn ? 0.5 : 1 }}>
                     <Text style={{ fontSize: 18 }}></Text>
                     <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Apple</Text>
                 </TouchableOpacity>
@@ -1604,6 +1612,14 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                             <TouchableOpacity
                                 style={[s.primaryBtn, { marginBottom: 8 }, scheduleLoading && { opacity: 0.6 }]}
                                 onPress={() => {
+                                    if (!scheduleDateObj) {
+                                        Alert.alert("Date required", "Please pick a date and time for the session.");
+                                        return;
+                                    }
+                                    if (scheduleDateObj.getTime() <= Date.now()) {
+                                        Alert.alert("Invalid time", "Please choose a future date and time.");
+                                        return;
+                                    }
                                     if (!scheduleNote.trim()) {
                                         Alert.alert("Message required", "Please add a message describing what you would like to discuss.");
                                         return;
@@ -1945,6 +1961,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [showRecharge, setShowRecharge] = useState(false);
     const [elapsedSecs, setElapsedSecs] = useState(0);
     const [amountCharged, setAmountCharged] = useState<number | null>(session.amount_charged ?? null);
+    const [startedAt, setStartedAt] = useState<string | null>(session.started_at ?? null);
     const [nowTick, setNowTick] = useState(() => new Date());
     const [panelOpen, setPanelOpen] = useState(true);
     // Translation state
@@ -2027,9 +2044,10 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 event: "UPDATE", schema: "public",
                 table: "connect_sessions", filter: `id=eq.${session.id}`,
             }, (payload) => {
-                const updated = payload.new as { status?: string; amount_charged?: number };
+                const updated = payload.new as { status?: string; amount_charged?: number; started_at?: string };
                 if (updated.status) setStatus(updated.status);
                 if (updated.amount_charged != null) setAmountCharged(updated.amount_charged);
+                if (updated.started_at) setStartedAt(updated.started_at);
             })
             .subscribe();
 
@@ -2078,12 +2096,12 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         clockRef.current = setInterval(() => {
             const tick = new Date();
             setNowTick(tick);
-            if (session.started_at && status === "active") {
-                setElapsedSecs(Math.max(0, Math.floor((tick.getTime() - new Date(session.started_at).getTime()) / 1000)));
+            if (startedAt && status === "active") {
+                setElapsedSecs(Math.max(0, Math.floor((tick.getTime() - new Date(startedAt).getTime()) / 1000)));
             }
         }, 1000);
         return () => { if (clockRef.current) clearInterval(clockRef.current); };
-    }, [session.started_at, status]);
+    }, [startedAt, status]);
 
     async function send() {
         const text = input.trim();
@@ -3408,6 +3426,7 @@ function LangDropdown({ value, onChange, colors, style }: {
     value: string; onChange: (code: string) => void; colors: any; style?: any;
 }) {
     const [open, setOpen] = useState(false);
+    const insets = useSafeAreaInsets();
     const selected = LANGUAGE_OPTIONS.find(l => l.code === value);
     return (
         <View style={style}>
@@ -3430,7 +3449,7 @@ function LangDropdown({ value, onChange, colors, style }: {
                 <View style={{
                     position: "absolute", bottom: 0, left: 0, right: 0,
                     backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-                    paddingBottom: 32, maxHeight: "65%",
+                    paddingBottom: Math.max(insets.bottom, 16), maxHeight: "65%",
                 }}>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottomWidth: 1, borderColor: colors.border }}>
                         <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary }}>Select Language</Text>
@@ -3441,6 +3460,7 @@ function LangDropdown({ value, onChange, colors, style }: {
                     <FlatList
                         data={LANGUAGE_OPTIONS}
                         keyExtractor={item => item.code}
+                        keyboardShouldPersistTaps="handled"
                         renderItem={({ item }) => (
                             <TouchableOpacity
                                 onPress={() => { onChange(item.code); setOpen(false); }}
