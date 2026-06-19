@@ -674,8 +674,12 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
             if (d.ok) setSessions((prev) => prev.map((s) => s.id === id ? { ...s, status: "cancelled" } : s));
             else {
                 Alert.alert("Error", d.error ?? "Could not cancel");
-                // 409 = session already moved on (accepted/declined); remove stale entry so Cancel button disappears
-                if (res.status === 409) setSessions((prev) => prev.filter((s) => s.id !== id));
+                if (res.status === 409) {
+                    // Re-fetch to get the true session state (may now be active if consultant accepted)
+                    const r2 = await cfetch(buildApiUrl("/api/connect/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } });
+                    const d2 = await r2.json();
+                    if (d2.ok && d2.sessions) setSessions(d2.sessions);
+                }
             }
         } catch {
             Alert.alert("Error", "Network error");
@@ -809,6 +813,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
         })
             .then((r) => r.json())
             .then((d) => {
+                if (!d.ok) return;
                 setWalletBalance(Number(d.wallet_balance ?? 0));
                 setWalletStatus(d.wallet_status ?? "active");
                 setExpiresAt(d.expires_at ?? null);
@@ -2893,12 +2898,23 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             if (d.ok) {
                 if (action === "accept") {
                     const sess = incoming.find((s) => s.id === sessionId);
-                    if (sess) onJoinSession({ ...sess, connect_consultants: null });
+                    if (sess) {
+                        onJoinSession({ ...sess, connect_consultants: null });
+                    } else {
+                        // Race: session moved out of incoming list — fetch it directly and navigate
+                        const r2 = await cfetch(buildApiUrl(`/api/connect/sessions/${sessionId}`), {
+                            headers: { Authorization: `Bearer ${accessToken}` },
+                        });
+                        const d2 = await r2.json();
+                        if (d2.ok && d2.session) onJoinSession({ ...d2.session, connect_consultants: null });
+                    }
                 } else {
                     setIncoming((prev) => prev.filter((s) => s.id !== sessionId));
                 }
+            } else {
+                Alert.alert("Error", d.error ?? `Could not ${action} session`);
             }
-        } catch { /* silent */ }
+        } catch { Alert.alert("Error", "Network error — please try again."); }
         finally { setActionLoading(null); }
     }
 
