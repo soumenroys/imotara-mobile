@@ -120,7 +120,8 @@
       "expo-secure-store",
       "expo-apple-authentication",
       "expo-iap",
-      "./plugins/withAndroidR8Mapping"
+      "./plugins/withAndroidR8Mapping",
+      "@react-native-community/datetimepicker"
     ],
     "scheme": "imotara",
     "runtimeVersion": {

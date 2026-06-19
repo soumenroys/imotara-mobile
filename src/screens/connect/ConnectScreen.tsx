@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
-import { useColors } from "../../theme/ThemeContext";
+import { useColors, useTheme } from "../../theme/ThemeContext";
 import { useAuth } from "../../auth/AuthContext";
 import { useSettings } from "../../state/SettingsContext";
 import { buildApiUrl } from "../../config/api";
@@ -28,6 +28,8 @@ import { useRoute, useNavigation } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import Slider from "@react-native-community/slider";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Consultant {
@@ -78,6 +80,14 @@ function tzLabel(tz: string): string {
         const parts = Intl.DateTimeFormat("en", { timeZoneName: "short", timeZone: tz }).formatToParts(new Date());
         return parts.find((p) => p.type === "timeZoneName")?.value ?? tz;
     } catch { return tz; }
+}
+
+function formatMinutes(mins: number): string {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h === 0) return `${m} min`;
+    if (m === 0) return `${h} hr${h > 1 ? "s" : ""}`;
+    return `${h} hr${h > 1 ? "s" : ""} ${m} min`;
 }
 
 function formatDuration(secs: number): string {
@@ -172,14 +182,17 @@ const ROLE_CATEGORIES = [
 ] as const;
 
 const LANGUAGE_OPTIONS = [
-    { code: "en", label: "English" },   { code: "hi", label: "Hindi" },
-    { code: "bn", label: "Bengali" },   { code: "mr", label: "Marathi" },
-    { code: "ta", label: "Tamil" },     { code: "te", label: "Telugu" },
-    { code: "gu", label: "Gujarati" },  { code: "pa", label: "Punjabi" },
-    { code: "kn", label: "Kannada" },   { code: "ml", label: "Malayalam" },
-    { code: "ur", label: "Urdu" },      { code: "ar", label: "Arabic" },
-    { code: "es", label: "Spanish" },   { code: "fr", label: "French" },
-    { code: "de", label: "German" },    { code: "pt", label: "Portuguese" },
+    { code: "en", label: "English" },        { code: "hi", label: "Hindi" },
+    { code: "bn", label: "Bengali" },        { code: "mr", label: "Marathi" },
+    { code: "ta", label: "Tamil" },          { code: "te", label: "Telugu" },
+    { code: "gu", label: "Gujarati" },       { code: "pa", label: "Punjabi" },
+    { code: "kn", label: "Kannada" },        { code: "ml", label: "Malayalam" },
+    { code: "or", label: "Odia" },           { code: "ur", label: "Urdu" },
+    { code: "ar", label: "Arabic" },         { code: "he", label: "Hebrew" },
+    { code: "ru", label: "Russian" },        { code: "zh", label: "Chinese" },
+    { code: "ja", label: "Japanese" },       { code: "es", label: "Spanish" },
+    { code: "fr", label: "French" },         { code: "de", label: "German" },
+    { code: "pt", label: "Portuguese" },
 ];
 
 // ── View type ──────────────────────────────────────────────────────────────────
@@ -194,6 +207,7 @@ type ConnectView =
 
 export default function ConnectScreen() {
     const colors = useColors();
+    const { isDark } = useTheme();
     const insets = useSafeAreaInsets();
     const { accessToken, user } = useAuth();
     const { toneContext } = useSettings();
@@ -318,10 +332,6 @@ export default function ConnectScreen() {
                 onSelectSession={(s) => setView({ name: "chat", session: s })} />}
             {tab === "wallet" && <WalletTab colors={colors} accessToken={accessToken} />}
 
-            {/* Footer disclaimer */}
-            <Text style={[s.disclaimer, { paddingBottom: insets.bottom + 4 }]}>
-                Peer wellness support only — not a substitute for professional mental health care.
-            </Text>
         </View>
     );
 }
@@ -332,6 +342,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
     onSelectConsultant: (c: Consultant) => void;
     onOpenWallet: () => void;
 }) {
+    const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const [consultants, setConsultants] = useState<Consultant[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterOnline, setFilterOnline] = useState(false);
@@ -446,21 +457,24 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
             {!accessToken && (
                 <View style={{ marginHorizontal: 12, marginTop: 10, marginBottom: 4, borderRadius: 12, borderWidth: 1, borderColor: "rgba(139,92,246,0.35)", backgroundColor: "rgba(139,92,246,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10 }}>
                     <Text style={{ fontSize: 13, color: "#c4b5fd", flex: 1 }}>🔒 Sign in to book a session</Text>
+                    <TouchableOpacity
+                        onPress={async () => { try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
+                        style={{ backgroundColor: "rgba(139,92,246,0.7)", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, marginLeft: 10 }}>
+                        <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Sign in</Text>
+                    </TouchableOpacity>
                 </View>
             )}
 
-            {/* Category chips */}
+            {/* Row 1: Category */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6, gap: 8, flexDirection: "row", alignItems: "center" }}>
+                contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 12, paddingBottom: 12, gap: 8, flexDirection: "row", alignItems: "center" }}>
                 <TouchableOpacity
                     style={[s.filterChip, !filterCategory && s.filterChipActive]}
                     onPress={() => setFilterCategory("")}>
                     <Text style={[s.filterChipText, !filterCategory && s.filterChipTextActive]}>All</Text>
                 </TouchableOpacity>
                 {ROLE_CATEGORIES.map((rc) => (
-                    <TouchableOpacity
-                        key={rc.key}
-                        disabled={rc.phase > 1}
+                    <TouchableOpacity key={rc.key} disabled={rc.phase > 1}
                         style={[s.filterChip, filterCategory === rc.key && s.filterChipActive, rc.phase > 1 && { opacity: 0.4 }]}
                         onPress={() => rc.phase === 1 && setFilterCategory((v) => (v === rc.key ? "" : rc.key))}>
                         <Text style={[s.filterChipText, filterCategory === rc.key && s.filterChipTextActive]}>
@@ -470,17 +484,32 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 ))}
             </ScrollView>
 
-            {/* Specialty + online filters */}
+            {/* Divider between filter rows */}
+            <View style={{ height: 1, marginHorizontal: 16, backgroundColor: "rgba(255,255,255,0.06)" }} />
+
+            {/* Row 2: Online + Sort + Topic */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 6, gap: 8, flexDirection: "row", alignItems: "center" }}>
+                contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 12, paddingBottom: 14, gap: 8, flexDirection: "row", alignItems: "center" }}>
                 <TouchableOpacity
-                    style={[s.filterChip, filterOnline && s.filterChipActive]}
+                    style={[s.filterChip, s.filterChipRow, filterOnline && s.filterChipActive]}
                     onPress={() => setFilterOnline((v) => !v)}>
-                    <Text style={[s.filterChipText, filterOnline && s.filterChipTextActive]}>🟢 Online only</Text>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#34d399", marginRight: 6 }} />
+                    <Text style={[s.filterChipText, filterOnline && s.filterChipTextActive]}>Online only</Text>
                 </TouchableOpacity>
+                {([
+                    { key: "rating",     label: "Top rated" },
+                    { key: "price_asc",  label: "Price ↑" },
+                    { key: "price_desc", label: "Price ↓" },
+                    { key: "sessions",   label: "Most sessions" },
+                ] as const).map((opt) => (
+                    <TouchableOpacity key={opt.key}
+                        style={[s.filterChip, sort === opt.key && s.filterChipActive]}
+                        onPress={() => setSort(opt.key)}>
+                        <Text style={[s.filterChipText, sort === opt.key && s.filterChipTextActive]}>{opt.label}</Text>
+                    </TouchableOpacity>
+                ))}
                 {["Stress & Anxiety", "Loneliness", "Grief & Loss", "Relationship Issues", "Work & Career Pressure", "Mindfulness"].map((tag) => (
-                    <TouchableOpacity
-                        key={tag}
+                    <TouchableOpacity key={tag}
                         style={[s.filterChip, filterTag === tag && s.filterChipActive]}
                         onPress={() => setFilterTag((v) => (v === tag ? "" : tag))}>
                         <Text style={[s.filterChipText, filterTag === tag && s.filterChipTextActive]}>{tag}</Text>
@@ -488,30 +517,12 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 ))}
             </ScrollView>
 
-            {/* Sort row */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 2, paddingBottom: 8, gap: 8, flexDirection: "row", alignItems: "center" }}>
-                {([
-                    { key: "rating",     label: "⭐ Top rated" },
-                    { key: "price_asc",  label: "Price ↑" },
-                    { key: "price_desc", label: "Price ↓" },
-                    { key: "sessions",   label: "Most sessions" },
-                ] as const).map((opt) => (
-                    <TouchableOpacity
-                        key={opt.key}
-                        style={[s.filterChip, sort === opt.key && s.filterChipActive]}
-                        onPress={() => setSort(opt.key)}>
-                        <Text style={[s.filterChipText, sort === opt.key && s.filterChipTextActive]}>{opt.label}</Text>
-                    </TouchableOpacity>
-                ))}
-            </ScrollView>
-
             <FlatList
                 data={displayed}
                 keyExtractor={(c) => c.id}
-                contentContainerStyle={{ padding: 12, gap: 12 }}
+                contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 20, gap: 12 }}
                 renderItem={({ item: c }) => (
-                    <TouchableOpacity style={s.card} onPress={() => onSelectConsultant(c)} activeOpacity={0.75}>
+                    <TouchableOpacity style={s.card} onPress={() => onSelectConsultant(c)} activeOpacity={0.78}>
                         <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                             <View style={{ position: "relative" }}>
                                 <View style={s.avatar}>
@@ -546,29 +557,29 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                                     ★ {c.rating_avg > 0 ? c.rating_avg.toFixed(1) : "New"} · {c.sessions_completed} sessions
                                 </Text>
                                 {c.bio && (
-                                    <Text style={[s.cardBio, { marginTop: 4 }]} numberOfLines={3}>{c.bio}</Text>
+                                    <Text style={[s.cardBio, { marginTop: 4 }]} numberOfLines={2}>{c.bio}</Text>
                                 )}
-                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 6, paddingBottom: 2 }}>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
                                     {c.expertise_tags.slice(0, 3).map((t) => (
                                         <Text key={t} style={s.tag}>{t}</Text>
                                     ))}
                                 </View>
-                                <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 10, alignItems: "center" }}>
-                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                                        <Text style={[s.cardBio, { fontSize: 11, color: c.is_online ? "#34d399" : "#94a3b8" }]}>
-                                            {c.is_online ? "● Online" : "○ Offline"}
-                                        </Text>
-                                        {c.is_busy && (
-                                            <Text style={[s.cardBio, { fontSize: 10, color: "#fb923c", backgroundColor: "rgba(251,146,60,0.15)", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8 }]}>
-                                                In Session
-                                            </Text>
-                                        )}
-                                    </View>
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 }}>
+                                    <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c.is_online ? "#34d399" : "#475569" }} />
+                                    <Text style={{ fontSize: 12, color: c.is_online ? "#34d399" : "#64748b", fontWeight: "500" }}>
+                                        {c.is_online ? "Online" : "Offline"}
+                                        {c.is_busy ? " · In session" : ""}
+                                    </Text>
                                 </View>
                             </View>
                         </View>
                     </TouchableOpacity>
                 )}
+                ListFooterComponent={
+                    <Text style={{ fontSize: 11, color: "#64748b", textAlign: "center", paddingVertical: 16, paddingHorizontal: 16 }}>
+                        Peer wellness support only — not a substitute for professional mental health care.
+                    </Text>
+                }
             />
         </View>
     );
@@ -579,6 +590,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
     colors: any; accessToken: string | null;
     onSelectSession: (s: Session) => void;
 }) {
+    const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const [sessions, setSessions] = useState<Session[]>([]);
     const [loading, setLoading] = useState(true);
     const [cancelling, setCancelling] = useState<string | null>(null);
@@ -644,7 +656,25 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
 
     if (loading) return <View style={s.center}><ActivityIndicator color={colors.primary} /></View>;
     if (!accessToken) return (
-        <View style={s.center}><Text style={s.emptyText}>Sign in to view your sessions.</Text></View>
+        <View style={[s.center, { paddingHorizontal: 32 }]}>
+            <Text style={{ fontSize: 32, marginBottom: 12 }}>🔒</Text>
+            <Text style={[s.emptyText, { marginBottom: 6 }]}>Sign in to view your sessions</Text>
+            <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", marginBottom: 24, opacity: 0.7 }}>Your past and upcoming sessions with companions will appear here.</Text>
+            <TouchableOpacity
+                onPress={async () => { try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%" }}>
+                <Text style={{ fontSize: 18 }}>G</Text>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Google</Text>
+            </TouchableOpacity>
+            {appleSignInAvailable && (
+                <TouchableOpacity
+                    onPress={async () => { try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10 }}>
+                    <Text style={{ fontSize: 18 }}></Text>
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Apple</Text>
+                </TouchableOpacity>
+            )}
+        </View>
     );
     if (sessions.length === 0) return (
         <View style={s.center}><Text style={s.emptyText}>No sessions yet. Browse companions to start.</Text></View>
@@ -711,6 +741,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
 const TOPUP_PRESETS = [1000, 2000, 5000, 10000];
 
 function WalletTab({ colors, accessToken }: { colors: any; accessToken: string | null }) {
+    const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const [walletBalance, setWalletBalance] = useState(0);
     const [walletStatus, setWalletStatus] = useState("active");
     const [expiresAt, setExpiresAt] = useState<string | null>(null);
@@ -844,7 +875,25 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
 
     if (loading) return <View style={s.center}><ActivityIndicator color={colors.primary} /></View>;
     if (!accessToken) return (
-        <View style={s.center}><Text style={s.emptyText}>Sign in to view your wallet.</Text></View>
+        <View style={[s.center, { paddingHorizontal: 32 }]}>
+            <Text style={{ fontSize: 32, marginBottom: 12 }}>🔒</Text>
+            <Text style={[s.emptyText, { marginBottom: 6 }]}>Sign in to use your Wallet</Text>
+            <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", marginBottom: 24, opacity: 0.7 }}>Add funds and pay for sessions with your Imotara Wallet.</Text>
+            <TouchableOpacity
+                onPress={async () => { try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%" }}>
+                <Text style={{ fontSize: 18 }}>G</Text>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Google</Text>
+            </TouchableOpacity>
+            {appleSignInAvailable && (
+                <TouchableOpacity
+                    onPress={async () => { try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10 }}>
+                    <Text style={{ fontSize: 18 }}></Text>
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Apple</Text>
+                </TouchableOpacity>
+            )}
+        </View>
     );
 
     const isDormant = walletStatus === "dormant";
@@ -1112,14 +1161,17 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     accessToken: string | null; userId: string | null;
     onBack: () => void; onStartSession: (s: Session) => void;
 }) {
+    const { isDark } = useTheme();
     const [topUpVisible, setTopUpVisible] = useState(false);
     const [walletBalance, setWalletBalance] = useState(0);
     const [walletCurrency, setWalletCurrency] = useState("INR");
     const [loading, setLoading] = useState(false);
     const [scheduleVisible, setScheduleVisible] = useState(false);
     const [scheduleNote, setScheduleNote] = useState("");
-    const [scheduleDate, setScheduleDate] = useState("");
-    const [scheduleTime, setScheduleTime] = useState("");
+    const [scheduleDateObj, setScheduleDateObj] = useState<Date | null>(null);
+    const [scheduleTimeObj, setScheduleTimeObj] = useState<Date | null>(null);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showTimePicker, setShowTimePicker] = useState(false);
     const [scheduleDuration, setScheduleDuration] = useState(30);
     const [scheduleLoading, setScheduleLoading] = useState(false);
     const [userLang, setUserLang] = useState("en");
@@ -1153,10 +1205,16 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 translation_requested: translationRequested,
             };
             if (note) body.scheduled_note = note;
-            if (sessionType === "scheduled" && scheduleDate.trim()) {
-                const dateTimeStr = scheduleTime.trim()
-                    ? `${scheduleDate.trim()}T${scheduleTime.trim()}`
-                    : scheduleDate.trim();
+            const scheduleDateStr = scheduleDateObj
+                ? `${scheduleDateObj.getFullYear()}-${String(scheduleDateObj.getMonth()+1).padStart(2,"0")}-${String(scheduleDateObj.getDate()).padStart(2,"0")}`
+                : "";
+            const scheduleTimeStr = scheduleTimeObj
+                ? `${String(scheduleTimeObj.getHours()).padStart(2,"0")}:${String(scheduleTimeObj.getMinutes()).padStart(2,"0")}`
+                : "";
+            if (sessionType === "scheduled" && scheduleDateStr) {
+                const dateTimeStr = scheduleTimeStr
+                    ? `${scheduleDateStr}T${scheduleTimeStr}`
+                    : scheduleDateStr;
                 const parsed = new Date(dateTimeStr);
                 if (!isNaN(parsed.getTime())) {
                     body.scheduled_at = parsed.toISOString();
@@ -1391,35 +1449,89 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                             {/* Date */}
                             <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Preferred Date</Text>
-                            <TextInput
-                                style={[s.messageInput, { marginBottom: 12, flex: 0, minHeight: 52, fontSize: 15 }]}
-                                value={scheduleDate}
-                                onChangeText={setScheduleDate}
-                                placeholder="YYYY-MM-DD  (e.g. 2026-06-15)"
-                                placeholderTextColor={colors.textSecondary}
-                                keyboardType="numbers-and-punctuation"
-                            />
+                            <TouchableOpacity
+                                style={[s.messageInput, { marginBottom: 12, flex: 0, minHeight: 52, justifyContent: "center" }]}
+                                onPress={() => { setShowDatePicker(true); setShowTimePicker(false); }}>
+                                <Text style={{ fontSize: 15, color: scheduleDateObj ? colors.textPrimary : colors.textSecondary }}>
+                                    {scheduleDateObj
+                                        ? scheduleDateObj.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric" })
+                                        : "Tap to select date"}
+                                </Text>
+                            </TouchableOpacity>
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    value={scheduleDateObj ?? new Date(Date.now() + 86_400_000)}
+                                    mode="date"
+                                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                                    minimumDate={new Date()}
+                                    themeVariant={isDark ? "dark" : "light"}
+                                    onChange={(_, date) => {
+                                        setShowDatePicker(Platform.OS === "ios");
+                                        if (date) setScheduleDateObj(date);
+                                        if (Platform.OS !== "ios") setShowDatePicker(false);
+                                    }}
+                                />
+                            )}
+                            {showDatePicker && Platform.OS === "ios" && (
+                                <TouchableOpacity onPress={() => setShowDatePicker(false)}
+                                    style={{ alignSelf: "flex-end", marginBottom: 8 }}>
+                                    <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 14 }}>Done</Text>
+                                </TouchableOpacity>
+                            )}
 
                             {/* Time */}
                             <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Preferred Time</Text>
-                            <TextInput
-                                style={[s.messageInput, { marginBottom: 12, flex: 0, minHeight: 52, fontSize: 15 }]}
-                                value={scheduleTime}
-                                onChangeText={setScheduleTime}
-                                placeholder="HH:MM  24-hour  (e.g. 18:30)"
-                                placeholderTextColor={colors.textSecondary}
-                                keyboardType="numbers-and-punctuation"
-                            />
+                            <TouchableOpacity
+                                style={[s.messageInput, { marginBottom: 12, flex: 0, minHeight: 52, justifyContent: "center" }]}
+                                onPress={() => { setShowTimePicker(true); setShowDatePicker(false); }}>
+                                <Text style={{ fontSize: 15, color: scheduleTimeObj ? colors.textPrimary : colors.textSecondary }}>
+                                    {scheduleTimeObj
+                                        ? scheduleTimeObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+                                        : "Tap to select time"}
+                                </Text>
+                            </TouchableOpacity>
+                            {showTimePicker && (
+                                <DateTimePicker
+                                    value={scheduleTimeObj ?? new Date()}
+                                    mode="time"
+                                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                                    themeVariant={isDark ? "dark" : "light"}
+                                    onChange={(_, time) => {
+                                        if (time) setScheduleTimeObj(time);
+                                        if (Platform.OS !== "ios") setShowTimePicker(false);
+                                    }}
+                                />
+                            )}
+                            {showTimePicker && Platform.OS === "ios" && (
+                                <TouchableOpacity onPress={() => setShowTimePicker(false)}
+                                    style={{ alignSelf: "flex-end", marginBottom: 8 }}>
+                                    <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 14 }}>Done</Text>
+                                </TouchableOpacity>
+                            )}
 
-                            {/* Duration chips */}
-                            <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Duration</Text>
-                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                                {([15, 30, 45, 60, 90, 120] as const).map((d) => (
-                                    <TouchableOpacity key={d}
-                                        style={[s.durationBtn, scheduleDuration === d && s.durationBtnActive]}
-                                        onPress={() => setScheduleDuration(d)}>
-                                        <Text style={[s.durationBtnText, scheduleDuration === d && s.durationBtnTextActive]}>
-                                            {d < 60 ? `${d} min` : d === 60 ? "1 hr" : d === 90 ? "1.5 hrs" : "2 hrs"}
+                            {/* Duration slider — 15 min to 4 hrs in 15-min steps */}
+                            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                                <Text style={[s.cardBio, { fontWeight: "600" }]}>Duration</Text>
+                                <Text style={{ fontSize: 22, fontWeight: "700", color: colors.primary }}>
+                                    {formatMinutes(scheduleDuration)}
+                                </Text>
+                            </View>
+                            <Slider
+                                style={{ width: "100%", height: 40, marginHorizontal: -4 }}
+                                minimumValue={15}
+                                maximumValue={240}
+                                step={15}
+                                value={scheduleDuration}
+                                onValueChange={(v) => setScheduleDuration(Math.round(v))}
+                                minimumTrackTintColor={colors.primary}
+                                maximumTrackTintColor={colors.border}
+                                thumbTintColor={colors.primary}
+                            />
+                            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12, marginTop: -4 }}>
+                                {[15, 60, 120, 180, 240].map((m) => (
+                                    <TouchableOpacity key={m} onPress={() => setScheduleDuration(m)}>
+                                        <Text style={{ fontSize: 11, color: scheduleDuration === m ? colors.primary : colors.textSecondary, fontWeight: scheduleDuration === m ? "700" : "400" }}>
+                                            {formatMinutes(m)}
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
@@ -1427,30 +1539,12 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 
                             {/* Language & Translation */}
                             <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Your Language</Text>
-                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                                {[
-                                    { code: "en", label: "English" }, { code: "hi", label: "Hindi" },
-                                    { code: "bn", label: "Bengali" }, { code: "mr", label: "Marathi" },
-                                    { code: "ta", label: "Tamil" }, { code: "te", label: "Telugu" },
-                                    { code: "gu", label: "Gujarati" }, { code: "pa", label: "Punjabi" },
-                                    { code: "kn", label: "Kannada" }, { code: "ml", label: "Malayalam" },
-                                    { code: "ur", label: "Urdu" }, { code: "ar", label: "Arabic" },
-                                    { code: "es", label: "Spanish" }, { code: "fr", label: "French" },
-                                    { code: "de", label: "German" }, { code: "pt", label: "Portuguese" },
-                                ].map((l) => (
-                                    <TouchableOpacity
-                                        key={l.code}
-                                        onPress={() => { setUserLang(l.code); setTranslationEnabled(false); }}
-                                        style={{
-                                            paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
-                                            backgroundColor: userLang === l.code ? "rgba(139,92,246,0.25)" : "rgba(255,255,255,0.06)",
-                                            borderWidth: 1, borderColor: userLang === l.code ? "rgba(139,92,246,0.6)" : "rgba(255,255,255,0.1)",
-                                        }}
-                                    >
-                                        <Text style={[s.cardBio, { fontSize: 12, color: userLang === l.code ? "#a78bfa" : undefined }]}>{l.label}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
+                            <LangDropdown
+                                value={userLang}
+                                onChange={(code) => { setUserLang(code); setTranslationEnabled(false); }}
+                                colors={colors}
+                                style={{ marginBottom: 8 }}
+                            />
                             {!langsMatch && (
                                 <TouchableOpacity
                                     onPress={() => setTranslationEnabled((v) => !v)}
@@ -1476,7 +1570,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                             )}
 
                             {/* Cost estimate */}
-                            {scheduleDate.trim().length > 0 && (
+                            {scheduleDateObj != null && (
                                 <View style={[s.card, { gap: 4, marginBottom: 12 }]}>
                                     <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                                         <Text style={s.cardBio}>{sym}{c.rate_per_min}/min × {scheduleDuration} min</Text>
@@ -1994,7 +2088,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         setSending(true); setInput("");
         try {
             if (session.translation_enabled) {
-                if (!accessToken) { setInput(text); setSending(false); return; }
+                if (!accessToken) { setInput(text); return; }
                 const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/messages`), {
                     method: "POST",
                     headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
@@ -2007,7 +2101,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 if (error) setInput(text);
             }
         } catch { setInput(text); }
-        setSending(false);
+        finally { setSending(false); }
     }
 
     async function submitReview() {
@@ -3305,6 +3399,66 @@ function ChipSelector({ label, options, selected, onToggle, colors }: {
     );
 }
 
+// Single-select language dropdown — shows selected label, opens a modal list on tap.
+function LangDropdown({ value, onChange, colors, style }: {
+    value: string; onChange: (code: string) => void; colors: any; style?: any;
+}) {
+    const [open, setOpen] = useState(false);
+    const selected = LANGUAGE_OPTIONS.find(l => l.code === value);
+    return (
+        <View style={style}>
+            <TouchableOpacity
+                onPress={() => setOpen(true)}
+                style={{
+                    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                    paddingHorizontal: 14, paddingVertical: 13, borderRadius: 12,
+                    borderWidth: 1, borderColor: colors.border,
+                    backgroundColor: colors.surfaceSoft,
+                }}>
+                <Text style={{ fontSize: 15, color: colors.textPrimary, fontWeight: "500" }}>
+                    {selected?.label ?? "Select language"}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)" }} activeOpacity={1} onPress={() => setOpen(false)} />
+                <View style={{
+                    position: "absolute", bottom: 0, left: 0, right: 0,
+                    backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+                    paddingBottom: 32, maxHeight: "65%",
+                }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottomWidth: 1, borderColor: colors.border }}>
+                        <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary }}>Select Language</Text>
+                        <TouchableOpacity onPress={() => setOpen(false)}>
+                            <Ionicons name="close" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+                    <FlatList
+                        data={LANGUAGE_OPTIONS}
+                        keyExtractor={item => item.code}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity
+                                onPress={() => { onChange(item.code); setOpen(false); }}
+                                style={{
+                                    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                                    paddingHorizontal: 20, paddingVertical: 14,
+                                    borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
+                                    backgroundColor: item.code === value ? (colors.primaryTint ?? "rgba(99,102,241,0.08)") : "transparent",
+                                }}>
+                                <Text style={{ fontSize: 15, color: item.code === value ? colors.primary : colors.textPrimary }}>
+                                    {item.label}
+                                </Text>
+                                {item.code === value && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                            </TouchableOpacity>
+                        )}
+                    />
+                </View>
+            </Modal>
+        </View>
+    );
+}
+
 function LangChipSelector({ label, selected, onToggle, colors }: {
     label: string; selected: string[];
     onToggle: (code: string) => void; colors: any;
@@ -3385,6 +3539,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
     const s = styles(colors);
 
     // Step 1
+    const [preferredLang, setPreferredLang] = useState("en");
     const [displayName, setDisplayName] = useState("");
     const [gender, setGender] = useState("");
     const [roleCategory, setRoleCategory] = useState("wellness_companion");
@@ -3576,6 +3731,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                     verification_docs:    Object.keys(verificationDocs).length > 0 ? verificationDocs : null,
                     coc_agreed:           true,
                     digital_signature:    digitalSig.trim(),
+                    preferred_lang:       preferredLang,
                 }),
             });
             const d = await res.json();
@@ -3785,6 +3941,14 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                         <LangChipSelector label="Languages Spoken *" selected={languages}
                             onToggle={(code) => setLanguages(prev => prev.includes(code) ? prev.filter(x=>x!==code) : [...prev,code])}
                             colors={colors} />
+
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={[s.cardBio, { marginBottom: 6, fontWeight: "600" }]}>Primary Session Language *</Text>
+                            <Text style={[s.cardBio, { fontSize: 11, color: colors.textSecondary, marginBottom: 8 }]}>
+                                The language you prefer for sessions. Users who speak a different language can opt in to auto-translation.
+                            </Text>
+                            <LangDropdown value={preferredLang} onChange={setPreferredLang} colors={colors} />
+                        </View>
 
                         <View style={{ marginBottom: 16 }}>
                             <Text style={[s.cardBio, { marginBottom: 8, fontWeight: "600" }]}>
@@ -4293,21 +4457,21 @@ function styles(colors: any) {
         emptyText: { fontSize: 14, color: colors.textSecondary, textAlign: "center" },
         card: {
             backgroundColor: colors.surfaceSoft,
-            borderRadius: 14, padding: 14,
+            borderRadius: 16, padding: 16,
             borderWidth: 1, borderColor: colors.border,
         },
         cardName: { fontSize: 15, fontWeight: "700", color: colors.textPrimary },
-        cardBio: { fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
+        cardBio: { fontSize: 13, color: colors.textSecondary, lineHeight: 19 },
         avatar: {
-            width: 52, height: 52, borderRadius: 26,
+            width: 56, height: 56, borderRadius: 28,
             backgroundColor: colors.primaryTint,
             alignItems: "center", justifyContent: "center",
             overflow: "hidden",
         },
-        avatarImg: { width: 52, height: 52, borderRadius: 26 },
+        avatarImg: { width: 56, height: 56, borderRadius: 28 },
         onlineDot: {
             position: "absolute", bottom: 2, right: 2,
-            width: 11, height: 11, borderRadius: 6,
+            width: 12, height: 12, borderRadius: 6,
             backgroundColor: "#34d399",
             borderWidth: 2, borderColor: colors.background,
         },
@@ -4317,20 +4481,26 @@ function styles(colors: any) {
         },
         tag: {
             fontSize: 11, backgroundColor: colors.primaryTint,
-            color: colors.primary, borderRadius: 8,
-            paddingHorizontal: 8, paddingVertical: 3,
+            color: colors.primary, borderRadius: 20,
+            paddingHorizontal: 9, paddingVertical: 3,
+            borderWidth: 1, borderColor: "transparent",
+            overflow: "hidden",
         },
         filterChip: {
-            paddingHorizontal: 12, paddingVertical: 10, borderRadius: 20,
+            paddingHorizontal: 16, height: 40, borderRadius: 20,
             borderWidth: 1.5, borderColor: colors.border,
             backgroundColor: colors.surfaceSoft,
-            minHeight: 36,
+            flexShrink: 0,
+            flexDirection: "row", alignItems: "center", justifyContent: "center",
+        },
+        filterChipRow: {
+            flexDirection: "row", alignItems: "center",
         },
         filterChipActive: {
             borderColor: colors.primary,
             backgroundColor: colors.primaryTint,
         },
-        filterChipText: { fontSize: 12, color: colors.textSecondary, fontWeight: "600" },
+        filterChipText: { fontSize: 13, color: colors.textSecondary, fontWeight: "600" },
         filterChipTextActive: { color: colors.primary },
         rateText: { fontSize: 14, fontWeight: "700", color: colors.primary },
         ratingText: { fontSize: 12, color: colors.textSecondary },

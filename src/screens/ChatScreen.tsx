@@ -2329,6 +2329,10 @@ export default function ChatScreen() {
   }, []);
 
   const scrollViewRef = useRef<FlatList | null>(null);
+  // Tracks whether the user has manually scrolled up away from the bottom.
+  // "New messages" button only shows when this is true — never on initial load
+  // or programmatic scrolls.
+  const userScrolledUpRef = useRef(false);
   const toastRef = useRef<ToastHandle>(null);
 
   // ✅ RN-safe typing (fixes TS issues in many RN setups)
@@ -2437,6 +2441,8 @@ export default function ChatScreen() {
         resetTypingState("foreground-stale-sendlock");
       }
       // Scroll to latest message when user returns to the app
+      userScrolledUpRef.current = false;
+      setShowScrollButton(false);
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 100);
     },
   });
@@ -2835,7 +2841,12 @@ export default function ChatScreen() {
   };
 
   const scrollToBottom = () => {
+    userScrolledUpRef.current = false;
+    setShowScrollButton(false);
     scrollViewRef.current?.scrollToEnd({ animated: true });
+    // Second call (non-animated) after animation settles ensures we land at the
+    // true bottom even when content size changed during the first scroll.
+    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 350);
   };
 
   const closeActionSheet = () => {
@@ -2993,8 +3004,14 @@ export default function ChatScreen() {
     const distanceFromBottom =
       contentSize.height - (contentOffset.y + layoutMeasurement.height);
 
-    const atBottom = distanceFromBottom < 24;
-    setShowScrollButton(!atBottom && distanceFromBottom > 150);
+    if (distanceFromBottom < 24) {
+      // Reached the bottom — clear the intent flag and hide button
+      userScrolledUpRef.current = false;
+      setShowScrollButton(false);
+    } else if (distanceFromBottom > 150 && userScrolledUpRef.current) {
+      // Only show when the user has deliberately scrolled up, not on initial render
+      setShowScrollButton(true);
+    }
   };
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -4559,6 +4576,7 @@ export default function ChatScreen() {
           }}
           onScroll={handleScroll}
           scrollEventThrottle={50}
+          onScrollBeginDrag={() => { userScrolledUpRef.current = true; }}
           onScrollEndDrag={() => {
             if (!DEBUG_UI_ENABLED) return;
             if (pullOffset < -60) handleRefresh();
