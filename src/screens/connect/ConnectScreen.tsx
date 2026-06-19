@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
     View, Text, ScrollView, TouchableOpacity, TextInput, FlatList,
     ActivityIndicator, Alert, Modal, Linking, Platform, StyleSheet,
-    KeyboardAvoidingView, Image,
+    KeyboardAvoidingView, Image, RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -201,7 +201,7 @@ type ConnectView =
     | { name: "sessions" }
     | { name: "wallet" }
     | { name: "profile"; consultant: Consultant }
-    | { name: "chat"; session: Session; origin?: "sessions" | "dashboard" }
+    | { name: "chat"; session: Session; origin?: "sessions" | "dashboard" | "browse" }
     | { name: "dashboard" }
     | { name: "register" };
 
@@ -278,13 +278,13 @@ export default function ConnectScreen() {
         return <ProfileView consultant={view.consultant} colors={colors} insets={insets}
             accessToken={accessToken} userId={user?.id ?? null}
             onBack={() => setView({ name: "browse" })}
-            onStartSession={(s) => setView({ name: "chat", session: s })} />;
+            onStartSession={(s) => setView({ name: "chat", session: s, origin: "browse" })} />;
     }
     if (view.name === "chat") {
         const chatOrigin = view.origin;
         return <ChatView session={view.session} colors={colors} insets={insets}
             accessToken={accessToken} userId={user?.id ?? null}
-            onBack={() => setView(chatOrigin === "dashboard" ? { name: "dashboard" } : { name: "sessions" })} />;
+            onBack={() => setView(chatOrigin === "dashboard" ? { name: "dashboard" } : chatOrigin === "browse" ? { name: "browse" } : { name: "sessions" })} />;
     }
     if (view.name === "dashboard") {
         return <DashboardView colors={colors} insets={insets}
@@ -607,9 +607,21 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
     const [isSigningIn, setIsSigningIn] = useState(false);
     const [sessions, setSessions] = useState<Session[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [cancelling, setCancelling] = useState<string | null>(null);
     const [summaryCopied, setSummaryCopied] = useState<string | null>(null);
     const s = styles(colors);
+
+    async function refreshSessions() {
+        if (!accessToken) return;
+        setRefreshing(true);
+        try {
+            const r = await cfetch(buildApiUrl("/api/connect/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } });
+            const d = await r.json();
+            setSessions(d.sessions ?? []);
+        } catch { /* ignore */ }
+        finally { setRefreshing(false); }
+    }
 
     function buildSummary(item: Session) {
         const companion = item.connect_consultants?.display_name ?? "Companion";
@@ -710,6 +722,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
             data={sessions}
             keyExtractor={(s) => s.id}
             contentContainerStyle={{ padding: 16, gap: 10 }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshSessions} tintColor={colors.primary} />}
             renderItem={({ item }) => (
                 <View style={s.card}>
                     <TouchableOpacity
@@ -855,7 +868,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             });
             const v = await verifyRes.json();
             if (!v.ok) { setTopupError(v.error ?? "Verification failed"); return; }
-            setWalletBalance(v.new_balance);
+            setWalletBalance(Number(v.new_balance ?? 0));
             setWalletStatus("active");
             setTransactions([]);
             Alert.alert("Success", `₹${v.amount_credited} added to your wallet!`);
@@ -1200,6 +1213,8 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     const [userLang, setUserLang] = useState("en");
     const [translationEnabled, setTranslationEnabled] = useState(false);
     const [pendingTranslation, setPendingTranslation] = useState(false);
+    const [pendingSessionType, setPendingSessionType] = useState<"instant" | "scheduled">("instant");
+    const [pendingNote, setPendingNote] = useState<string | undefined>(undefined);
     const s = styles(colors);
     const sym = CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code;
     const consultantLang = c.preferred_lang ?? "en";
@@ -1253,6 +1268,8 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
             if (!d.ok) {
                 if (d.error?.includes("Insufficient balance")) {
                     setPendingTranslation(translationRequested);
+                    setPendingSessionType(sessionType);
+                    setPendingNote(note);
                     setTopUpVisible(true);
                 } else if (d.redirect && d.existing_session_id) {
                     // existing session — navigate there
@@ -1445,7 +1462,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 walletBalance={walletBalance}
                 walletCurrency={walletCurrency}
                 onClose={() => setTopUpVisible(false)}
-                onSuccess={(newBal) => { setWalletBalance(newBal); setTopUpVisible(false); startSession("instant", undefined, pendingTranslation); }}
+                onSuccess={(newBal) => { setWalletBalance(newBal); setTopUpVisible(false); startSession(pendingSessionType, pendingNote, pendingTranslation); }}
                 colors={colors}
             />
 
