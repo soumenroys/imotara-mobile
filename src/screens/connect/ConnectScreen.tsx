@@ -1317,8 +1317,20 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     setHasPendingSession(true);
                     setTopUpVisible(true);
                 } else if (d.redirect && d.existing_session_id) {
-                    // existing session — navigate there
-                    onStartSession({ id: d.existing_session_id, connect_consultants: null, status: "pending", type: sessionType, user_id: userId ?? "", consultant_id: c.id, minutes_used: 0, scheduled_note: note ?? null, currency_code: c.currency_code, created_at: new Date().toISOString(), translation_enabled: undefined, user_lang: null, consultant_lang: null } as Session);
+                    // Fetch full session so rate_per_min and translation_enabled are correct
+                    try {
+                        const sr = await cfetch(buildApiUrl(`/api/connect/sessions/${d.existing_session_id}`), {
+                            headers: { Authorization: `Bearer ${accessToken}` },
+                        });
+                        const sd = await sr.json();
+                        if (sd.ok && sd.session) {
+                            onStartSession(sd.session);
+                        } else {
+                            Alert.alert("Error", "Could not resume existing session.");
+                        }
+                    } catch {
+                        Alert.alert("Error", "Network error resuming session.");
+                    }
                 } else {
                     Alert.alert("Error", d.error ?? "Could not start session");
                 }
@@ -2900,11 +2912,29 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                 const newSession = payload.new;
                 if (newSession?.status === "pending") {
                     setIncoming((prev) => {
-                        if (prev.find((s) => s.id === newSession.id)) return prev;
+                        if (prev.find((s: any) => s.id === newSession.id)) return prev;
                         setNewRequestAlert(true);
                         Alert.alert("New Request! 🔔", "A user wants to connect with you.");
                         return [newSession, ...prev];
                     });
+                }
+            })
+            .on("postgres_changes" as any, {
+                event: "UPDATE",
+                schema: "public",
+                table: "connect_sessions",
+                filter: `consultant_id=eq.${consultantId}`,
+            }, (payload: any) => {
+                const updated = payload.new;
+                // connect_sessions uses REPLICA IDENTITY DEFAULT — status may be absent
+                // in tick-only UPDATEs (minutes_used changed). Guard to avoid false removal.
+                if (!updated?.status) return;
+                if (!["pending", "active"].includes(updated.status)) {
+                    setIncoming((prev: any[]) => prev.filter((s: any) => s.id !== updated.id));
+                } else {
+                    setIncoming((prev: any[]) =>
+                        prev.map((s: any) => s.id === updated.id ? { ...s, status: updated.status } : s)
+                    );
                 }
             })
             .subscribe();
