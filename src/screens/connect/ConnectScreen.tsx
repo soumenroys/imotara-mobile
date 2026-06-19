@@ -458,12 +458,22 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
             {!accessToken && (
                 <View style={{ marginHorizontal: 12, marginTop: 10, marginBottom: 4, borderRadius: 12, borderWidth: 1, borderColor: "rgba(139,92,246,0.35)", backgroundColor: "rgba(139,92,246,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10 }}>
                     <Text style={{ fontSize: 13, color: "#c4b5fd", flex: 1 }}>🔒 Sign in to book a session</Text>
-                    <TouchableOpacity
-                        disabled={isSigningIn}
-                        onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
-                        style={{ backgroundColor: "rgba(139,92,246,0.7)", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, marginLeft: 10, opacity: isSigningIn ? 0.5 : 1 }}>
-                        {isSigningIn ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Sign in</Text>}
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: "row", gap: 8, marginLeft: 10 }}>
+                        <TouchableOpacity
+                            disabled={isSigningIn}
+                            onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                            style={{ backgroundColor: "rgba(139,92,246,0.7)", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, opacity: isSigningIn ? 0.5 : 1 }}>
+                            {isSigningIn ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Google</Text>}
+                        </TouchableOpacity>
+                        {appleSignInAvailable && (
+                            <TouchableOpacity
+                                disabled={isSigningIn}
+                                onPress={async () => { setIsSigningIn(true); try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                                style={{ backgroundColor: "#000", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, opacity: isSigningIn ? 0.5 : 1 }}>
+                                <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Apple</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
                 </View>
             )}
 
@@ -1616,9 +1626,14 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                                         Alert.alert("Date required", "Please pick a date and time for the session.");
                                         return;
                                     }
-                                    if (scheduleDateObj.getTime() <= Date.now()) {
-                                        Alert.alert("Invalid time", "Please choose a future date and time.");
-                                        return;
+                                    {
+                                        const dStr = `${scheduleDateObj.getFullYear()}-${String(scheduleDateObj.getMonth()+1).padStart(2,"0")}-${String(scheduleDateObj.getDate()).padStart(2,"0")}`;
+                                        const tStr = scheduleTimeObj ? `${String(scheduleTimeObj.getHours()).padStart(2,"0")}:${String(scheduleTimeObj.getMinutes()).padStart(2,"0")}` : "00:00";
+                                        const combined = new Date(`${dStr}T${tStr}`);
+                                        if (combined.getTime() <= Date.now()) {
+                                            Alert.alert("Invalid time", "Please choose a future date and time.");
+                                            return;
+                                        }
                                     }
                                     if (!scheduleNote.trim()) {
                                         Alert.alert("Message required", "Please add a message describing what you would like to discuss.");
@@ -1954,7 +1969,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [status, setStatus] = useState(session.status);
     const [showEmergency, setShowEmergency] = useState(false);
     const [showReview, setShowReview] = useState(false);
-
+    const [submittingReview, setSubmittingReview] = useState(false);
     const [rating, setRating] = useState(0);
     const [reviewText, setReviewText] = useState("");
     // Dual panel state — walletBal removed (was showing unrelated general INR wallet)
@@ -2126,14 +2141,22 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     }
 
     async function submitReview() {
-        if (rating === 0 || !accessToken) return;
-        const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/review`), {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-            body: JSON.stringify({ rating, review_text: reviewText || null }),
-        });
-        const d = await res.json();
-        if (d.ok) { setShowReview(false); }
+        if (rating === 0 || !accessToken || submittingReview) return;
+        setSubmittingReview(true);
+        try {
+            const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/review`), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ rating, review_text: reviewText || null }),
+            });
+            const d = await res.json();
+            if (d.ok) { setShowReview(false); }
+            else { Alert.alert("Error", d.error ?? "Could not submit review."); }
+        } catch {
+            Alert.alert("Network error", "Please check your connection and try again.");
+        } finally {
+            setSubmittingReview(false);
+        }
     }
 
     const isActive = status === "active";
@@ -2465,9 +2488,9 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                             maxLength={200}
                             multiline
                         />
-                        <TouchableOpacity style={[s.primaryBtn, rating === 0 && { opacity: 0.5 }]}
-                            onPress={submitReview} disabled={rating === 0}>
-                            <Text style={s.primaryBtnText}>Submit Review</Text>
+                        <TouchableOpacity style={[s.primaryBtn, (rating === 0 || submittingReview) && { opacity: 0.5 }]}
+                            onPress={submitReview} disabled={rating === 0 || submittingReview}>
+                            {submittingReview ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.primaryBtnText}>Submit Review</Text>}
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -2715,24 +2738,29 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
 
     const load = useCallback(async () => {
         if (!accessToken) { setLoading(false); return; }
-        const [pRes, eRes, sRes] = await Promise.all([
-            cfetch(buildApiUrl("/api/connect/consultant/profile"), { headers: { Authorization: `Bearer ${accessToken}` } }),
-            cfetch(buildApiUrl("/api/connect/consultant/earnings"), { headers: { Authorization: `Bearer ${accessToken}` } }),
-            cfetch(buildApiUrl("/api/connect/consultant/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } }),
-        ]);
-        const [p, e, s] = await Promise.all([pRes.json(), eRes.json(), sRes.json()]);
-        if (p.ok) {
-            setProfile(p.consultant);
-            if (p.consultant?.status === "approved") {
-                void registerConnectPushToken(accessToken);
+        try {
+            const [pRes, eRes, sRes] = await Promise.all([
+                cfetch(buildApiUrl("/api/connect/consultant/profile"), { headers: { Authorization: `Bearer ${accessToken}` } }),
+                cfetch(buildApiUrl("/api/connect/consultant/earnings"), { headers: { Authorization: `Bearer ${accessToken}` } }),
+                cfetch(buildApiUrl("/api/connect/consultant/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } }),
+            ]);
+            const [p, e, s] = await Promise.all([pRes.json(), eRes.json(), sRes.json()]);
+            if (p.ok) {
+                setProfile(p.consultant);
+                if (p.consultant?.status === "approved") {
+                    void registerConnectPushToken(accessToken);
+                }
             }
+            if (e.ok) setEarnings(e);
+            if (s.ok) {
+                setIncoming(s.sessions ?? []);
+                prevPendingCount.current = (s.sessions ?? []).filter((x: any) => x.status === "pending").length;
+            }
+        } catch {
+            // Network failure — show empty state rather than spinning indefinitely
+        } finally {
+            setLoading(false);
         }
-        if (e.ok) setEarnings(e);
-        if (s.ok) {
-            setIncoming(s.sessions ?? []);
-            prevPendingCount.current = (s.sessions ?? []).filter((x: any) => x.status === "pending").length;
-        }
-        setLoading(false);
     }, [accessToken]);
 
     useEffect(() => { load(); }, [load]);
