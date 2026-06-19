@@ -3105,7 +3105,11 @@ export default function ChatScreen() {
     }
 
     // API call starts immediately — no undo delay
-    if (!mountedRef.current) return;
+    if (!mountedRef.current) {
+      isSendingRef.current = false;
+      resumeAutoSync();
+      return;
+    }
 
     setIsTyping(true);
     typingStartedAtRef.current = Date.now();

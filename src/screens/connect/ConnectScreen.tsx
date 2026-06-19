@@ -1977,6 +1977,8 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [elapsedSecs, setElapsedSecs] = useState(0);
     const [amountCharged, setAmountCharged] = useState<number | null>(session.amount_charged ?? null);
     const [startedAt, setStartedAt] = useState<string | null>(session.started_at ?? null);
+    const [minutesUsed, setMinutesUsed] = useState<number>(session.minutes_used);
+    const [endingSession, setEndingSession] = useState(false);
     const [nowTick, setNowTick] = useState(() => new Date());
     const [panelOpen, setPanelOpen] = useState(true);
     // Translation state
@@ -1993,11 +1995,13 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
 
     // Load messages
     useEffect(() => {
+        let active = true;
         supabase.from("connect_messages")
             .select("id, sender_id, content, translated_content, created_at")
             .eq("session_id", session.id)
             .order("created_at", { ascending: true })
-            .then(({ data }) => { if (data) setMessages(data as Message[]); });
+            .then(({ data }) => { if (active && data) setMessages(data as Message[]); });
+        return () => { active = false; };
     }, [session.id]);
 
     // Translation helpers
@@ -2059,10 +2063,11 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 event: "UPDATE", schema: "public",
                 table: "connect_sessions", filter: `id=eq.${session.id}`,
             }, (payload) => {
-                const updated = payload.new as { status?: string; amount_charged?: number; started_at?: string };
+                const updated = payload.new as { status?: string; amount_charged?: number; started_at?: string; minutes_used?: number };
                 if (updated.status) setStatus(updated.status);
                 if (updated.amount_charged != null) setAmountCharged(updated.amount_charged);
                 if (updated.started_at) setStartedAt(updated.started_at);
+                if (updated.minutes_used != null) setMinutesUsed(Number(updated.minutes_used));
             })
             .subscribe();
 
@@ -2085,6 +2090,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 const d = await res.json().catch(() => null);
                 if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
                 if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
+                if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
                 if (d?.status === "completed") setStatus("completed");
             }
         }, 60_000);
@@ -2272,7 +2278,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             )}
             {isCompleted && (
                 <View style={{ padding: 10, alignItems: "center", backgroundColor: "rgba(148,163,184,0.08)" }}>
-                    <Text style={s.cardBio}>Session completed · {session.minutes_used} min</Text>
+                    <Text style={s.cardBio}>Session completed · {minutesUsed} min</Text>
                     {!showReview && !isConsultantView && (
                         <TouchableOpacity onPress={() => setShowReview(true)}>
                             <Text style={{ color: colors.primary, fontSize: 12, marginTop: 4 }}>Leave a review</Text>
@@ -2395,19 +2401,31 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 </View>
             )}
 
-            {/* End session button */}
-            {isActive && (
-                <TouchableOpacity style={{ alignItems: "center", paddingVertical: 8, paddingBottom: insets.bottom || 4 }}
-                    onPress={() => {
-                        cfetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-                            body: JSON.stringify({ action: "complete" }),
-                        }).then(() => {
-                            if (isConsultantView) onBack();
-                        }).catch(() => {});
+            {/* End session button — only shown to consultant */}
+            {isActive && isConsultantView && (
+                <TouchableOpacity
+                    style={{ alignItems: "center", paddingVertical: 8, paddingBottom: insets.bottom || 4, opacity: endingSession ? 0.5 : 1 }}
+                    disabled={endingSession}
+                    onPress={async () => {
+                        setEndingSession(true);
+                        try {
+                            const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                                body: JSON.stringify({ action: "complete" }),
+                            });
+                            const d = await res.json().catch(() => null);
+                            if (d?.ok || res.status === 200) { onBack(); }
+                            else { Alert.alert("Error", d?.error ?? "Could not end session. Please try again."); }
+                        } catch {
+                            Alert.alert("Network error", "Please check your connection and try again.");
+                        } finally {
+                            setEndingSession(false);
+                        }
                     }}>
-                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>End session</Text>
+                    {endingSession
+                        ? <ActivityIndicator size="small" color={colors.textSecondary} />
+                        : <Text style={{ color: colors.textSecondary, fontSize: 12 }}>End session</Text>}
                 </TouchableOpacity>
             )}
 
