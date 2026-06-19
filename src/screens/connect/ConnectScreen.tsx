@@ -618,7 +618,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
         try {
             const r = await cfetch(buildApiUrl("/api/connect/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } });
             const d = await r.json();
-            setSessions(d.sessions ?? []);
+            if (d.ok && d.sessions) setSessions(d.sessions);
         } catch { /* ignore */ }
         finally { setRefreshing(false); }
     }
@@ -809,7 +809,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
         })
             .then((r) => r.json())
             .then((d) => {
-                setWalletBalance(d.wallet_balance ?? 0);
+                setWalletBalance(Number(d.wallet_balance ?? 0));
                 setWalletStatus(d.wallet_status ?? "active");
                 setExpiresAt(d.expires_at ?? null);
                 setDaysUntilExpiry(d.days_until_expiry ?? null);
@@ -819,7 +819,8 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
     }, [accessToken]);
 
     async function loadHistory() {
-        if (transactions.length > 0) { setShowHistory((v) => !v); return; }
+        if (showHistory) { setShowHistory(false); return; }
+        if (transactions.length > 0) { setShowHistory(true); return; }
         setShowHistory(true);
         setHistoryLoading(true);
         try {
@@ -2442,8 +2443,8 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                                 body: JSON.stringify({ action: "complete" }),
                             });
                             const d = await res.json().catch(() => null);
-                            if (d?.ok || res.status === 200) { onBack(); }
-                            else { Alert.alert("Error", d?.error ?? "Could not end session. Please try again."); }
+                            if (d?.ok) { onBack(); }
+                            else { Alert.alert("Error", d?.error ?? "Could not end session"); }
                         } catch {
                             Alert.alert("Network error", "Please check your connection and try again.");
                         } finally {
@@ -2904,14 +2905,20 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
     async function toggleOnline() {
         if (!accessToken || !profile) return;
         setToggling(true);
-        const res = await cfetch(buildApiUrl("/api/connect/consultant/status"), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-            body: JSON.stringify({ is_online: !profile.is_online }),
-        });
-        const d = await res.json();
-        if (d.ok) setProfile((p: any) => ({ ...p, is_online: !p.is_online }));
-        setToggling(false);
+        try {
+            const res = await cfetch(buildApiUrl("/api/connect/consultant/status"), {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ is_online: !profile.is_online }),
+            });
+            const d = await res.json();
+            if (d.ok) setProfile((p: any) => ({ ...p, is_online: !p.is_online }));
+            else Alert.alert("Error", d.error ?? "Could not update status");
+        } catch {
+            Alert.alert("Error", "Network error — please try again.");
+        } finally {
+            setToggling(false);
+        }
     }
 
     const pending = incoming.filter((s) => s.status === "pending");
