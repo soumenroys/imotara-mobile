@@ -361,6 +361,10 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
     const s = styles(colors);
 
     useEffect(() => {
+        // Reset pagination state synchronously so loadMoreConsultants won't fire
+        // with a stale page number while the new filter result is loading.
+        setHasMore(false);
+        setPage(1);
         const params = new URLSearchParams();
         if (filterOnline)   params.set("online", "true");
         if (filterCategory) params.set("category", filterCategory);
@@ -1254,6 +1258,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     const [pendingTranslation, setPendingTranslation] = useState(false);
     const [pendingSessionType, setPendingSessionType] = useState<"instant" | "scheduled">("instant");
     const [pendingNote, setPendingNote] = useState<string | undefined>(undefined);
+    const [hasPendingSession, setHasPendingSession] = useState(false);
     const s = styles(colors);
     const sym = CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code;
     const consultantLang = c.preferred_lang ?? "en";
@@ -1309,6 +1314,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     setPendingTranslation(translationRequested);
                     setPendingSessionType(sessionType);
                     setPendingNote(note);
+                    setHasPendingSession(true);
                     setTopUpVisible(true);
                 } else if (d.redirect && d.existing_session_id) {
                     // existing session — navigate there
@@ -1501,7 +1507,14 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 walletBalance={walletBalance}
                 walletCurrency={walletCurrency}
                 onClose={() => setTopUpVisible(false)}
-                onSuccess={(newBal) => { setWalletBalance(newBal); setTopUpVisible(false); startSession(pendingSessionType, pendingNote, pendingTranslation); }}
+                onSuccess={(newBal) => {
+                    setWalletBalance(newBal);
+                    setTopUpVisible(false);
+                    if (hasPendingSession) {
+                        setHasPendingSession(false);
+                        startSession(pendingSessionType, pendingNote, pendingTranslation);
+                    }
+                }}
                 colors={colors}
             />
 
@@ -2935,11 +2948,19 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                         onJoinSession({ ...sess, connect_consultants: null });
                     } else {
                         // Race: session moved out of incoming list — fetch it directly and navigate
-                        const r2 = await cfetch(buildApiUrl(`/api/connect/sessions/${sessionId}`), {
-                            headers: { Authorization: `Bearer ${accessToken}` },
-                        });
-                        const d2 = await r2.json();
-                        if (d2.ok && d2.session) onJoinSession({ ...d2.session, connect_consultants: null });
+                        try {
+                            const r2 = await cfetch(buildApiUrl(`/api/connect/sessions/${sessionId}`), {
+                                headers: { Authorization: `Bearer ${accessToken}` },
+                            });
+                            const d2 = await r2.json();
+                            if (d2.ok && d2.session) {
+                                onJoinSession({ ...d2.session, connect_consultants: null });
+                            } else {
+                                Alert.alert("Session accepted", "Session is ready — check Active Sessions to join.");
+                            }
+                        } catch {
+                            Alert.alert("Session accepted", "Session is ready — check Active Sessions to join.");
+                        }
                     }
                 } else {
                     setIncoming((prev) => prev.filter((s) => s.id !== sessionId));
