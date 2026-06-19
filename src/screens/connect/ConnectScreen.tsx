@@ -2227,7 +2227,15 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     body: JSON.stringify({ content: text }),
                 });
                 const d = await res.json();
-                if (!res.ok || !d.ok) setInput(text);
+                if (!res.ok || !d.ok) {
+                    setInput(text);
+                } else if (d.message) {
+                    // Append immediately with translated_content populated.
+                    // Realtime dedup (prev.find by id) prevents the Realtime INSERT from doubling it.
+                    setMessages((prev: any[]) =>
+                        prev.find((m: any) => m.id === d.message.id) ? prev : [...prev, d.message]
+                    );
+                }
             } else {
                 if (!userId) { setInput(text); return; }
                 const { error } = await supabase.from("connect_messages").insert({ session_id: session.id, sender_id: userId, content: text });
@@ -2928,7 +2936,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                 const updated = payload.new;
                 // connect_sessions uses REPLICA IDENTITY DEFAULT — status may be absent
                 // in tick-only UPDATEs (minutes_used changed). Guard to avoid false removal.
-                if (!updated?.status) return;
+                if (!updated?.id || !updated?.status) return;
                 if (!["pending", "active"].includes(updated.status)) {
                     setIncoming((prev: any[]) => prev.filter((s: any) => s.id !== updated.id));
                 } else {
