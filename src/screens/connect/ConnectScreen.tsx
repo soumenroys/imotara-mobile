@@ -347,6 +347,9 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
     const [isSigningIn, setIsSigningIn] = useState(false);
     const [consultants, setConsultants] = useState<Consultant[]>([]);
     const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [filterOnline, setFilterOnline] = useState(false);
     const [filterTag, setFilterTag] = useState("");
     const [filterCategory, setFilterCategory] = useState("");
@@ -375,12 +378,37 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 const cd = cdR.status === "fulfilled" ? cdR.value : { ok: false };
                 const fd = fdR.status === "fulfilled" ? fdR.value : { ok: false, favorites: [] };
                 const wd = wdR.status === "fulfilled" ? wdR.value : { ok: false };
-                if (cd.ok) setConsultants(cd.consultants ?? []);
+                if (cd.ok) {
+                    setConsultants(cd.consultants ?? []);
+                    setHasMore(1 < (cd.totalPages ?? 1));
+                    setPage(1);
+                }
                 if (fd.ok) setFavorites(new Set(fd.favorites ?? []));
                 if (wd.ok) { setWalletBalance(Number(wd.wallet_balance ?? 0)); setWalletCurrency(wd.wallet_currency ?? "INR"); }
             })
             .finally(() => setLoading(false));
     }, [accessToken, filterOnline, filterCategory]);
+
+    async function loadMoreConsultants() {
+        if (!hasMore || loadingMore) return;
+        const nextPage = page + 1;
+        setLoadingMore(true);
+        const params = new URLSearchParams();
+        if (filterOnline)   params.set("online", "true");
+        if (filterCategory) params.set("category", filterCategory);
+        params.set("page", String(nextPage));
+        const authHeaders: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+        try {
+            const r = await cfetch(buildApiUrl(`/api/connect/consultants?${params}`), { headers: authHeaders });
+            const cd = await r.json();
+            if (cd.ok) {
+                setConsultants((prev) => [...prev, ...(cd.consultants ?? [])]);
+                setHasMore(nextPage < (cd.totalPages ?? 1));
+                setPage(nextPage);
+            }
+        } catch { /* silent */ }
+        finally { setLoadingMore(false); }
+    }
 
     // Bug #98 fix: realtime subscription to keep is_online status accurate
     useEffect(() => {
@@ -534,6 +562,8 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 data={displayed}
                 keyExtractor={(c) => c.id}
                 contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 20, gap: 12 }}
+                onEndReached={loadMoreConsultants}
+                onEndReachedThreshold={0.3}
                 renderItem={({ item: c }) => (
                     <TouchableOpacity style={s.card} onPress={() => onSelectConsultant(c)} activeOpacity={0.78}>
                         <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
@@ -589,9 +619,12 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                     </TouchableOpacity>
                 )}
                 ListFooterComponent={
-                    <Text style={{ fontSize: 11, color: "#64748b", textAlign: "center", paddingVertical: 16, paddingHorizontal: 16 }}>
-                        Peer wellness support only — not a substitute for professional mental health care.
-                    </Text>
+                    <>
+                        {loadingMore && <ActivityIndicator color={colors.primary} style={{ paddingVertical: 16 }} />}
+                        <Text style={{ fontSize: 11, color: "#64748b", textAlign: "center", paddingVertical: 16, paddingHorizontal: 16 }}>
+                            Peer wellness support only — not a substitute for professional mental health care.
+                        </Text>
+                    </>
                 }
             />
         </View>
