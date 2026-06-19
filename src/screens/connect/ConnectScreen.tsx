@@ -1944,6 +1944,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     // Dual panel state — walletBal removed (was showing unrelated general INR wallet)
     const [showRecharge, setShowRecharge] = useState(false);
     const [elapsedSecs, setElapsedSecs] = useState(0);
+    const [amountCharged, setAmountCharged] = useState<number | null>(session.amount_charged ?? null);
     const [nowTick, setNowTick] = useState(() => new Date());
     const [panelOpen, setPanelOpen] = useState(true);
     // Translation state
@@ -2026,8 +2027,9 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 event: "UPDATE", schema: "public",
                 table: "connect_sessions", filter: `id=eq.${session.id}`,
             }, (payload) => {
-                const updated = payload.new as { status?: string };
+                const updated = payload.new as { status?: string; amount_charged?: number };
                 if (updated.status) setStatus(updated.status);
+                if (updated.amount_charged != null) setAmountCharged(updated.amount_charged);
             })
             .subscribe();
 
@@ -2049,6 +2051,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             if (res) {
                 const d = await res.json().catch(() => null);
                 if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
+                if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
                 if (d?.status === "completed") setStatus("completed");
             }
         }, 60_000);
@@ -2121,7 +2124,8 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const isConsultantView = session.user_id !== userId;
     const sym = CURRENCY_SYMBOLS[session.currency_code ?? "INR"] ?? "₹";
     const rate = Number(session.rate_per_min ?? session.connect_consultants?.rate_per_min ?? 0);
-    const consumed = (elapsedSecs / 60) * rate;
+    // Use server-confirmed amount_charged; fall back to local clock estimate between ticks
+    const consumed = amountCharged ?? (elapsedSecs / 60) * rate;
     const isLow = displaySeconds !== null && displaySeconds <= 120 && isActive;
 
     const userTz = session.user_timezone || "Asia/Kolkata";
