@@ -5,6 +5,7 @@
 //             Falls back to Razorpay if Google Play Billing unavailable (not recommended for new installs).
 
 import React, { useEffect, useRef, useState } from "react";
+import { DEBUG_UI_ENABLED } from "../../config/debug";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     Modal,
@@ -275,7 +276,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     } = useIAP({
         onPurchaseSuccess: async (purchase: Purchase) => {
             // Handles BOTH iOS and Android
-            console.log("[IAP] onPurchaseSuccess:", purchase.productId, "gate=", purchaseOutcomeHandledRef.current);
+            if (DEBUG_UI_ENABLED) console.log("[IAP] onPurchaseSuccess:", purchase.productId, "gate=", purchaseOutcomeHandledRef.current);
             // Gate check first — whichever callback fires first (success or error) claims the gate.
             if (purchaseOutcomeHandledRef.current) return;
             purchaseOutcomeHandledRef.current = true;
@@ -297,7 +298,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                 // If the ref is still null the component just mounted — do a single timed
                 // getSession() attempt (10 s) before giving up.
                 if (!accessToken) {
-                    console.log("[IAP] accessToken not cached yet — attempting timed getSession");
+                    if (DEBUG_UI_ENABLED) console.log("[IAP] accessToken not cached yet — attempting timed getSession");
                     try {
                         const result = await Promise.race([
                             supabase.auth.getSession(),
@@ -307,12 +308,12 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                         accessToken = result.data.session?.access_token ?? null;
                         if (accessToken) accessTokenRef.current = accessToken;
                     } catch (e) {
-                        console.log("[IAP] getSession timeout/error:", String(e));
+                        if (DEBUG_UI_ENABLED) console.log("[IAP] getSession timeout/error:", String(e));
                     }
                 }
 
                 if (!accessToken) {
-                    console.log("[IAP] no session — finishing transaction then showing sign in required");
+                    if (DEBUG_UI_ENABLED) console.log("[IAP] no session — finishing transaction then showing sign in required");
                     // Finish the transaction BEFORE returning so the purchase doesn't stay
                     // stuck in a pending state. The user can restore it after signing in.
                     try { await finishTransaction({ purchase, isConsumable: isTokenPack }); } catch { /* ignore */ }
@@ -323,7 +324,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                     return;
                 }
 
-                console.log("[IAP] session: true user:", userEmail ?? "unknown platform:", Platform.OS);
+                if (DEBUG_UI_ENABLED) console.log("[IAP] session: true user:", userEmail ?? "unknown platform:", Platform.OS);
 
                 if (Platform.OS === "android") {
                     // ── Android: Google Play Billing verification ──────────────────
@@ -351,7 +352,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                 } else {
                     // ── iOS: Apple IAP verification ────────────────────────────────
                     const iosTransactionId = (purchase as PurchaseIOS).transactionId ?? purchase.id;
-                    console.log("[IAP] verifying transactionId:", iosTransactionId);
+                    if (DEBUG_UI_ENABLED) console.log("[IAP] verifying transactionId:", iosTransactionId);
                     const verifyAbort = new AbortController();
                     const verifyAbortTimer = setTimeout(() => verifyAbort.abort(), 35_000);
                     let verifyRes: Response;
@@ -368,7 +369,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                     } finally {
                         clearTimeout(verifyAbortTimer);
                     }
-                    console.log("[IAP] verify response status:", verifyRes.status);
+                    if (DEBUG_UI_ENABLED) console.log("[IAP] verify response status:", verifyRes.status);
                     if (!verifyRes.ok) {
                         const errBody = await verifyRes.json().catch(() => ({})) as { error?: string };
                         Alert.alert(
@@ -387,7 +388,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                 const tierName = isTokenPack ? "credits" : (productId.includes("pro") ? "Pro" : "Plus");
                 setPurchaseSuccess({ tierName, isTokenPack });
             } catch (err) {
-                console.log("[IAP] onPurchaseSuccess catch:", String(err));
+                if (DEBUG_UI_ENABLED) console.log("[IAP] onPurchaseSuccess catch:", String(err));
                 if (serverVerified) {
                     Alert.alert(
                         "Purchase complete",
@@ -409,7 +410,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
             // Handle errors on both platforms
             const code = (error as any).code ?? "";
             const msg = (error as any).message ?? "";
-            console.log("[IAP] onPurchaseError:", code, msg, "gate=", purchaseOutcomeHandledRef.current);
+            if (DEBUG_UI_ENABLED) console.log("[IAP] onPurchaseError:", code, msg, "gate=", purchaseOutcomeHandledRef.current);
             // Gate check FIRST — if onPurchaseSuccess already claimed the gate, return
             // immediately without clearing the spinner (success handler owns it now).
             if (purchaseOutcomeHandledRef.current) return;
@@ -544,7 +545,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     };
 
     const handleIosPurchase = async (sku: string, type: "subs" | "in-app") => {
-        console.log("[IAP] handleIosPurchase:", sku, "purchasing=", purchasing, "signingIn=", signingIn, "signedIn=", isSignedInRef.current);
+        if (DEBUG_UI_ENABLED) console.log("[IAP] handleIosPurchase:", sku, "purchasing=", purchasing, "signingIn=", signingIn, "signedIn=", isSignedInRef.current);
         if (purchasing || signingIn) return;
         if (isSignedInRef.current === false) {
             promptSignIn(() => handleIosPurchase(sku, type));
@@ -568,7 +569,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
             setPurchasing(null);
             const errCode = (err as any)?.code ?? "";
             const errMsg  = String((err as any)?.message ?? "");
-            console.log("[IAP] requestPurchase catch:", errCode, errMsg, "gate=", purchaseOutcomeHandledRef.current);
+            if (DEBUG_UI_ENABLED) console.log("[IAP] requestPurchase catch:", errCode, errMsg, "gate=", purchaseOutcomeHandledRef.current);
             // onPurchaseError fires as a separate event for the same failure.
             // Only show a dialog here if that callback hasn't already handled it.
             if (!purchaseOutcomeHandledRef.current && errCode !== "E_USER_CANCELLED") {
