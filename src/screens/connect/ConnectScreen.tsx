@@ -2139,6 +2139,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 const d = await res.json();
                 if (!res.ok || !d.ok) setInput(text);
             } else {
+                if (!userId) { setInput(text); return; }
                 const { error } = await supabase.from("connect_messages").insert({ session_id: session.id, sender_id: userId, content: text });
                 if (error) setInput(text);
             }

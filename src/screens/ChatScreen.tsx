@@ -3788,14 +3788,14 @@ export default function ChatScreen() {
             speakMessage(botMessage.id, botMessage.text, g, l, () => setSpeakingMessageId(null), ttsRate, ttsPitch, accessToken ?? undefined);
           }
         } finally {
+          // Always release send-lock regardless of mount state
+          isSendingRef.current = false;
+          resumeAutoSync();
+
           if (!mountedRef.current) return;
 
           setIsTyping(false);
           setTypingStatus("idle");
-
-          // ✅ release send-lock after full cycle ends
-          isSendingRef.current = false;
-          resumeAutoSync();
         }
       })();
     }, 800);
