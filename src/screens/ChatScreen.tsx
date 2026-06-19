@@ -3813,6 +3813,7 @@ export default function ChatScreen() {
     const { messageId } = pendingUndo;
     setPendingUndo(null);
     isSendingRef.current = false;
+    resumeAutoSync();
     setIsTyping(false);
     setTypingStatus("idle");
     // Remove streaming placeholder if first token already arrived

@@ -201,7 +201,7 @@ type ConnectView =
     | { name: "sessions" }
     | { name: "wallet" }
     | { name: "profile"; consultant: Consultant }
-    | { name: "chat"; session: Session }
+    | { name: "chat"; session: Session; origin?: "sessions" | "dashboard" }
     | { name: "dashboard" }
     | { name: "register" };
 
@@ -281,15 +281,16 @@ export default function ConnectScreen() {
             onStartSession={(s) => setView({ name: "chat", session: s })} />;
     }
     if (view.name === "chat") {
+        const chatOrigin = view.origin;
         return <ChatView session={view.session} colors={colors} insets={insets}
             accessToken={accessToken} userId={user?.id ?? null}
-            onBack={() => setView({ name: "sessions" })} />;
+            onBack={() => setView(chatOrigin === "dashboard" ? { name: "dashboard" } : { name: "sessions" })} />;
     }
     if (view.name === "dashboard") {
         return <DashboardView colors={colors} insets={insets}
             accessToken={accessToken}
             onBack={() => setView({ name: "browse" })}
-            onJoinSession={(s) => setView({ name: "chat", session: s })}
+            onJoinSession={(s) => setView({ name: "chat", session: s, origin: "dashboard" })}
             onRegister={() => setView({ name: "register" })} />;
     }
     if (view.name === "register") {
@@ -659,7 +660,11 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
             });
             const d = await res.json();
             if (d.ok) setSessions((prev) => prev.map((s) => s.id === id ? { ...s, status: "cancelled" } : s));
-            else Alert.alert("Error", d.error ?? "Could not cancel");
+            else {
+                Alert.alert("Error", d.error ?? "Could not cancel");
+                // 409 = session already moved on (accepted/declined); remove stale entry so Cancel button disappears
+                if (res.status === 409) setSessions((prev) => prev.filter((s) => s.id !== id));
+            }
         } catch {
             Alert.alert("Error", "Network error");
         } finally {
@@ -1623,12 +1628,16 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                                 style={[s.primaryBtn, { marginBottom: 8 }, scheduleLoading && { opacity: 0.6 }]}
                                 onPress={() => {
                                     if (!scheduleDateObj) {
-                                        Alert.alert("Date required", "Please pick a date and time for the session.");
+                                        Alert.alert("Date required", "Please pick a date for the session.");
+                                        return;
+                                    }
+                                    if (!scheduleTimeObj) {
+                                        Alert.alert("Time required", "Please select a time for the session.");
                                         return;
                                     }
                                     {
                                         const dStr = `${scheduleDateObj.getFullYear()}-${String(scheduleDateObj.getMonth()+1).padStart(2,"0")}-${String(scheduleDateObj.getDate()).padStart(2,"0")}`;
-                                        const tStr = scheduleTimeObj ? `${String(scheduleTimeObj.getHours()).padStart(2,"0")}:${String(scheduleTimeObj.getMinutes()).padStart(2,"0")}` : "00:00";
+                                        const tStr = `${String(scheduleTimeObj.getHours()).padStart(2,"0")}:${String(scheduleTimeObj.getMinutes()).padStart(2,"0")}`;
                                         const combined = new Date(`${dStr}T${tStr}`);
                                         if (combined.getTime() <= Date.now()) {
                                             Alert.alert("Invalid time", "Please choose a future date and time.");
