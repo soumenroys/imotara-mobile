@@ -3091,11 +3091,15 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             const d = await res.json();
             if (d.ok) {
                 if (action === "accept") {
+                    // Remove from incoming immediately — without this the session remains
+                    // in the list with ghost Accept/Decline buttons if the consultant
+                    // navigates back before the Realtime UPDATE arrives.
+                    setIncoming((prev) => prev.filter((s) => s.id !== sessionId));
                     const sess = incoming.find((s) => s.id === sessionId);
                     if (sess) {
                         onJoinSession({ ...sess, connect_consultants: null });
                     } else {
-                        // Race: session moved out of incoming list — fetch it directly and navigate
+                        // Race: session already moved out of incoming — fetch directly and navigate
                         try {
                             const r2 = await cfetch(buildApiUrl(`/api/connect/sessions/${sessionId}`), {
                                 headers: { Authorization: `Bearer ${accessToken}` },
