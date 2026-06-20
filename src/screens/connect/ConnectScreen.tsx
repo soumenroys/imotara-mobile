@@ -1310,7 +1310,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
             });
             const d = await res.json();
             if (!d.ok) {
-                if (d.error?.includes("Insufficient balance")) {
+                if (d.needs_recharge || d.error?.includes("Insufficient balance")) {
                     setPendingTranslation(translationRequested);
                     setPendingSessionType(sessionType);
                     setPendingNote(note);
@@ -2264,6 +2264,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 const d = await res.json();
                 if (!res.ok || !d.ok) {
                     setInput(text);
+                    Alert.alert("Message not sent", d?.error ?? "Please try again.");
                 } else if (d.message) {
                     // Append immediately with translated_content populated.
                     // Realtime dedup (prev.find by id) prevents the Realtime INSERT from doubling it.
@@ -2274,9 +2275,15 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             } else {
                 if (!userId) { setInput(text); return; }
                 const { error } = await supabase.from("connect_messages").insert({ session_id: session.id, sender_id: userId, content: text });
-                if (error) setInput(text);
+                if (error) {
+                    setInput(text);
+                    Alert.alert("Message not sent", "Please try again.");
+                }
             }
-        } catch { setInput(text); }
+        } catch {
+            setInput(text);
+            Alert.alert("Message not sent", "Network error — please try again.");
+        }
         finally { setSending(false); }
     }
 
