@@ -371,6 +371,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
         if (filterOnline)   params.set("online", "true");
         if (filterCategory) params.set("category", filterCategory);
         const authHeaders: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+        setLoading(true);
         setFetchFailed(false);
         Promise.allSettled([
             cfetch(buildApiUrl(`/api/connect/consultants?${params}`), { headers: authHeaders }).then((r) => r.json()),
@@ -831,6 +832,84 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
 // ── Wallet Tab ─────────────────────────────────────────────────────────────────
 const TOPUP_PRESETS = [1000, 2000, 5000, 10000];
 
+// Defined at module scope so React sees a stable component type and does NOT unmount/remount
+// the TextInput inside on every WalletTab re-render (which would lose keyboard focus).
+function TopUpForm({ label, colors, s, topupAmount, setTopupAmount, isCustom, setIsCustom, customAmount,
+    setCustomAmount, termsAccepted, setTermsAccepted, topupError, setTopupError, topupLoading, handleTopUp, isDormant }: {
+    label: string; colors: any; s: any;
+    topupAmount: number; setTopupAmount: (v: number) => void;
+    isCustom: boolean; setIsCustom: (v: boolean | ((p: boolean) => boolean)) => void;
+    customAmount: string; setCustomAmount: (v: string) => void;
+    termsAccepted: boolean; setTermsAccepted: (v: boolean | ((p: boolean) => boolean)) => void;
+    topupError: string; setTopupError: (v: string) => void;
+    topupLoading: boolean; handleTopUp: () => void; isDormant: boolean;
+}) {
+    return (
+        <View style={s.card}>
+            <Text style={[s.cardName, { marginBottom: 12 }]}>{label}</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                {TOPUP_PRESETS.map((p) => (
+                    <TouchableOpacity key={p}
+                        style={[s.durationBtn, !isCustom && topupAmount === p && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
+                        onPress={() => { setIsCustom(false); setTopupAmount(p); setTopupError(""); }}>
+                        <Text style={[s.durationBtnText, !isCustom && topupAmount === p && s.durationBtnTextActive]} numberOfLines={1}>
+                            ₹{p.toLocaleString("en-IN")}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                    style={[s.durationBtn, isCustom && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
+                    onPress={() => { setIsCustom(true); setTopupError(""); }}>
+                    <Text style={[s.durationBtnText, isCustom && s.durationBtnTextActive]} numberOfLines={1}>Custom</Text>
+                </TouchableOpacity>
+            </View>
+            {isCustom && (
+                <TextInput
+                    style={[s.messageInput, { marginBottom: 10 }]}
+                    value={customAmount}
+                    onChangeText={setCustomAmount}
+                    placeholder="Enter amount (₹)"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="numeric"
+                />
+            )}
+            <TouchableOpacity
+                style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 10 }}
+                onPress={() => setTermsAccepted((v) => !v)}
+                activeOpacity={0.7}>
+                <View style={{
+                    width: 20, height: 20, borderRadius: 4, borderWidth: 1.5,
+                    borderColor: termsAccepted ? colors.primary : colors.border,
+                    backgroundColor: termsAccepted ? colors.primary : "transparent",
+                    alignItems: "center", justifyContent: "center", marginTop: 2,
+                }}>
+                    {termsAccepted && <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>✓</Text>}
+                </View>
+                <Text style={[s.cardBio, { fontSize: 12, flex: 1 }]}>
+                    I accept the{" "}
+                    <Text style={{ color: colors.primary, textDecorationLine: "underline" }}
+                        onPress={() => Linking.openURL("https://imotara.com/connect/wallet-terms")}>
+                        Wallet Terms & Policy
+                    </Text>
+                    {" "}including the 2-year inactivity and dormancy rules.
+                </Text>
+            </TouchableOpacity>
+            {topupError !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{topupError}</Text>}
+            <TouchableOpacity
+                style={[s.primaryBtn, (topupLoading || !termsAccepted) && { opacity: 0.5 }]}
+                onPress={handleTopUp}
+                disabled={topupLoading || !termsAccepted}>
+                {topupLoading
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={s.primaryBtnText}>
+                        {isDormant ? "Reactivate & Add " : "Add "}
+                        ₹{isCustom ? (customAmount || "0") : topupAmount.toLocaleString("en-IN")} to Wallet
+                    </Text>}
+            </TouchableOpacity>
+        </View>
+    );
+}
+
 function WalletTab({ colors, accessToken }: { colors: any; accessToken: string | null }) {
     const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const [isSigningIn, setIsSigningIn] = useState(false);
@@ -996,74 +1075,6 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
     const isDormant = walletStatus === "dormant";
     const isRefundRequested = walletStatus === "refund_requested";
 
-    // Shared top-up form used in both active and dormant states
-    function TopUpForm({ label }: { label: string }) {
-        return (
-            <View style={s.card}>
-                <Text style={[s.cardName, { marginBottom: 12 }]}>{label}</Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-                    {TOPUP_PRESETS.map((p) => (
-                        <TouchableOpacity key={p}
-                            style={[s.durationBtn, !isCustom && topupAmount === p && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
-                            onPress={() => { setIsCustom(false); setTopupAmount(p); setTopupError(""); }}>
-                            <Text style={[s.durationBtnText, !isCustom && topupAmount === p && s.durationBtnTextActive]} numberOfLines={1}>
-                                ₹{p.toLocaleString("en-IN")}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                    <TouchableOpacity
-                        style={[s.durationBtn, isCustom && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
-                        onPress={() => { setIsCustom(true); setTopupError(""); }}>
-                        <Text style={[s.durationBtnText, isCustom && s.durationBtnTextActive]} numberOfLines={1}>Custom</Text>
-                    </TouchableOpacity>
-                </View>
-                {isCustom && (
-                    <TextInput
-                        style={[s.messageInput, { marginBottom: 10 }]}
-                        value={customAmount}
-                        onChangeText={setCustomAmount}
-                        placeholder="Enter amount (₹)"
-                        placeholderTextColor={colors.textSecondary}
-                        keyboardType="numeric"
-                    />
-                )}
-                <TouchableOpacity
-                    style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 10 }}
-                    onPress={() => setTermsAccepted((v) => !v)}
-                    activeOpacity={0.7}>
-                    <View style={{
-                        width: 20, height: 20, borderRadius: 4, borderWidth: 1.5,
-                        borderColor: termsAccepted ? colors.primary : colors.border,
-                        backgroundColor: termsAccepted ? colors.primary : "transparent",
-                        alignItems: "center", justifyContent: "center", marginTop: 2,
-                    }}>
-                        {termsAccepted && <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>✓</Text>}
-                    </View>
-                    <Text style={[s.cardBio, { fontSize: 12, flex: 1 }]}>
-                        I accept the{" "}
-                        <Text style={{ color: colors.primary, textDecorationLine: "underline" }}
-                            onPress={() => Linking.openURL("https://imotara.com/connect/wallet-terms")}>
-                            Wallet Terms & Policy
-                        </Text>
-                        {" "}including the 2-year inactivity and dormancy rules.
-                    </Text>
-                </TouchableOpacity>
-                {topupError !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{topupError}</Text>}
-                <TouchableOpacity
-                    style={[s.primaryBtn, (topupLoading || !termsAccepted) && { opacity: 0.5 }]}
-                    onPress={handleTopUp}
-                    disabled={topupLoading || !termsAccepted}>
-                    {topupLoading
-                        ? <ActivityIndicator color="#fff" />
-                        : <Text style={s.primaryBtnText}>
-                            {isDormant ? "Reactivate & Add " : "Add "}
-                            ₹{isCustom ? (customAmount || "0") : topupAmount.toLocaleString("en-IN")} to Wallet
-                        </Text>}
-                </TouchableOpacity>
-            </View>
-        );
-    }
-
     return (
         <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
             {/* Balance card */}
@@ -1113,7 +1124,17 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
 
             {/* Top-up form */}
             {!isRefundRequested && (
-                <TopUpForm label={isDormant ? "Reactivate Wallet" : "Add Money to Wallet"} />
+                <TopUpForm
+                    label={isDormant ? "Reactivate Wallet" : "Add Money to Wallet"}
+                    colors={colors} s={s}
+                    topupAmount={topupAmount} setTopupAmount={setTopupAmount}
+                    isCustom={isCustom} setIsCustom={setIsCustom}
+                    customAmount={customAmount} setCustomAmount={setCustomAmount}
+                    termsAccepted={termsAccepted} setTermsAccepted={setTermsAccepted}
+                    topupError={topupError} setTopupError={setTopupError}
+                    topupLoading={topupLoading} handleTopUp={handleTopUp}
+                    isDormant={isDormant}
+                />
             )}
 
             {/* Dormant refund panel */}
@@ -2190,7 +2211,11 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [session.id]);
+    // accessToken must be in deps: the translate API calls inside the Realtime
+    // INSERT handler capture it in a closure. Without it, a token refresh mid-session
+    // would leave the handler calling translate with an expired token.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [session.id, accessToken]);
 
     // 60s billing tick
     useEffect(() => {
@@ -2289,6 +2314,10 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     setMessages((prev: any[]) =>
                         prev.find((m: any) => m.id === d.message.id) ? prev : [...prev, d.message]
                     );
+                } else {
+                    // ok:true but message missing (server-side serialization edge case)
+                    setInput(text);
+                    Alert.alert("Message not sent", "Server error — please try again.");
                 }
             } else {
                 if (!userId) { setInput(text); return; }
@@ -2987,6 +3016,9 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                 if (newSession?.status === "pending") {
                     setIncoming((prev) => {
                         if (prev.find((s: any) => s.id === newSession.id)) return prev;
+                        // Sync the polling counter so the 15s poller doesn't fire a
+                        // second "New Request" alert for the same session.
+                        prevPendingCount.current += 1;
                         setNewRequestAlert(true);
                         Alert.alert("New Request! 🔔", "A user wants to connect with you.");
                         return [newSession, ...prev];
