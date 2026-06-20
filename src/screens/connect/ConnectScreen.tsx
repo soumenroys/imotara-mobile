@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
     View, Text, ScrollView, TouchableOpacity, TextInput, FlatList,
     ActivityIndicator, Alert, Modal, Linking, Platform, StyleSheet,
-    KeyboardAvoidingView, Image, RefreshControl,
+    KeyboardAvoidingView, Image, RefreshControl, BackHandler,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -2196,6 +2196,26 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         }, 60_000);
         return () => { if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; } };
     }, [status, session.id, accessToken]);
+
+    // Android hardware back button: warn user before leaving an active session
+    useEffect(() => {
+        if (Platform.OS !== "android") return;
+        const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+            if (status === "active") {
+                Alert.alert(
+                    "Leave active session?",
+                    "Billing will continue until the session is ended. Are you sure you want to leave?",
+                    [
+                        { text: "Stay", style: "cancel" },
+                        { text: "Leave", style: "destructive", onPress: onBack },
+                    ]
+                );
+                return true; // consume the back event
+            }
+            return false; // allow normal back navigation when not active
+        });
+        return () => sub.remove();
+    }, [status, onBack]);
 
     // Per-second visual countdown synced from API tick
     useEffect(() => {
