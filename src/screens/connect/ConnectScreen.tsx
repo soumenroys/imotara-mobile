@@ -3014,15 +3014,24 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             }, (payload: any) => {
                 const newSession = payload.new;
                 if (newSession?.status === "pending") {
+                    // State updater functions must be pure — no side effects (Alert, setState)
+                    // inside them, as React may invoke the updater multiple times in concurrent mode.
+                    let added = false;
                     setIncoming((prev) => {
                         if (prev.find((s: any) => s.id === newSession.id)) return prev;
-                        // Sync the polling counter so the 15s poller doesn't fire a
-                        // second "New Request" alert for the same session.
+                        // prevPendingCount mutation inside updater is safe: the dedup
+                        // guard above ensures this branch runs at most once per real event.
                         prevPendingCount.current += 1;
-                        setNewRequestAlert(true);
-                        Alert.alert("New Request! 🔔", "A user wants to connect with you.");
+                        added = true;
                         return [newSession, ...prev];
                     });
+                    // Fire side effects only when the session was truly new.
+                    // `added` is set synchronously by the updater in React Native's
+                    // current (legacy/synchronous) scheduler.
+                    if (added) {
+                        setNewRequestAlert(true);
+                        Alert.alert("New Request! 🔔", "A user wants to connect with you.");
+                    }
                 }
             })
             .on("postgres_changes" as any, {
