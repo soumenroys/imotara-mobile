@@ -2997,7 +2997,10 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                 })
                 .catch(() => {});
         }, 15_000);
-        return () => { clearInterval(t); prevPendingCount.current = 0; };
+        // Do NOT reset prevPendingCount.current here — resetting it on token refresh would
+        // cause the next poll to treat all existing pending sessions as new and fire spurious
+        // "New Request" alerts. The ref is intentionally not part of the effect's cleanup.
+        return () => { clearInterval(t); };
     }, [accessToken]);
 
     // Supabase Realtime: instant alert for new pending sessions
