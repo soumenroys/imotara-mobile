@@ -388,7 +388,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                     setPage(1);
                 }
                 if (fd.ok) setFavorites(new Set(fd.favorites ?? []));
-                if (wd.ok) { setWalletBalance(Number(wd.wallet_balance ?? 0)); setWalletCurrency(wd.wallet_currency ?? "INR"); }
+                if (wd.ok) { setWalletBalance(Math.max(0, Number(wd.wallet_balance ?? 0))); setWalletCurrency(wd.wallet_currency ?? "INR"); }
             })
             .finally(() => setLoading(false));
     }, [accessToken, filterOnline, filterCategory]);
@@ -851,7 +851,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             .then((r) => r.json())
             .then((d) => {
                 if (!d.ok) return;
-                setWalletBalance(Number(d.wallet_balance ?? 0));
+                setWalletBalance(Math.max(0, Number(d.wallet_balance ?? 0)));
                 setWalletStatus(d.wallet_status ?? "active");
                 setExpiresAt(d.expires_at ?? null);
                 setDaysUntilExpiry(d.days_until_expiry ?? null);
@@ -1764,6 +1764,15 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
     const sym = CURRENCY_SYMBOLS[walletCurrency] ?? "₹";
     const topupAmt = isCustom ? Math.max(1, parseFloat(customAmt) || 0) : selectedAmt;
 
+    // Reset all form state when the modal opens so stale errors / accepted terms
+    // from a prior open don't carry over to a new payment attempt.
+    useEffect(() => {
+        if (visible) {
+            setSelectedAmt(1000); setCustomAmt(""); setIsCustom(false);
+            setTerms(false); setError("");
+        }
+    }, [visible]);
+
     async function handlePay() {
         if (!accessToken) return;
         if (topupAmt < 1) { setError("Please enter a valid amount"); return; }
@@ -2119,9 +2128,10 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         setChatLang(lang);
         setShowLangPicker(false);
         if (lang) {
-            setMessages((msgs) => {
-                msgs.forEach((m) => { if (!translations.has(`${m.id}::${lang}`)) translateMessage(m.id, m.content, lang); });
-                return msgs;
+            // Trigger translations outside setMessages updater — calling setState
+            // from inside another state updater violates React's rules.
+            messages.forEach((m: any) => {
+                if (!translations.has(`${m.id}::${lang}`)) translateMessage(m.id, m.content, lang);
             });
         }
     }
@@ -2211,12 +2221,17 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 setElapsedSecs(Math.max(0, Math.floor((tick.getTime() - new Date(startedAt).getTime()) / 1000)));
             }
         }, 1000);
-        return () => { if (clockRef.current) clearInterval(clockRef.current); };
+        return () => { if (clockRef.current) { clearInterval(clockRef.current); clockRef.current = null; } };
     }, [startedAt, status]);
 
     async function send() {
         const text = input.trim();
         if (!text || sending) return;
+        if (status !== "active") return; // guard: don't send to completed/cancelled sessions
+        if (session.translation_enabled && !accessToken) {
+            Alert.alert("Signed out", "Please sign in again to continue.");
+            return;
+        }
         setSending(true); setInput("");
         try {
             if (session.translation_enabled) {
@@ -2802,13 +2817,18 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                 onPress: async () => {
                     setBlockingId(userId);
                     try {
-                        await cfetch(buildApiUrl("/api/connect/blocks"), {
+                        const res = await cfetch(buildApiUrl("/api/connect/blocks"), {
                             method: "POST",
                             headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                             body: JSON.stringify({ blocked_user_id: userId, reason: "Reported by companion" }),
                         });
+                        const d = await res.json().catch(() => null);
+                        if (!res.ok || !d?.ok) {
+                            Alert.alert("Error", d?.error ?? "Could not block user. Please try again.");
+                            return;
+                        }
                         setHistory((prev) => prev.filter((h) => h.user_id !== userId));
-                    } catch { /* silent */ }
+                    } catch { Alert.alert("Error", "Network error. Please try again."); }
                     finally { setBlockingId(null); }
                 },
             },
@@ -2902,7 +2922,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                 })
                 .catch(() => {});
         }, 15_000);
-        return () => clearInterval(t);
+        return () => { clearInterval(t); prevPendingCount.current = 0; };
     }, [accessToken]);
 
     // Supabase Realtime: instant alert for new pending sessions
