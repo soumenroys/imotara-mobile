@@ -358,6 +358,8 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
     const [favLoading, setFavLoading] = useState<string | null>(null);
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
     const [walletCurrency, setWalletCurrency] = useState("INR");
+    const [fetchFailed, setFetchFailed] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
     const s = styles(colors);
 
     useEffect(() => {
@@ -369,6 +371,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
         if (filterOnline)   params.set("online", "true");
         if (filterCategory) params.set("category", filterCategory);
         const authHeaders: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+        setFetchFailed(false);
         Promise.allSettled([
             cfetch(buildApiUrl(`/api/connect/consultants?${params}`), { headers: authHeaders }).then((r) => r.json()),
             accessToken
@@ -386,12 +389,14 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                     setConsultants(cd.consultants ?? []);
                     setHasMore(1 < (cd.totalPages ?? 1));
                     setPage(1);
+                } else {
+                    setFetchFailed(true);
                 }
                 if (fd.ok) setFavorites(new Set(fd.favorites ?? []));
                 if (wd.ok) { setWalletBalance(Math.max(0, Number(wd.wallet_balance ?? 0))); setWalletCurrency(wd.wallet_currency ?? "INR"); }
             })
             .finally(() => setLoading(false));
-    }, [accessToken, filterOnline, filterCategory]);
+    }, [accessToken, filterOnline, filterCategory, refreshKey]);
 
     async function loadMoreConsultants() {
         if (!hasMore || loadingMore) return;
@@ -467,8 +472,20 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
     if (loading) return <View style={s.center}><ActivityIndicator color={colors.primary} /></View>;
     if (consultants.length === 0) return (
         <View style={s.center}>
-            <Text style={s.emptyText}>No companions online right now.</Text>
-            <Text style={[s.emptyText, { marginTop: 4, fontSize: 12, opacity: 0.6 }]}>Check back soon.</Text>
+            {fetchFailed ? (
+                <>
+                    <Text style={s.emptyText}>Could not load companions.</Text>
+                    <Text style={[s.emptyText, { marginTop: 4, fontSize: 12, opacity: 0.6 }]}>Check your connection and try again.</Text>
+                    <TouchableOpacity onPress={() => { setLoading(true); setRefreshKey((k) => k + 1); }} style={{ marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 10, backgroundColor: "rgba(139,92,246,0.2)", borderWidth: 1, borderColor: "rgba(139,92,246,0.4)" }}>
+                        <Text style={{ color: "#a78bfa", fontSize: 13, fontWeight: "600" }}>Retry</Text>
+                    </TouchableOpacity>
+                </>
+            ) : (
+                <>
+                    <Text style={s.emptyText}>No companions online right now.</Text>
+                    <Text style={[s.emptyText, { marginTop: 4, fontSize: 12, opacity: 0.6 }]}>Check back soon.</Text>
+                </>
+            )}
         </View>
     );
 
@@ -943,6 +960,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             });
             const d = await res.json();
             setRefundResult({ ok: d.ok, ref: d.reference_number, error: d.error });
+            if (d.ok) setWalletStatus("refund_requested");
         } catch {
             setRefundResult({ ok: false, error: "Request failed. Please try again." });
         } finally {
@@ -2740,6 +2758,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [historyLoading, setHistoryLoading] = useState(false);
     const [loading, setLoading]             = useState(true);
+    const [loadError, setLoadError]         = useState(false);
     const [toggling, setToggling]           = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [showPayout, setShowPayout]       = useState(false);
@@ -2921,7 +2940,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                 prevPendingCount.current = (s.sessions ?? []).filter((x: any) => x.status === "pending").length;
             }
         } catch {
-            // Network failure — show empty state rather than spinning indefinitely
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -3091,6 +3110,14 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
 
             {loading ? (
                 <View style={s.center}><ActivityIndicator color={colors.primary} /></View>
+            ) : loadError ? (
+                <View style={[s.center, { paddingHorizontal: 32 }]}>
+                    <Text style={[s.emptyText, { marginBottom: 8 }]}>Could not load dashboard.</Text>
+                    <Text style={[s.cardBio, { textAlign: "center", marginBottom: 16 }]}>Check your connection and try again.</Text>
+                    <TouchableOpacity onPress={() => { setLoading(true); setLoadError(false); load(); }} style={{ paddingHorizontal: 24, paddingVertical: 10, borderRadius: 12, backgroundColor: "rgba(139,92,246,0.2)", borderWidth: 1, borderColor: "rgba(139,92,246,0.4)" }}>
+                        <Text style={{ color: "#a78bfa", fontSize: 14, fontWeight: "600" }}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
             ) : !profile ? (
                 <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
                     <View style={s.card}>
