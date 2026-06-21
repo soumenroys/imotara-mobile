@@ -2510,7 +2510,22 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         >
             {/* Header */}
             <View style={s.header}>
-                <TouchableOpacity onPress={onBack} style={s.backBtn}>
+                <TouchableOpacity
+                    onPress={() => {
+                        if (status === "active") {
+                            Alert.alert(
+                                "Leave active session?",
+                                "Billing will continue until the session is ended.",
+                                [
+                                    { text: "Stay", style: "cancel" },
+                                    { text: "Leave", style: "destructive", onPress: onBack },
+                                ]
+                            );
+                        } else {
+                            onBack();
+                        }
+                    }}
+                    style={s.backBtn}>
                     <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
                 </TouchableOpacity>
                 <View style={{ flex: 1 }}>
