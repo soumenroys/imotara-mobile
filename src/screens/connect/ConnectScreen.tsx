@@ -2775,7 +2775,12 @@ async function registerConnectPushToken(token: string | null) {
         const Notifications = require("expo-notifications");
         const { status } = await Notifications.requestPermissionsAsync();
         if (status !== "granted") return;
-        const { data: pushToken } = await Notifications.getExpoPushTokenAsync();
+        const Constants = require("expo-constants");
+        const projectId = Constants.default?.expoConfig?.extra?.eas?.projectId
+            ?? Constants.expoConfig?.extra?.eas?.projectId;
+        const { data: pushToken } = await Notifications.getExpoPushTokenAsync(
+            projectId ? { projectId } : undefined
+        );
         if (!pushToken) return;
         await pfetch(buildApiUrl("/api/connect/consultant/profile"), {
             method: "PATCH",
@@ -3139,6 +3144,10 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
 
     async function toggleOnline() {
         if (!accessToken || !profile) return;
+        if (profile.is_online && active.length > 0) {
+            Alert.alert("Active Session", "You cannot go offline while a session is in progress. Please end the session first.");
+            return;
+        }
         setToggling(true);
         try {
             const res = await cfetch(buildApiUrl("/api/connect/consultant/status"), {
@@ -3411,9 +3420,9 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                                         )}
                                         <View style={{ flexDirection: "row", gap: 8 }}>
                                             <TouchableOpacity
-                                                style={[s.primaryBtn, { flex: 1, paddingVertical: 10 }, actionLoading === req.id && { opacity: 0.6 }]}
+                                                style={[s.primaryBtn, { flex: 1, paddingVertical: 10 }, (actionLoading === req.id || active.length > 0) && { opacity: 0.6 }]}
                                                 onPress={() => handleAction(req.id, "accept")}
-                                                disabled={actionLoading === req.id}>
+                                                disabled={actionLoading === req.id || active.length > 0}>
                                                 {actionLoading === req.id
                                                     ? <ActivityIndicator color="#fff" size="small" />
                                                     : <Text style={s.primaryBtnText}>Accept & Chat</Text>
