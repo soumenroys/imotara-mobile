@@ -442,6 +442,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
 
     async function toggleFavorite(consultantId: string) {
         if (!accessToken) return;
+        if (favLoading === consultantId) return;
         const isFav = favorites.has(consultantId);
         setFavLoading(consultantId);
         try {
