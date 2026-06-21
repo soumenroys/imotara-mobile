@@ -674,8 +674,9 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
         try {
             const r = await cfetch(buildApiUrl("/api/connect/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } });
             const d = await r.json();
-            if (d.ok && d.sessions) setSessions(d.sessions);
-        } catch { /* ignore */ }
+            if (d.ok && d.sessions) { setSessions(d.sessions); setFetchFailed(false); }
+            else setFetchFailed(true);
+        } catch { setFetchFailed(true); }
         finally { setRefreshing(false); }
     }
 
@@ -712,7 +713,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
             headers: { Authorization: `Bearer ${accessToken}` },
         })
             .then((r) => r.json())
-            .then((d) => setSessions(d.sessions ?? []))
+            .then((d) => { if (d.ok && d.sessions) setSessions(d.sessions); else setFetchFailed(true); })
             .catch(() => setFetchFailed(true))
             .finally(() => setLoading(false));
     }, [accessToken]);
@@ -785,9 +786,12 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
         cancelled: "#f87171", declined: "#f87171",
     };
 
+    const STATUS_ORDER: Record<string, number> = { active: 0, pending: 1 };
+    const sortedSessions = [...sessions].sort((a, b) => (STATUS_ORDER[a.status] ?? 2) - (STATUS_ORDER[b.status] ?? 2));
+
     return (
         <FlatList
-            data={sessions}
+            data={sortedSessions}
             keyExtractor={(s) => s.id}
             contentContainerStyle={{ padding: 16, gap: 10 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshSessions} tintColor={colors.primary} />}
@@ -2167,7 +2171,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const lastTickAtRef = useRef<number>(0);
+    const lastTickAtRef = useRef<number>(Date.now());
     const userPushTokenRegistered = useRef(false);
     const s = styles(colors);
 
@@ -4107,6 +4111,9 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
             const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: "images", allowsEditing: true, aspect: [1, 1], quality: 0.7 });
             if (result.canceled || !result.assets[0]) return;
             const asset = result.assets[0];
+            if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
+                Alert.alert("File too large", "Profile photo must be under 10 MB."); return;
+            }
             setPhotoLocalUri(asset.uri);
             setPhotoUploading(true);
             const uploadResult = await FileSystem.uploadAsync(buildApiUrl("/api/connect/upload-photo"), asset.uri, {
@@ -4130,6 +4137,9 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
             const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "application/pdf"], copyToCacheDirectory: true });
             if (result.canceled || !result.assets?.[0]) return;
             const asset = result.assets[0];
+            if (asset.size && asset.size > 20 * 1024 * 1024) {
+                Alert.alert("File too large", "Documents must be under 20 MB."); return;
+            }
             setDocUploading(key);
             const uploadResult = await FileSystem.uploadAsync(buildApiUrl("/api/connect/upload-doc"), asset.uri, {
                 httpMethod: "POST",
