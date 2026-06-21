@@ -2169,6 +2169,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [endingSession, setEndingSession] = useState(false);
     const [nowTick, setNowTick] = useState(() => new Date());
     const [panelOpen, setPanelOpen] = useState(true);
+    const [tickPaused, setTickPaused] = useState(false);
     // Translation state
     const [chatLang, setChatLang] = useState("");
     const [translations, setTranslations] = useState<Map<string, string>>(new Map());
@@ -2292,12 +2293,12 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [session.id, accessToken]);
 
-    // 60s billing tick
-    useEffect(() => {
-        if (status !== "active") {
-            if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
-            return;
-        }
+    // Tick helpers — stop/start the 60s billing interval
+    function stopTick() {
+        if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
+    }
+    function startTick() {
+        stopTick();
         tickRef.current = setInterval(async () => {
             if (!accessToken) return;
             lastTickAtRef.current = Date.now();
@@ -2305,15 +2306,26 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 method: "POST",
                 headers: { Authorization: `Bearer ${accessToken}` },
             }).catch(() => null);
-            if (res) {
-                const d = await res.json().catch(() => null);
-                if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
-                if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
-                if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
-                if (d?.status === "completed") setStatus("completed");
-            }
+            if (!res) return;
+            if (res.status === 401) { stopTick(); setTickPaused(true); return; }
+            const d = await res.json().catch(() => null);
+            if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
+            if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
+            if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
+            if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
+            if (d?.status === "completed") setStatus("completed");
         }, 60_000);
-        return () => { if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; } };
+    }
+
+    // 60s billing tick
+    useEffect(() => {
+        if (status !== "active") {
+            stopTick();
+            return;
+        }
+        startTick();
+        return () => { stopTick(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status, session.id, accessToken]);
 
     // AppState foreground-resume: re-fire a tick immediately if >= 55s elapsed while backgrounded.
@@ -2330,7 +2342,9 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     headers: { Authorization: `Bearer ${accessToken}` },
                 }).catch(() => null);
                 if (!res) return;
+                if (res.status === 401) { stopTick(); setTickPaused(true); return; }
                 const d = await res.json().catch(() => null);
+                if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
                 if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
                 if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
                 if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
@@ -2572,6 +2586,19 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 <Text style={{ textAlign: "center", color: "#fbbf24", fontSize: 12, padding: 8, backgroundColor: "rgba(251,191,36,0.08)" }}>
                     Waiting for companion to accept…
                 </Text>
+            )}
+            {tickPaused && isActive && (
+                <View style={{ backgroundColor: "#92400e22", borderBottomWidth: 1, borderColor: "#f59e0b44", paddingVertical: 6, paddingHorizontal: 16 }}>
+                    <Text style={{ color: "#fbbf24", fontSize: 11, textAlign: "center" }}>
+                        Billing paused (connection issue).{" "}
+                        <Text
+                            style={{ textDecorationLine: "underline" }}
+                            onPress={() => { setTickPaused(false); startTick(); }}
+                        >
+                            Reconnect
+                        </Text>
+                    </Text>
+                </View>
             )}
             {isActive && displaySeconds !== null && displaySeconds <= 120 && displaySeconds > 0 && (
                 <TouchableOpacity
@@ -3169,6 +3196,15 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                     }
                 })
                 .catch(() => {});
+            // Also refresh profile to keep is_busy and is_online in sync
+            if (accessToken) {
+                cfetch(buildApiUrl("/api/connect/consultant/profile"), {
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                })
+                    .then((r) => r.json())
+                    .then((d) => { if (d.ok && d.consultant) setProfile(d.consultant); })
+                    .catch(() => {});
+            }
         }, 15_000);
         // Do NOT reset prevPendingCount.current here — resetting it on token refresh would
         // cause the next poll to treat all existing pending sessions as new and fire spurious
@@ -4116,6 +4152,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [registered, setRegistered] = useState(false);
 
     // Auto-detect country code from device timezone
     useEffect(() => {
@@ -4254,7 +4291,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
             });
             const d = await res.json();
             if (!d.ok) { setError(d.error ?? "Registration failed"); return; }
-            onSuccess();
+            setRegistered(true);
         } catch {
             setError("Network error — please try again.");
         } finally {
@@ -4280,6 +4317,24 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
     else if (payoutMethod === "bank_int") step3Valid = bankSwift.trim().length > 0 && bankIban.trim().length > 0 && bankHolder.trim().length > 0 && bankName.trim().length > 0 && docsValid;
     const step4Valid = consent1 && consent2 && consent3 && consent4 && consent5;
     const step5Valid = agreeInfoTrue && digitalSig.trim().length > 0;
+
+    if (registered) {
+        return (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 }}>
+                <Text style={{ fontSize: 48, marginBottom: 16 }}>🎉</Text>
+                <Text style={[s.cardName, { fontSize: 22, textAlign: "center", marginBottom: 8 }]}>Application Submitted!</Text>
+                <Text style={[s.cardBio, { textAlign: "center", marginBottom: 24, lineHeight: 20 }]}>
+                    Your application is under review. We&apos;ll notify you within 2–5 business days.
+                </Text>
+                <TouchableOpacity
+                    style={[s.primaryBtn, { width: "100%" }]}
+                    onPress={() => onBack()}
+                >
+                    <Text style={s.primaryBtnText}>Back to Connect</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
 
     return (
         <KeyboardAvoidingView style={[s.container, { paddingTop: insets.top }]}
