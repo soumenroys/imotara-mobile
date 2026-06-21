@@ -360,6 +360,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
     const [walletCurrency, setWalletCurrency] = useState("INR");
     const [fetchFailed, setFetchFailed] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [refreshing, setRefreshing] = useState(false);
     const s = styles(colors);
 
     useEffect(() => {
@@ -396,7 +397,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 if (fd.ok) setFavorites(new Set(fd.favorites ?? []));
                 if (wd.ok) { setWalletBalance(Math.max(0, Number(wd.wallet_balance ?? 0))); setWalletCurrency(wd.wallet_currency ?? "INR"); }
             })
-            .finally(() => setLoading(false));
+            .finally(() => { setLoading(false); setRefreshing(false); });
     }, [accessToken, filterOnline, filterCategory, refreshKey]);
 
     async function loadMoreConsultants() {
@@ -586,6 +587,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 20, gap: 12 }}
                 onEndReached={loadMoreConsultants}
                 onEndReachedThreshold={0.3}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setRefreshKey((k) => k + 1); }} tintColor={colors.primary} />}
                 renderItem={({ item: c }) => (
                     <TouchableOpacity style={s.card} onPress={() => onSelectConsultant(c)} activeOpacity={0.78}>
                         <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
@@ -1337,11 +1339,17 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     // Local online status — re-fetched on mount so stale browse-list data
     // doesn't leave Talk Now enabled for an offline consultant.
     const [isOnline, setIsOnline] = useState(c.is_online);
+    const [isBusy, setIsBusy] = useState(c.is_busy ?? false);
     useEffect(() => {
         let mounted = true;
         cfetch(buildApiUrl(`/api/connect/consultants/${c.id}`))
             .then((r) => r.json())
-            .then((d) => { if (mounted && d.ok && d.consultant) setIsOnline(!!d.consultant.is_online); })
+            .then((d) => {
+                if (mounted && d.ok && d.consultant) {
+                    setIsOnline(!!d.consultant.is_online);
+                    setIsBusy(!!d.consultant.is_busy);
+                }
+            })
             .catch(() => {});
         return () => { mounted = false; };
     }, [c.id]);
@@ -1560,7 +1568,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 
                 {/* Talk Now */}
                 <TouchableOpacity
-                    style={[s.primaryBtn, (loading || !isOnline) && { opacity: 0.6 }]}
+                    style={[s.primaryBtn, (loading || !isOnline || isBusy) && { opacity: 0.6 }]}
                     onPress={() => {
                         if (!langsMatch) {
                             Alert.alert(
@@ -1575,11 +1583,11 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                             startSession("instant");
                         }
                     }}
-                    disabled={loading || !isOnline}
+                    disabled={loading || !isOnline || isBusy}
                 >
                     {loading
                         ? <ActivityIndicator color="#fff" />
-                        : <Text style={s.primaryBtnText}>{isOnline ? "Talk Now" : "Companion Offline"}</Text>
+                        : <Text style={s.primaryBtnText}>{!isOnline ? "Companion Offline" : isBusy ? "In a Session" : "Talk Now"}</Text>
                     }
                 </TouchableOpacity>
 
