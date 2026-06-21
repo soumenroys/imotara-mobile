@@ -2932,7 +2932,7 @@ async function registerUserPushToken(accessToken: string) {
     if (Platform.OS === "web") return;
     try {
         const Notifications = require("expo-notifications");
-        const { status } = await Notifications.getPermissionsAsync();
+        const { status } = await Notifications.requestPermissionsAsync();
         if (status !== "granted") return;
         const Constants = require("expo-constants");
         const projectId = Constants.default?.expoConfig?.extra?.eas?.projectId
