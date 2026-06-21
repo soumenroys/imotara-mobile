@@ -1424,7 +1424,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                                 : <Text style={{ fontSize: 44 }}>{c.gender === "female" ? "👩" : "👨"}</Text>
                             }
                         </View>
-                        {c.is_online && <View style={[s.onlineDot, { width: 14, height: 14, bottom: 2, right: 2 }]} />}
+                        {isOnline && <View style={[s.onlineDot, { width: 14, height: 14, bottom: 2, right: 2 }]} />}
                     </View>
                     <Text style={[s.cardName, { fontSize: 20 }]}>{c.display_name}</Text>
                     {c.role_category && (() => {
@@ -1438,7 +1438,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
                         {c.is_busy ? (
                             <Text style={{ fontSize: 12, color: "#fb923c", backgroundColor: "rgba(251,146,60,0.15)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>In Session</Text>
-                        ) : c.is_online ? (
+                        ) : isOnline ? (
                             <Text style={{ fontSize: 12, color: "#34d399", backgroundColor: "rgba(52,211,153,0.12)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>● Online now</Text>
                         ) : (
                             <Text style={{ fontSize: 12, color: "#94a3b8", backgroundColor: "rgba(148,163,184,0.1)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>Offline</Text>
@@ -2179,6 +2179,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
 
     // Translation helpers
     async function translateMessage(msgId: string, text: string, lang: string) {
+        if (!accessToken) return;
         const key = `${msgId}::${lang}`;
         setTranslating((prev) => { const s = new Set(prev); s.add(msgId); return s; });
         try {
@@ -3112,12 +3113,13 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
     }, [profile?.id]);
 
     async function loadHistory() {
+        if (!accessToken) return;
         if (historyLoaded) { setShowHistory((v) => !v); return; }
         setShowHistory(true);
         setHistoryLoading(true);
         try {
             const res = await cfetch(buildApiUrl("/api/connect/consultant/sessions?status=history"), {
-                headers: { Authorization: `Bearer ${accessToken ?? ""}` },
+                headers: { Authorization: `Bearer ${accessToken}` },
             });
             const d = await res.json();
             if (d.ok) { setHistory(d.sessions ?? []); setHistoryLoaded(true); }
