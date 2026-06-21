@@ -662,6 +662,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
     const [isSigningIn, setIsSigningIn] = useState(false);
     const [sessions, setSessions] = useState<Session[]>([]);
     const [loading, setLoading] = useState(true);
+    const [fetchFailed, setFetchFailed] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [cancelling, setCancelling] = useState<string | null>(null);
     const [summaryCopied, setSummaryCopied] = useState<string | null>(null);
@@ -712,7 +713,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
         })
             .then((r) => r.json())
             .then((d) => setSessions(d.sessions ?? []))
-            .catch(() => {})
+            .catch(() => setFetchFailed(true))
             .finally(() => setLoading(false));
     }, [accessToken]);
 
@@ -765,6 +766,14 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
                     <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Apple</Text>
                 </TouchableOpacity>
             )}
+        </View>
+    );
+    if (fetchFailed) return (
+        <View style={s.center}>
+            <Text style={s.emptyText}>Could not load sessions. Check your connection.</Text>
+            <TouchableOpacity onPress={() => { setFetchFailed(false); setLoading(true); refreshSessions().finally(() => setLoading(false)); }} style={{ marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8, backgroundColor: "#7c3aed" }}>
+                <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>Retry</Text>
+            </TouchableOpacity>
         </View>
     );
     if (sessions.length === 0) return (
@@ -925,6 +934,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
     const [expiresAt, setExpiresAt] = useState<string | null>(null);
     const [daysUntilExpiry, setDaysUntilExpiry] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
+    const [walletFetchFailed, setWalletFetchFailed] = useState(false);
 
     const [topupAmount, setTopupAmount] = useState(1000);
     const [customAmount, setCustomAmount] = useState("");
@@ -959,7 +969,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                 setExpiresAt(d.expires_at ?? null);
                 setDaysUntilExpiry(d.days_until_expiry ?? null);
             })
-            .catch(() => {})
+            .catch(() => setWalletFetchFailed(true))
             .finally(() => setLoading(false));
     }, [accessToken]);
 
@@ -1056,6 +1066,14 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
     }
 
     if (loading) return <View style={s.center}><ActivityIndicator color={colors.primary} /></View>;
+    if (walletFetchFailed) return (
+        <View style={s.center}>
+            <Text style={s.emptyText}>Could not load wallet. Check your connection.</Text>
+            <TouchableOpacity onPress={() => { setWalletFetchFailed(false); setLoading(true); cfetch(buildApiUrl("/api/connect/wallet"), { headers: { Authorization: `Bearer ${accessToken}` } }).then((r) => r.json()).then((d) => { if (!d.ok) return; setWalletBalance(Math.max(0, Number(d.wallet_balance ?? 0))); setWalletStatus(d.wallet_status ?? "active"); setExpiresAt(d.expires_at ?? null); setDaysUntilExpiry(d.days_until_expiry ?? null); }).catch(() => setWalletFetchFailed(true)).finally(() => setLoading(false)); }} style={{ marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8, backgroundColor: "#7c3aed" }}>
+                <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>Retry</Text>
+            </TouchableOpacity>
+        </View>
+    );
     if (!accessToken) return (
         <View style={[s.center, { paddingHorizontal: 32 }]}>
             <Text style={{ fontSize: 32, marginBottom: 12 }}>🔒</Text>
