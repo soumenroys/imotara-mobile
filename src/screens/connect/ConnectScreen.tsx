@@ -1557,7 +1557,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 accessToken={accessToken}
                 walletBalance={walletBalance}
                 walletCurrency={walletCurrency}
-                onClose={() => setTopUpVisible(false)}
+                onClose={() => { setTopUpVisible(false); setHasPendingSession(false); }}
                 onSuccess={(newBal) => {
                     setWalletBalance(newBal);
                     setTopUpVisible(false);
@@ -2321,10 +2321,21 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 }
             } else {
                 if (!userId) { setInput(text); return; }
-                const { error } = await supabase.from("connect_messages").insert({ session_id: session.id, sender_id: userId, content: text });
+                const { data: sentMsg, error } = await supabase
+                    .from("connect_messages")
+                    .insert({ session_id: session.id, sender_id: userId, content: text })
+                    .select("id, session_id, sender_id, content, translated_content, created_at")
+                    .single();
                 if (error) {
                     setInput(text);
                     Alert.alert("Message not sent", "Please try again.");
+                } else if (sentMsg) {
+                    // Optimistic append: prevents the message being invisible if the Realtime
+                    // INSERT event is dropped (network partition, WebSocket reconnect lag).
+                    // Realtime dedup (prev.find by id) prevents doubling when the event does arrive.
+                    setMessages((prev: any[]) =>
+                        prev.find((m: any) => m.id === sentMsg.id) ? prev : [...prev, sentMsg]
+                    );
                 }
             }
         } catch {
