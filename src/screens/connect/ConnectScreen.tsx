@@ -1365,6 +1365,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 
     async function startSession(sessionType: "instant" | "scheduled" = "instant", note?: string, translationRequested = false) {
         if (!accessToken) { Alert.alert("Sign in required", "Please sign in to start a session."); return; }
+        if (loading || scheduleLoading) return;
         if (sessionType === "instant") setLoading(true);
         else setScheduleLoading(true);
         try {
@@ -2315,6 +2316,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
             if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
             if (d?.status === "completed") setStatus("completed");
+            if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); }
         }, 60_000);
     }
 
