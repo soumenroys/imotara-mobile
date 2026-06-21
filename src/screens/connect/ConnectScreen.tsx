@@ -1010,6 +1010,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             setWalletBalance(Number(v.new_balance ?? 0));
             setWalletStatus("active");
             setTransactions([]);
+            setShowHistory(false);
             Alert.alert("Success", `₹${v.amount_credited} added to your wallet!`);
         } catch (err: any) {
             if (err?.code !== 0 && !String(err?.description ?? "").toLowerCase().includes("cancel")) {
@@ -1979,7 +1980,7 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
     currencyCode: string;
     ratePerMin: number;
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (minutesAdded: number) => void;
     colors: any;
 }) {
     const PRESETS = [15, 30, 60];
@@ -2024,7 +2025,7 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
             const v = await vRes.json();
             if (!v.ok) { setError(v.error ?? "Verification failed"); return; }
             Alert.alert("Time Added", `${selectedMin} minutes added to your session!`);
-            onSuccess();
+            onSuccess(Number(v.minutes_credited ?? selectedMin));
         } catch (err: any) {
             if (err?.code !== 0 && !String(err?.description ?? "").toLowerCase().includes("cancel")) {
                 setError(String(err?.message ?? "Payment failed"));
@@ -2112,6 +2113,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [reviewText, setReviewText] = useState("");
     // Dual panel state — walletBal removed (was showing unrelated general INR wallet)
     const [showRecharge, setShowRecharge] = useState(false);
+    useEffect(() => { if (status !== "active") setShowRecharge(false); }, [status]);
     const [elapsedSecs, setElapsedSecs] = useState(0);
     const [amountCharged, setAmountCharged] = useState<number | null>(session.amount_charged ?? null);
     const [startedAt, setStartedAt] = useState<string | null>(session.started_at ?? null);
@@ -2722,7 +2724,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 currencyCode={session.currency_code ?? "INR"}
                 ratePerMin={rate}
                 onClose={() => setShowRecharge(false)}
-                onSuccess={() => setShowRecharge(false)}
+                onSuccess={(minutesAdded) => { setShowRecharge(false); setRemaining((prev) => (prev ?? 0) + minutesAdded); }}
                 colors={colors}
             />
         </KeyboardAvoidingView>
