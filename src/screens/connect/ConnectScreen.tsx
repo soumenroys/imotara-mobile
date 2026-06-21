@@ -2085,7 +2085,7 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
     }
 
     return (
-        <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+        <Modal visible={visible} transparent animationType="slide" onRequestClose={loading ? undefined : onClose}>
             <View style={s.modalBackdrop}>
                 <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
@@ -2727,6 +2727,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                         returnKeyType="send"
                         onSubmitEditing={send}
                         multiline
+                        maxLength={2000}
                     />
                     <TouchableOpacity style={[s.sendBtn, sending && { opacity: 0.5 }]} onPress={send} disabled={sending || !input.trim()}>
                         <Ionicons name="send" size={16} color="#fff" />
