@@ -815,6 +815,13 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
                                 : <Text style={{ color: "#f87171", fontWeight: "600", fontSize: 13 }}>Cancel Request</Text>}
                         </TouchableOpacity>
                     )}
+                    {item.status === "active" && (
+                        <TouchableOpacity
+                            style={{ marginTop: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: "rgba(52,211,153,0.5)", alignItems: "center", backgroundColor: "rgba(52,211,153,0.08)" }}
+                            onPress={() => onSelectSession(item)}>
+                            <Text style={{ color: "#34d399", fontWeight: "700", fontSize: 13 }}>🔴 Session Active — Return Now</Text>
+                        </TouchableOpacity>
+                    )}
                     {item.status === "completed" && (
                         <TouchableOpacity
                             style={{ marginTop: 8, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: "rgba(139,92,246,0.4)", alignItems: "center", backgroundColor: "rgba(139,92,246,0.08)" }}
@@ -1305,6 +1312,17 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     const langsMatch = userLang === consultantLang;
     const translationSurcharge = (translationEnabled && !langsMatch) ? c.rate_per_min * 0.10 : 0;
     const effectiveRate = c.rate_per_min + translationSurcharge;
+    // Local online status — re-fetched on mount so stale browse-list data
+    // doesn't leave Talk Now enabled for an offline consultant.
+    const [isOnline, setIsOnline] = useState(c.is_online);
+    useEffect(() => {
+        let mounted = true;
+        cfetch(buildApiUrl(`/api/connect/consultants/${c.id}`))
+            .then((r) => r.json())
+            .then((d) => { if (mounted && d.ok && d.consultant) setIsOnline(!!d.consultant.is_online); })
+            .catch(() => {});
+        return () => { mounted = false; };
+    }, [c.id]);
 
     useEffect(() => {
         if (!accessToken) return;
@@ -1520,7 +1538,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 
                 {/* Talk Now */}
                 <TouchableOpacity
-                    style={[s.primaryBtn, (loading || !c.is_online) && { opacity: 0.6 }]}
+                    style={[s.primaryBtn, (loading || !isOnline) && { opacity: 0.6 }]}
                     onPress={() => {
                         if (!langsMatch) {
                             Alert.alert(
@@ -1535,11 +1553,11 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                             startSession("instant");
                         }
                     }}
-                    disabled={loading || !c.is_online}
+                    disabled={loading || !isOnline}
                 >
                     {loading
                         ? <ActivityIndicator color="#fff" />
-                        : <Text style={s.primaryBtnText}>{c.is_online ? "Talk Now" : "Companion Offline"}</Text>
+                        : <Text style={s.primaryBtnText}>{isOnline ? "Talk Now" : "Companion Offline"}</Text>
                     }
                 </TouchableOpacity>
 
@@ -2132,6 +2150,21 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const s = styles(colors);
+
+    // Re-fetch session status on mount — the session prop from SessionsTab history
+    // may be stale (status was captured at list-fetch time). This corrects the status
+    // so the right CTA buttons (input bar, End session) appear immediately.
+    useEffect(() => {
+        if (!accessToken) return;
+        let active = true;
+        cfetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        })
+            .then((r) => r.json())
+            .then((d) => { if (active && d.ok && d.session?.status) setStatus(d.session.status); })
+            .catch(() => {});
+        return () => { active = false; };
+    }, [session.id, accessToken]);
 
     // Load messages
     useEffect(() => {
@@ -3425,7 +3458,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                                                 disabled={actionLoading === req.id || active.length > 0}>
                                                 {actionLoading === req.id
                                                     ? <ActivityIndicator color="#fff" size="small" />
-                                                    : <Text style={s.primaryBtnText}>Accept & Chat</Text>
+                                                    : <Text style={s.primaryBtnText}>{active.length > 0 ? "Finish Active First" : "Accept & Chat"}</Text>
                                                 }
                                             </TouchableOpacity>
                                             <TouchableOpacity
