@@ -2086,8 +2086,8 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
                             </Text>
                             <Text style={[s.cardName, { fontSize: 18 }]}>Extend with {consultantName}</Text>
                         </View>
-                        <TouchableOpacity onPress={onClose}>
-                            <Ionicons name="close" size={20} color={colors.textSecondary} />
+                        <TouchableOpacity onPress={onClose} disabled={loading}>
+                            <Ionicons name="close" size={20} color={loading ? colors.textSecondary + "55" : colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
 
@@ -2717,6 +2717,34 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     {endingSession
                         ? <ActivityIndicator size="small" color={colors.textSecondary} />
                         : <Text style={{ color: colors.textSecondary, fontSize: 12 }}>End session</Text>}
+                </TouchableOpacity>
+            )}
+
+            {/* End session early — shown to the user side only */}
+            {isActive && !isConsultantView && (
+                <TouchableOpacity
+                    style={{ alignItems: "center", paddingVertical: 8, paddingBottom: insets.bottom || 4, opacity: endingSession ? 0.5 : 1 }}
+                    disabled={endingSession}
+                    onPress={async () => {
+                        setEndingSession(true);
+                        try {
+                            const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                                body: JSON.stringify({ action: "userEnd" }),
+                            });
+                            const d = await res.json().catch(() => null);
+                            if (d?.ok) { onBack(); }
+                            else { Alert.alert("Error", d?.error ?? "Could not end session"); }
+                        } catch {
+                            Alert.alert("Network error", "Please check your connection and try again.");
+                        } finally {
+                            setEndingSession(false);
+                        }
+                    }}>
+                    {endingSession
+                        ? <ActivityIndicator size="small" color={colors.textSecondary} />
+                        : <Text style={{ color: colors.textSecondary, fontSize: 12 }}>End session early</Text>}
                 </TouchableOpacity>
             )}
 
