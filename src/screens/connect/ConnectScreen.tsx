@@ -462,8 +462,8 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
         .filter((c) => !filterTag || c.expertise_tags.includes(filterTag))
         .sort((a, b) => {
             if (sort === "rating")     return (b.rating_avg || 0) - (a.rating_avg || 0);
-            if (sort === "price_asc")  return a.rate_per_min - b.rate_per_min;
-            if (sort === "price_desc") return b.rate_per_min - a.rate_per_min;
+            if (sort === "price_asc")  return (a.rate_per_min ?? 0) - (b.rate_per_min ?? 0);
+            if (sort === "price_desc") return (b.rate_per_min ?? 0) - (a.rate_per_min ?? 0);
             if (sort === "sessions")   return b.sessions_completed - a.sessions_completed;
             return 0;
         });
@@ -601,7 +601,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                                     <Text style={s.cardName}>{c.display_name}</Text>
                                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                                        <Text style={s.rateText}>{CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code}{c.rate_per_min}/min</Text>
+                                        <Text style={s.rateText}>{CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code}{c.rate_per_min ?? "—"}/min</Text>
                                         {/* Favorite heart button */}
                                         <TouchableOpacity onPress={() => toggleFavorite(c.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                                             <Text style={{ fontSize: 16, opacity: favLoading === c.id ? 0.4 : 1 }}>
