@@ -4328,9 +4328,9 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                 </Text>
                 <TouchableOpacity
                     style={[s.primaryBtn, { width: "100%" }]}
-                    onPress={() => onBack()}
+                    onPress={() => onSuccess()}
                 >
-                    <Text style={s.primaryBtnText}>Back to Connect</Text>
+                    <Text style={s.primaryBtnText}>Go to Dashboard</Text>
                 </TouchableOpacity>
             </View>
         );
