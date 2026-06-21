@@ -2865,6 +2865,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
     const [noteSaved, setNoteSaved]       = useState(false);
     // Block user
     const [blockingId, setBlockingId]     = useState<string | null>(null);
+    const pushTokenRegistered             = useRef(false);
     const s = styles(colors);
 
     async function saveAvailability() {
@@ -3011,7 +3012,8 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             const [p, e, s] = await Promise.all([pRes.json(), eRes.json(), sRes.json()]);
             if (p.ok) {
                 setProfile(p.consultant);
-                if (p.consultant?.status === "approved") {
+                if (p.consultant?.status === "approved" && !pushTokenRegistered.current) {
+                    pushTokenRegistered.current = true;
                     void registerConnectPushToken(accessToken);
                 }
             }
