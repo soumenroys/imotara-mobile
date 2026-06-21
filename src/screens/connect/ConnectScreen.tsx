@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
     View, Text, ScrollView, TouchableOpacity, TextInput, FlatList,
     ActivityIndicator, Alert, Modal, Linking, Platform, StyleSheet,
-    KeyboardAvoidingView, Image, RefreshControl, BackHandler,
+    KeyboardAvoidingView, Image, RefreshControl, BackHandler, AppState,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -2167,6 +2167,8 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const lastTickAtRef = useRef<number>(0);
+    const userPushTokenRegistered = useRef(false);
     const s = styles(colors);
 
     // Re-fetch session status on mount — the session prop from SessionsTab history
@@ -2279,6 +2281,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         }
         tickRef.current = setInterval(async () => {
             if (!accessToken) return;
+            lastTickAtRef.current = Date.now();
             const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/tick`), {
                 method: "POST",
                 headers: { Authorization: `Bearer ${accessToken}` },
@@ -2293,6 +2296,37 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         }, 60_000);
         return () => { if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; } };
     }, [status, session.id, accessToken]);
+
+    // AppState foreground-resume: re-fire a tick immediately if >= 55s elapsed while backgrounded.
+    // React Native pauses JS execution when backgrounded, causing setInterval to miss ticks.
+    useEffect(() => {
+        if (status !== "active") return;
+        const sub = AppState.addEventListener("change", (nextState) => {
+            if (nextState !== "active" || Date.now() - lastTickAtRef.current < 55_000) return;
+            void (async () => {
+                if (!accessToken) return;
+                lastTickAtRef.current = Date.now();
+                const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/tick`), {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                }).catch(() => null);
+                if (!res) return;
+                const d = await res.json().catch(() => null);
+                if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
+                if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
+                if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
+                if (d?.status === "completed") setStatus("completed");
+            })();
+        });
+        return () => sub.remove();
+    }, [status, session.id, accessToken]);
+
+    // Register user push token on session entry so the server can notify on accept/decline/force-close
+    useEffect(() => {
+        if (session.user_id !== userId || !accessToken || userPushTokenRegistered.current) return;
+        userPushTokenRegistered.current = true;
+        void registerUserPushToken(accessToken);
+    }, [session.user_id, userId, accessToken]);
 
     // Android hardware back button: warn user before leaving an active session
     useEffect(() => {
@@ -2821,6 +2855,27 @@ function EmergencyModal({ visible, onClose, colors }: { visible: boolean; onClos
 
 // Registers the device's Expo push token with the server so the consultant
 // receives push notifications when a new session request arrives.
+async function registerUserPushToken(accessToken: string) {
+    if (Platform.OS === "web") return;
+    try {
+        const Notifications = require("expo-notifications");
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== "granted") return;
+        const Constants = require("expo-constants");
+        const projectId = Constants.default?.expoConfig?.extra?.eas?.projectId
+            ?? Constants.expoConfig?.extra?.eas?.projectId;
+        const { data: pushToken } = await Notifications.getExpoPushTokenAsync(
+            projectId ? { projectId } : undefined
+        );
+        if (!pushToken) return;
+        await pfetch(buildApiUrl("/api/connect/user/push-token"), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+            body: JSON.stringify({ token: pushToken }),
+        });
+    } catch { /* non-critical — push is best-effort */ }
+}
+
 async function registerConnectPushToken(token: string | null) {
     if (!token || Platform.OS === "web") return;
     try {
