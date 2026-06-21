@@ -2183,6 +2183,13 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const userPushTokenRegistered = useRef(false);
     const s = styles(colors);
 
+    // Scroll to bottom only when new messages arrive (not on keyboard show/hide)
+    useEffect(() => {
+        if (flatRef.current && messages.length > 0) {
+            flatRef.current.scrollToEnd({ animated: messages.length > 1 });
+        }
+    }, [messages.length]);
+
     // Re-fetch session status on mount — the session prop from SessionsTab history
     // may be stale (status was captured at list-fetch time). This corrects the status
     // so the right CTA buttons (input bar, End session) appear immediately.
@@ -2592,7 +2599,6 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 data={messages}
                 keyExtractor={(m) => m.id}
                 contentContainerStyle={{ padding: 12, gap: 8 }}
-                onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: true })}
                 renderItem={({ item: m }) => {
                     const isMe = m.sender_id === userId;
 
