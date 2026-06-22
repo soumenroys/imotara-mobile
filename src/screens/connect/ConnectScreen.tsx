@@ -1314,6 +1314,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 }) {
     const { isDark } = useTheme();
     const [topUpVisible, setTopUpVisible] = useState(false);
+    const [rechargeBeforeStartVisible, setRechargeBeforeStartVisible] = useState(false);
     const [walletBalance, setWalletBalance] = useState(0);
     const [walletCurrency, setWalletCurrency] = useState("INR");
     const [loading, setLoading] = useState(false);
@@ -1405,7 +1406,10 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     setPendingSessionType(sessionType);
                     setPendingNote(note);
                     setHasPendingSession(true);
-                    setTopUpVisible(true);
+                    // Show per-consultant minute recharge modal (NOT general wallet top-up).
+                    // The 402 is triggered by get_session_balance() which reads connect_recharges,
+                    // not imotara_wallets — topping up the general wallet does nothing.
+                    setRechargeBeforeStartVisible(true);
                 } else if (d.redirect && d.existing_session_id) {
                     // Fetch full session so rate_per_min and translation_enabled are correct
                     try {
@@ -1468,7 +1472,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                         ) : null;
                     })()}
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
-                        {c.is_busy ? (
+                        {isBusy ? (
                             <Text style={{ fontSize: 12, color: "#fb923c", backgroundColor: "rgba(251,146,60,0.15)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>In Session</Text>
                         ) : isOnline ? (
                             <Text style={{ fontSize: 12, color: "#34d399", backgroundColor: "rgba(52,211,153,0.12)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>● Online now</Text>
@@ -1602,7 +1606,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 </TouchableOpacity>
             </ScrollView>
 
-            {/* Wallet top-up modal */}
+            {/* Wallet top-up modal (general INR wallet — triggered by "+" button only) */}
             <WalletTopUpModal
                 visible={topUpVisible}
                 accessToken={accessToken}
@@ -1612,6 +1616,26 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 onSuccess={(newBal) => {
                     setWalletBalance(newBal);
                     setTopUpVisible(false);
+                    if (hasPendingSession) {
+                        setHasPendingSession(false);
+                        startSession(pendingSessionType, pendingNote, pendingTranslation);
+                    }
+                }}
+                colors={colors}
+            />
+
+            {/* Per-consultant minute recharge — shown when session creation returns 402.
+                Uses connect_recharges (not imotara_wallets); retry startSession on success. */}
+            <SessionRechargeModal
+                visible={rechargeBeforeStartVisible}
+                accessToken={accessToken}
+                consultantId={c.id}
+                consultantName={c.display_name}
+                currencyCode={c.currency_code ?? "INR"}
+                ratePerMin={c.rate_per_min}
+                onClose={() => { setRechargeBeforeStartVisible(false); setHasPendingSession(false); }}
+                onSuccess={() => {
+                    setRechargeBeforeStartVisible(false);
                     if (hasPendingSession) {
                         setHasPendingSession(false);
                         startSession(pendingSessionType, pendingNote, pendingTranslation);
@@ -2001,9 +2025,9 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
                     {error !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{error}</Text>}
 
                     <TouchableOpacity
-                        style={[s.primaryBtn, (loading || topupAmt < 1) && { opacity: 0.5 }]}
+                        style={[s.primaryBtn, (loading || topupAmt < 1 || !termsAccepted) && { opacity: 0.5 }]}
                         onPress={handlePay}
-                        disabled={loading || topupAmt < 1}>
+                        disabled={loading || topupAmt < 1 || !termsAccepted}>
                         {loading
                             ? <ActivityIndicator color="#fff" />
                             : <Text style={s.primaryBtnText}>Add {sym}{topupAmt.toFixed(0)} to Wallet</Text>
@@ -2316,7 +2340,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
             if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
             if (d?.status === "completed") setStatus("completed");
-            if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); }
+            if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
         }, 60_000);
     }
 
@@ -2353,6 +2377,11 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
                 if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
                 if (d?.status === "completed") setStatus("completed");
+                // Reset the interval so the next scheduled tick fires 60s from this
+                // AppState tick, not from whenever the interval was last scheduled —
+                // prevents a double-tick if the interval was about to fire at the same
+                // moment the app returned to foreground.
+                if (d?.status !== "completed") { stopTick(); startTick(); }
             })();
         });
         return () => sub.remove();
