@@ -1405,10 +1405,11 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     setPendingTranslation(translationRequested);
                     setPendingSessionType(sessionType);
                     setPendingNote(note);
-                    setHasPendingSession(true);
-                    // Show per-consultant minute recharge modal (NOT general wallet top-up).
-                    // The 402 is triggered by get_session_balance() which reads connect_recharges,
-                    // not imotara_wallets — topping up the general wallet does nothing.
+                    // Do NOT set hasPendingSession here. SessionRechargeModal.onSuccess
+                    // retries directly — no flag needed. Keeping hasPendingSession=false
+                    // also prevents WalletTopUpModal (opened via the "+" button) from
+                    // accidentally retrying a session after a general wallet top-up that
+                    // does nothing to fix a Connect-minutes 402.
                     setRechargeBeforeStartVisible(true);
                 } else if (d.redirect && d.existing_session_id) {
                     // Fetch full session so rate_per_min and translation_enabled are correct
@@ -1633,13 +1634,10 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 consultantName={c.display_name}
                 currencyCode={c.currency_code ?? "INR"}
                 ratePerMin={c.rate_per_min}
-                onClose={() => { setRechargeBeforeStartVisible(false); setHasPendingSession(false); }}
+                onClose={() => { setRechargeBeforeStartVisible(false); }}
                 onSuccess={() => {
                     setRechargeBeforeStartVisible(false);
-                    if (hasPendingSession) {
-                        setHasPendingSession(false);
-                        startSession(pendingSessionType, pendingNote, pendingTranslation);
-                    }
+                    startSession(pendingSessionType, pendingNote, pendingTranslation);
                 }}
                 colors={colors}
             />
@@ -1876,7 +1874,9 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
     const [error, setError]             = useState("");
     const s = styles(colors);
     const sym = CURRENCY_SYMBOLS[walletCurrency] ?? "₹";
-    const topupAmt = isCustom ? Math.max(1, parseFloat(customAmt) || 0) : selectedAmt;
+    // Max(0, ...) — NOT Max(1, ...) — so an empty custom field gives 0 and
+    // the Pay button stays disabled via the topupAmt < 1 guard below.
+    const topupAmt = isCustom ? Math.max(0, parseFloat(customAmt) || 0) : selectedAmt;
 
     // Reset all form state when the modal opens so stale errors / accepted terms
     // from a prior open don't carry over to a new payment attempt.
