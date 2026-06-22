@@ -1401,7 +1401,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
             });
             const d = await res.json();
             if (!d.ok) {
-                if (d.needs_recharge || d.error?.includes("Insufficient balance")) {
+                if (d.needs_recharge || res.status === 402 || d.error?.includes("Insufficient balance")) {
                     setPendingTranslation(translationRequested);
                     setPendingSessionType(sessionType);
                     setPendingNote(note);
@@ -2336,11 +2336,14 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             if (res.status === 401) { stopTick(); setTickPaused(true); return; }
             const d = await res.json().catch(() => null);
             if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
+            // 402 guard must come before state updates — if the server includes
+            // status:"completed" in a 402 body both the review modal and the recharge
+            // modal would open simultaneously (inconsistent UI).
+            if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
             if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
             if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
             if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
             if (d?.status === "completed") setStatus("completed");
-            if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
         }, 60_000);
     }
 
@@ -2359,18 +2362,20 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     // React Native pauses JS execution when backgrounded, causing setInterval to miss ticks.
     useEffect(() => {
         if (status !== "active") return;
+        let cancelled = false;
         const sub = AppState.addEventListener("change", (nextState) => {
             if (nextState !== "active" || Date.now() - lastTickAtRef.current < 55_000) return;
             void (async () => {
-                if (!accessToken) return;
+                if (cancelled || !accessToken) return;
                 lastTickAtRef.current = Date.now();
                 const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/tick`), {
                     method: "POST",
                     headers: { Authorization: `Bearer ${accessToken}` },
                 }).catch(() => null);
-                if (!res) return;
+                if (cancelled || !res) return;
                 if (res.status === 401) { stopTick(); setTickPaused(true); return; }
                 const d = await res.json().catch(() => null);
+                if (cancelled) return;
                 if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
                 if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
                 if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
@@ -2378,13 +2383,13 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
                 if (d?.status === "completed") setStatus("completed");
                 // Reset the interval so the next scheduled tick fires 60s from this
-                // AppState tick, not from whenever the interval was last scheduled —
-                // prevents a double-tick if the interval was about to fire at the same
-                // moment the app returned to foreground.
-                if (d?.status !== "completed") { stopTick(); startTick(); }
+                // AppState tick, not from whenever the interval was last scheduled.
+                // Guard on `cancelled` prevents startTick() from creating an orphaned
+                // interval if the component unmounted while this async IIFE was in flight.
+                if (!cancelled && d?.status !== "completed") { stopTick(); startTick(); }
             })();
         });
-        return () => sub.remove();
+        return () => { cancelled = true; sub.remove(); };
     }, [status, session.id, accessToken]);
 
     // Register user push token on session entry so the server can notify on accept/decline/force-close
