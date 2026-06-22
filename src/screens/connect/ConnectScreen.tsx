@@ -2348,6 +2348,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 if (res.status === 401) { stopTick(); setTickPaused(true); return; }
                 const d = await res.json().catch(() => null);
                 if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
+                if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
                 if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
                 if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
                 if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
