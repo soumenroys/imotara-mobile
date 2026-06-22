@@ -1574,7 +1574,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 
                 {/* Talk Now */}
                 <TouchableOpacity
-                    style={[s.primaryBtn, (loading || !isOnline || isBusy) && { opacity: 0.6 }]}
+                    style={[s.primaryBtn, (loading || !isOnline || isBusy || rechargeBeforeStartVisible) && { opacity: 0.6 }]}
                     onPress={() => {
                         if (!langsMatch) {
                             Alert.alert(
@@ -1589,7 +1589,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                             startSession("instant");
                         }
                     }}
-                    disabled={loading || !isOnline || isBusy}
+                    disabled={loading || !isOnline || isBusy || rechargeBeforeStartVisible}
                 >
                     {loading
                         ? <ActivityIndicator color="#fff" />
