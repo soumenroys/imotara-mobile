@@ -1438,8 +1438,8 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     return (
         <View style={[s.container, { paddingTop: insets.top }]}>
             <View style={s.header}>
-                <TouchableOpacity onPress={onBack} style={s.backBtn}>
-                    <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+                <TouchableOpacity onPress={onBack} style={s.backBtn} disabled={loading || scheduleLoading}>
+                    <Ionicons name="arrow-back" size={20} color={loading || scheduleLoading ? colors.textSecondary : colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={s.headerTitle}>{c.display_name}</Text>
                 <View style={{ width: 36 }} />
