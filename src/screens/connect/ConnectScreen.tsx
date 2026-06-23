@@ -1594,8 +1594,9 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 
                 {/* Request Meeting (scheduled session) */}
                 <TouchableOpacity
-                    style={[s.primaryBtn, { backgroundColor: "transparent", borderWidth: 1.5, borderColor: colors.primary }]}
+                    style={[s.primaryBtn, { backgroundColor: "transparent", borderWidth: 1.5, borderColor: colors.primary }, (loading || scheduleLoading) && { opacity: 0.5 }]}
                     onPress={() => setScheduleVisible(true)}
+                    disabled={loading || scheduleLoading}
                 >
                     <Text style={[s.primaryBtnText, { color: colors.primary }]}>Request Meeting</Text>
                 </TouchableOpacity>
@@ -1633,22 +1634,22 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
             />
 
             {/* Schedule session modal — keyboard-aware bottom sheet */}
-            <Modal visible={scheduleVisible} transparent animationType="slide" onRequestClose={() => setScheduleVisible(false)}>
+            <Modal visible={scheduleVisible} transparent animationType="slide" onRequestClose={scheduleLoading ? undefined : () => setScheduleVisible(false)}>
                 <KeyboardAvoidingView
                     behavior={Platform.OS === "ios" ? "padding" : "height"}
                     style={{ flex: 1 }}
                 >
-                    {/* Tap-to-dismiss backdrop */}
+                    {/* Tap-to-dismiss backdrop — blocked during in-flight request to prevent ghost navigation */}
                     <TouchableOpacity
                         activeOpacity={1}
                         style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)" }}
-                        onPress={() => setScheduleVisible(false)}
+                        onPress={scheduleLoading ? undefined : () => setScheduleVisible(false)}
                     />
                     <View style={[s.modalSheet, { backgroundColor: colors.surface, maxHeight: "90%" }]}>
                         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                             <Text style={[s.cardName, { fontSize: 18 }]}>Request a Meeting</Text>
-                            <TouchableOpacity onPress={() => setScheduleVisible(false)}>
-                                <Ionicons name="close" size={20} color={colors.textSecondary} />
+                            <TouchableOpacity onPress={scheduleLoading ? undefined : () => setScheduleVisible(false)} disabled={scheduleLoading}>
+                                <Ionicons name="close" size={20} color={scheduleLoading ? colors.textSecondary : colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
 
