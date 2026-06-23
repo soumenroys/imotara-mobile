@@ -1926,7 +1926,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
     }
 
     return (
-        <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+        <Modal visible={visible} transparent animationType="slide" onRequestClose={loading ? undefined : onClose}>
             <View style={s.modalBackdrop}>
                 <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
                     {/* Header */}
