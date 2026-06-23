@@ -919,9 +919,9 @@ function TopUpForm({ label, colors, s, topupAmount, setTopupAmount, isCustom, se
             </TouchableOpacity>
             {topupError !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{topupError}</Text>}
             <TouchableOpacity
-                style={[s.primaryBtn, (topupLoading || !termsAccepted) && { opacity: 0.5 }]}
+                style={[s.primaryBtn, (topupLoading || !termsAccepted || (isCustom && (!customAmount || parseFloat(customAmount) < 1))) && { opacity: 0.5 }]}
                 onPress={handleTopUp}
-                disabled={topupLoading || !termsAccepted}>
+                disabled={topupLoading || !termsAccepted || (isCustom && (!customAmount || parseFloat(customAmount) < 1))}>
                 {topupLoading
                     ? <ActivityIndicator color="#fff" />
                     : <Text style={s.primaryBtnText}>
@@ -1331,7 +1331,6 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     const [pendingTranslation, setPendingTranslation] = useState(false);
     const [pendingSessionType, setPendingSessionType] = useState<"instant" | "scheduled">("instant");
     const [pendingNote, setPendingNote] = useState<string | undefined>(undefined);
-    const [hasPendingSession, setHasPendingSession] = useState(false);
     const s = styles(colors);
     const sym = CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code;
     const consultantLang = c.preferred_lang ?? "en";
@@ -1405,11 +1404,6 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     setPendingTranslation(translationRequested);
                     setPendingSessionType(sessionType);
                     setPendingNote(note);
-                    // Do NOT set hasPendingSession here. SessionRechargeModal.onSuccess
-                    // retries directly — no flag needed. Keeping hasPendingSession=false
-                    // also prevents WalletTopUpModal (opened via the "+" button) from
-                    // accidentally retrying a session after a general wallet top-up that
-                    // does nothing to fix a Connect-minutes 402.
                     setRechargeBeforeStartVisible(true);
                 } else if (d.redirect && d.existing_session_id) {
                     // Fetch full session so rate_per_min and translation_enabled are correct
@@ -1613,14 +1607,10 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 accessToken={accessToken}
                 walletBalance={walletBalance}
                 walletCurrency={walletCurrency}
-                onClose={() => { setTopUpVisible(false); setHasPendingSession(false); }}
+                onClose={() => { setTopUpVisible(false); }}
                 onSuccess={(newBal) => {
                     setWalletBalance(newBal);
                     setTopUpVisible(false);
-                    if (hasPendingSession) {
-                        setHasPendingSession(false);
-                        startSession(pendingSessionType, pendingNote, pendingTranslation);
-                    }
                 }}
                 colors={colors}
             />
