@@ -2927,7 +2927,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 currencyCode={session.currency_code ?? "INR"}
                 ratePerMin={rate}
                 onClose={() => setShowRecharge(false)}
-                onSuccess={(minutesAdded) => { setShowRecharge(false); setRemaining((prev) => (prev ?? 0) + minutesAdded); }}
+                onSuccess={(minutesAdded) => { setShowRecharge(false); setRemaining((prev) => (prev ?? 0) + minutesAdded); startTick(); }}
                 colors={colors}
             />
         </KeyboardAvoidingView>
@@ -3062,13 +3062,18 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
         if (!accessToken || !profile) return;
         setAvailSaving(true);
         try {
-            await cfetch(buildApiUrl("/api/connect/consultant/profile"), {
+            const res = await cfetch(buildApiUrl("/api/connect/consultant/profile"), {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ availability_windows: profile.availability_windows ?? [] }),
             });
+            const d = await res.json().catch(() => null);
+            if (!d?.ok) {
+                Alert.alert("Save Failed", d?.error ?? "Could not save availability. Please try again.");
+                return;
+            }
             setEditingAvail(false);
-        } catch { /* silent */ }
+        } catch { Alert.alert("Error", "Network error — please try again."); }
         finally { setAvailSaving(false); }
     }
 
