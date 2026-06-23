@@ -991,7 +991,10 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             });
             const d = await res.json();
             if (d.ok) setTransactions(d.transactions ?? []);
-        } catch { /* silent */ }
+        } catch {
+            setShowHistory(false);
+            Alert.alert("Error", "Could not load transaction history. Please try again.");
+        }
         finally { setHistoryLoading(false); }
     }
 
@@ -1035,7 +1038,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             setWalletStatus("active");
             setTransactions([]);
             setShowHistory(false);
-            Alert.alert("Success", `₹${v.amount_credited} added to your wallet!`);
+            Alert.alert("Success", `₹${v.amount_credited ?? "?"} added to your wallet!`);
         } catch (err: any) {
             if (err?.code !== 0 && !String(err?.description ?? "").toLowerCase().includes("cancel")) {
                 setTopupError(String(err?.message ?? "Payment failed"));
@@ -1914,7 +1917,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
             });
             const v = await vRes.json();
             if (!v.ok) { setError(v.error ?? "Verification failed"); return; }
-            Alert.alert("Success", `${sym}${v.amount_credited} added to your wallet!`);
+            Alert.alert("Success", `${sym}${v.amount_credited ?? "?"} added to your wallet!`);
             onSuccess(Number(v.new_balance ?? 0));
         } catch (err: any) {
             if (err?.code !== 0 && !String(err?.description ?? "").toLowerCase().includes("cancel")) {
@@ -1937,8 +1940,8 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
                             </Text>
                             <Text style={[s.cardName, { fontSize: 18 }]}>Add Balance</Text>
                         </View>
-                        <TouchableOpacity onPress={onClose}>
-                            <Ionicons name="close" size={20} color={colors.textSecondary} />
+                        <TouchableOpacity onPress={loading ? undefined : onClose} disabled={loading}>
+                            <Ionicons name="close" size={20} color={loading ? "transparent" : colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
 
@@ -3330,7 +3333,10 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             });
             const d = await res.json();
             if (d.ok) { setHistory(d.sessions ?? []); setHistoryLoaded(true); }
-        } catch { /* silent */ }
+        } catch {
+            setShowHistory(false);
+            Alert.alert("Error", "Could not load session history. Please try again.");
+        }
         finally { setHistoryLoading(false); }
     }
 
