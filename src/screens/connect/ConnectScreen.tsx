@@ -4240,6 +4240,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
     }
 
     async function pickAndUploadPhoto() {
+        if (!accessToken) { Alert.alert("Sign in required", "Please sign in before uploading."); return; }
         try {
             const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (!perm.granted) { Alert.alert("Permission required", "Allow photo library access to upload a profile photo."); return; }
@@ -4268,6 +4269,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
     }
 
     async function pickAndUploadDoc(key: DocKey) {
+        if (!accessToken) { Alert.alert("Sign in required", "Please sign in before uploading."); return; }
         try {
             const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "application/pdf"], copyToCacheDirectory: true });
             if (result.canceled || !result.assets?.[0]) return;
