@@ -2755,6 +2755,14 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                             </View>
                         </View>
                     ))}
+                    {/* Show the user's session topic so the consultant can see it
+                        without leaving the chat — only for scheduled sessions */}
+                    {session.type === "scheduled" && !!session.scheduled_note && (
+                        <View style={{ marginTop: 6, paddingTop: 8, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.06)" }}>
+                            <Text style={{ fontSize: 9, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, color: colors.textSecondary, marginBottom: 3 }}>Session Topic</Text>
+                            <Text style={{ fontSize: 11, color: colors.textPrimary, lineHeight: 16 }}>{session.scheduled_note}</Text>
+                        </View>
+                    )}
                 </View>
             )}
 
@@ -3090,7 +3098,16 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 currencyCode={session.currency_code ?? "INR"}
                 ratePerMin={rate}
                 onClose={() => setShowRecharge(false)}
-                onSuccess={(minutesAdded) => { setShowRecharge(false); setRemaining((prev) => (prev ?? 0) + minutesAdded); lastTickAtRef.current = Date.now(); startTick(); }}
+                onSuccess={(minutesAdded) => {
+                    setShowRecharge(false);
+                    setRemaining((prev) => (prev ?? 0) + minutesAdded);
+                    lastTickAtRef.current = Date.now();
+                    // Only restart tick if the session is still active — the consultant may have
+                    // ended the session while the Razorpay payment was in-flight. Starting
+                    // the interval on a completed session creates an orphaned interval that
+                    // fires one spurious POST to the tick endpoint before the component unmounts.
+                    if (status === "active") startTick();
+                }}
                 colors={colors}
             />
         </KeyboardAvoidingView>
