@@ -2196,6 +2196,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [status, setStatus] = useState(session.status);
     const [showEmergency, setShowEmergency] = useState(false);
     const [showReview, setShowReview] = useState(false);
+    const [reviewSubmitted, setReviewSubmitted] = useState(false);
     const [submittingReview, setSubmittingReview] = useState(false);
     const [rating, setRating] = useState(0);
     const [reviewText, setReviewText] = useState("");
@@ -2528,7 +2529,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 body: JSON.stringify({ rating, review_text: reviewText || null }),
             });
             const d = await res.json();
-            if (d.ok) { setShowReview(false); }
+            if (d.ok) { setShowReview(false); setReviewSubmitted(true); }
             else { Alert.alert("Error", d.error ?? "Could not submit review."); }
         } catch {
             Alert.alert("Network error", "Please check your connection and try again.");
@@ -2679,7 +2680,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             {isCompleted && (
                 <View style={{ padding: 10, alignItems: "center", backgroundColor: "rgba(148,163,184,0.08)" }}>
                     <Text style={s.cardBio}>Session completed · {minutesUsed} min</Text>
-                    {!showReview && !isConsultantView && (
+                    {!showReview && !reviewSubmitted && !isConsultantView && (
                         <TouchableOpacity onPress={() => setShowReview(true)}>
                             <Text style={{ color: colors.primary, fontSize: 12, marginTop: 4 }}>Leave a review</Text>
                         </TouchableOpacity>
@@ -2807,6 +2808,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     style={{ alignItems: "center", paddingVertical: 8, paddingBottom: insets.bottom || 4, opacity: endingSession ? 0.5 : 1 }}
                     disabled={endingSession}
                     onPress={async () => {
+                        stopTick();
                         setEndingSession(true);
                         try {
                             const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
@@ -2835,6 +2837,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     style={{ alignItems: "center", paddingVertical: 8, paddingBottom: insets.bottom || 4, opacity: endingSession ? 0.5 : 1 }}
                     disabled={endingSession}
                     onPress={async () => {
+                        stopTick();
                         setEndingSession(true);
                         try {
                             const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
@@ -3358,7 +3361,13 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                 headers: { Authorization: `Bearer ${accessToken}` },
             });
             const d = await res.json();
-            if (d.ok) { setHistory(d.sessions ?? []); setHistoryLoaded(true); }
+            if (!res.ok || !d.ok) {
+                setShowHistory(false);
+                Alert.alert("Error", d?.error ?? "Could not load session history. Please try again.");
+                return;
+            }
+            setHistory(d.sessions ?? []);
+            setHistoryLoaded(true);
         } catch {
             setShowHistory(false);
             Alert.alert("Error", "Could not load session history. Please try again.");
