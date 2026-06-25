@@ -2223,6 +2223,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const lastTickAtRef = useRef<number>(Date.now());
     const tickInFlightRef = useRef(false);
+    const tickMountedRef = useRef(true);
     const userPushTokenRegistered = useRef(false);
     const s = styles(colors);
 
@@ -2293,8 +2294,10 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         }
     }
 
-    // Realtime subscription
+    // Realtime subscription + network-recovery re-sync
     useEffect(() => {
+        let cancelled = false;
+        let prevRealtimeStatus = "";
         const channel = supabase.channel(`connect:session:${session.id}`)
             .on("postgres_changes", {
                 event: "INSERT", schema: "public",
@@ -2326,9 +2329,41 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 if (updated.started_at) setStartedAt(updated.started_at);
                 if (updated.minutes_used != null) setMinutesUsed(Number(updated.minutes_used));
             })
-            .subscribe();
+            .subscribe((status) => {
+                // On reconnect after a channel error (network drop/recovery), fire a tick
+                // immediately to re-sync session state. AppState only fires on app background/
+                // foreground — it doesn't cover foreground network recovery (e.g. WiFi drops
+                // while screen is on). Without this, remaining/minutesUsed drift until the
+                // next 60s tick, and a server-side completion may not reach the client.
+                if (
+                    status === "SUBSCRIBED" &&
+                    (prevRealtimeStatus === "CHANNEL_ERROR" || prevRealtimeStatus === "TIMED_OUT") &&
+                    !cancelled && accessToken && !tickInFlightRef.current
+                ) {
+                    tickInFlightRef.current = true;
+                    void (async () => {
+                        try {
+                            const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/tick`), {
+                                method: "POST",
+                                headers: { Authorization: `Bearer ${accessToken}` },
+                            }).catch(() => null);
+                            if (cancelled || !res || !tickMountedRef.current) return;
+                            const d = await res.json().catch(() => null);
+                            if (cancelled || !tickMountedRef.current) return;
+                            if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
+                            if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
+                            if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
+                            if (d?.status === "completed") setStatus("completed");
+                            if (!cancelled && d?.status !== "completed") { stopTick(); startTick(); }
+                        } finally {
+                            tickInFlightRef.current = false;
+                        }
+                    })();
+                }
+                prevRealtimeStatus = status;
+            });
 
-        return () => { supabase.removeChannel(channel); };
+        return () => { cancelled = true; supabase.removeChannel(channel); };
     // accessToken must be in deps: the translate API calls inside the Realtime
     // INSERT handler capture it in a closure. Without it, a token refresh mid-session
     // would leave the handler calling translate with an expired token.
@@ -2356,6 +2391,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             // status:"completed" in a 402 body both the review modal and the recharge
             // modal would open simultaneously (inconsistent UI).
             if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
+            if (!tickMountedRef.current) return;
             if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
             if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
             if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
@@ -2369,8 +2405,9 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             stopTick();
             return;
         }
+        tickMountedRef.current = true;
         startTick();
-        return () => { stopTick(); };
+        return () => { tickMountedRef.current = false; stopTick(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status, session.id, accessToken]);
 
@@ -3425,6 +3462,12 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                     setIncoming((prev) => prev.filter((s) => s.id !== sessionId));
                 }
             } else {
+                // Remove from incoming on any API failure — if the server rejected
+                // the request, the session is no longer actionable (expired, already
+                // declined, or completed by another path). Leaving it in the list
+                // would show a ghost Accept/Decline after a Realtime reconnect misses
+                // the status UPDATE.
+                setIncoming((prev) => prev.filter((s) => s.id !== sessionId));
                 Alert.alert("Error", d.error ?? `Could not ${action} session`);
             }
         } catch { Alert.alert("Error", "Network error — please try again."); }
