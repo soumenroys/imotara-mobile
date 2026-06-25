@@ -450,7 +450,8 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
         finally { setLoadingMore(false); }
     }
 
-    // Bug #98 fix: realtime subscription to keep is_online status accurate
+    // Keep is_online and is_busy accurate in real-time so browse cards reflect
+    // whether a consultant is live-online and whether they are in an active session.
     useEffect(() => {
         const channel = supabase
             .channel("connect:consultants:online")
@@ -458,10 +459,16 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 "postgres_changes",
                 { event: "UPDATE", schema: "public", table: "connect_consultants", filter: undefined },
                 (payload) => {
-                    const updated = payload.new as { id?: string; is_online?: boolean };
-                    if (!updated?.id || typeof updated.is_online !== "boolean") return;
+                    const updated = payload.new as { id?: string; is_online?: boolean; is_busy?: boolean };
+                    if (!updated?.id) return;
                     setConsultants((prev) =>
-                        prev.map((c) => (c.id === updated.id ? { ...c, is_online: updated.is_online as boolean } : c))
+                        prev.map((c) => {
+                            if (c.id !== updated.id) return c;
+                            const patch: Partial<typeof c> = {};
+                            if (typeof updated.is_online === "boolean") patch.is_online = updated.is_online;
+                            if (typeof updated.is_busy   === "boolean") patch.is_busy   = updated.is_busy;
+                            return Object.keys(patch).length ? { ...c, ...patch } : c;
+                        })
                     );
                 }
             )
@@ -2123,8 +2130,11 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
     const s   = styles(colors);
     const sym = CURRENCY_SYMBOLS[currencyCode] ?? "₹";
 
+    const rechargePayingRef = React.useRef(false);
     async function handlePay() {
+        if (rechargePayingRef.current) return;
         if (!accessToken) return;
+        rechargePayingRef.current = true;
         setLoading(true); setError("");
         try {
             const res = await pfetch(buildApiUrl("/api/connect/wallet/recharge/create"), {
@@ -2133,7 +2143,7 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
                 body: JSON.stringify({ consultant_id: consultantId, minutes: selectedMin }),
             });
             const d = await res.json();
-            if (!d.ok) { setError(d.error ?? "Failed to create order"); setLoading(false); return; }
+            if (!d.ok) { setError(d.error ?? "Failed to create order"); return; }
 
             const RazorpayCheckout = require("react-native-razorpay").default;
             const paymentData = await RazorpayCheckout.open({
@@ -2164,6 +2174,7 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
                 setError(String(err?.message ?? "Payment failed"));
             }
         } finally {
+            rechargePayingRef.current = false;
             setLoading(false);
         }
     }
@@ -2465,7 +2476,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     method: "POST",
                     headers: { Authorization: `Bearer ${accessToken}` },
                 }).catch(() => null);
-                if (!res) return;
+                if (!res) { console.warn("[tick] network error — billing tick missed"); return; }
                 if (res.status === 401) { stopTick(); setTickPaused(true); return; }
                 const d = await res.json().catch(() => null);
                 if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
@@ -2473,6 +2484,14 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 // status:"completed" in a 402 body both the review modal and the recharge
                 // modal would open simultaneously (inconsistent UI).
                 if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
+                if (!res.ok && res.status !== 402) {
+                    console.warn("[tick] server error", res.status, d?.error);
+                    // Alert once only — stopTick so the interval doesn't spam the user.
+                    // The orphan cron will auto-complete the session within 15 minutes.
+                    stopTick();
+                    Alert.alert("Billing Paused", "There was a problem processing your session billing. The session will auto-close shortly if connectivity doesn't restore.", [{ text: "OK" }]);
+                    return;
+                }
                 // Stamp only after a confirmed successful billing tick (not on 401/402).
                 // Stamping on 401 would delay AppState/reconnect re-sync by up to 55s.
                 lastTickAtRef.current = Date.now();
@@ -3438,6 +3457,12 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
 
     useEffect(() => { load(); }, [load]);
 
+    // Android hardware back: return to the Connect browse tab instead of navigating away.
+    useEffect(() => {
+        const sub = BackHandler.addEventListener("hardwareBackPress", () => { onBack(); return true; });
+        return () => sub.remove();
+    }, [onBack]);
+
     // Poll every 15s for new requests
     useEffect(() => {
         if (!accessToken) return;
@@ -3556,8 +3581,11 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
         finally { setHistoryLoading(false); }
     }
 
+    const actionInFlightRef = React.useRef<string | null>(null);
     async function handleAction(sessionId: string, action: "accept" | "decline") {
+        if (actionInFlightRef.current === sessionId) return;
         if (!accessToken) return;
+        actionInFlightRef.current = sessionId;
         setActionLoading(sessionId);
         try {
             const res = await cfetch(buildApiUrl(`/api/connect/sessions/${sessionId}`), {
@@ -3609,7 +3637,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                 Alert.alert("Error", d.error ?? `Could not ${action} session`);
             }
         } catch { Alert.alert("Error", "Network error — please try again."); }
-        finally { setActionLoading(null); }
+        finally { actionInFlightRef.current = null; setActionLoading(null); }
     }
 
     async function toggleOnline() {
