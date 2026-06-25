@@ -1839,6 +1839,11 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                                         Alert.alert("Message required", "Please add a message describing what you would like to discuss.");
                                         return;
                                     }
+                                    if (walletBalance < c.rate_per_min) {
+                                        setScheduleVisible(false);
+                                        setRechargeBeforeStartVisible(true);
+                                        return;
+                                    }
                                     startSession("scheduled", scheduleNote, translationEnabled && !langsMatch);
                                 }}
                                 disabled={scheduleLoading}>
