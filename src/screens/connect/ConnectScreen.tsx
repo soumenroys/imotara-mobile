@@ -244,6 +244,28 @@ export default function ConnectScreen() {
         return () => { sub?.remove?.(); };
     }, []);
 
+    // Auto-return to an active session on cold launch. If the user closed the app while a
+    // session was running, the billing tick stops (no ticks without ChatView mounted) but
+    // the consultant remains marked is_busy=true. Navigating to ChatView automatically
+    // on next open lets the user end or resume the session and unblocks the consultant.
+    // Only navigates if still on the default "browse" view — respects any other navigation
+    // already set (e.g., by a push notification tap on the same launch).
+    useEffect(() => {
+        if (!accessToken) return;
+        let mounted = true;
+        cfetch(buildApiUrl("/api/connect/sessions"), {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        })
+            .then((r) => r.json())
+            .then((d) => {
+                if (!mounted || !d.ok) return;
+                const live = (d.sessions ?? []).find((s: any) => s.status === "active");
+                if (live) setView((prev: any) => (prev.name === "browse" ? { name: "chat", session: live } : prev));
+            })
+            .catch(() => {});
+        return () => { mounted = false; };
+    }, [accessToken]);
+
     const s = styles(colors);
 
     // Age gate — mirrors web /connect/age-restricted redirect.
