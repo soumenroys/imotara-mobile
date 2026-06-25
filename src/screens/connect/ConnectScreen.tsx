@@ -2386,25 +2386,30 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     function startTick() {
         stopTick();
         tickRef.current = setInterval(async () => {
-            if (!accessToken) return;
-            lastTickAtRef.current = Date.now();
-            const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/tick`), {
-                method: "POST",
-                headers: { Authorization: `Bearer ${accessToken}` },
-            }).catch(() => null);
-            if (!res) return;
-            if (res.status === 401) { stopTick(); setTickPaused(true); return; }
-            const d = await res.json().catch(() => null);
-            if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
-            // 402 guard must come before state updates — if the server includes
-            // status:"completed" in a 402 body both the review modal and the recharge
-            // modal would open simultaneously (inconsistent UI).
-            if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
-            if (!tickMountedRef.current) return;
-            if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
-            if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
-            if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
-            if (d?.status === "completed") setStatus("completed");
+            if (!accessToken || tickInFlightRef.current) return;
+            tickInFlightRef.current = true;
+            try {
+                const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/tick`), {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                }).catch(() => null);
+                if (!res) return;
+                lastTickAtRef.current = Date.now();
+                if (res.status === 401) { stopTick(); setTickPaused(true); return; }
+                const d = await res.json().catch(() => null);
+                if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
+                // 402 guard must come before state updates — if the server includes
+                // status:"completed" in a 402 body both the review modal and the recharge
+                // modal would open simultaneously (inconsistent UI).
+                if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
+                if (!tickMountedRef.current) return;
+                if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
+                if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
+                if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
+                if (d?.status === "completed") setStatus("completed");
+            } finally {
+                tickInFlightRef.current = false;
+            }
         }, 60_000);
     }
 
@@ -2763,7 +2768,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
 
                     // Session-level translation: show pre-translated content from DB
                     if (session.translation_enabled) {
-                        const primaryText   = isMe ? m.content : (m.translated_content ?? m.content);
+                        const primaryText   = isMe ? m.content : (m.translated_content || m.content);
                         const secondaryText = isMe ? m.translated_content : m.content;
                         return (
                             <View style={{ alignItems: isMe ? "flex-end" : "flex-start" }}>
