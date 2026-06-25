@@ -2547,6 +2547,15 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     if (cancelled) return;
                     if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
                     if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
+                    // Guard non-401/402 server errors — same treatment as regular interval.
+                    if (!res.ok) {
+                        console.warn("[AppState tick] server error", res.status, d?.error);
+                        stopTick();
+                        if (tickMountedRef.current) {
+                            Alert.alert("Billing Paused", "There was a problem processing your session billing. The session will auto-close shortly if connectivity doesn't restore.", [{ text: "OK" }]);
+                        }
+                        return;
+                    }
                     // Stamp only after a confirmed successful billing tick (not on 401/402).
                     // Guard tickMountedRef before state updates — ChatView may have unmounted
                     // while this async IIFE was in flight (user tapped End Session).
