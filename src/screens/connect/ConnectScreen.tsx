@@ -1010,7 +1010,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                 body: JSON.stringify({ amount: amt, terms_accepted: true }),
             });
             const d = await res.json();
-            if (!d.ok) { setTopupError(d.error ?? "Failed to create order"); setTopupLoading(false); return; }
+            if (!d.ok) { setTopupError(d.error ?? "Failed to create order"); return; }
 
             const RazorpayCheckout = require("react-native-razorpay").default;
             const paymentData = await RazorpayCheckout.open({
