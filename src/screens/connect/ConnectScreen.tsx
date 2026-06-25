@@ -1074,6 +1074,16 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             if (!v.ok) { setTopupError(v.error ?? "Verification failed"); return; }
             setWalletBalance(Math.max(0, Number(v.new_balance ?? 0)));
             setWalletStatus("active");
+            // Refresh expiry data — topup resets the wallet expiry on the server but the
+            // verify response only includes new_balance. Fetch fresh wallet data so the
+            // expiry banner immediately reflects the new expiry date.
+            void cfetch(buildApiUrl("/api/connect/wallet"), {
+                headers: { Authorization: `Bearer ${accessToken}` },
+            }).then((r) => r.json()).then((d) => {
+                if (!d.ok) return;
+                setExpiresAt(d.expires_at ?? null);
+                setDaysUntilExpiry(d.days_until_expiry ?? null);
+            }).catch(() => {});
             setTransactions([]);
             setShowHistory(false);
             Alert.alert("Success", `₹${v.amount_credited ?? "?"} added to your wallet!`);
@@ -1850,7 +1860,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                                 placeholder="e.g. Would love to talk about anxiety management…"
                                 placeholderTextColor={colors.textSecondary}
                                 multiline
-                                maxLength={300}
+                                maxLength={800}
                                 textAlignVertical="top"
                             />
                             <TouchableOpacity
@@ -2223,7 +2233,8 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [status, setStatus] = useState(session.status);
     const [showEmergency, setShowEmergency] = useState(false);
     const [showReview, setShowReview] = useState(false);
-    const [reviewSubmitted, setReviewSubmitted] = useState(false);
+    // Init from session data so revisiting a completed session doesn't show the review form again
+    const [reviewSubmitted, setReviewSubmitted] = useState(!!session.review_submitted_at);
     const [submittingReview, setSubmittingReview] = useState(false);
     const [rating, setRating] = useState(0);
     const [reviewText, setReviewText] = useState("");
