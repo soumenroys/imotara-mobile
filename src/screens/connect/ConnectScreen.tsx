@@ -1574,6 +1574,10 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 <TouchableOpacity
                     style={[s.primaryBtn, (loading || !isOnline || isBusy || rechargeBeforeStartVisible) && { opacity: 0.6 }]}
                     onPress={() => {
+                        if (walletBalance < c.rate_per_min) {
+                            setRechargeBeforeStartVisible(true);
+                            return;
+                        }
                         if (!langsMatch) {
                             Alert.alert(
                                 "Enable Translation?",
