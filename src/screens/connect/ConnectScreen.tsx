@@ -2353,6 +2353,9 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                                 headers: { Authorization: `Bearer ${accessToken}` },
                             }).catch(() => null);
                             if (cancelled || !res || !tickMountedRef.current) return;
+                            // Stamp after confirming fetch succeeded so the AppState handler
+                            // cannot fire a second billing tick within 55s of this reconnect tick.
+                            lastTickAtRef.current = Date.now();
                             const d = await res.json().catch(() => null);
                             if (cancelled || !tickMountedRef.current) return;
                             if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
@@ -2435,13 +2438,17 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     return;
                 }
                 tickInFlightRef.current = true;
-                lastTickAtRef.current = Date.now();
                 try {
                     const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/tick`), {
                         method: "POST",
                         headers: { Authorization: `Bearer ${accessToken}` },
                     }).catch(() => null);
                     if (cancelled || !res) return;
+                    // Stamp only after a successful response — not before. If the network
+                    // request fails and we stamped early, both the AppState handler and the
+                    // Realtime reconnect handler would skip re-sync for 55s even though
+                    // no billing occurred and the session state was never updated.
+                    lastTickAtRef.current = Date.now();
                     if (res.status === 401) { stopTick(); setTickPaused(true); return; }
                     const d = await res.json().catch(() => null);
                     if (cancelled) return;
