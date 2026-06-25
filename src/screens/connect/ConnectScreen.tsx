@@ -259,7 +259,9 @@ export default function ConnectScreen() {
             .then((r) => r.json())
             .then((d) => {
                 if (!mounted || !d.ok) return;
-                const live = (d.sessions ?? []).find((s: any) => s.status === "active");
+                // Return to an active OR pending session — pending means the consultant
+                // hasn't accepted yet; the ChatView shows a "Waiting…" state in that case.
+                const live = (d.sessions ?? []).find((s: any) => s.status === "active" || s.status === "pending");
                 if (live) setView((prev: any) => (prev.name === "browse" ? { name: "chat", session: live } : prev));
             })
             .catch(() => {});
@@ -1938,10 +1940,15 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
         }
     }, [visible]);
 
+    // Ref-based guard prevents double-tap from launching two Razorpay flows before the
+    // async setLoading(true) re-render has propagated and disabled the button.
+    const payingRef = React.useRef(false);
     async function handlePay() {
+        if (payingRef.current) return;
         if (!accessToken) return;
         if (topupAmt < 1) { setError("Please enter a valid amount"); return; }
         if (!termsAccepted) { setError("Please accept the Wallet Terms to continue"); return; }
+        payingRef.current = true;
         setLoading(true); setError("");
         try {
             const res = await pfetch(buildApiUrl("/api/connect/wallet/topup/create"), {
@@ -1950,7 +1957,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
                 body: JSON.stringify({ amount: topupAmt, terms_accepted: true }),
             });
             const d = await res.json();
-            if (!d.ok) { setError(d.error ?? "Failed to create order"); setLoading(false); return; }
+            if (!d.ok) { setError(d.error ?? "Failed to create order"); return; }
 
             const RazorpayCheckout = require("react-native-razorpay").default;
             const paymentData = await RazorpayCheckout.open({
@@ -1981,6 +1988,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
                 setError(String(err?.message ?? "Payment failed"));
             }
         } finally {
+            payingRef.current = false;
             setLoading(false);
         }
     }
