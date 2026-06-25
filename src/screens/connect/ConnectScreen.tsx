@@ -232,7 +232,12 @@ export default function ConnectScreen() {
             sub = Notifications.addNotificationResponseReceivedListener((response: any) => {
                 const data = response?.notification?.request?.content?.data;
                 if (data?.type === "session_request") {
-                    setView({ name: "dashboard" });
+                    // Don't eject the user from an active chat session — a background push
+                    // notification arriving during a live call must not navigate away.
+                    setView((prev: any) => {
+                        if (prev.name === "chat") return prev;
+                        return { name: "dashboard" };
+                    });
                 }
             });
         } catch { /* expo-notifications unavailable */ }
@@ -2234,9 +2239,10 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         }
     }, [messages.length]);
 
-    // Re-fetch session status on mount — the session prop from SessionsTab history
-    // may be stale (status was captured at list-fetch time). This corrects the status
-    // so the right CTA buttons (input bar, End session) appear immediately.
+    // Re-fetch session on mount — the session prop from SessionsTab may be stale (captured
+    // at list-fetch time). This corrects status, started_at, minutes_used, and amount_charged
+    // so the elapsed clock, billing panel, and CTA buttons are immediately accurate when the
+    // user returns to an active session via "Return Now".
     useEffect(() => {
         if (!accessToken) return;
         let active = true;
@@ -2244,7 +2250,13 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             headers: { Authorization: `Bearer ${accessToken}` },
         })
             .then((r) => r.json())
-            .then((d) => { if (active && d.ok && d.session?.status) setStatus(d.session.status); })
+            .then((d) => {
+                if (!active || !d.ok || !d.session) return;
+                if (d.session.status) setStatus(d.session.status);
+                if (d.session.started_at) setStartedAt(d.session.started_at);
+                if (d.session.minutes_used != null) setMinutesUsed(Number(d.session.minutes_used));
+                if (d.session.amount_charged != null) setAmountCharged(Number(d.session.amount_charged));
+            })
             .catch(() => {});
         return () => { active = false; };
     }, [session.id, accessToken]);
