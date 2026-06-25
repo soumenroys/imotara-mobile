@@ -2915,6 +2915,18 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     disabled={endingSession}
                     onPress={async () => {
                         stopTick();
+                        // If a billing tick POST is still in-flight, wait for it to finish
+                        // before sending the complete PATCH. The server's optimistic lock
+                        // (eq status=active, eq minutes_used=N) prevents double-completion,
+                        // but the safest path is to drain the in-flight request first so the
+                        // RETURNING minutes_used value is authoritative.
+                        if (tickInFlightRef.current) {
+                            await new Promise<void>((resolve) => {
+                                const poll = setInterval(() => {
+                                    if (!tickInFlightRef.current) { clearInterval(poll); resolve(); }
+                                }, 50);
+                            });
+                        }
                         setEndingSession(true);
                         try {
                             const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
@@ -2944,6 +2956,13 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     disabled={endingSession}
                     onPress={async () => {
                         stopTick();
+                        if (tickInFlightRef.current) {
+                            await new Promise<void>((resolve) => {
+                                const poll = setInterval(() => {
+                                    if (!tickInFlightRef.current) { clearInterval(poll); resolve(); }
+                                }, 50);
+                            });
+                        }
                         setEndingSession(true);
                         try {
                             const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
@@ -3513,7 +3532,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                             });
                             const d2 = await r2.json();
                             if (d2.ok && d2.session) {
-                                onJoinSession({ ...d2.session, connect_consultants: null });
+                                onJoinSession({ ...d2.session });
                             } else {
                                 Alert.alert("Session accepted", "Session is ready — check Active Sessions to join.");
                             }
