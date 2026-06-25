@@ -2370,7 +2370,25 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             }, (payload) => {
                 if (!tickMountedRef.current) return;
                 const updated = payload.new as { status?: string; amount_charged?: number; started_at?: string; minutes_used?: number };
-                if (updated.status) setStatus(updated.status);
+                if (updated.status) {
+                    setStatus(updated.status);
+                    // Alert the user when a session is declined or cancelled so they
+                    // aren't left in the chat view with just a raw status change in the
+                    // header subtitle and no call-to-action.
+                    if (updated.status === "declined") {
+                        Alert.alert(
+                            "Request Declined",
+                            "The companion is unavailable right now. Try another or check back later.",
+                            [{ text: "OK", onPress: onBack }]
+                        );
+                    } else if (updated.status === "cancelled") {
+                        Alert.alert(
+                            "Session Cancelled",
+                            "This session has been cancelled.",
+                            [{ text: "OK", onPress: onBack }]
+                        );
+                    }
+                }
                 if (updated.amount_charged != null) setAmountCharged(updated.amount_charged);
                 if (updated.started_at) setStartedAt(updated.started_at);
                 if (updated.minutes_used != null) setMinutesUsed(Number(updated.minutes_used));
@@ -3415,10 +3433,12 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
     // Poll every 15s for new requests
     useEffect(() => {
         if (!accessToken) return;
+        let mounted = true;
         const t = setInterval(() => {
             cfetch(buildApiUrl("/api/connect/consultant/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } })
                 .then((r) => r.json())
                 .then((d) => {
+                    if (!mounted) return;
                     if (d.ok) {
                         const sessions = d.sessions ?? [];
                         const newPendingCount = sessions.filter((x: any) => x.status === "pending").length;
@@ -3437,14 +3457,14 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                     headers: { Authorization: `Bearer ${accessToken}` },
                 })
                     .then((r) => r.json())
-                    .then((d) => { if (d.ok && d.consultant) setProfile(d.consultant); })
+                    .then((d) => { if (mounted && d.ok && d.consultant) setProfile(d.consultant); })
                     .catch(() => {});
             }
         }, 15_000);
         // Do NOT reset prevPendingCount.current here — resetting it on token refresh would
         // cause the next poll to treat all existing pending sessions as new and fire spurious
         // "New Request" alerts. The ref is intentionally not part of the effect's cleanup.
-        return () => { clearInterval(t); };
+        return () => { mounted = false; clearInterval(t); };
     }, [accessToken]);
 
     // Supabase Realtime: instant alert for new pending sessions
