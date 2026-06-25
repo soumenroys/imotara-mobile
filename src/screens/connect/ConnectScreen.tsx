@@ -2222,6 +2222,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const lastTickAtRef = useRef<number>(Date.now());
+    const tickInFlightRef = useRef(false);
     const userPushTokenRegistered = useRef(false);
     const s = styles(colors);
 
@@ -2381,27 +2382,32 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         const sub = AppState.addEventListener("change", (nextState) => {
             if (nextState !== "active") return;
             void (async () => {
-                if (cancelled || !accessToken) return;
+                if (cancelled || !accessToken || tickInFlightRef.current) return;
+                tickInFlightRef.current = true;
                 lastTickAtRef.current = Date.now();
-                const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/tick`), {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${accessToken}` },
-                }).catch(() => null);
-                if (cancelled || !res) return;
-                if (res.status === 401) { stopTick(); setTickPaused(true); return; }
-                const d = await res.json().catch(() => null);
-                if (cancelled) return;
-                if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
-                if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
-                if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
-                if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
-                if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
-                if (d?.status === "completed") setStatus("completed");
-                // Reset the interval so the next scheduled tick fires 60s from this
-                // AppState tick, not from whenever the interval was last scheduled.
-                // Guard on `cancelled` prevents startTick() from creating an orphaned
-                // interval if the component unmounted while this async IIFE was in flight.
-                if (!cancelled && d?.status !== "completed") { stopTick(); startTick(); }
+                try {
+                    const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/tick`), {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${accessToken}` },
+                    }).catch(() => null);
+                    if (cancelled || !res) return;
+                    if (res.status === 401) { stopTick(); setTickPaused(true); return; }
+                    const d = await res.json().catch(() => null);
+                    if (cancelled) return;
+                    if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
+                    if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
+                    if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
+                    if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
+                    if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
+                    if (d?.status === "completed") setStatus("completed");
+                    // Reset the interval so the next scheduled tick fires 60s from this
+                    // AppState tick, not from whenever the interval was last scheduled.
+                    // Guard on `cancelled` prevents startTick() from creating an orphaned
+                    // interval if the component unmounted while this async IIFE was in flight.
+                    if (!cancelled && d?.status !== "completed") { stopTick(); startTick(); }
+                } finally {
+                    tickInFlightRef.current = false;
+                }
             })();
         });
         return () => { cancelled = true; sub.remove(); };
