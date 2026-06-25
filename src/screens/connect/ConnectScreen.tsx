@@ -2379,7 +2379,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         if (status !== "active") return;
         let cancelled = false;
         const sub = AppState.addEventListener("change", (nextState) => {
-            if (nextState !== "active" || Date.now() - lastTickAtRef.current < 55_000) return;
+            if (nextState !== "active") return;
             void (async () => {
                 if (cancelled || !accessToken) return;
                 lastTickAtRef.current = Date.now();
@@ -3395,8 +3395,8 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                     // Remove from incoming immediately — without this the session remains
                     // in the list with ghost Accept/Decline buttons if the consultant
                     // navigates back before the Realtime UPDATE arrives.
-                    setIncoming((prev) => prev.filter((s) => s.id !== sessionId));
                     const sess = incoming.find((s) => s.id === sessionId);
+                    setIncoming((prev) => prev.filter((s) => s.id !== sessionId));
                     if (sess) {
                         onJoinSession({ ...sess, connect_consultants: null });
                     } else {
