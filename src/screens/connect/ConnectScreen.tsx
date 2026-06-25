@@ -3133,15 +3133,21 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
         if (!accessToken) return;
         setNoteSaving(true);
         try {
-            await cfetch(buildApiUrl(`/api/connect/sessions/${sessionId}/notes`), {
+            const res = await cfetch(buildApiUrl(`/api/connect/sessions/${sessionId}/notes`), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ content: noteContent }),
             });
+            const d = await res.json().catch(() => null);
+            if (!d?.ok) {
+                Alert.alert("Save Failed", d?.error ?? "Could not save note. Please try again.");
+                return;
+            }
             setNoteSaved(true);
             setTimeout(() => setNoteSaved(false), 2000);
-        } catch { /* silent */ }
-        finally { setNoteSaving(false); }
+        } catch {
+            Alert.alert("Error", "Network error — could not save note. Please try again.");
+        } finally { setNoteSaving(false); }
     }
 
     async function blockUser(userId: string) {
