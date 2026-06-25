@@ -812,7 +812,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
                             </Text>
                         </View>
                         <Text style={[s.cardBio, { marginTop: 2 }]}>
-                            {new Date(item.created_at).toLocaleDateString()} · {item.minutes_used.toFixed(0)} min used
+                            {new Date(item.created_at).toLocaleDateString()} · {(item.minutes_used ?? 0).toFixed(0)} min used
                         </Text>
                         {item.scheduled_note && <Text style={[s.cardBio, { opacity: 0.7, fontStyle: "italic" }]} numberOfLines={1}>{item.scheduled_note}</Text>}
                     </TouchableOpacity>
