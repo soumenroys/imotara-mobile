@@ -446,18 +446,24 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
         const isFav = favorites.has(consultantId);
         setFavLoading(consultantId);
         try {
-            await cfetch(buildApiUrl("/api/connect/favorites"), {
+            const res = await cfetch(buildApiUrl("/api/connect/favorites"), {
                 method: isFav ? "DELETE" : "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ consultant_id: consultantId }),
             });
+            const d = await res.json().catch(() => null);
+            if (!res.ok || !d?.ok) {
+                Alert.alert("Error", d?.error ?? "Could not update favourite. Please try again.");
+                return;
+            }
             setFavorites((prev) => {
                 const next = new Set(prev);
                 if (isFav) next.delete(consultantId); else next.add(consultantId);
                 return next;
             });
-        } catch { /* silent */ }
-        finally { setFavLoading(null); }
+        } catch {
+            Alert.alert("Error", "Could not update favourite. Please try again.");
+        } finally { setFavLoading(null); }
     }
 
     const displayed = consultants
@@ -990,7 +996,12 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                 headers: { Authorization: `Bearer ${accessToken ?? ""}` },
             });
             const d = await res.json();
-            if (d.ok) setTransactions(d.transactions ?? []);
+            if (!res.ok || !d.ok) {
+                setShowHistory(false);
+                Alert.alert("Error", d?.error ?? "Could not load transaction history. Please try again.");
+                return;
+            }
+            setTransactions(d.transactions ?? []);
         } catch {
             setShowHistory(false);
             Alert.alert("Error", "Could not load transaction history. Please try again.");
