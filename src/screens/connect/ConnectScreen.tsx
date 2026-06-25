@@ -1034,7 +1034,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             });
             const v = await verifyRes.json();
             if (!v.ok) { setTopupError(v.error ?? "Verification failed"); return; }
-            setWalletBalance(Number(v.new_balance ?? 0));
+            setWalletBalance(Math.max(0, Number(v.new_balance ?? 0)));
             setWalletStatus("active");
             setTransactions([]);
             setShowHistory(false);
@@ -1362,7 +1362,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
         if (!accessToken) return;
         cfetch(buildApiUrl("/api/connect/wallet"), { headers: { Authorization: `Bearer ${accessToken}` } })
             .then((r) => r.json())
-            .then((d) => { if (d.ok) { setWalletBalance(Number(d.wallet_balance ?? 0)); setWalletCurrency(d.wallet_currency ?? "INR"); } })
+            .then((d) => { if (d.ok) { setWalletBalance(Math.max(0, Number(d.wallet_balance ?? 0))); setWalletCurrency(d.wallet_currency ?? "INR"); } })
             .catch(() => {});
     }, [accessToken]);
 
@@ -1918,7 +1918,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
             const v = await vRes.json();
             if (!v.ok) { setError(v.error ?? "Verification failed"); return; }
             Alert.alert("Success", `${sym}${v.amount_credited ?? "?"} added to your wallet!`);
-            onSuccess(Number(v.new_balance ?? 0));
+            onSuccess(Math.max(0, Number(v.new_balance ?? 0)));
         } catch (err: any) {
             if (err?.code !== 0 && !String(err?.description ?? "").toLowerCase().includes("cancel")) {
                 setError(String(err?.message ?? "Payment failed"));
