@@ -2357,6 +2357,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 event: "UPDATE", schema: "public",
                 table: "connect_sessions", filter: `id=eq.${session.id}`,
             }, (payload) => {
+                if (!tickMountedRef.current) return;
                 const updated = payload.new as { status?: string; amount_charged?: number; started_at?: string; minutes_used?: number };
                 if (updated.status) setStatus(updated.status);
                 if (updated.amount_charged != null) setAmountCharged(updated.amount_charged);
@@ -2428,7 +2429,6 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     headers: { Authorization: `Bearer ${accessToken}` },
                 }).catch(() => null);
                 if (!res) return;
-                lastTickAtRef.current = Date.now();
                 if (res.status === 401) { stopTick(); setTickPaused(true); return; }
                 const d = await res.json().catch(() => null);
                 if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
@@ -2436,6 +2436,9 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 // status:"completed" in a 402 body both the review modal and the recharge
                 // modal would open simultaneously (inconsistent UI).
                 if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
+                // Stamp only after a confirmed successful billing tick (not on 401/402).
+                // Stamping on 401 would delay AppState/reconnect re-sync by up to 55s.
+                lastTickAtRef.current = Date.now();
                 if (!tickMountedRef.current) return;
                 if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
                 if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
@@ -2483,16 +2486,16 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                         headers: { Authorization: `Bearer ${accessToken}` },
                     }).catch(() => null);
                     if (cancelled || !res) return;
-                    // Stamp only after a successful response — not before. If the network
-                    // request fails and we stamped early, both the AppState handler and the
-                    // Realtime reconnect handler would skip re-sync for 55s even though
-                    // no billing occurred and the session state was never updated.
-                    lastTickAtRef.current = Date.now();
                     if (res.status === 401) { stopTick(); setTickPaused(true); return; }
                     const d = await res.json().catch(() => null);
                     if (cancelled) return;
                     if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
                     if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
+                    // Stamp only after a confirmed successful billing tick (not on 401/402).
+                    // Guard tickMountedRef before state updates — ChatView may have unmounted
+                    // while this async IIFE was in flight (user tapped End Session).
+                    lastTickAtRef.current = Date.now();
+                    if (!tickMountedRef.current) return;
                     if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
                     if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
                     if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
@@ -3057,7 +3060,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 currencyCode={session.currency_code ?? "INR"}
                 ratePerMin={rate}
                 onClose={() => setShowRecharge(false)}
-                onSuccess={(minutesAdded) => { setShowRecharge(false); setRemaining((prev) => (prev ?? 0) + minutesAdded); startTick(); }}
+                onSuccess={(minutesAdded) => { setShowRecharge(false); setRemaining((prev) => (prev ?? 0) + minutesAdded); lastTickAtRef.current = Date.now(); startTick(); }}
                 colors={colors}
             />
         </KeyboardAvoidingView>
@@ -3501,7 +3504,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                     const sess = incoming.find((s) => s.id === sessionId);
                     setIncoming((prev) => prev.filter((s) => s.id !== sessionId));
                     if (sess) {
-                        onJoinSession({ ...sess, connect_consultants: null });
+                        onJoinSession({ ...sess });
                     } else {
                         // Race: session already moved out of incoming — fetch directly and navigate
                         try {
