@@ -2340,6 +2340,11 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     (prevRealtimeStatus === "CHANNEL_ERROR" || prevRealtimeStatus === "TIMED_OUT") &&
                     !cancelled && accessToken && !tickInFlightRef.current
                 ) {
+                    if (Date.now() - lastTickAtRef.current < 55_000) {
+                        // Network blip shorter than 55s — re-anchor the countdown interval to
+                        // prevent display drift without billing an extra minute.
+                        if (!cancelled) { stopTick(); startTick(); }
+                    } else {
                     tickInFlightRef.current = true;
                     void (async () => {
                         try {
@@ -2359,6 +2364,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                             tickInFlightRef.current = false;
                         }
                     })();
+                    } // end >= 55s branch
                 }
                 prevRealtimeStatus = status;
             });
@@ -2420,6 +2426,14 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             if (nextState !== "active") return;
             void (async () => {
                 if (cancelled || !accessToken || tickInFlightRef.current) return;
+                // Elapsed-time guard: brief backgrounds (< 55s) must NOT trigger a billing tick —
+                // the user hasn't used another minute. Re-anchor the interval so the countdown
+                // display self-corrects without billing. Only bill when >= 55s have elapsed
+                // (JS timers typically miss a full tick cycle when backgrounded).
+                if (Date.now() - lastTickAtRef.current < 55_000) {
+                    if (!cancelled) { stopTick(); startTick(); }
+                    return;
+                }
                 tickInFlightRef.current = true;
                 lastTickAtRef.current = Date.now();
                 try {
