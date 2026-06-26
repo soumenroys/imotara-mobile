@@ -1,5 +1,5 @@
 // src/components/imotara/OnboardingModal.tsx
-// 3-step first-launch onboarding — sets name, companion tone, and privacy mode.
+// 2-step first-launch onboarding — sets name and companion relationship.
 
 import React, { useState } from "react";
 import {
@@ -30,7 +30,7 @@ type Relationship =
 export type OnboardingResult = {
   name: string;
   relationship: Relationship;
-  analysisMode: "auto" | "cloud" | "local";
+  analysisMode: "cloud";
 };
 
 const RELATIONSHIPS: { value: Relationship; label: string; description: string }[] = [
@@ -158,7 +158,7 @@ export function OnboardingModal({ visible, onComplete }: Props) {
 
           {step === 0 && (
             <TouchableOpacity
-              onPress={() => onComplete({ name: "", relationship: "prefer_not", analysisMode: "auto" })}
+              onPress={() => onComplete({ name: "", relationship: "prefer_not", analysisMode: "cloud" })}
               style={{ alignItems: "center", paddingVertical: 14 }}
             >
               <Text style={{ fontSize: 12, color: colors.textSecondary }}>

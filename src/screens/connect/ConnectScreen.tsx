@@ -1126,6 +1126,8 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             }).catch(() => {});
             setTransactions([]);
             setShowHistory(false);
+            setAgeConfirmed(false);
+            setTermsAccepted(false);
             Alert.alert("Success", `₹${v.amount_credited ?? "?"} added to your wallet!`);
         } catch (err: any) {
             if (err?.code !== 0 && !String(err?.description ?? "").toLowerCase().includes("cancel")) {
@@ -2626,6 +2628,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
                     if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
                     if (d?.status === "completed") setStatus("completed");
+                    if (Number(d?.remaining_minutes) <= 0) { stopTick(); return; }
                     // Reset the interval so the next scheduled tick fires 60s from this
                     // AppState tick, not from whenever the interval was last scheduled.
                     // Guard on `cancelled` prevents startTick() from creating an orphaned
