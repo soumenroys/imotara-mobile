@@ -3734,7 +3734,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
 
     async function toggleOnline() {
         if (!accessToken || !profile) return;
-        if (profile.is_online && active.length > 0) {
+        if (profile.is_online && (active.length > 0 || profile.is_busy)) {
             Alert.alert("Active Session", "You cannot go offline while a session is in progress. Please end the session first.");
             return;
         }
