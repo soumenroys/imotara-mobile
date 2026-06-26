@@ -72,7 +72,6 @@ import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { DiscoveryCard, DISCOVERY_CARDS_KEY, CARD_ORDER, getNextCard, type DiscoveryCardId } from "../components/chat/DiscoveryCard";
 import { OpenLoopCard } from "../components/chat/OpenLoopCard";
 import { CompanionInsightCard } from "../components/imotara/CompanionInsightCard";
@@ -1486,10 +1485,6 @@ export default function ChatScreen() {
   const colors = useColors();
   const { isDark, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
-  // Tab bar is now in normal flow (tabBarHideOnKeyboard removed). useBottomTabBarHeight()
-  // returns the true rendered height including gesture-nav padding from RootNavigator,
-  // which can be larger than the formula-derived value when insets.bottom > 0.
-  const bottomTabBarHeight = useBottomTabBarHeight();
 
   // Companion quick panel — opened by swiping right from the left edge strip
   const [companionPanelVisible, setCompanionPanelVisible] = useState(false);
@@ -4264,7 +4259,6 @@ export default function ChatScreen() {
   const isPad = Platform.OS === "ios" && Platform.isPad;
 
   return (
-    <View style={{ flex: 1, paddingBottom: Platform.OS === "android" ? (bottomTabBarHeight || (58 + Math.max(insets.bottom, 4))) : 0 }}>
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -5668,6 +5662,5 @@ export default function ChatScreen() {
       />
     </View>
     </KeyboardAvoidingView>
-    </View>
   );
 }
