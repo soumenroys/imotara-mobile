@@ -227,7 +227,6 @@ export default function RootNavigator() {
                             paddingBottom: insets.bottom > 0 ? insets.bottom : 4,
                             height: 56 + (insets.bottom > 0 ? insets.bottom : 4),
                         },
-                        tabBarHideOnKeyboard: Platform.OS === "android",
                         tabBarVisibilityAnimationConfig: {
                             hide: { animation: "timing", config: { duration: 150 } },
                             show: { animation: "timing", config: { duration: 200, delay: 40 } },
