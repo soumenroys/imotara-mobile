@@ -632,6 +632,14 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 20, gap: 12 }}
                 onEndReached={loadMoreConsultants}
                 onEndReachedThreshold={0.3}
+                ListEmptyComponent={
+                    consultants.length > 0 ? (
+                        <View style={[s.center, { paddingTop: 40 }]}>
+                            <Text style={s.emptyText}>No companions match this filter.</Text>
+                            <Text style={[s.emptyText, { marginTop: 4, fontSize: 12, opacity: 0.6 }]}>Try a different specialty or remove filters.</Text>
+                        </View>
+                    ) : null
+                }
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setRefreshKey((k) => k + 1); }} tintColor={colors.primary} />}
                 renderItem={({ item: c }) => (
                     <TouchableOpacity style={s.card} onPress={() => onSelectConsultant(c)} activeOpacity={0.78}>
@@ -1377,7 +1385,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     const { isDark } = useTheme();
     const [topUpVisible, setTopUpVisible] = useState(false);
     const [rechargeBeforeStartVisible, setRechargeBeforeStartVisible] = useState(false);
-    const [walletBalance, setWalletBalance] = useState(0);
+    const [walletBalance, setWalletBalance] = useState<number | null>(null);
     const [walletCurrency, setWalletCurrency] = useState("INR");
     const [loading, setLoading] = useState(false);
     const [scheduleVisible, setScheduleVisible] = useState(false);
@@ -1550,7 +1558,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                         <Text style={s.cardName}>Rate</Text>
                         <Text style={[s.rateText, { fontSize: 18 }]}>{sym}{c.rate_per_min}/min</Text>
                     </View>
-                    {accessToken && (
+                    {accessToken && walletBalance !== null && (
                         <TouchableOpacity
                             onPress={() => setTopUpVisible(true)}
                             style={{ borderRadius: 14, borderWidth: 1, borderColor: "rgba(139,92,246,0.3)", backgroundColor: "rgba(139,92,246,0.08)", paddingHorizontal: 14, paddingVertical: 10, alignItems: "center", justifyContent: "center", gap: 2 }}>
@@ -2500,7 +2508,14 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 // Stamping on 401 would delay AppState/reconnect re-sync by up to 55s.
                 lastTickAtRef.current = Date.now();
                 if (!tickMountedRef.current) return;
-                if (d?.remaining_minutes != null) setRemaining(d.remaining_minutes);
+                if (d?.remaining_minutes != null) {
+                    setRemaining(d.remaining_minutes);
+                    // Proactively stop the interval when balance is exhausted — the server
+                    // always returns status:"completed" in this case, but calling stopTick()
+                    // here avoids waiting one full render cycle + useEffect before the
+                    // interval clears, which matters when Realtime is reconnecting.
+                    if (Number(d.remaining_minutes) <= 0) stopTick();
+                }
                 if (d?.amount_charged != null) setAmountCharged(d.amount_charged);
                 if (d?.minutes_used != null) setMinutesUsed(Number(d.minutes_used));
                 if (d?.status === "completed") setStatus("completed");
