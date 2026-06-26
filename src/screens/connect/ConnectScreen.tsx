@@ -126,6 +126,8 @@ interface WalletTx {
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
     INR: "₹", USD: "$", EUR: "€", GBP: "£", AED: "د.إ", SGD: "S$", AUD: "A$",
+    CAD: "CA$", NZD: "NZ$", CHF: "CHF ", JPY: "¥", CNY: "¥", HKD: "HK$",
+    MYR: "RM", THB: "฿", IDR: "Rp", PHP: "₱", ZAR: "R", BRL: "R$",
 };
 
 const CHAT_LANGUAGES = [
@@ -2128,7 +2130,9 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
     const [loading, setLoading]         = useState(false);
     const [error, setError]             = useState("");
     const s   = styles(colors);
-    const sym = CURRENCY_SYMBOLS[currencyCode] ?? "₹";
+    // Fall back to the raw currency code (e.g. "CAD ") for unlisted currencies so
+    // the user sees a readable label instead of the wrong INR symbol.
+    const sym = CURRENCY_SYMBOLS[currencyCode] ?? `${currencyCode} `;
 
     const rechargePayingRef = React.useRef(false);
     async function handlePay() {
@@ -2608,7 +2612,9 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     // Per-second visual countdown synced from API tick
     useEffect(() => {
         if (remaining === null) { setDisplaySeconds(null); return; }
-        const secs = Math.round(remaining * 60);
+        // Clamp to 0 — server may return negative remaining_minutes (e.g. -0.5) when
+        // balance is exactly zero; a negative value would render "-1:-30" in the timer.
+        const secs = Math.max(0, Math.round(remaining * 60));
         setDisplaySeconds(secs);
         if (countdownRef.current) clearInterval(countdownRef.current);
         countdownRef.current = setInterval(() => {
@@ -2788,7 +2794,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                             { label: "Elapsed",   value: formatDuration(elapsedSecs),                          bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)",  text: "#f59e0b" },
                             { label: "Remaining", value: displaySeconds !== null ? formatDuration(displaySeconds) : "—", bg: isLow ? "rgba(248,113,113,0.12)" : "rgba(52,211,153,0.12)", border: isLow ? "rgba(248,113,113,0.3)" : "rgba(52,211,153,0.3)", text: isLow ? "#f87171" : "#34d399" },
                             { label: "Used",      value: `${sym}${consumed.toFixed(2)}`,                       bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.3)", text: "#f87171" },
-                            { label: "Balance",   value: remaining !== null ? `${sym}${(remaining * rate).toFixed(2)}` : "—", bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.3)", text: "#a78bfa" },
+                            { label: "Balance",   value: remaining !== null ? `${sym}${(Math.max(0, remaining) * rate).toFixed(2)}` : "—", bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.3)", text: "#a78bfa" },
                         ].map((m) => (
                             <View key={m.label} style={{ flex: 1, backgroundColor: m.bg, borderWidth: 1, borderColor: m.border, borderRadius: 10, padding: 6, alignItems: "center" }}>
                                 <Text style={{ fontSize: 8, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, color: m.text, opacity: 0.7, marginBottom: 2 }}>{m.label}</Text>
