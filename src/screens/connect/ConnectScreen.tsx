@@ -72,6 +72,7 @@ interface Session {
     translation_enabled?: boolean;
     user_lang?: string | null;
     consultant_lang?: string | null;
+    review_submitted_at?: string | null;
     connect_consultants: { display_name: string; photo_url: string | null; rate_per_min?: number } | null;
 }
 
@@ -1662,7 +1663,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 <TouchableOpacity
                     style={[s.primaryBtn, (loading || !isOnline || isBusy || rechargeBeforeStartVisible) && { opacity: 0.6 }]}
                     onPress={() => {
-                        if (walletBalance < c.rate_per_min) {
+                        if ((walletBalance ?? 0) < c.rate_per_min) {
                             setRechargeBeforeStartVisible(true);
                             return;
                         }
@@ -1701,7 +1702,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
             <WalletTopUpModal
                 visible={topUpVisible}
                 accessToken={accessToken}
-                walletBalance={walletBalance}
+                walletBalance={walletBalance ?? 0}
                 walletCurrency={walletCurrency}
                 onClose={() => { setTopUpVisible(false); }}
                 onSuccess={(newBal) => {
@@ -1927,7 +1928,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                                         Alert.alert("Message required", "Please add a message describing what you would like to discuss.");
                                         return;
                                     }
-                                    if (walletBalance < c.rate_per_min) {
+                                    if ((walletBalance ?? 0) < c.rate_per_min) {
                                         setScheduleVisible(false);
                                         setRechargeBeforeStartVisible(true);
                                         return;
@@ -1957,12 +1958,13 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
     onSuccess: (newBalance: number) => void;
     colors: any;
 }) {
-    const [selectedAmt, setSelectedAmt] = useState(1000);
-    const [customAmt, setCustomAmt]     = useState("");
-    const [isCustom, setIsCustom]       = useState(false);
-    const [termsAccepted, setTerms]     = useState(false);
-    const [loading, setLoading]         = useState(false);
-    const [error, setError]             = useState("");
+    const [selectedAmt, setSelectedAmt]   = useState(1000);
+    const [customAmt, setCustomAmt]       = useState("");
+    const [isCustom, setIsCustom]         = useState(false);
+    const [ageConfirmed, setAgeConfirmed] = useState(false);
+    const [termsAccepted, setTerms]       = useState(false);
+    const [loading, setLoading]           = useState(false);
+    const [error, setError]               = useState("");
     const s = styles(colors);
     const sym = CURRENCY_SYMBOLS[walletCurrency] ?? "₹";
     // Max(0, ...) — NOT Max(1, ...) — so an empty custom field gives 0 and
@@ -1974,7 +1976,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
     useEffect(() => {
         if (visible) {
             setSelectedAmt(1000); setCustomAmt(""); setIsCustom(false);
-            setTerms(false); setError("");
+            setAgeConfirmed(false); setTerms(false); setError("");
         }
     }, [visible]);
 
@@ -1985,6 +1987,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
         if (payingRef.current) return;
         if (!accessToken) return;
         if (topupAmt < 1) { setError("Please enter a valid amount"); return; }
+        if (!ageConfirmed) { setError("Please confirm you are 18 or older to continue"); return; }
         if (!termsAccepted) { setError("Please accept the Wallet Terms to continue"); return; }
         payingRef.current = true;
         setLoading(true); setError("");
@@ -2096,6 +2099,24 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
                         </View>
                     </View>
 
+                    {/* Age confirmation */}
+                    <TouchableOpacity
+                        style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}
+                        onPress={() => setAgeConfirmed((v) => !v)}
+                        activeOpacity={0.7}>
+                        <View style={{
+                            width: 18, height: 18, borderRadius: 3, borderWidth: 1.5,
+                            borderColor: ageConfirmed ? colors.primary : colors.border,
+                            backgroundColor: ageConfirmed ? colors.primary : "transparent",
+                            alignItems: "center", justifyContent: "center",
+                        }}>
+                            {ageConfirmed && <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>✓</Text>}
+                        </View>
+                        <Text style={[s.cardBio, { fontSize: 11, flex: 1 }]}>
+                            I confirm I am 18 years of age or older.
+                        </Text>
+                    </TouchableOpacity>
+
                     {/* Consent */}
                     <TouchableOpacity
                         style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 }}
@@ -2122,9 +2143,9 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
                     {error !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{error}</Text>}
 
                     <TouchableOpacity
-                        style={[s.primaryBtn, (loading || topupAmt < 1 || !termsAccepted) && { opacity: 0.5 }]}
+                        style={[s.primaryBtn, (loading || topupAmt < 1 || !ageConfirmed || !termsAccepted) && { opacity: 0.5 }]}
                         onPress={handlePay}
-                        disabled={loading || topupAmt < 1 || !termsAccepted}>
+                        disabled={loading || topupAmt < 1 || !ageConfirmed || !termsAccepted}>
                         {loading
                             ? <ActivityIndicator color="#fff" />
                             : <Text style={s.primaryBtnText}>Add {sym}{topupAmt.toFixed(0)} to Wallet</Text>
