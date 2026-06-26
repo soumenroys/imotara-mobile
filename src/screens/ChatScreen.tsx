@@ -1486,7 +1486,9 @@ export default function ChatScreen() {
   const colors = useColors();
   const { isDark, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  // useBottomTabBarHeight() returns 0 when tab bar is hidden (tabBarHideOnKeyboard).
+  // Compute height from the same formula used in RootNavigator to get a reliable value.
+  const tabBarHeight = useBottomTabBarHeight() || (56 + Math.max(insets.bottom, 4));
 
   // Companion quick panel — opened by swiping right from the left edge strip
   const [companionPanelVisible, setCompanionPanelVisible] = useState(false);
