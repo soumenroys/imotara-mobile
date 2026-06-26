@@ -907,6 +907,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
 
 // ── Wallet Tab ─────────────────────────────────────────────────────────────────
 const TOPUP_PRESETS = [1000, 2000, 5000, 10000];
+const RAZORPAY_MAX_INR = 500_000; // ₹5,00,000 Razorpay domestic ceiling
 
 // Defined at module scope so React sees a stable component type and does NOT unmount/remount
 // the TextInput inside on every WalletTab re-render (which would lose keyboard focus).
@@ -1021,6 +1022,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [topupLoading, setTopupLoading] = useState(false);
     const [topupError, setTopupError] = useState("");
+    const walletTabPayingRef = React.useRef(false);
 
     const [showRefund, setShowRefund] = useState(false);
     const [refundMethod, setRefundMethod] = useState<"upi" | "bank">("upi");
@@ -1077,7 +1079,10 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
 
     async function handleTopUp() {
         const amt = isCustom ? parseFloat(customAmount) : topupAmount;
+        if (walletTabPayingRef.current) return;
         if (!accessToken || isNaN(amt) || amt < 1) { setTopupError("Enter a valid amount"); return; }
+        if (amt > RAZORPAY_MAX_INR) { setTopupError("Maximum top-up is ₹5,00,000 per transaction"); return; }
+        walletTabPayingRef.current = true;
         if (!ageConfirmed) { setTopupError("Please confirm you are 18 or older to continue"); return; }
         if (!termsAccepted) { setTopupError("Please accept the Wallet Terms to continue"); return; }
         setTopupLoading(true); setTopupError("");
@@ -1134,6 +1139,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                 setTopupError(String(err?.message ?? "Payment failed"));
             }
         } finally {
+            walletTabPayingRef.current = false;
             setTopupLoading(false);
         }
     }
@@ -1420,6 +1426,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [scheduleDuration, setScheduleDuration] = useState(30);
     const [scheduleLoading, setScheduleLoading] = useState(false);
+    const startingSessionRef = React.useRef(false);
     const [userLang, setUserLang] = useState("en");
     const [translationEnabled, setTranslationEnabled] = useState(false);
     const [pendingTranslation, setPendingTranslation] = useState(false);
@@ -1459,7 +1466,8 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 
     async function startSession(sessionType: "instant" | "scheduled" = "instant", note?: string, translationRequested = false) {
         if (!accessToken) { Alert.alert("Sign in required", "Please sign in to start a session."); return; }
-        if (loading || scheduleLoading) return;
+        if (startingSessionRef.current || loading || scheduleLoading) return;
+        startingSessionRef.current = true;
         if (sessionType === "instant") setLoading(true);
         else setScheduleLoading(true);
         try {
@@ -1524,6 +1532,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
         } catch {
             Alert.alert("Error", "Network error — please try again.");
         } finally {
+            startingSessionRef.current = false;
             setLoading(false);
             setScheduleLoading(false);
         }
@@ -1989,6 +1998,7 @@ function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency,
         if (payingRef.current) return;
         if (!accessToken) return;
         if (topupAmt < 1) { setError("Please enter a valid amount"); return; }
+        if (topupAmt > RAZORPAY_MAX_INR) { setError("Maximum top-up is ₹5,00,000 per transaction"); return; }
         if (!ageConfirmed) { setError("Please confirm you are 18 or older to continue"); return; }
         if (!termsAccepted) { setError("Please accept the Wallet Terms to continue"); return; }
         payingRef.current = true;
@@ -2190,6 +2200,8 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
     async function handlePay() {
         if (rechargePayingRef.current) return;
         if (!accessToken) return;
+        const estimatedINR = selectedMin * Number(ratePerMin ?? 0);
+        if (estimatedINR > RAZORPAY_MAX_INR) { setError("Amount exceeds ₹5,00,000 Razorpay limit. Please select fewer minutes."); return; }
         rechargePayingRef.current = true;
         setLoading(true); setError("");
         try {
