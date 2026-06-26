@@ -4265,7 +4265,7 @@ export default function ChatScreen() {
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       enabled={!(Platform.OS === "ios" && Platform.isPad)}
     >
-    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }} {...edgeSwipeResponder.panHandlers}>
+    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: Platform.OS === "android" ? (56 + Math.max(insets.bottom, 4)) : 0 }} {...edgeSwipeResponder.panHandlers}>
       {/* iPad: constrain content to a centered column so the UI doesn't span the full iPad width */}
       <View style={isPad ? { flex: 1, maxWidth: 700, width: "100%", alignSelf: "center" } : { flex: 1 }}>
       {/* Offline / unsynced indicator */}
