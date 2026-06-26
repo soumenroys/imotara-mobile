@@ -4259,7 +4259,7 @@ export default function ChatScreen() {
   const isPad = Platform.OS === "ios" && Platform.isPad;
 
   return (
-    <View style={{ flex: 1, paddingBottom: Platform.OS === "android" ? (56 + Math.max(insets.bottom, 4)) : 0 }}>
+    <View style={{ flex: 1, paddingBottom: Platform.OS === "android" ? (58 + Math.max(insets.bottom, 4)) : 0 }}>
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
