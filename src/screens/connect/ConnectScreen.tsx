@@ -910,11 +910,12 @@ const TOPUP_PRESETS = [1000, 2000, 5000, 10000];
 // Defined at module scope so React sees a stable component type and does NOT unmount/remount
 // the TextInput inside on every WalletTab re-render (which would lose keyboard focus).
 function TopUpForm({ label, colors, s, topupAmount, setTopupAmount, isCustom, setIsCustom, customAmount,
-    setCustomAmount, termsAccepted, setTermsAccepted, topupError, setTopupError, topupLoading, handleTopUp, isDormant }: {
+    setCustomAmount, ageConfirmed, setAgeConfirmed, termsAccepted, setTermsAccepted, topupError, setTopupError, topupLoading, handleTopUp, isDormant }: {
     label: string; colors: any; s: any;
     topupAmount: number; setTopupAmount: (v: number) => void;
     isCustom: boolean; setIsCustom: (v: boolean | ((p: boolean) => boolean)) => void;
     customAmount: string; setCustomAmount: (v: string) => void;
+    ageConfirmed: boolean; setAgeConfirmed: (v: boolean | ((p: boolean) => boolean)) => void;
     termsAccepted: boolean; setTermsAccepted: (v: boolean | ((p: boolean) => boolean)) => void;
     topupError: string; setTopupError: (v: string) => void;
     topupLoading: boolean; handleTopUp: () => void; isDormant: boolean;
@@ -948,6 +949,23 @@ function TopUpForm({ label, colors, s, topupAmount, setTopupAmount, isCustom, se
                     keyboardType="numeric"
                 />
             )}
+            {/* Age confirmation */}
+            <TouchableOpacity
+                style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}
+                onPress={() => setAgeConfirmed((v) => !v)}
+                activeOpacity={0.7}>
+                <View style={{
+                    width: 20, height: 20, borderRadius: 4, borderWidth: 1.5,
+                    borderColor: ageConfirmed ? colors.primary : colors.border,
+                    backgroundColor: ageConfirmed ? colors.primary : "transparent",
+                    alignItems: "center", justifyContent: "center",
+                }}>
+                    {ageConfirmed && <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>✓</Text>}
+                </View>
+                <Text style={[s.cardBio, { fontSize: 12, flex: 1 }]}>
+                    I confirm I am 18 years of age or older.
+                </Text>
+            </TouchableOpacity>
             <TouchableOpacity
                 style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 10 }}
                 onPress={() => setTermsAccepted((v) => !v)}
@@ -971,9 +989,9 @@ function TopUpForm({ label, colors, s, topupAmount, setTopupAmount, isCustom, se
             </TouchableOpacity>
             {topupError !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{topupError}</Text>}
             <TouchableOpacity
-                style={[s.primaryBtn, (topupLoading || !termsAccepted || (isCustom && (!customAmount || parseFloat(customAmount) < 1))) && { opacity: 0.5 }]}
+                style={[s.primaryBtn, (topupLoading || !ageConfirmed || !termsAccepted || (isCustom && (!customAmount || parseFloat(customAmount) < 1))) && { opacity: 0.5 }]}
                 onPress={handleTopUp}
-                disabled={topupLoading || !termsAccepted || (isCustom && (!customAmount || parseFloat(customAmount) < 1))}>
+                disabled={topupLoading || !ageConfirmed || !termsAccepted || (isCustom && (!customAmount || parseFloat(customAmount) < 1))}>
                 {topupLoading
                     ? <ActivityIndicator color="#fff" />
                     : <Text style={s.primaryBtnText}>
@@ -998,6 +1016,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
     const [topupAmount, setTopupAmount] = useState(1000);
     const [customAmount, setCustomAmount] = useState("");
     const [isCustom, setIsCustom] = useState(false);
+    const [ageConfirmed, setAgeConfirmed] = useState(false);
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [topupLoading, setTopupLoading] = useState(false);
     const [topupError, setTopupError] = useState("");
@@ -1058,6 +1077,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
     async function handleTopUp() {
         const amt = isCustom ? parseFloat(customAmount) : topupAmount;
         if (!accessToken || isNaN(amt) || amt < 1) { setTopupError("Enter a valid amount"); return; }
+        if (!ageConfirmed) { setTopupError("Please confirm you are 18 or older to continue"); return; }
         if (!termsAccepted) { setTopupError("Please accept the Wallet Terms to continue"); return; }
         setTopupLoading(true); setTopupError("");
         try {
@@ -1233,6 +1253,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                     topupAmount={topupAmount} setTopupAmount={setTopupAmount}
                     isCustom={isCustom} setIsCustom={setIsCustom}
                     customAmount={customAmount} setCustomAmount={setCustomAmount}
+                    ageConfirmed={ageConfirmed} setAgeConfirmed={setAgeConfirmed}
                     termsAccepted={termsAccepted} setTermsAccepted={setTermsAccepted}
                     topupError={topupError} setTopupError={setTopupError}
                     topupLoading={topupLoading} handleTopUp={handleTopUp}
