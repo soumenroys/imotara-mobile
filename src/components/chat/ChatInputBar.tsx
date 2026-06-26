@@ -37,12 +37,7 @@ export function ChatInputBar({
   firstTimeTip,
 }: Props) {
   const insets = useSafeAreaInsets();
-  // React Navigation consumes insets.bottom at the tab bar level, so inside a tab
-  // screen insets.bottom is 0. Use a platform-specific minimum so the Send button
-  // has visible clearance above the tab bar border on Android.
-  const paddingBottom = Platform.OS === "android"
-    ? Math.max(insets.bottom, 14)
-    : Math.max(insets.bottom, 8);
+  const paddingBottom = Math.max(insets.bottom, 8);
   const isPad = Platform.OS === "ios" && Platform.isPad;
   return (
     <View

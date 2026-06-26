@@ -72,6 +72,7 @@ import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { DiscoveryCard, DISCOVERY_CARDS_KEY, CARD_ORDER, getNextCard, type DiscoveryCardId } from "../components/chat/DiscoveryCard";
 import { OpenLoopCard } from "../components/chat/OpenLoopCard";
 import { CompanionInsightCard } from "../components/imotara/CompanionInsightCard";
@@ -1485,6 +1486,7 @@ export default function ChatScreen() {
   const colors = useColors();
   const { isDark, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
 
   // Companion quick panel — opened by swiping right from the left edge strip
   const [companionPanelVisible, setCompanionPanelVisible] = useState(false);
@@ -5337,6 +5339,11 @@ export default function ChatScreen() {
         }}
         firstTimeTip={showFirstTimeTip ? "Just talk — Imotara listens without judgment." : null}
       />
+      {/* Spacer that lifts content above the absolutely-positioned tab bar.
+          Collapses when keyboard is open so the input bar stays near the keyboard. */}
+      {Platform.OS === "android" && !keyboardVisible ? (
+        <View style={{ height: tabBarHeight }} />
+      ) : null}
 
       {renderActionSheet()}
 
