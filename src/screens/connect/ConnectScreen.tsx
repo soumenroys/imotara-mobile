@@ -3127,7 +3127,9 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                         <Text style={[s.cardName, { fontSize: 18, marginBottom: 16 }]}>How was the session?</Text>
                         <View style={{ flexDirection: "row", justifyContent: "center", gap: 12, marginBottom: 16 }}>
                             {[1, 2, 3, 4, 5].map((n) => (
-                                <TouchableOpacity key={n} onPress={() => setRating(n)}>
+                                // hitSlop expands the tap area to ≥48dp on Android — without it
+                                // emoji glyph bounding boxes are ~20×20pt, silently eating taps.
+                                <TouchableOpacity key={n} onPress={() => setRating(n)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                                     <Text style={{ fontSize: 28, opacity: n <= rating ? 1 : 0.25 }}>⭐</Text>
                                 </TouchableOpacity>
                             ))}
@@ -3622,7 +3624,10 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                     const sess = incoming.find((s) => s.id === sessionId);
                     setIncoming((prev) => prev.filter((s) => s.id !== sessionId));
                     if (sess) {
-                        onJoinSession({ ...sess });
+                        // Stamp status:"active" on the local object so ChatView doesn't
+                        // briefly show "Waiting for companion…" and delay the tick start
+                        // while the on-mount re-fetch round-trips to the server.
+                        onJoinSession({ ...sess, status: "active" });
                     } else {
                         // Race: session already moved out of incoming — fetch directly and navigate
                         try {
