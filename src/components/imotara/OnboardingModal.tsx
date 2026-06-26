@@ -27,12 +27,10 @@ type Relationship =
   | "parent_like"
   | "partner_like";
 
-type AnalysisMode = "auto" | "cloud" | "local";
-
 export type OnboardingResult = {
   name: string;
   relationship: Relationship;
-  analysisMode: AnalysisMode;
+  analysisMode: "auto" | "cloud" | "local";
 };
 
 const RELATIONSHIPS: { value: Relationship; label: string; description: string }[] = [
@@ -46,26 +44,6 @@ const RELATIONSHIPS: { value: Relationship; label: string; description: string }
   { value: "prefer_not", label: "Just Imotara", description: "Neutral companion style" },
 ];
 
-const MODES: { value: AnalysisMode; label: string; description: string; icon: string }[] = [
-  {
-    value: "local",
-    label: "Device only",
-    description: "All replies happen on your phone. Nothing is sent to any server.",
-    icon: "\uD83D\uDD12",
-  },
-  {
-    value: "auto",
-    label: "Smart (recommended)",
-    description: "Tries cloud mode first for deeper responses, falls back to device if unavailable. When cloud is used, your message is sent to OpenAI (openai.com) to generate a reply.",
-    icon: "\u26A1",
-  },
-  {
-    value: "cloud",
-    label: "Cloud",
-    description: "Always uses cloud mode for the deepest responses. Your message is sent to OpenAI (openai.com) to generate a reply.",
-    icon: "\u2601\uFE0F",
-  },
-];
 
 type Props = {
   visible: boolean;
@@ -79,22 +57,22 @@ export function OnboardingModal({ visible, onComplete }: Props) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [relationship, setRelationship] = useState<Relationship>("friend");
-  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("auto");
 
-  const totalSteps = 3;
+  const totalSteps = 2;
 
   const handleNext = () => {
     if (step < totalSteps - 1) {
       setStep((s) => s + 1);
     } else {
-      onComplete({ name: name.trim(), relationship, analysisMode });
+      // Default to cloud — user can switch to local in Settings at any time.
+      onComplete({ name: name.trim(), relationship, analysisMode: "cloud" });
     }
   };
 
   const stepContent = [
     // Step 0 — Name
     <View key="name" style={{ flex: 1 }}>
-      <Text style={styles.stepLabel}>Step 1 of 3</Text>
+      <Text style={styles.stepLabel}>Step 1 of 2</Text>
       <Text style={styles.heading}>{"What\u2019s your name?"}</Text>
       <Text style={styles.subheading}>
         Imotara will use this to greet you. You can change it anytime in Settings.
@@ -113,7 +91,7 @@ export function OnboardingModal({ visible, onComplete }: Props) {
 
     // Step 1 — Companion relationship
     <View key="relationship" style={{ flex: 1 }}>
-      <Text style={styles.stepLabel}>Step 2 of 3</Text>
+      <Text style={styles.stepLabel}>Step 2 of 2</Text>
       <Text style={styles.heading}>Who should Imotara be to you?</Text>
       <Text style={styles.subheading}>
         This shapes how Imotara responds — tone, warmth, and style.
@@ -142,38 +120,6 @@ export function OnboardingModal({ visible, onComplete }: Props) {
       </ScrollView>
     </View>,
 
-    // Step 2 — Privacy / analysis mode
-    <View key="privacy" style={{ flex: 1 }}>
-      <Text style={styles.stepLabel}>Step 3 of 3</Text>
-      <Text style={styles.heading}>How private do you want to be?</Text>
-      <Text style={styles.subheading}>
-        Imotara is local-first by design. You choose how responses are generated.
-      </Text>
-      {MODES.map((m) => (
-        <TouchableOpacity
-          key={m.value}
-          onPress={() => setAnalysisMode(m.value)}
-          style={[
-            styles.optionRow,
-            analysisMode === m.value && styles.optionRowSelected,
-          ]}
-        >
-          <Text style={{ fontSize: 22, marginRight: 12 }}>{m.icon}</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.optionLabel, analysisMode === m.value && { color: colors.primary }]}>
-              {m.label}
-            </Text>
-            <Text style={styles.optionDesc}>{m.description}</Text>
-          </View>
-          {analysisMode === m.value && (
-            <Text style={{ fontSize: 16, color: colors.primary }}>{"✓"}</Text>
-          )}
-        </TouchableOpacity>
-      ))}
-      <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 12, lineHeight: 16, opacity: 0.7 }}>
-        When cloud mode is used, only your chat message is sent to OpenAI (openai.com) to generate a reply. No account info, name, or device data is attached. You can change this anytime in Settings.
-      </Text>
-    </View>,
   ];
 
   return (
