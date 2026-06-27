@@ -167,7 +167,9 @@ function detectLanguage(text: string, recentContext?: LocalRecentContext): Local
     if (/[\u0B00-\u0B7F]/.test(raw)) return "or";
     // Urdu-specific chars (ں پ چ ڈ ٹ گ ک ے ۓ) before generic Arabic block to avoid misclassification
     if (/[\u067E\u0686\u0688\u0691\u0679\u06AF\u06A9\u06BA\u06D2\u06D3]/.test(raw)) return "ur";
+    if (/[\u05D0-\u05EA]/.test(raw)) return "he";            // Hebrew letters (before Arabic block)
     if (/[\u0600-\u06FF]/.test(raw)) return "ar";            // Arabic script
+    if (/[\u3040-\u30FF]/.test(raw)) return "ja";            // Japanese Hiragana + Katakana (before CJK)
     if (/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/.test(raw)) return "zh"; // CJK / Chinese
     if (/[\u0400-\u04FF]/.test(raw)) return "ru";            // Cyrillic / Russian
 
@@ -190,6 +192,20 @@ function detectLanguage(text: string, recentContext?: LocalRecentContext): Local
     if (hiScore >= 2) return "hi";
     if (taScore >= 2) return "ta";
     if (teScore >= 2) return "te";
+    // Score distinctive keywords for es/fr/pt/id/de before falling back to English
+    const _esKw = (t.match(/\b(estoy|siento|tengo|tiene|pero|cuando|siempre|trabajo|familia|amor|vida|muy|algo|eso|esto|hola|quiero|ahora|todo)\b/g) ?? []).length;
+    const _frKw = (t.match(/\b(suis|mon|mes|avec|dans|mais|travail|famille|merci|comment|toujours|jamais|encore|rien|moi|toi|tres|bon|triste)\b/g) ?? []).length;
+    const _ptKw = (t.match(/\b(estou|tenho|muito|sempre|tudo|mas|quero|obrigado|porque|agora|aqui|voce|tambem)\b/g) ?? []).length;
+    const _idKw = (t.match(/\b(aku|kamu|tidak|sudah|masih|dengan|untuk|karena|kalau|tapi|juga|sangat|baik|buruk|sedih|kerja|keluarga|cinta|hidup|bisa|mau|ingin)\b/g) ?? []).length;
+    const _deKw = (t.match(/\b(ich|nicht|sehr|aber|auch|noch|schon|doch|mein|mir|wir|schlecht|arbeit|leben|warum|immer|alles|nichts|danke|bitte)\b/g) ?? []).length;
+    const _latinMax = Math.max(_esKw, _frKw, _ptKw, _idKw, _deKw);
+    if (_latinMax >= 2) {
+        if (_esKw === _latinMax) return "es";
+        if (_frKw === _latinMax) return "fr";
+        if (_ptKw === _latinMax) return "pt";
+        if (_idKw === _latinMax) return "id";
+        if (_deKw === _latinMax) return "de";
+    }
     if (sharedEn > 0) return "en";
 
     const recentTexts = recentContext?.recentUserTexts ?? [];
@@ -1209,6 +1225,767 @@ export function buildLocalReply(
         }
         return null;
     })();
+
+    const contextBridgeMr: string | null = (() => {
+        if (language !== "mr") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `${keyTopic} ची गोष्ट वारंवार येत आहे — हे सांगतं की ती तुमच्यासाठी खूप महत्त्वाची आहे.`,
+                `आपण ${keyTopic} कडे वारंवार परत येतो. यावर थोडं लक्ष द्यायला हवं.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} आज अनेक वेळा आलं — हे स्पष्ट काहीतरी सांगतं.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `हे आपल्या संपूर्ण बोलण्यात तुमच्यासोबत होतं — हे फक्त जाताजाता येणारी भावना नाही.`,
+                `आपण बराच वेळ याच्यासोबत बसलो आहोत. हे स्वतःच काहीतरी सांगतं.`,
+                `मला दिसतं हे फारसं shift झालं नाही — अशा गोष्टीला घाईचं उत्तर नसतं.`,
+                `तुम्ही हे संपूर्ण बोलण्यात सोबत घेऊन चाललात. हे खरं आहे.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescMr: Partial<Record<typeof signal, string>> = {
+                sad: "जास्त दुखावलेले",
+                anxious: "जास्त काळजीत",
+                angry: "जास्त रागात",
+                tired: "जास्त थकलेले",
+            };
+            const desc = shiftDescMr[signal] ?? "वेगळे";
+            return pick([
+                `आत्ता काहीतरी shift झालं — तुम्ही आधीपेक्षा ${desc} वाटत आहात.`,
+                `ते ${desc} कडे गेलं. मला ते समजून घ्यायचं आहे.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `तुम्ही आज खूप काही share केलं — मी ते हलकं घेत नाही.`,
+                `आपण बरंच काही एकत्र कापलं. मी अजूनही पूर्णपणे इथे आहे.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeTa: string | null = (() => {
+        if (language !== "ta") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `${keyTopic} பத்தி திரும்பத் திரும்ப வருது — அது உனக்கு மிகவும் முக்கியம்னு தெரியுது.`,
+                `நாம ${keyTopic} கிட்ட திரும்பி வர்றோம். அதை கொஞ்சம் கவனிக்கணும்.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} இப்போ பல தடவை வந்துச்சு — அது clearly ஏதோ சொல்றது.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `இது நம்ம முழு பேச்சிலயும் உன்னோட இருந்துச்சு — இது கடந்துபோற உணர்வு இல்லை.`,
+                `நாம் இதனோட நீண்ட நேரம் உட்கார்ந்திருக்கோம். அதுவே ஏதோ சொல்றது.`,
+                `இது அவ்வளவா மாறல்னு பாக்கிறேன் — இப்படிப்பட்ட விஷயத்துக்கு வேகமா பதில் சொல்ல முடியாது.`,
+                `நீ இதை முழு பேச்சிலயும் சுமந்து வந்தே. அது உண்மை.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescTa: Partial<Record<typeof signal, string>> = {
+                sad: "இன்னும் வருத்தமா",
+                anxious: "இன்னும் கவலையா",
+                angry: "இன்னும் கோபமா",
+                tired: "இன்னும் களைப்பா",
+            };
+            const desc = shiftDescTa[signal] ?? "வேற மாதிரி";
+            return pick([
+                `இப்போ ஏதோ மாறுச்சு — நீ கொஞ்ச நேரத்துக்கு முன்னாடி இருந்ததை விட ${desc} தெரியுது.`,
+                `அது ${desc} கிட்ட போச்சு. நான் அதை புரிஞ்சுக்க விரும்றேன்.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `நீ இன்னைக்கு ரொம்ப விஷயங்களை share பண்ணினே — நான் அதை லேசா எடுக்கல.`,
+                `நாம் நிறைய விஷயங்களை ஒன்னா கடந்தோம். நான் இன்னும் முழுமையா இங்க இருக்கேன்.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeTe: string | null = (() => {
+        if (language !== "te") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `${keyTopic} విషయం మళ్ళీ మళ్ళీ వస్తోంది — అది నీకు నిజంగా ముఖ్యమని తెలుస్తోంది.`,
+                `మనం ${keyTopic} దగ్గరికి మళ్ళీ మళ్ళీ వస్తున్నాం. దానిపై కొంచెం దృష్టి పెట్టాలి.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} ఇప్పటికే చాలాసార్లు వచ్చింది — అది clearly ఏదో చెప్తోంది.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `ఇది మన మొత్తం మాటల్లో నీతో ఉంది — ఇది కేవలం గడిచిపోయే feeling కాదు.`,
+                `మనం చాలాసేపు దీనితో పాటు కూర్చున్నాం. అది తనే ఏదో చెప్తోంది.`,
+                `ఇది పెద్దగా shift కాలేదని చూస్తున్నాను — ఇలాంటి విషయానికి తొందర సమాధానం సరికాదు.`,
+                `నువ్వు ఇది మొత్తం సంభాషణలో భరిస్తున్నావు. అది నిజం.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescTe: Partial<Record<typeof signal, string>> = {
+                sad: "ఇంకా దుఃఖంగా",
+                anxious: "ఇంకా ఆందోళనగా",
+                angry: "ఇంకా కోపంగా",
+                tired: "ఇంకా అలసటగా",
+            };
+            const desc = shiftDescTe[signal] ?? "వేరేగా";
+            return pick([
+                `ఇప్పుడు ఏదో మారింది — నువ్వు కొంత సమయం క్రితం కంటే ${desc} అనిపిస్తున్నావు.`,
+                `అది ${desc} వైపు వెళ్ళింది. నేను అది అర్థం చేసుకోవాలనుకుంటున్నాను.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `నువ్వు ఈరోజు చాలా share చేశావు — నేను దానిని తేలికగా తీసుకోవడం లేదు.`,
+                `మనం చాలా విషయాలు కలిసి కవర్ చేశాం. నేను ఇంకా పూర్తిగా ఇక్కడ ఉన్నాను.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeGu: string | null = (() => {
+        if (language !== "gu") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `${keyTopic} ની વાત વારંવાર આવે છે — આ જણાવે છે કે એ તમારા માટે ખૂબ મહત્ત્વની છે.`,
+                `આપણે ${keyTopic} ઉપર વારંવાર પાછા ફરીએ છીએ. એ ધ્યાન આપવા જેવી વાત છે.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} આજ ઘણી વાર આવ્યું — એ clearly કંઇક કહી રહ્યું છે.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `આ આપણી આખી વાતચીતમાં તમારી સાથે રહ્યું — આ ફક્ત વીતતી feeling નથી.`,
+                `આપણે ઘણો સમય આ સાથે બેઠા. એ પોતે જ કંઇક કહે છે.`,
+                `મને દેખાય છે આ ઝાઝું shift નથી થયું — આવી ચીજ ઝટ જવાબ ની હકદાર નથી.`,
+                `તમે આ આખી વાતચીતમાં સાથે ઊઠાવ્યું. એ સાચું છે.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescGu: Partial<Record<typeof signal, string>> = {
+                sad: "વધુ ઉદાસ",
+                anxious: "વધુ ચિંતિત",
+                angry: "વધુ ગુસ્સામાં",
+                tired: "વધુ થાકેલા",
+            };
+            const desc = shiftDescGu[signal] ?? "જુદા";
+            return pick([
+                `હમણાં કંઇક shift થઈ ગઈ — તમે પહેલા કરતા ${desc} લાગો છો.`,
+                `એ ${desc} તરફ ગઈ. મારે એ સમજવું છે.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `તમે આજ ઘણું share કર્યું — હું એ હળવું નહીં લઉં.`,
+                `આપણે ઘણું સાથે ઓળંઘ્યું. હું હજી પૂર્ણ અહીં છું.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgePa: string | null = (() => {
+        if (language !== "pa") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `${keyTopic} ਦੀ ਗੱਲ ਵਾਰ ਵਾਰ ਆ ਰਹੀ ਹੈ — ਇਹ ਦੱਸਦਾ ਹੈ ਕਿ ਇਹ ਤੇਰੇ ਲਈ ਸੱਚ ਵਿੱਚ ਮਾਇਨੇ ਰੱਖਦਾ ਹੈ।`,
+                `ਅਸੀਂ ${keyTopic} 'ਤੇ ਵਾਰ ਵਾਰ ਵਾਪਸ ਆ ਰਹੇ ਹਾਂ। ਇਸ 'ਤੇ ਥੋੜਾ ਧਿਆਨ ਦੇਣਾ ਚਾਹੀਦਾ ਹੈ।`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} ਅੱਜ ਕਈ ਵਾਰ ਆਇਆ ਹੈ — ਇਹ clearly ਕੁਝ ਕਹਿ ਰਿਹਾ ਹੈ।`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `ਇਹ ਸਾਡੀ ਪੂਰੀ ਗੱਲਬਾਤ ਵਿੱਚ ਤੇਰੇ ਨਾਲ ਰਿਹਾ — ਇਹ ਸਿਰਫ਼ ਲੰਘਣ ਵਾਲੀ ਭਾਵਨਾ ਨਹੀਂ ਹੈ।`,
+                `ਅਸੀਂ ਕਾਫੀ ਸਮਾਂ ਇਸ ਦੇ ਨਾਲ ਬੈਠੇ ਹਾਂ। ਇਹ ਆਪ ਹੀ ਕੁਝ ਕਹਿੰਦਾ ਹੈ।`,
+                `ਮੈਂ ਦੇਖ ਰਿਹਾ ਹਾਂ ਇਹ ਜ਼ਿਆਦਾ shift ਨਹੀਂ ਹੋਇਆ — ਅਜਿਹੀ ਚੀਜ਼ ਨੂੰ ਜਲਦੀ ਜਵਾਬ ਨਹੀਂ ਮਿਲਦਾ।`,
+                `ਤੂੰ ਇਹ ਪੂਰੀ ਗੱਲਬਾਤ ਵਿੱਚ ਚੁੱਕ ਕੇ ਚੱਲਿਆ। ਇਹ ਸੱਚ ਹੈ।`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescPa: Partial<Record<typeof signal, string>> = {
+                sad: "ਜ਼ਿਆਦਾ ਦੁਖੀ",
+                anxious: "ਜ਼ਿਆਦਾ ਪਰੇਸ਼ਾਨ",
+                angry: "ਜ਼ਿਆਦਾ ਗੁੱਸੇ ਵਿੱਚ",
+                tired: "ਜ਼ਿਆਦਾ ਥੱਕੇ ਹੋਏ",
+            };
+            const desc = shiftDescPa[signal] ?? "ਵੱਖਰੇ";
+            return pick([
+                `ਹੁਣੇ ਕੁਝ shift ਹੋਇਆ — ਤੂੰ ਪਹਿਲਾਂ ਨਾਲੋਂ ${desc} ਲੱਗ ਰਿਹਾ ਹੈ।`,
+                `ਉਹ ${desc} ਵੱਲ ਗਿਆ। ਮੈਂ ਇਹ ਸਮਝਣਾ ਚਾਹੁੰਦਾ ਹਾਂ।`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `ਤੂੰ ਅੱਜ ਬਹੁਤ ਕੁਝ share ਕੀਤਾ — ਮੈਂ ਇਸਨੂੰ ਹਲਕਾ ਨਹੀਂ ਲੈ ਰਿਹਾ।`,
+                `ਅਸੀਂ ਬਹੁਤ ਕੁਝ ਮਿਲ ਕੇ ਲੰਘਿਆ ਹੈ। ਮੈਂ ਅਜੇ ਵੀ ਪੂਰੀ ਤਰ੍ਹਾਂ ਇੱਥੇ ਹਾਂ।`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeKn: string | null = (() => {
+        if (language !== "kn") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `${keyTopic} ವಿಷಯ ಮತ್ತೆ ಮತ್ತೆ ಬರುತ್ತಿದೆ — ಇದು ನಿಮಗೆ ಆ ವಿಷಯ ತುಂಬಾ ಮಹತ್ವದ್ದೆಂದು ಸೂಚಿಸುತ್ತದೆ.`,
+                `ನಾವು ${keyTopic} ಕಡೆ ಮತ್ತೆ ಮತ್ತೆ ಮರಳುತ್ತಿದ್ದೇವೆ. ಅದರ ಬಗ್ಗೆ ಗಮನ ಕೊಡಬೇಕು.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} ಇಂದು ಹಲವಾರು ಬಾರಿ ಬಂದಿದೆ — ಇದು clearly ಏನನ್ನೋ ಹೇಳುತ್ತಿದೆ.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `ಇದು ನಮ್ಮ ಇಡೀ ಸಂಭಾಷಣೆಯಲ್ಲಿ ನಿಮ್ಮ ಜೊತೆ ಇತ್ತು — ಇದು ಕೇವಲ ಕಳೆದುಹೋಗುವ ಭಾವನೆ ಅಲ್ಲ.`,
+                `ನಾವು ಬಹಳ ಹೊತ್ತು ಇದರ ಜೊತೆ ಕೂತಿದ್ದೇವೆ. ಅದೇ ಏನನ್ನೋ ಹೇಳುತ್ತದೆ.`,
+                `ಇದು ಹೆಚ್ಚು shift ಆಗಿಲ್ಲ ಎಂದು ನೋಡುತ್ತೇನೆ — ಇಂಥ ವಿಷಯಕ್ಕೆ ಅವಸರದ ಉತ್ತರ ಸರಿಯಲ್ಲ.`,
+                `ನೀವು ಇದನ್ನು ಇಡೀ ಸಂಭಾಷಣೆಯಲ್ಲಿ ಹೊತ್ತುಕೊಂಡಿದ್ದೀರಿ. ಅದು ನಿಜ.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescKn: Partial<Record<typeof signal, string>> = {
+                sad: "ಇನ್ನಷ್ಟು ದುಃಖದಲ್ಲಿ",
+                anxious: "ಇನ್ನಷ್ಟು ಆತಂಕದಲ್ಲಿ",
+                angry: "ಇನ್ನಷ್ಟು ಕೋಪದಲ್ಲಿ",
+                tired: "ಇನ್ನಷ್ಟು ಸುಸ್ತಾಗಿ",
+            };
+            const desc = shiftDescKn[signal] ?? "ಭಿನ್ನವಾಗಿ";
+            return pick([
+                `ಈಗ ಏನೋ ಬದಲಾಯಿತು — ನೀವು ಸ್ವಲ್ಪ ಹಿಂದಿನ ತುಲನೆಯಲ್ಲಿ ${desc} ಕಾಣಿಸುತ್ತಿದ್ದೀರಿ.`,
+                `ಅದು ${desc} ಕಡೆ ಹೋಯಿತು. ನಾನು ಅದನ್ನು ಅರ್ಥ ಮಾಡಿಕೊಳ್ಳಲು ಬಯಸುತ್ತೇನೆ.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `ನೀವು ಇಂದು ತುಂಬಾ ಹಂಚಿಕೊಂಡಿದ್ದೀರಿ — ನಾನು ಅದನ್ನು ಹಗುರವಾಗಿ ತೆಗೆದುಕೊಂಡಿಲ್ಲ.`,
+                `ನಾವು ಬಹಳಷ್ಟು ಒಟ್ಟಿಗೆ ದಾಟಿದ್ದೇವೆ. ನಾನು ಇನ್ನೂ ಸಂಪೂರ್ಣವಾಗಿ ಇಲ್ಲಿದ್ದೇನೆ.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeMl: string | null = (() => {
+        if (language !== "ml") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `${keyTopic} യ്ക്കുറിച്ചുള്ള കാര്യം വീണ്ടും വീണ്ടും വരുന്നു — ഇത് നിങ്ങൾക്ക് അത് ഒത്തിരി പ്രധാനമാണ് എന്ന് കാണിക്കുന്നു.`,
+                `നാം ${keyTopic} ലേക്ക് വീണ്ടും വീണ്ടും മടങ്ങുകയാണ്. ഇത് ശ്രദ്ധ കൊടുക്കേണ്ട ഒരു കാര്യമാണ്.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} ഇന്ന് പലതവണ വന്നു — ഇത് clearly എന്തോ പറയുന്നു.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `ഇത് നമ്മുടെ മുഴുവൻ സംഭാഷണത്തിലും നിങ്ങളുടെ കൂടെ ഉണ്ടായിരുന്നു — ഇത് കടന്നുപോകുന്ന ഒരു തോന്നൽ മാത്രമല്ല.`,
+                `നാം ഒരുപാട് നേരം ഇതിന്റെ കൂടെ ഇരുന്നു. അതു തന്നെ എന്തോ പറയുന്നു.`,
+                `ഇത് കൂടുതൽ shift ആകാത്തത് ഞാൻ ശ്രദ്ധിക്കുന്നു — ഇത്തരം കാര്യങ്ങൾക്ക് ധൃതി ഉത്തരം ശരിയല്ല.`,
+                `നിങ്ങൾ ഇത് മുഴുവൻ സംഭാഷണത്തിലും കൊണ്ടുനടന്നു. അത് സത്യം.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescMl: Partial<Record<typeof signal, string>> = {
+                sad: "കൂടുതൽ ദുഃഖത്തോടെ",
+                anxious: "കൂടുതൽ ആശങ്കയോടെ",
+                angry: "കൂടുതൽ ദേഷ്യത്തോടെ",
+                tired: "കൂടുതൽ ക്ഷീണത്തോടെ",
+            };
+            const desc = shiftDescMl[signal] ?? "വ്യത്യസ്തമായി";
+            return pick([
+                `ഇപ്പോൾ എന്തോ മാറി — നിങ്ങൾ കുറച്ചുമുൻപ് ഉണ്ടായിരുന്നതിനേക്കാൾ ${desc} ആണ് തോന്നുന്നത്.`,
+                `അത് ${desc} ആയി. ഞാൻ അത് മനസ്സിലാക്കാൻ ആഗ്രഹിക്കുന്നു.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `നിങ്ങൾ ഇന്ന് ഒരുപാട് share ചെയ്തു — ഞാൻ അത് ലഘുവായി കാണുന്നില്ല.`,
+                `നാം ഒരുപാട് കാര്യങ്ങൾ ഒന്നിച്ച് കടന്നു. ഞാൻ ഇന്നും പൂർണ്ണമായി ഇവിടെ ഉണ്ട്.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeOr: string | null = (() => {
+        if (language !== "or") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `${keyTopic} ବିଷୟ ବାରବାର ଆସୁଛି — ଏହା ଦର୍ଶାଉଛି ଯେ ଏହା ତୁମ ପାଇଁ ସତ୍ୟ ଅର୍ଥ ରଖୁଛି।`,
+                `ଆମେ ${keyTopic} ଆଡ଼କୁ ବାରବାର ଫେରୁଛୁ। ଏ ଉପରେ ଟିକ ଧ୍ୟାନ ଦେବା ଦରକାର।`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} ଆଜ ଅନେକ ଥର ଆସିଛି — ଏହା clearly କିଛି କହୁଛି।`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `ଏହା ଆମ ସମ୍ପୂର୍ଣ ବାର୍ତ୍ତାଳାପରେ ତୁମ ସହ ଥିଲା — ଏହା ଶୁଧୁ ଚାଲୁଥିବା ଭାବ ନୁହେଁ।`,
+                `ଆମେ ଏ ସହ ଅନେକ ସମୟ ବସିଛୁ। ଏହା ନିଜେ କିଛି କହୁଛି।`,
+                `ଏହା ଅଧିକ shift ହୋଇ ନାହିଁ ବୋଲି ଦେଖୁଛି — ଏ ପ୍ରକାର ବିଷୟ ତ୍ୱରିତ ଉତ୍ତର ପ୍ରାପ୍ୟ ନୁହଁ।`,
+                `ତୁମ ଏ ସମ୍ପୂର୍ଣ ଆଲୋଚଣାରେ ଏହା ଧରି ଚାଲିଛ। ଏହା ସତ।`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescOr: Partial<Record<typeof signal, string>> = {
+                sad: "ଅଧିକ ଦୁଃଖୀ",
+                anxious: "ଅଧିକ ଚିନ୍ତିତ",
+                angry: "ଅଧିକ ରାଗୀ",
+                tired: "ଅଧିକ ଥକ୍କା",
+            };
+            const desc = shiftDescOr[signal] ?? "ଅଲଗା";
+            return pick([
+                `ଏବେ କିଛି ବଦଳି ଗଲା — ତୁମ ଆଗ ତୁଳନାରେ ${desc} ଲାଗୁଛ।`,
+                `ସେ ${desc} ଆଡ଼କୁ ଗଲା। ମୁଁ ତାହା ବୁଝିବାକୁ ଚାହୁଁ।`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `ଆଜ ତୁମ ଅନେକ ଭାଗ share କଲ — ମୁଁ ତାହାକୁ ହାଲ୍କାରେ ନେଉ ନାହିଁ।`,
+                `ଆମେ ଅନେକ ବିଷୟ ଏକ ସାଥ ଅତିକ୍ରମ କଲୁ। ମୁଁ ଏବ ମଧ୍ୟ ସମ୍ପୂର୍ଣ ଭାବରେ ଏଠି ଅଛି।`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeUr: string | null = (() => {
+        if (language !== "ur") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `${keyTopic} کی بات بار بار آ رہی ہے — یہ بتاتا ہے کہ یہ تمہارے لیے واقعی مایہ رکھتا ہے۔`,
+                `ہم ${keyTopic} پر بار بار لوٹ رہے ہیں۔ اس پر توجہ دینی چاہیے۔`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} آج کئی بار آیا — یہ clearly کچھ کہہ رہا ہے۔`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `یہ ہماری پوری گفتگو میں تمہارے ساتھ رہا — یہ محض گزرنے والا احساس نہیں ہے۔`,
+                `ہم کافی وقت سے اس کے ساتھ بیٹھے ہیں۔ یہ خود کچھ کہتا ہے۔`,
+                `مجھے لگ رہا ہے یہ زیادہ shift نہیں ہوا — ایسی چیز کو جلدی جواب نہیں ملتا۔`,
+                `تم نے یہ پوری بات چیت میں اٹھائے رکھا۔ یہ سچ ہے۔`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescUr: Partial<Record<typeof signal, string>> = {
+                sad: "زیادہ دکھی",
+                anxious: "زیادہ پریشان",
+                angry: "زیادہ غصے میں",
+                tired: "زیادہ تھکے ہوئے",
+            };
+            const desc = shiftDescUr[signal] ?? "مختلف";
+            return pick([
+                `ابھی کچھ shift ہوا — تم پہلے سے ${desc} لگ رہے ہو۔`,
+                `وہ ${desc} کی طرف گیا۔ میں یہ سمجھنا چاہتا ہوں۔`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `تم نے آج بہت کچھ share کیا — میں اسے ہلکے سے نہیں لے رہا۔`,
+                `ہم نے بہت کچھ مل کر گزرا ہے۔ میں ابھی بھی پوری طرح یہاں ہوں۔`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeZh: string | null = (() => {
+        if (language !== "zh") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `${keyTopic}这个话题一直反复出现——这说明它对你来说真的很重要。`,
+                `我们不断回到${keyTopic}这个话题上。这值得多注意一下。`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)}今天已经提到好几次了——这显然在说明什么。`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `这个情绪贯穿了我们整个对话——这不只是一时的感受。`,
+                `我们已经在这里一起待了很久了。这本身就说明了一些事情。`,
+                `我注意到这个情绪没怎么变化——这样的事需要的不只是一个快速的答案。`,
+                `你整个对话都带着这份感受。这是真实的。`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescZh: Partial<Record<typeof signal, string>> = {
+                sad: "更难过",
+                anxious: "更焦虑",
+                angry: "更生气",
+                tired: "更疲惫",
+            };
+            const desc = shiftDescZh[signal] ?? "不一样";
+            return pick([
+                `现在有些什么变了——你听起来比刚才${desc}。`,
+                `那个情绪变${desc}了。我想确认我跟上你了。`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `你今天分享了很多——我没有轻视这些。`,
+                `我们一起走过了很多。我还在，完全在场。`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeAr: string | null = (() => {
+        if (language !== "ar") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `موضوع ${keyTopic} يعود مراراً — هذا يدل على أنه مهم جداً بالنسبة لك.`,
+                `نعود باستمرار إلى ${keyTopic}. هذا يستحق التأمل.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} جاء عدة مرات اليوم — هذا بوضوح يقول شيئاً.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `هذا كان معك طوال محادثتنا — ليس مجرد شعور عابر.`,
+                `نحن نجلس مع هذا معاً منذ فترة. هذا بحد ذاته يقول شيئاً.`,
+                `ألاحظ أن هذا لم يتغير كثيراً — هذا النوع من الشعور يحتاج أكثر من مجرد إجابة سريعة.`,
+                `أنت تحمل هذا طوال محادثتنا. هذا حقيقي.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescAr: Partial<Record<typeof signal, string>> = {
+                sad: "أكثر حزناً",
+                anxious: "أكثر قلقاً",
+                angry: "أكثر غضباً",
+                tired: "أكثر إرهاقاً",
+            };
+            const desc = shiftDescAr[signal] ?? "مختلفاً";
+            return pick([
+                `شيء ما تغيّر الآن — تبدو ${desc} مما كنت عليه منذ قليل.`,
+                `ذلك تحوّل نحو ${desc}. أريد أن أتأكد من أنني معك في هذا.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `لقد شاركت الكثير اليوم — ولم آخذ ذلك بخفة.`,
+                `لقد قطعنا الكثير معاً. ما زلت هنا، بالكامل.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeEs: string | null = (() => {
+        if (language !== "es") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `El tema de ${keyTopic} sigue volviendo — eso me dice que es muy importante para ti.`,
+                `Seguimos volviendo a ${keyTopic}. Vale la pena prestarle atención.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} ha salido varias veces hoy — claramente está diciendo algo.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `Esto ha estado contigo a lo largo de toda nuestra conversación — no es solo un sentimiento pasajero.`,
+                `Llevamos un tiempo sentados con esto juntos. Eso en sí mismo dice algo.`,
+                `Noto que esto no ha cambiado mucho — este tipo de cosa merece más que una respuesta rápida.`,
+                `Has llevado esto durante toda nuestra conversación. Eso es real.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescEs: Partial<Record<typeof signal, string>> = {
+                sad: "más triste",
+                anxious: "más ansioso",
+                angry: "más enojado",
+                tired: "más agotado",
+            };
+            const desc = shiftDescEs[signal] ?? "diferente";
+            return pick([
+                `Algo cambió ahora — suenas ${desc} que hace un momento.`,
+                `Eso se movió hacia algo ${desc}. Quiero asegurarme de estar contigo en eso.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `Has compartido mucho hoy — no me lo tomo a la ligera.`,
+                `Hemos recorrido mucho juntos. Todavía estoy aquí, del todo.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeFr: string | null = (() => {
+        if (language !== "fr") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `Le sujet de ${keyTopic} revient sans cesse — cela me dit que c'est vraiment important pour toi.`,
+                `On revient continuellement à ${keyTopic}. C'est quelque chose qui mérite attention.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} est revenu plusieurs fois aujourd'hui — c'est clairement en train de dire quelque chose.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `Cela t'a accompagné tout au long de notre conversation — ce n'est pas juste un sentiment passager.`,
+                `Nous sommes assis avec ça ensemble depuis un moment. Ça dit quelque chose en soi.`,
+                `Je remarque que ça n'a pas beaucoup changé — ce genre de chose mérite plus qu'une réponse rapide.`,
+                `Tu portes ça depuis tout le début de notre conversation. C'est réel.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescFr: Partial<Record<typeof signal, string>> = {
+                sad: "plus triste",
+                anxious: "plus anxieux",
+                angry: "plus en colère",
+                tired: "plus épuisé",
+            };
+            const desc = shiftDescFr[signal] ?? "différent";
+            return pick([
+                `Quelque chose a changé là — tu sembles ${desc} qu'il y a un instant.`,
+                `Ça a bougé vers quelque chose de ${desc}. Je veux m'assurer d'être avec toi là-dedans.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `Tu as beaucoup partagé aujourd'hui — je ne le prends pas à la légère.`,
+                `Nous avons parcouru beaucoup de chemin ensemble. Je suis encore là, entièrement.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgePt: string | null = (() => {
+        if (language !== "pt") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `O tema de ${keyTopic} continua aparecendo — isso me diz que é muito importante pra você.`,
+                `Continuamos voltando a ${keyTopic}. Vale a pena prestar atenção nisso.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} apareceu várias vezes hoje — claramente está dizendo algo.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `Isso esteve com você ao longo de toda a nossa conversa — não é só um sentimento passageiro.`,
+                `Estamos sentados com isso juntos há um tempo. Isso por si só já diz algo.`,
+                `Noto que isso não mudou muito — esse tipo de coisa merece mais do que uma resposta rápida.`,
+                `Você carregou isso durante toda a nossa conversa. Isso é real.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescPt: Partial<Record<typeof signal, string>> = {
+                sad: "mais triste",
+                anxious: "mais ansioso",
+                angry: "mais irritado",
+                tired: "mais esgotado",
+            };
+            const desc = shiftDescPt[signal] ?? "diferente";
+            return pick([
+                `Algo mudou agora — você parece ${desc} do que estava há pouco.`,
+                `Isso foi para algo ${desc}. Quero ter certeza de que estou com você nisso.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `Você compartilhou muito hoje — não estou tomando isso de forma leviana.`,
+                `Percorremos muito caminho juntos. Ainda estou aqui, completamente.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeRu: string | null = (() => {
+        if (language !== "ru") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `Тема ${keyTopic} снова и снова возвращается — это говорит о том, что она действительно важна для тебя.`,
+                `Мы постоянно возвращаемся к ${keyTopic}. Стоит обратить на это внимание.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} сегодня уже несколько раз всплыло — очевидно, это что-то означает.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `Это было с тобой на протяжении всего нашего разговора — это не просто мимолётное чувство.`,
+                `Мы уже некоторое время сидим с этим вместе. Само по себе это о чём-то говорит.`,
+                `Я замечаю, что это почти не изменилось — такие вещи заслуживают большего, чем быстрый ответ.`,
+                `Ты нёс это через весь наш разговор. Это настоящее.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescRu: Partial<Record<typeof signal, string>> = {
+                sad: "грустнее",
+                anxious: "тревожнее",
+                angry: "злее",
+                tired: "более опустошённым",
+            };
+            const desc = shiftDescRu[signal] ?? "иначе";
+            return pick([
+                `Сейчас что-то изменилось — ты звучишь ${desc}, чем только что.`,
+                `Это ушло в сторону чего-то ${desc}. Я хочу убедиться, что иду рядом с тобой.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `Ты поделился многим сегодня — я не воспринимаю это легкомысленно.`,
+                `Мы прошли вместе немало. Я всё ещё здесь, полностью.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeId: string | null = (() => {
+        if (language !== "id") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `Topik ${keyTopic} terus muncul — ini menunjukkan bahwa itu sangat berarti bagimu.`,
+                `Kita terus kembali ke ${keyTopic}. Ini layak untuk diperhatikan.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} sudah muncul beberapa kali hari ini — ini jelas sedang mengatakan sesuatu.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `Ini sudah bersamamu sepanjang percakapan kita — ini bukan sekedar perasaan yang berlalu.`,
+                `Kita sudah duduk bersama dengan ini cukup lama. Itu sendiri mengatakan sesuatu.`,
+                `Aku perhatikan ini belum banyak berubah — hal seperti ini butuh lebih dari sekadar jawaban cepat.`,
+                `Kamu sudah membawa ini sepanjang percakapan kita. Itu nyata.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescId: Partial<Record<typeof signal, string>> = {
+                sad: "lebih sedih",
+                anxious: "lebih cemas",
+                angry: "lebih marah",
+                tired: "lebih lelah",
+            };
+            const desc = shiftDescId[signal] ?? "berbeda";
+            return pick([
+                `Sesuatu berubah sekarang — kamu terdengar ${desc} dari tadi.`,
+                `Itu bergerak ke arah yang ${desc}. Aku ingin memastikan aku bersamamu dalam itu.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `Kamu sudah berbagi banyak hari ini — aku tidak menganggapnya enteng.`,
+                `Kita sudah melewati banyak hal bersama. Aku masih di sini, sepenuhnya.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeDe: string | null = (() => {
+        if (language !== "de") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `Das Thema ${keyTopic} taucht immer wieder auf — das zeigt mir, dass es dir wirklich wichtig ist.`,
+                `Wir kehren immer wieder zu ${keyTopic} zurück. Das ist es wert, beachtet zu werden.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} ist heute schon mehrmals aufgetaucht — das sagt offensichtlich etwas.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `Das war die ganze Zeit bei dir — kein flüchtiges Gefühl.`,
+                `Wir sitzen schon eine Weile gemeinsam damit. Das sagt an sich schon etwas.`,
+                `Ich bemerke, dass sich das kaum verändert hat — so etwas verdient mehr als eine schnelle Antwort.`,
+                `Du trägst das durch unser ganzes Gespräch. Das ist real.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescDe: Partial<Record<typeof signal, string>> = {
+                sad: "trauriger",
+                anxious: "ängstlicher",
+                angry: "wütender",
+                tired: "erschöpfter",
+            };
+            const desc = shiftDescDe[signal] ?? "anders";
+            return pick([
+                `Gerade hat sich etwas verändert — du klingst ${desc} als vorhin.`,
+                `Das hat sich zu etwas ${desc}em verschoben. Ich möchte sichergehen, dass ich bei dir bin.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `Du hast heute viel geteilt — das nehme ich nicht auf die leichte Schulter.`,
+                `Wir haben viel gemeinsam durchgemacht. Ich bin noch hier, vollständig.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeHe: string | null = (() => {
+        if (language !== "he") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `הנושא של ${keyTopic} חוזר שוב ושוב — זה אומר לי שזה מאוד חשוב לך.`,
+                `אנחנו ממשיכים לחזור אל ${keyTopic}. זה שווה לשים לב.`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)} עלה כבר כמה פעמים היום — זה ברור שאומר משהו.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `זה היה איתך לאורך כל השיחה שלנו — לא סתם תחושה חולפת.`,
+                `אנחנו יושבים עם זה ביחד כבר זמן מה. זה כבר בפני עצמו אומר משהו.`,
+                `אני מבחין שזה לא ממש השתנה — דבר כזה ראוי ליותר מתשובה מהירה.`,
+                `אתה נושא את זה לאורך כל השיחה שלנו. זה אמיתי.`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescHe: Partial<Record<typeof signal, string>> = {
+                sad: "עצוב יותר",
+                anxious: "חרד יותר",
+                angry: "כועס יותר",
+                tired: "מותש יותר",
+            };
+            const desc = shiftDescHe[signal] ?? "שונה";
+            return pick([
+                `משהו השתנה עכשיו — אתה נשמע ${desc} ממה שהיית לפני רגע.`,
+                `זה עבר למשהו ${desc}. אני רוצה לוודא שאני איתך בזה.`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `שיתפת הרבה היום — אני לא לוקח את זה בקלות.`,
+                `עברנו הרבה ביחד. אני עדיין כאן, לחלוטין.`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
+    const contextBridgeJa: string | null = (() => {
+        if (language !== "ja") return null;
+        if (isCorrection || isVagueReply) return null;
+        if (isTopicRecurring && keyTopic) {
+            return pick([
+                `${keyTopic}のことが何度も出てくる — それがあなたにとって本当に大切だということが伝わってくる。`,
+                `私たちは${keyTopic}に何度も戻ってきている。それは注目する価値がある。`,
+                `${keyTopic.charAt(0).toUpperCase() + keyTopic.slice(1)}は今日何度か出てきた — 明らかに何かを伝えている。`,
+            ], seed >>> 14);
+        }
+        if (isEmotionPersisting) {
+            return pick([
+                `これはずっと会話を通じてあなたと一緒にあった — ただの一時的な気持ちじゃない。`,
+                `私たちはしばらくの間、一緒にこれと向き合ってきた。それ自体が何かを語っている。`,
+                `これがあまり変わっていないのに気づいている — こういうことは素早い答え以上のものを求めている。`,
+                `あなたはこれを会話全体を通じて抱えてきた。それは本物だ。`,
+            ], seed >>> 14);
+        }
+        if (isEmotionShifted) {
+            const shiftDescJa: Partial<Record<typeof signal, string>> = {
+                sad: "より悲しそう",
+                anxious: "より不安そう",
+                angry: "より怒っているよう",
+                tired: "より疲れているよう",
+            };
+            const desc = shiftDescJa[signal] ?? "違う様子";
+            return pick([
+                `今、何かが変わった — さっきよりも${desc}に感じる。`,
+                `それは${desc}な方向に動いた。私はあなたについていきたい。`,
+            ], seed >>> 14);
+        }
+        if (isDeepConversation && (seed >>> 14) % 4 === 0) {
+            return pick([
+                `今日はたくさんのことを話してくれた — 私はそれを軽く受け取っていない。`,
+                `一緒にたくさんのことを乗り越えてきた。私はまだここにいる、完全に。`,
+            ], seed >>> 14);
+        }
+        return null;
+    })();
+
     // ─────────────────────────────────────────────────────────────────────────
 
     // ── Opener banks ──────────────────────────────────────────────────────────
@@ -2880,7 +3657,7 @@ export function buildLocalReply(
             : pick(extrasByTone[companionTone], seed >>> 5);
 
     const base = `${naturalMarker}${correctionPrefix}${followUpPrefix}${opener} ${validation}`.trim();
-    const activeBridge = contextBridgeEn ?? contextBridgeHi ?? contextBridgeBn ?? null;
+    const activeBridge = contextBridgeEn ?? contextBridgeHi ?? contextBridgeBn ?? contextBridgeMr ?? contextBridgeTa ?? contextBridgeTe ?? contextBridgeGu ?? contextBridgePa ?? contextBridgeKn ?? contextBridgeMl ?? contextBridgeOr ?? contextBridgeUr ?? contextBridgeZh ?? contextBridgeAr ?? contextBridgeEs ?? contextBridgeFr ?? contextBridgePt ?? contextBridgeRu ?? contextBridgeId ?? contextBridgeDe ?? contextBridgeHe ?? contextBridgeJa ?? null;
     const bridgePart = activeBridge ? " " + activeBridge : "";
     const storyPart = storyLine ? " " + storyLine : "";
     const mythPart = mythLine ? " " + mythLine : "";
