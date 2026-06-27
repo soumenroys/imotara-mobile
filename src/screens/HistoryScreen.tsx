@@ -334,7 +334,7 @@ export default function HistoryScreen() {
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => { setScreenReady(true); });
                 });
-            }, 300);
+            }, 150);
             return () => { clearTimeout(timer); setScreenReady(false); };
         }, [])
     );

@@ -3,7 +3,6 @@
 
 import React from "react";
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import type { ColorPalette } from "../../theme/colors";
 
@@ -36,8 +35,7 @@ export function ChatInputBar({
   onMicPress,
   firstTimeTip,
 }: Props) {
-  const insets = useSafeAreaInsets();
-  const paddingBottom = Math.max(insets.bottom, 8);
+  const paddingBottom = 8;
   const isPad = Platform.OS === "ios" && Platform.isPad;
   return (
     <View

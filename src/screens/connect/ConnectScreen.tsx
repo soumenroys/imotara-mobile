@@ -369,6 +369,15 @@ export default function ConnectScreen() {
     );
 }
 
+// 30-second stale cache for the consultant list — prevents redundant fetches on
+// rapid filter toggles or accessToken re-renders while the data is still fresh.
+const browseCache: {
+    key: string;
+    data: { consultants: any[]; totalPages: number; favorites: string[]; walletBalance: number | null; walletCurrency: string };
+    at: number;
+} | null = (null as any);
+let _browseCache = browseCache;
+
 // ── Browse Tab ─────────────────────────────────────────────────────────────────
 function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
     colors: any; accessToken: string | null;
@@ -403,6 +412,25 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
         const params = new URLSearchParams();
         if (filterOnline)   params.set("online", "true");
         if (filterCategory) params.set("category", filterCategory);
+        const cacheKey = `${accessToken ?? ""}|${filterOnline}|${filterCategory}`;
+        const STALE_MS = 30_000;
+        // Serve from cache when data is fresh and this is not a manual pull-to-refresh.
+        // refreshKey increments only on explicit user pull-to-refresh, so checking
+        // _browseCache.key guards against stale filter-key hits.
+        if (
+            _browseCache &&
+            _browseCache.key === cacheKey &&
+            Date.now() - _browseCache.at < STALE_MS &&
+            !refreshing
+        ) {
+            const c = _browseCache.data;
+            setConsultants(c.consultants);
+            setHasMore(1 < c.totalPages);
+            setFavorites(new Set(c.favorites));
+            if (c.walletBalance !== null) { setWalletBalance(c.walletBalance); setWalletCurrency(c.walletCurrency); }
+            setLoading(false);
+            return;
+        }
         const authHeaders: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
         setLoading(true);
         setFetchFailed(false);
@@ -423,6 +451,18 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                     setConsultants(cd.consultants ?? []);
                     setHasMore(1 < (cd.totalPages ?? 1));
                     setPage(1);
+                    // Update module-level cache
+                    _browseCache = {
+                        key: cacheKey,
+                        at: Date.now(),
+                        data: {
+                            consultants: cd.consultants ?? [],
+                            totalPages: cd.totalPages ?? 1,
+                            favorites: fd.ok ? (fd.favorites ?? []) : [],
+                            walletBalance: wd.ok ? Math.max(0, Number(wd.wallet_balance ?? 0)) : null,
+                            walletCurrency: wd.ok ? (wd.wallet_currency ?? "INR") : "INR",
+                        },
+                    };
                 } else {
                     setFetchFailed(true);
                 }
@@ -2544,7 +2584,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     method: "POST",
                     headers: { Authorization: `Bearer ${accessToken}` },
                 }).catch(() => null);
-                if (!res) { console.warn("[tick] network error — billing tick missed"); return; }
+                if (!res) { return; }
                 if (res.status === 401) { stopTick(); setTickPaused(true); return; }
                 const d = await res.json().catch(() => null);
                 if (d?.error === "Authentication required") { stopTick(); setTickPaused(true); return; }
@@ -2553,7 +2593,6 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 // modal would open simultaneously (inconsistent UI).
                 if (d?.needs_recharge === true || res.status === 402) { stopTick(); setShowRecharge(true); return; }
                 if (!res.ok && res.status !== 402) {
-                    console.warn("[tick] server error", res.status, d?.error);
                     // Alert once only — stopTick so the interval doesn't spam the user.
                     // The orphan cron will auto-complete the session within 15 minutes.
                     stopTick();

@@ -1245,7 +1245,7 @@ export default function TrendsScreen() {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => { setScreenReady(true); });
         });
-      }, 300);
+      }, 150);
       return () => { clearTimeout(timer); setScreenReady(false); };
     }, [])
   );
