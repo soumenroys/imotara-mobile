@@ -18,8 +18,11 @@ import {
     Alert,
     Linking,
 } from "react-native";
-import { useIAP, getAvailablePurchases } from "expo-iap";
 import type { Purchase, Product, ProductSubscription } from "expo-iap";
+let _iapMod: typeof import("expo-iap") | null = null;
+try { _iapMod = require("expo-iap"); } catch { /* not available in dev builds */ }
+const useIAP: typeof import("expo-iap")["useIAP"] = _iapMod?.useIAP ?? (() => ({ connected: false, products: [], subscriptions: [], availablePurchases: [], currentPurchase: undefined, currentPurchaseError: undefined, finishTransaction: async () => {}, getProducts: async () => {}, getSubscriptions: async () => {}, requestPurchase: async () => {}, requestSubscription: async () => {} } as any));
+const getAvailablePurchases: typeof import("expo-iap")["getAvailablePurchases"] = _iapMod?.getAvailablePurchases ?? (async () => []);
 import { useColors } from "../../theme/ThemeContext";
 import { useAuth } from "../../auth/AuthContext";
 import { supabase } from "../../lib/supabase/client";
@@ -37,7 +40,7 @@ import {
     type PlanDef,
     type ProductId,
 } from "../../payments/upgradePlans";
-import type { PurchaseIOS } from "expo-iap";
+import type { PurchaseIOS } from "expo-iap"; // type-only, no runtime cost
 
 type Props = {
     visible: boolean;

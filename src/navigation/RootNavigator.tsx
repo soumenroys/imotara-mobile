@@ -22,7 +22,8 @@ import { buildApiUrl } from "../config/api";
 
 import { OnboardingModal, type OnboardingResult } from "../components/imotara/OnboardingModal";
 import { useColors, useTheme } from "../theme/ThemeContext";
-import * as NavigationBar from "expo-navigation-bar";
+let NavigationBar: typeof import("expo-navigation-bar") | null = null;
+try { NavigationBar = require("expo-navigation-bar"); } catch { /* not available in dev builds */ }
 
 // ── Global sync status strip ───────────────────────────────────────────────────
 function SyncStatusStrip() {
@@ -114,17 +115,13 @@ export default function RootNavigator() {
     const { isDark } = useTheme();
     const insets = useSafeAreaInsets();
 
-    // Paint the Android system navigation bar to match the tab bar — prevents
-    // the black strip that appears with edgeToEdgeEnabled on 3-button nav mode.
-    // Android 15 (API 35) enforces edge-to-edge and deprecates setNavigationBarColor;
-    // skip on API 35+ to avoid Play Store deprecation warnings (color is a no-op anyway).
+    // Set nav bar button style (light/dark icons). Background color is a no-op on
+    // edge-to-edge apps (API 35+) and silently fails on older APIs — skip it and
+    // instead use the outer View backgroundColor to fill behind the nav bar.
     useEffect(() => {
         if (Platform.OS !== "android") return;
-        if (typeof Platform.Version === "number" && Platform.Version >= 35) return;
-        const bg = isDark ? "#1e293b" : "#e2e8f0";
         const style = isDark ? "light" : "dark";
-        NavigationBar.setBackgroundColorAsync(bg).catch(() => {});
-        NavigationBar.setButtonStyleAsync(style).catch(() => {});
+        NavigationBar?.setButtonStyleAsync(style).catch(() => {});
     }, [isDark]);
 
     // --- Lifecycle-driven "resume" sync (deduped) ---
@@ -209,7 +206,7 @@ export default function RootNavigator() {
     };
 
     return (
-        <View style={{ flex: 1, backgroundColor: isDark ? "#1e293b" : "#e2e8f0" }}>
+        <View style={{ flex: 1, backgroundColor: colors.surfaceSoft }}>
             <NavigationContainer linking={linking}>
                 <Tab.Navigator
                     backBehavior="history"
@@ -224,8 +221,11 @@ export default function RootNavigator() {
                         tabBarStyle: {
                             backgroundColor: colors.surfaceSoft,
                             borderTopColor: colors.border,
-                            paddingBottom: insets.bottom > 0 ? insets.bottom : 4,
-                            height: 56 + (insets.bottom > 0 ? insets.bottom : 4),
+                            // Android: fixed 56dp — no bottom padding; outer View fills nav-bar
+                            // area with the same colour so there is no visible gap.
+                            // iOS: pad by insets.bottom so icons sit above the home indicator.
+                            paddingBottom: Platform.OS === "android" ? 0 : (insets.bottom > 0 ? insets.bottom : 4),
+                            height: Platform.OS === "android" ? 56 : (56 + (insets.bottom > 0 ? insets.bottom : 4)),
                         },
                         tabBarVisibilityAnimationConfig: {
                             hide: { animation: "timing", config: { duration: 150 } },

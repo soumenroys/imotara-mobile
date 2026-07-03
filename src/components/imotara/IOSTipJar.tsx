@@ -11,8 +11,10 @@
 
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
-import { useIAP } from "expo-iap";
 import type { Purchase, Product } from "expo-iap";
+let _iapModule: typeof import("expo-iap") | null = null;
+try { _iapModule = require("expo-iap"); } catch { /* not available in dev builds */ }
+const useIAP: typeof import("expo-iap")["useIAP"] = _iapModule?.useIAP ?? (() => ({ connected: false, products: [], subscriptions: [], availablePurchases: [], currentPurchase: undefined, currentPurchaseError: undefined, finishTransaction: async () => {}, getProducts: async () => {}, getSubscriptions: async () => {}, requestPurchase: async () => {}, requestSubscription: async () => {} } as any));
 import { useColors } from "../../theme/ThemeContext";
 
 export const IOS_TIP_SKUS = [

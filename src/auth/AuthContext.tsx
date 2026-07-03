@@ -17,7 +17,8 @@ import { Alert, Linking, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session, User } from "@supabase/supabase-js";
 import * as WebBrowser from "expo-web-browser";
-import * as AppleAuthentication from "expo-apple-authentication";
+let AppleAuthentication: typeof import("expo-apple-authentication") | null = null;
+try { AppleAuthentication = require("expo-apple-authentication"); } catch { /* not available in dev builds */ }
 import { supabase } from "../lib/supabase/client";
 import { buildApiUrl } from "../config/api";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
@@ -72,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check Apple Sign In availability once on mount
     useEffect(() => {
         if (Platform.OS === "ios") {
-            AppleAuthentication.isAvailableAsync()
+            AppleAuthentication?.isAvailableAsync()
                 .then(setAppleAvailable)
                 .catch(() => setAppleAvailable(false));
         }
@@ -216,6 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // The identity token is exchanged for a Supabase session.
 
     const signInWithApple = useCallback(async () => {
+        if (!AppleAuthentication) return; // not available in dev builds
         try {
             const credential = await AppleAuthentication.signInAsync({
                 requestedScopes: [

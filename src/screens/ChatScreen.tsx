@@ -72,6 +72,7 @@ import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { DiscoveryCard, DISCOVERY_CARDS_KEY, CARD_ORDER, getNextCard, type DiscoveryCardId } from "../components/chat/DiscoveryCard";
 import { OpenLoopCard } from "../components/chat/OpenLoopCard";
 import { CompanionInsightCard } from "../components/imotara/CompanionInsightCard";
@@ -1485,6 +1486,10 @@ export default function ChatScreen() {
   const colors = useColors();
   const { isDark, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
+  // On Android with edgeToEdgeEnabled, adjustResize is ignored so KAV must compensate
+  // for the tab bar height (the keyboard height is measured from the screen bottom, but
+  // the KAV bottom sits above the tab bar — so we offset by tab bar height).
+  const bottomTabBarHeight = useBottomTabBarHeight();
 
   // Companion quick panel — opened by swiping right from the left edge strip
   const [companionPanelVisible, setCompanionPanelVisible] = useState(false);
@@ -1503,7 +1508,8 @@ export default function ChatScreen() {
   const swipeDirectionRef = useRef<"left" | "right" | null>(null);
 
   // Capture-phase PanResponder — fires top-down before FlatList can claim any gesture.
-  // Right swipe (dx > 20) → Companion panel (if enabled). Left swipe (dx < -20) → Plan & Support panel (if enabled).
+  // Right swipe → Companion panel (if enabled). Left swipe → Plan & Support panel (if enabled).
+  // No x0 guard needed: ChatScreen is a tab (no iOS back-swipe navigation stack).
   const edgeSwipeResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponderCapture: () => false,
@@ -1511,9 +1517,8 @@ export default function ChatScreen() {
         if (companionPanelVisibleRef.current || planPanelVisibleRef.current) return false;
         const horiz = Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5;
         if (!horiz) return false;
-        // Skip if swipe starts within 30px of left edge — that's the iOS native back gesture zone.
-        if (gs.dx > 20 && companionPanelEnabledRef.current && gs.x0 > 30) { swipeDirectionRef.current = "right"; return true; }
-        if (gs.dx < -20 && planPanelEnabledRef.current)                    { swipeDirectionRef.current = "left";  return true; }
+        if (gs.dx > 15 && companionPanelEnabledRef.current) { swipeDirectionRef.current = "right"; return true; }
+        if (gs.dx < -15 && planPanelEnabledRef.current)     { swipeDirectionRef.current = "left";  return true; }
         return false;
       },
       onPanResponderGrant: () => {
@@ -1695,14 +1700,24 @@ export default function ChatScreen() {
   const voiceConfirmRef = React.useRef(voiceConfirm);
   React.useEffect(() => { voiceConfirmRef.current = voiceConfirm; }, [voiceConfirm]);
 
-  // voiceLangRef is set to the user's preferredLang once toneContext loads (see effect below)
+  // voiceLangRef is set to the user's preferredLang once toneContext loads (see effect below).
+  // voiceLang (state) mirrors it so useVoiceInput re-renders when the language changes —
+  // ref mutations alone don't trigger re-renders, so opts.lang was always stuck at "en".
   const voiceLangRef = React.useRef("en");
+  const [voiceLang, setVoiceLang] = useState("en");
 
-  const voiceInput = useVoiceInput(
-    (text) => {
-      // Hands-free: skip draft entirely, send immediately
+  // Stable ref so the onTranscript callback can always call the latest handleSend.
+  // Without this, the auto-stop timer (set in startRecording's setInterval) holds the
+  // handleSend closure from the moment recording started — stale isTyping state —
+  // which could bypass the double-send guard on timer-triggered stops.
+  const handleSendRef = useRef<(overrideText?: string) => void>(() => {});
+  useEffect(() => { handleSendRef.current = handleSend; }); // no dep array — every render
+
+  // Stable callback ([] deps) so stopRecording's useCallback doesn't re-create on
+  // every timer tick (setDurationMs fires every 500 ms → re-render).
+  const onTranscript = useCallback((text: string) => {
       if (handsfreeRef.current) {
-        setTimeout(() => handleSend(text), 80);
+        setTimeout(() => handleSendRef.current(text), 80);
         return;
       }
       const insertText = () => {
@@ -1724,10 +1739,42 @@ export default function ChatScreen() {
       } else {
         insertText();
       }
-    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentional [] — all mutable values accessed via refs
+
+  const voiceInput = useVoiceInput(
+    onTranscript,
     process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL,
-    { maxDurationMs: voiceMaxDurationMs, quality: voiceQuality, cloudTranscription: voiceCloudTranscription, lang: voiceLangRef.current },
+    { maxDurationMs: voiceMaxDurationMs, quality: voiceQuality, cloudTranscription: voiceCloudTranscription, lang: voiceLang },
   );
+
+  // voiceStateRef keeps the live recording state accessible from callbacks that
+  // must not re-create on every render (onBackground, handleMicPress).
+  const voiceStateRef = useRef(voiceInput.state);
+  useEffect(() => { voiceStateRef.current = voiceInput.state; });
+
+  // voiceInputRef keeps the latest startRecording/stopRecording functions so
+  // handleMicPress (deps:[]) always calls the version created after AsyncStorage
+  // has loaded voiceMaxDurationMs and voiceQuality. Without this, the first-render
+  // functions (built with default 60s/high) are used even when the user saved
+  // different preferences — the settings would be silently ignored.
+  const voiceInputRef = useRef(voiceInput);
+  useEffect(() => { voiceInputRef.current = voiceInput; });
+
+  // Stable handler (deps []) — all mutable values accessed via refs.
+  // This prevents ChatInputBar re-rendering every 500ms during recording
+  // (setDurationMs ticks would otherwise produce a new onMicPress each render).
+  const handleMicPress = useCallback(async () => {
+    if (voiceStateRef.current === "idle") {
+      // Stop any active TTS before recording — on Android, TTS audio bleeds
+      // into the mic if it's still playing when recording begins.
+      stopSpeaking();
+      setSpeakingMessageId(null);
+      await voiceInputRef.current.startRecording();
+    } else if (voiceStateRef.current === "recording") {
+      await voiceInputRef.current.stopRecording();
+    }
+  }, []); // intentional [] — state via voiceStateRef; functions via voiceInputRef
 
   // Message reactions — messageId → emoji (persisted to AsyncStorage)
   const REACTIONS_KEY = "imotara.reactions.v1";
@@ -2224,9 +2271,13 @@ export default function ChatScreen() {
     })();
   }, [history.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep voiceLangRef in sync with toneContext so transcription uses the correct language
+  // Keep voiceLangRef and voiceLang state in sync with toneContext so transcription
+  // uses the correct language. Both must be updated: ref for instant access in callbacks,
+  // state to trigger a re-render so useVoiceInput receives the updated opts.lang.
   React.useEffect(() => {
-    voiceLangRef.current = toneContext?.user?.preferredLang ?? "en";
+    const lang = toneContext?.user?.preferredLang ?? "en";
+    voiceLangRef.current = lang;
+    setVoiceLang(lang);
   }, [toneContext?.user?.preferredLang]);
 
   // P3/P5 — Companion insight effect (needs history, toneContext, accessToken)
@@ -2411,6 +2462,11 @@ export default function ChatScreen() {
   useAppLifecycle({
     debounceMs: 350,
     onBackground: () => {
+      // Cancel any active recording — the OS reclaims the audio session on background,
+      // leaving expo-av's native recorder stopped while JS state shows "recording".
+      if (voiceStateRef.current === "recording") {
+        void voiceInput.cancelRecording();
+      }
       // If the app goes background mid "typing", clear timers and unlock
       if (isTyping || isSendingRef.current) {
         resetTypingState("background");
@@ -4262,7 +4318,7 @@ export default function ChatScreen() {
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      keyboardVerticalOffset={Platform.OS === "android" ? bottomTabBarHeight : 0}
       enabled={!(Platform.OS === "ios" && Platform.isPad)}
     >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }} {...edgeSwipeResponder.panHandlers}>
@@ -4290,8 +4346,14 @@ export default function ChatScreen() {
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          {/* Title section — flex: 1 so it yields space to buttons on small screens */}
-          <View style={{ flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0 }}>
+          {/* Title section — tappable to open companion panel; flex:1 yields space to buttons */}
+          <TouchableOpacity
+            style={{ flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0 }}
+            onPress={() => setCompanionPanelVisible(true)}
+            activeOpacity={0.6}
+            accessibilityRole="button"
+            accessibilityLabel="Open companion settings"
+          >
             <View
               style={{
                 width: 8,
@@ -4318,7 +4380,7 @@ export default function ChatScreen() {
             </Text>
 
 {/* AI mode badge moved to ⋯ overflow menu — technical label not needed in default header */}
-          </View>
+          </TouchableOpacity>
 
           {/* Buttons section — 3 items max to prevent header overflow */}
           <View style={{ flexDirection: "row", alignItems: "center", flexShrink: 0, gap: 6 }}>
@@ -5331,10 +5393,7 @@ export default function ChatScreen() {
         onChangeText={handleInputChange}
         onContentSizeChange={handleContentSizeChange}
         onSend={() => handleSend()}
-        onMicPress={async () => {
-          if (voiceInput.state === "idle") await voiceInput.startRecording();
-          else if (voiceInput.state === "recording") await voiceInput.stopRecording();
-        }}
+        onMicPress={handleMicPress}
         firstTimeTip={showFirstTimeTip ? "Just talk — Imotara listens without judgment." : null}
       />
       {renderActionSheet()}

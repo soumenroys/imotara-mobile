@@ -26,8 +26,10 @@ const cfetch = (url: string, init: RequestInit = {}) => fetchWithTimeout(url, in
 const pfetch = (url: string, init: RequestInit = {}) => fetchWithTimeout(url, init, 30_000);
 import { useRoute, useNavigation } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
-import * as ImagePicker from "expo-image-picker";
-import * as DocumentPicker from "expo-document-picker";
+let ImagePicker: typeof import("expo-image-picker") | null = null;
+try { ImagePicker = require("expo-image-picker"); } catch { /* not available in dev builds */ }
+let DocumentPicker: typeof import("expo-document-picker") | null = null;
+try { DocumentPicker = require("expo-document-picker"); } catch { /* not available in dev builds */ }
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Slider from "@react-native-community/slider";
 
@@ -4622,6 +4624,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
 
     async function pickAndUploadPhoto() {
         if (!accessToken) { Alert.alert("Sign in required", "Please sign in before uploading."); return; }
+        if (!ImagePicker) { Alert.alert("Not available", "Photo upload is not available in this build."); return; }
         try {
             const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (!perm.granted) { Alert.alert("Permission required", "Allow photo library access to upload a profile photo."); return; }
@@ -4651,6 +4654,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
 
     async function pickAndUploadDoc(key: DocKey) {
         if (!accessToken) { Alert.alert("Sign in required", "Please sign in before uploading."); return; }
+        if (!DocumentPicker) { Alert.alert("Not available", "Document upload is not available in this build."); return; }
         try {
             const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "application/pdf"], copyToCacheDirectory: true });
             if (result.canceled || !result.assets?.[0]) return;

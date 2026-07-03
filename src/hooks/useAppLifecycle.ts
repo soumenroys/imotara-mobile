@@ -40,6 +40,17 @@ export function useAppLifecycle(options: AppLifecycleOptions = {}) {
     const lastStateRef = useRef<AppStateStatus>(AppState.currentState);
     const lastEventAtRef = useRef<number>(0);
 
+    // Store callbacks in refs so the AppState listener never needs to be
+    // torn down and re-registered when the caller's function identity changes.
+    // Without this, an inline onBackground in ChatScreen causes the subscription
+    // to be removed and re-added every 500ms during recording (setDurationMs
+    // fires every 500ms), creating a window where an AppState event is silently
+    // dropped — leaving the recording stuck after backgrounding.
+    const onForegroundRef = useRef(onForeground);
+    const onBackgroundRef = useRef(onBackground);
+    useEffect(() => { onForegroundRef.current = onForeground; });
+    useEffect(() => { onBackgroundRef.current = onBackground; });
+
     const isBackgroundish = useMemo(() => {
         return (s: AppStateStatus) =>
             s === "background" || (treatInactiveAsBackground && s === "inactive");
@@ -62,13 +73,13 @@ export function useAppLifecycle(options: AppLifecycleOptions = {}) {
 
             // Foreground: background/inactive -> active
             if (next === "active" && isBackgroundish(prev)) {
-                onForeground?.({ from: prev, to: next, at: now });
+                onForegroundRef.current?.({ from: prev, to: next, at: now });
                 return;
             }
 
             // Background: active -> inactive/background
             if (isBackgroundish(next) && prev === "active") {
-                onBackground?.({ from: prev, to: next, at: now });
+                onBackgroundRef.current?.({ from: prev, to: next, at: now });
                 return;
             }
         });
@@ -76,7 +87,9 @@ export function useAppLifecycle(options: AppLifecycleOptions = {}) {
         return () => {
             sub.remove();
         };
-    }, [debounceMs, isBackgroundish, onBackground, onForeground]);
+    // Callbacks intentionally excluded — they are read via refs above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debounceMs, isBackgroundish]);
 
     return {
         appState,

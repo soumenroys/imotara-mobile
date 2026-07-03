@@ -7,7 +7,9 @@ import UpgradeSheet from "../components/imotara/UpgradeSheet";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import * as FileSystem from "expo-file-system/legacy";
-import * as Sharing from "expo-sharing";
+// Dynamic require so DevLauncher builds (without expo-sharing linked) don't crash at import time
+let Sharing: typeof import("expo-sharing") | null = null;
+try { Sharing = require("expo-sharing"); } catch { /* not available in dev builds */ }
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 
@@ -1473,8 +1475,8 @@ function SettingsScreenContent() {
             const fileName = `imotara-export-${new Date().toISOString().slice(0, 10)}.json`;
             const fileUri = FileSystem.cacheDirectory + fileName;
             await FileSystem.writeAsStringAsync(fileUri, json, { encoding: FileSystem.EncodingType.UTF8 });
-            const canShare = await Sharing.isAvailableAsync();
-            if (canShare) {
+            const canShare = Sharing ? await Sharing.isAvailableAsync() : false;
+            if (canShare && Sharing) {
                 await Sharing.shareAsync(fileUri, { mimeType: "application/json", dialogTitle: "Export Imotara data" });
             } else {
                 Alert.alert("Export unavailable", "Sharing is not available on this device.");
@@ -1496,8 +1498,8 @@ function SettingsScreenContent() {
             const fileName = `imotara-export-${new Date().toISOString().slice(0, 10)}.csv`;
             const fileUri = FileSystem.cacheDirectory + fileName;
             await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
-            const canShare = await Sharing.isAvailableAsync();
-            if (canShare) {
+            const canShare = Sharing ? await Sharing.isAvailableAsync() : false;
+            if (canShare && Sharing) {
                 await Sharing.shareAsync(fileUri, { mimeType: "text/csv", dialogTitle: "Export Imotara data (CSV)" });
             } else {
                 Alert.alert("Export unavailable", "Sharing is not available on this device.");
@@ -1548,8 +1550,8 @@ function SettingsScreenContent() {
             const fileName = `imotara-journal-${new Date().toISOString().slice(0, 10)}.txt`;
             const fileUri = FileSystem.cacheDirectory + fileName;
             await FileSystem.writeAsStringAsync(fileUri, content, { encoding: FileSystem.EncodingType.UTF8 });
-            const canShare = await Sharing.isAvailableAsync();
-            if (canShare) {
+            const canShare = Sharing ? await Sharing.isAvailableAsync() : false;
+            if (canShare && Sharing) {
                 await Sharing.shareAsync(fileUri, { mimeType: "text/plain", dialogTitle: "Export Journal" });
             } else {
                 Alert.alert("Export unavailable", "Sharing is not available on this device.");
