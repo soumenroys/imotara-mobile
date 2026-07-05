@@ -1,7 +1,7 @@
 // App.tsx
 import React from "react";
 import { StatusBar } from "expo-status-bar";
-import { KeyboardAvoidingView, Platform, View, Text, TouchableOpacity, Linking } from "react-native";
+import { Platform, View, Text, TouchableOpacity, Linking } from "react-native";
 import RootNavigator from "./src/navigation/RootNavigator";
 import AppThemeProvider from "./src/theme/AppThemeProvider";
 import { ThemeProvider } from "./src/theme/ThemeContext";
@@ -105,13 +105,12 @@ function AppShell() {
       <AuthProvider>
       <SettingsProvider>
         <HistoryProvider>
-          <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={Platform.OS === "ios" ? "height" : "padding"}
-            keyboardVerticalOffset={0}
-          >
-            <RootNavigator />
-          </KeyboardAvoidingView>
+          {/* No root-level KeyboardAvoidingView here — Chat/Settings/Connect each
+              handle their own keyboard avoidance locally. A second wrapper here
+              double-applied the keyboard-height shrink on top of theirs, which
+              on short-screen devices squeezed the tab bar enough to make its
+              icons/labels overlap when the keyboard was open. */}
+          <RootNavigator />
 
           <StatusBar style="auto" />
         </HistoryProvider>

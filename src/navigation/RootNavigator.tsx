@@ -211,6 +211,7 @@ export default function RootNavigator() {
                 <Tab.Navigator
                     backBehavior="history"
                     screenOptions={({ route }) => ({
+                        sceneStyle: { backgroundColor: colors.surfaceSoft },
                         headerStyle: {
                             backgroundColor: colors.background,
                         },
@@ -221,11 +222,13 @@ export default function RootNavigator() {
                         tabBarStyle: {
                             backgroundColor: colors.surfaceSoft,
                             borderTopColor: colors.border,
-                            // Android: fixed 56dp — no bottom padding; outer View fills nav-bar
-                            // area with the same colour so there is no visible gap.
+                            // Android: let @react-navigation/bottom-tabs auto-size — a fixed
+                            // height/paddingBottom here sits behind the system nav bar on
+                            // edge-to-edge builds instead of above it.
                             // iOS: pad by insets.bottom so icons sit above the home indicator.
-                            paddingBottom: Platform.OS === "android" ? 0 : (insets.bottom > 0 ? insets.bottom : 4),
-                            height: Platform.OS === "android" ? 56 : (56 + (insets.bottom > 0 ? insets.bottom : 4)),
+                            ...(Platform.OS === "android"
+                                ? {}
+                                : { paddingBottom: insets.bottom > 0 ? insets.bottom : 4, height: 56 + (insets.bottom > 0 ? insets.bottom : 4) }),
                         },
                         tabBarVisibilityAnimationConfig: {
                             hide: { animation: "timing", config: { duration: 150 } },

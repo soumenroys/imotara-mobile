@@ -72,7 +72,6 @@ import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { DiscoveryCard, DISCOVERY_CARDS_KEY, CARD_ORDER, getNextCard, type DiscoveryCardId } from "../components/chat/DiscoveryCard";
 import { OpenLoopCard } from "../components/chat/OpenLoopCard";
 import { CompanionInsightCard } from "../components/imotara/CompanionInsightCard";
@@ -1486,10 +1485,6 @@ export default function ChatScreen() {
   const colors = useColors();
   const { isDark, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
-  // On Android with edgeToEdgeEnabled, adjustResize is ignored so KAV must compensate
-  // for the tab bar height (the keyboard height is measured from the screen bottom, but
-  // the KAV bottom sits above the tab bar — so we offset by tab bar height).
-  const bottomTabBarHeight = useBottomTabBarHeight();
 
   // Companion quick panel — opened by swiping right from the left edge strip
   const [companionPanelVisible, setCompanionPanelVisible] = useState(false);
@@ -2505,10 +2500,22 @@ export default function ChatScreen() {
 
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // Android-only: RN's KeyboardAvoidingView wires both keyboardDidShow AND
+  // keyboardDidHide to the same internal handler instead of resetting height
+  // to 0 on hide (an upstream RN bug), which left a stale gap the size of
+  // keyboardVerticalOffset after every dismiss. Tracking height ourselves via
+  // the correct show/hide events sidesteps that broken internal state.
+  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
 
   useEffect(() => {
-    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", () => setKeyboardVisible(true));
-    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboardVisible(false));
+    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", (e) => {
+      setKeyboardVisible(true);
+      if (Platform.OS === "android") setAndroidKeyboardHeight(e?.endCoordinates?.height ?? 0);
+    });
+    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => {
+      setKeyboardVisible(false);
+      if (Platform.OS === "android") setAndroidKeyboardHeight(0);
+    });
     return () => { show.remove(); hide.remove(); };
   }, []);
 
@@ -4318,8 +4325,18 @@ export default function ChatScreen() {
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "android" ? bottomTabBarHeight : 0}
-      enabled={!(Platform.OS === "ios" && Platform.isPad)}
+      // Android: no offset — the tab bar fully hides while the keyboard is
+      // open (it doesn't sit alongside it), so compensating for its height
+      // here only left a gap between the input bar and the keyboard.
+      keyboardVerticalOffset={0}
+      // Android: gate on our own reliably-tracked keyboard height rather than
+      // leaving this always-enabled. RN's KeyboardAvoidingView wires both
+      // keyboardDidShow/Hide to the same internal handler on Android (an
+      // upstream bug) and never resets its internal height offset back to 0
+      // on dismiss, leaving a stale gap. Disabling it once we know the
+      // keyboard is actually closed forces its height math back to the full
+      // frame, sidestepping the stuck internal state.
+      enabled={Platform.OS === "android" ? androidKeyboardHeight > 0 : !(Platform.OS === "ios" && Platform.isPad)}
     >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }} {...edgeSwipeResponder.panHandlers}>
       {/* iPad: constrain content to a centered column so the UI doesn't span the full iPad width */}
