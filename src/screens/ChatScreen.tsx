@@ -5723,6 +5723,7 @@ export default function ChatScreen() {
         onClose={() => setCompanionPanelVisible(false)}
         toneContext={toneContext}
         setToneContext={setToneContext}
+        accessToken={accessToken ?? undefined}
       />
 
       {/* Plan & Support quick panel — swipe left to open, swipe right or tap backdrop to close */}

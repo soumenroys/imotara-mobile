@@ -120,9 +120,10 @@ export type Props = {
   onClose: () => void;
   toneContext: ToneContextPayload | null | undefined;
   setToneContext: (ctx: ToneContextPayload) => void;
+  accessToken?: string;
 };
 
-export function CompanionQuickPanel({ visible, onClose, toneContext, setToneContext }: Props) {
+export function CompanionQuickPanel({ visible, onClose, toneContext, setToneContext, accessToken }: Props) {
   const colors = useColors();
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -269,7 +270,7 @@ export function CompanionQuickPanel({ visible, onClose, toneContext, setToneCont
               <TouchableOpacity
                 onPress={() => {
                   if (voicePreviewId === "u") { stopSpeaking(); setVoicePreviewId(null); }
-                  else { setVoicePreviewId("u"); speakPreview(toneContext?.user?.gender, toneContext?.user?.preferredLang ?? "en", toneContext?.user?.name?.trim(), () => setVoicePreviewId(null)); }
+                  else { setVoicePreviewId("u"); speakPreview(toneContext?.user?.gender, toneContext?.user?.preferredLang ?? "en", toneContext?.user?.name?.trim(), () => setVoicePreviewId(null), accessToken); }
                 }}
                 style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}
               >
@@ -366,7 +367,7 @@ export function CompanionQuickPanel({ visible, onClose, toneContext, setToneCont
               <TouchableOpacity
                 onPress={() => {
                   if (voicePreviewId === "c") { stopSpeaking(); setVoicePreviewId(null); }
-                  else { setVoicePreviewId("c"); speakPreview(toneContext?.companion?.gender, toneContext?.user?.preferredLang ?? "en", toneContext?.companion?.name?.trim(), () => setVoicePreviewId(null)); }
+                  else { setVoicePreviewId("c"); speakPreview(toneContext?.companion?.gender, toneContext?.user?.preferredLang ?? "en", toneContext?.companion?.name?.trim(), () => setVoicePreviewId(null), accessToken); }
                 }}
                 disabled={!enabled}
                 style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4, opacity: enabled ? 1 : 0.4 }}

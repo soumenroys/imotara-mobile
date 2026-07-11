@@ -3013,28 +3013,6 @@ function SettingsScreenContent() {
                         })}
                     </View>
 
-                    {/* Voice preview */}
-                    <TouchableOpacity
-                        onPress={() => {
-                            const id = "settings-user-preview";
-                            if (voicePreviewId === id) {
-                                stopSpeaking();
-                                setVoicePreviewId(null);
-                            } else {
-                                const gender = toneContext?.user?.gender;
-                                const lang = toneContext?.user?.preferredLang ?? "en";
-                                const name = toneContext?.user?.name?.trim();
-                                setVoicePreviewId(id);
-                                speakPreview(gender, lang, name, () => setVoicePreviewId(null));
-                            }
-                        }}
-                        style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 }}
-                    >
-                        <Text style={{ fontSize: 12, color: colors.primary }}>
-                            {voicePreviewId === "settings-user-preview" ? "⏹ Stop preview" : "🔊 Preview voice"}
-                        </Text>
-                    </TouchableOpacity>
-
                     {/* Avatar appearance */}
                     <AvatarSlider
                         gender={toneContext?.user?.gender}
@@ -3452,7 +3430,7 @@ function SettingsScreenContent() {
                                 const lang = toneContext?.user?.preferredLang ?? "en";
                                 const name = toneContext?.companion?.name?.trim();
                                 setVoicePreviewId(id);
-                                speakPreview(gender, lang, name, () => setVoicePreviewId(null));
+                                speakPreview(gender, lang, name, () => setVoicePreviewId(null), accessToken ?? undefined);
                             }
                         }}
                         disabled={!toneContext?.companion?.enabled}
