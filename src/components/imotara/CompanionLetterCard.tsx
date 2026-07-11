@@ -35,6 +35,7 @@ export default function CompanionLetterCard({
   const { accessToken } = useAuth();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [speaking, setSpeaking] = useState(false);
+  const [preparingSpeech, setPreparingSpeech] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
   const [reaction, setReaction] = useState<string | undefined>(letter.reaction);
   const [replyOpen, setReplyOpen] = useState(false);
@@ -47,12 +48,13 @@ export default function CompanionLetterCard({
   });
 
   const handleTTS = useCallback(async () => {
-    if (speaking) {
+    if (speaking || preparingSpeech) {
       stopSpeaking();
       setSpeaking(false);
+      setPreparingSpeech(false);
       return;
     }
-    setSpeaking(true);
+    setPreparingSpeech(true);
     try {
       await speakMessage(
         `letter-${letter.id}`,
@@ -63,12 +65,14 @@ export default function CompanionLetterCard({
         1.0,
         1.0,
         accessToken ?? undefined,
+        () => { setPreparingSpeech(false); setSpeaking(true); },
       );
     } catch {
       setSpeaking(false);
+      setPreparingSpeech(false);
       Alert.alert("Audio unavailable", "Could not play the letter. Please try again.");
     }
-  }, [speaking, letter, companionGender, lang, accessToken]);
+  }, [speaking, preparingSpeech, letter, companionGender, lang, accessToken]);
 
   const handleReact = useCallback(async (emoji: string) => {
     const next = reaction === emoji ? undefined : emoji;
@@ -143,15 +147,19 @@ export default function CompanionLetterCard({
             {/* TTS */}
             <TouchableOpacity
               onPress={handleTTS}
-              style={[styles.actionBtn, { backgroundColor: speaking ? "rgba(99,102,241,0.2)" : colors.surfaceSoft, borderColor: speaking ? colors.primary : colors.border }]}
+              style={[styles.actionBtn, { backgroundColor: (speaking || preparingSpeech) ? "rgba(99,102,241,0.2)" : colors.surfaceSoft, borderColor: (speaking || preparingSpeech) ? colors.primary : colors.border }]}
             >
-              <Ionicons
-                name={speaking ? "stop-circle" : "volume-high-outline"}
-                size={16}
-                color={speaking ? colors.primary : colors.textSecondary}
-              />
-              <Text style={{ fontSize: 11, color: speaking ? colors.primary : colors.textSecondary, marginLeft: 4 }}>
-                {speaking ? "Stop" : "Listen"}
+              {preparingSpeech ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons
+                  name={speaking ? "stop-circle" : "volume-high-outline"}
+                  size={16}
+                  color={speaking ? colors.primary : colors.textSecondary}
+                />
+              )}
+              <Text style={{ fontSize: 11, color: (speaking || preparingSpeech) ? colors.primary : colors.textSecondary, marginLeft: 4 }}>
+                {preparingSpeech ? "Preparing…" : speaking ? "Stop" : "Listen"}
               </Text>
             </TouchableOpacity>
 

@@ -977,6 +977,7 @@ type MessageBubbleProps = {
   dismissedCrisisCards: Set<string>;
   reactions: Map<string, string>;
   speakingMessageId: string | null;
+  preparingSpeechId: string | null;
   companionAvatarSource?: any;
   companionName?: string;
   showTimestamps?: boolean;
@@ -1005,6 +1006,7 @@ function MessageBubble({
   dismissedCrisisCards,
   reactions,
   speakingMessageId,
+  preparingSpeechId,
   companionAvatarSource,
   companionName,
   showTimestamps = false,
@@ -1255,6 +1257,7 @@ function MessageBubble({
       {!isUser && !message.isPending && (() => {
         const activeReaction = reactions.get(message.id);
         const isSpeaking = speakingMessageId === message.id;
+        const isPreparingSpeech = preparingSpeechId === message.id;
         const isBookmarked = bookmarks.has(message.id);
 
         // Original Ionicons reaction set — reverted to match preferred UI
@@ -1310,15 +1313,19 @@ function MessageBubble({
 
               {/* TTS */}
               <TouchableOpacity
-                onPress={() => isSpeaking ? onStopSpeak() : onSpeak(message.id, message.text)}
+                onPress={() => (isSpeaking || isPreparingSpeech) ? onStopSpeak() : onSpeak(message.id, message.text)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel={isSpeaking ? "Stop speaking" : "Read message aloud"}
+                accessibilityLabel={isPreparingSpeech ? "Preparing voice…" : isSpeaking ? "Stop speaking" : "Read message aloud"}
               >
-                <Ionicons
-                  name={isSpeaking ? "stop-circle-outline" : "volume-high-outline"}
-                  size={18}
-                  color={isSpeaking ? "#7dd3fc" : colors.textSecondary}
-                />
+                {isPreparingSpeech ? (
+                  <ActivityIndicator size="small" color="#7dd3fc" />
+                ) : (
+                  <Ionicons
+                    name={isSpeaking ? "stop-circle-outline" : "volume-high-outline"}
+                    size={18}
+                    color={isSpeaking ? "#7dd3fc" : colors.textSecondary}
+                  />
+                )}
               </TouchableOpacity>
 
               {/* Bookmark */}
@@ -1462,6 +1469,11 @@ const MemoMessageBubble = React.memo(MessageBubble, (prev, next) => {
     const isPlaying = next.speakingMessageId === next.message.id;
     if (wasPlaying !== isPlaying) return false;
   }
+  if (prev.preparingSpeechId !== next.preparingSpeechId) {
+    const wasPreparing = prev.preparingSpeechId === prev.message.id;
+    const isPreparing = next.preparingSpeechId === next.message.id;
+    if (wasPreparing !== isPreparing) return false;
+  }
   if (prev.reactions.get(prev.message.id) !== next.reactions.get(next.message.id)) return false;
   if (prev.bookmarks.has(prev.message.id) !== next.bookmarks.has(next.message.id)) return false;
   if (prev.dismissedCrisisCards.has(prev.message.id) !== next.dismissedCrisisCards.has(next.message.id)) return false;
@@ -1557,6 +1569,11 @@ export default function ChatScreen() {
 
   // ✅ TTS state
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  // Set the instant a speaker button is tapped, cleared once audio actually
+  // starts (onStart) — shows a "preparing voice…" spinner during the
+  // network+synthesis wait instead of the "now speaking" icon appearing
+  // before any sound plays, which read as broken/unresponsive.
+  const [preparingSpeechId, setPreparingSpeechId] = useState<string | null>(null);
 
   // ✅ Chat search
   const [showSearch, setShowSearch] = useState(false);
@@ -3745,8 +3762,13 @@ export default function ChatScreen() {
           if ((handsfreeRef.current || autoReadEnabled1 === "1") && botMessage.text) {
             const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
             const l = toneContext?.user?.preferredLang ?? "en";
-            setSpeakingMessageId(botMessage.id);
-            speakMessage(botMessage.id, botMessage.text, g, l, () => setSpeakingMessageId(null), ttsRate, ttsPitch, accessToken ?? undefined);
+            setPreparingSpeechId(botMessage.id);
+            speakMessage(
+              botMessage.id, botMessage.text, g, l,
+              () => { setSpeakingMessageId(null); },
+              ttsRate, ttsPitch, accessToken ?? undefined,
+              () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
+            );
           }
         } catch (error) {
           // Undo abort — discard silently, no local fallback
@@ -3847,8 +3869,13 @@ export default function ChatScreen() {
           if ((handsfreeRef.current || autoReadEnabled2 === "1") && botMessage.text) {
             const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
             const l = toneContext?.user?.preferredLang ?? "en";
-            setSpeakingMessageId(botMessage.id);
-            speakMessage(botMessage.id, botMessage.text, g, l, () => setSpeakingMessageId(null), ttsRate, ttsPitch, accessToken ?? undefined);
+            setPreparingSpeechId(botMessage.id);
+            speakMessage(
+              botMessage.id, botMessage.text, g, l,
+              () => { setSpeakingMessageId(null); },
+              ttsRate, ttsPitch, accessToken ?? undefined,
+              () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
+            );
           }
         } finally {
           // Always release send-lock regardless of mount state
@@ -4162,20 +4189,26 @@ export default function ChatScreen() {
                 ? toneContext?.companion?.gender
                 : toneContext?.user?.gender as string | undefined;
               const lang = toneContext?.user?.preferredLang ?? "en";
-              const isCurrentlySpeaking = speakingMessageId === id;
+              const isCurrentlySpeaking = speakingMessageId === id || preparingSpeechId === id;
               if (isCurrentlySpeaking) {
                 stopSpeaking();
                 setSpeakingMessageId(null);
+                setPreparingSpeechId(null);
               } else {
-                setSpeakingMessageId(id);
-                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null), ttsRate, ttsPitch, accessToken ?? undefined);
+                setPreparingSpeechId(id);
+                speakMessage(
+                  id, text, gender, lang,
+                  () => { setSpeakingMessageId(null); },
+                  ttsRate, ttsPitch, accessToken ?? undefined,
+                  () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
+                );
               }
               setActionMessage(null);
             }}
             style={{ paddingVertical: 10 }}
           >
             <Text style={{ fontSize: 14, color: colors.textPrimary }}>
-              {speakingMessageId === actionMessage.id ? "Stop speaking" : "Speak aloud 🔊"}
+              {(speakingMessageId === actionMessage.id || preparingSpeechId === actionMessage.id) ? "Stop speaking" : "Speak aloud 🔊"}
             </Text>
           </TouchableOpacity>
 
@@ -4620,6 +4653,7 @@ export default function ChatScreen() {
               dismissedCrisisCards={dismissedCrisisCards}
               reactions={reactions}
               speakingMessageId={speakingMessageId}
+              preparingSpeechId={preparingSpeechId}
               companionAvatarSource={companionAvatarSource}
               companionName={toneContext?.companion?.name?.trim() || undefined}
               onLongPress={setActionMessage}
@@ -4635,10 +4669,15 @@ export default function ChatScreen() {
                   ? toneContext?.companion?.gender
                   : toneContext?.user?.gender as string | undefined;
                 const lang = toneContext?.user?.preferredLang ?? "en";
-                setSpeakingMessageId(id);
-                speakMessage(id, text, gender, lang, () => setSpeakingMessageId(null), ttsRate, ttsPitch, accessToken ?? undefined);
+                setPreparingSpeechId(id);
+                speakMessage(
+                  id, text, gender, lang,
+                  () => { setSpeakingMessageId(null); },
+                  ttsRate, ttsPitch, accessToken ?? undefined,
+                  () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
+                );
               }}
-              onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); }}
+              onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); setPreparingSpeechId(null); }}
               onBookmark={handleToggleBookmark}
               onReact={addReaction}
               showTimestamps={showMsgTimestamps}

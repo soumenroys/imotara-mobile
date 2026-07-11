@@ -8,9 +8,9 @@
 //
 // English is always available natively on iOS and Android — Azure is never called for English.
 
-import * as Speech     from "expo-speech";
-import { Audio }       from "expo-av";
-import * as FileSystem from "expo-file-system/legacy";
+import * as Speech        from "expo-speech";
+import { Audio }          from "expo-av";
+import { File, Paths }    from "expo-file-system";
 import { fetchWithTimeout } from "../fetchWithTimeout";
 
 // ── BCP-47 map ────────────────────────────────────────────────────────────────
@@ -26,6 +26,63 @@ const LANG_TO_BCP47: Record<string, string> = {
 
 export function toBCP47(lang: string): string {
     return LANG_TO_BCP47[lang] ?? "en-US";
+}
+
+// ── Script detection ──────────────────────────────────────────────────────────
+// The chat AI replies in whatever script the user typed in, independent of the
+// static `preferredLang` app setting (which most users never touch after
+// onboarding) — so a Bengali reply sent to Azure with lang="en" gets an
+// English voice that can only pronounce the odd Latin-script word/name and
+// goes silent on the rest. Detect the reply's actual script directly instead
+// of trusting the stale preference; `fallbackLang` (preferredLang) only
+// breaks ties within a shared script (Devanagari → hi vs mr, Arabic → ar vs ur)
+// and covers pure-Latin-script languages (es/fr/de/pt/id) that look identical
+// to English at the codepoint level.
+const SCRIPT_RANGES: Array<{ lang: string; re: RegExp }> = [
+    { lang: "bn", re: /[ঀ-৿]/g },
+    { lang: "hi", re: /[ऀ-ॿ]/g }, // Devanagari — hi or mr
+    { lang: "ta", re: /[஀-௿]/g },
+    { lang: "te", re: /[ఀ-౿]/g },
+    { lang: "gu", re: /[઀-૿]/g },
+    { lang: "pa", re: /[਀-੿]/g },
+    { lang: "kn", re: /[ಀ-೿]/g },
+    { lang: "ml", re: /[ഀ-ൿ]/g },
+    { lang: "or", re: /[଀-୿]/g },
+    { lang: "ar", re: /[؀-ۿ]/g }, // Arabic script — ar or ur
+    { lang: "ja", re: /[぀-ヿ]/g }, // Hiragana/Katakana — checked before CJK
+    { lang: "zh", re: /[一-鿿]/g },
+    { lang: "he", re: /[֐-׿]/g },
+    { lang: "ru", re: /[Ѐ-ӿ]/g },
+];
+
+// Urdu shares the Arabic block but adds a handful of extension letters Arabic
+// doesn't use. Marathi has no character exclusive to it at all (identical
+// Devanagari alphabet to Hindi) — only common function words distinguish it,
+// and matching must NOT use \b word boundaries: JS's default \w is ASCII-only,
+// so \b never fires around Devanagari/Bengali/etc. text and silently fails to
+// match anything, which is why an earlier version of this fix passed all
+// tests except Marathi until switching to plain substring matching.
+const URDU_HINT    = /[ٹڈڑںے]/;
+const MARATHI_HINT = /आहे|नाही|माझ[ेा]|तुझ[ेा]|होत[ेी]|मी |तुम्ही/;
+
+/** Detect the dominant non-Latin script in `text`; falls back to `fallbackLang` when the text is pure Latin script or empty. */
+export function detectMessageLang(text: string, fallbackLang: string): string {
+    let best: { lang: string; count: number } | null = null;
+    for (const { lang, re } of SCRIPT_RANGES) {
+        const count = text.match(re)?.length ?? 0;
+        if (count > 0 && (!best || count > best.count)) best = { lang, count };
+    }
+    if (!best) return fallbackLang; // pure Latin script — trust the app setting
+
+    if (best.lang === "hi") {
+        if (MARATHI_HINT.test(text)) return "mr";
+        return fallbackLang === "mr" ? "mr" : "hi";
+    }
+    if (best.lang === "ar") {
+        if (URDU_HINT.test(text)) return "ur";
+        return fallbackLang === "ur" ? "ur" : "ar";
+    }
+    return best.lang;
 }
 
 // ── Preview text ──────────────────────────────────────────────────────────────
@@ -70,7 +127,9 @@ const NOVELTY_VOICE_PAT = /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|de
 
 let _speakingId:  string | null          = null;
 let _soundObject: Audio.Sound | null     = null;
-let _fetchAbort:  AbortController | null = null; // cancels in-flight TTS API fetch
+let _fetchAbort:  AbortController | null = null; // cancels in-flight TTS API fetch(es)
+let _generation                          = 0;    // bumped on stop/supersede — chunk loops check this to bail out
+let _resolveCurrentChunk: (() => void) | null = null; // lets stopAll() unstick an in-flight chunk-playback await
 
 // ── Native voice availability ─────────────────────────────────────────────────
 
@@ -159,6 +218,7 @@ function apiBase(): string {
 }
 
 async function stopAll(): Promise<void> {
+    _generation++; // invalidates any in-flight speakMessage chunk loop
     _fetchAbort?.abort();
     _fetchAbort = null;
     Speech.stop();
@@ -166,7 +226,100 @@ async function stopAll(): Promise<void> {
         await _soundObject.unloadAsync().catch(() => {});
         _soundObject = null;
     }
+    if (_resolveCurrentChunk) {
+        const resolve = _resolveCurrentChunk;
+        _resolveCurrentChunk = null;
+        resolve(); // wake up a chunk loop that's mid-`await playChunkAndWait(...)`
+    }
     _speakingId = null;
+}
+
+/**
+ * Splits text into sentence-sized chunks so speakMessage can pipeline
+ * fetch+playback: the first chunk is capped small so speech starts as soon
+ * as Azure returns the first sentence, instead of waiting for the whole
+ * reply to synthesize. Later chunks are capped larger to limit round trips
+ * on long replies. A short reply naturally produces just one chunk.
+ */
+function splitIntoSpeechChunks(text: string, firstMax = 110, restMax = 240): string[] {
+    // Terminators: Latin . ! ? — Devanagari (hi/mr/bn etc.) । — Urdu ۔ —
+    // Arabic ؟ — CJK ideographic 。 and fullwidth ！？ (zh/ja).
+    const sentences = text.match(/[^.!?।۔؟。！？]+[.!?।۔؟。！？]*\s*/g) ?? [text];
+    const chunks: string[] = [];
+    let current = "";
+    for (const sentence of sentences) {
+        const limit = chunks.length === 0 ? firstMax : restMax;
+        if (current && current.length + sentence.length > limit) {
+            chunks.push(current.trim());
+            current = sentence;
+        } else {
+            current += sentence;
+        }
+    }
+    if (current.trim()) chunks.push(current.trim());
+    return chunks.length > 0 ? chunks : [text];
+}
+
+async function fetchChunkAudio(
+    text: string,
+    lang: string,
+    gender: string | undefined,
+    accessToken: string | undefined,
+    signal: AbortSignal,
+): Promise<ArrayBuffer> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+    const res = await fetch(
+        `${apiBase()}/api/tts`,
+        { method: "POST", headers, body: JSON.stringify({ text, lang, gender: gender ?? "neutral" }), signal },
+    );
+    if (!res.ok) throw new Error(`TTS API ${res.status}`);
+    return res.arrayBuffer();
+}
+
+/**
+ * Plays one chunk's audio file and resolves when it finishes naturally, or
+ * when stopAll() unsticks it. Deletes the file once playback is done with it
+ * — the two alternating filenames already bound total storage, but the file
+ * should still be removed rather than left for the next overwrite.
+ */
+function playChunkAndWait(file: File, rate: number, onStart?: () => void): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+        _resolveCurrentChunk = resolve;
+        (async () => {
+            try {
+                await Audio.setAudioModeAsync({
+                    allowsRecordingIOS:         false,
+                    playsInSilentModeIOS:       true,
+                    playThroughEarpieceAndroid: false,
+                    staysActiveInBackground:    true,
+                });
+                const { sound } = await Audio.Sound.createAsync(
+                    { uri: file.uri },
+                    { shouldPlay: true, rate: isFinite(rate) ? rate : 0.95, volume: 1.0 },
+                );
+                _soundObject = sound;
+                onStart?.();
+                sound.setOnPlaybackStatusUpdate((status) => {
+                    if (!status.isLoaded) return;
+                    if (status.didJustFinish) {
+                        sound.unloadAsync()
+                            .catch(() => {})
+                            .finally(() => {
+                                try { file.delete(); } catch {}
+                                if (_soundObject === sound) _soundObject = null;
+                                if (_resolveCurrentChunk === resolve) _resolveCurrentChunk = null;
+                                resolve();
+                            });
+                    }
+                });
+            } catch (err) {
+                try { file.delete(); } catch {}
+                if (_resolveCurrentChunk === resolve) _resolveCurrentChunk = null;
+                reject(err);
+            }
+        })();
+    });
 }
 
 /**
@@ -202,10 +355,9 @@ async function synthesizeViaAzure(text: string, lang: string, gender: string | u
 
     if (!res.ok) throw new Error(`TTS API ${res.status}`);
     const arrayBuf = await res.arrayBuffer();
-    const base64   = Buffer.from(arrayBuf).toString("base64");
-    const tmpPath  = (FileSystem.cacheDirectory ?? "") + "imotara_tts_preview.mp3";
-    await FileSystem.writeAsStringAsync(tmpPath, base64, { encoding: FileSystem.EncodingType.Base64 });
-    await playSound(tmpPath, onDone, rate);
+    const file     = new File(Paths.cache, "imotara_tts_preview.mp3");
+    file.write(new Uint8Array(arrayBuf));
+    await playSound(file.uri, () => { try { file.delete(); } catch {} onDone?.(); }, rate);
 }
 
 async function playSound(uri: string, onDone?: () => void, rate = 0.95): Promise<void> {
@@ -247,6 +399,11 @@ export async function speakMessage(
     rate = 0.95,
     pitch = 1.0,
     accessToken?: string,
+    // Fires the moment audio actually starts (first chunk playing, or native
+    // fallback engaged) — distinct from onDone, so callers can show a
+    // "preparing voice…" state during the network+synthesis wait instead of
+    // a misleading "now speaking" state that shows before any sound plays.
+    onStart?: () => void,
 ): Promise<void> {
     const isSpeaking = await Speech.isSpeakingAsync();
     if (isSpeaking || _soundObject) {
@@ -257,42 +414,59 @@ export async function speakMessage(
 
     _speakingId = messageId;
 
+    // The reply's actual script may not match the passed-in `lang` (the app's
+    // static preferredLang setting) — see detectMessageLang's doc comment.
+    lang = detectMessageLang(text, lang);
+
+    const myGen      = ++_generation;
+    const controller = new AbortController();
+    _fetchAbort      = controller;
+    // Ceiling across the whole chunked sequence, not per-chunk — a long reply
+    // legitimately takes longer in total even though each chunk is quick.
+    const timer = setTimeout(() => controller.abort(), 45_000);
+
+    const chunks = splitIntoSpeechChunks(stripMarkdown(text));
+    console.log(`[mobileTTS] speakMessage start lang=${lang} textLen=${text.length} chunks=${chunks.length}`);
+
     // Always use Azure Neural TTS — native Speech.speak() ignores gender,
     // so the companion voice setting would be silently overridden by the device default.
     try {
-        // Create a combined abort controller: stops on user-cancel OR 20s timeout.
-        _fetchAbort?.abort();
-        const abort   = new AbortController();
-        _fetchAbort   = abort;
-        const timer   = setTimeout(() => abort.abort(), 20_000);
+        // Pipeline: fetch chunk N+1 while chunk N plays, so speech starts as
+        // soon as the first (small) chunk is ready instead of waiting for the
+        // entire reply to synthesize.
+        let nextFetch: Promise<ArrayBuffer> | null =
+            fetchChunkAudio(chunks[0], lang, gender, accessToken, controller.signal);
 
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+        for (let i = 0; i < chunks.length; i++) {
+            if (myGen !== _generation) return; // stopped/superseded
 
-        let res: Response;
-        try {
-            res = await fetch(
-                `${apiBase()}/api/tts`,
-                { method: "POST", headers, body: JSON.stringify({ text: stripMarkdown(text), lang, gender: gender ?? "neutral" }), signal: abort.signal },
-            );
-        } finally {
-            clearTimeout(timer);
+            const t0  = Date.now();
+            const buf = await nextFetch!;
+            console.log(`[mobileTTS] chunk ${i + 1}/${chunks.length} fetched in ${Date.now() - t0}ms bytes=${buf.byteLength}`);
+
+            if (myGen !== _generation) return;
+
+            nextFetch = i + 1 < chunks.length
+                ? fetchChunkAudio(chunks[i + 1], lang, gender, accessToken, controller.signal)
+                : null;
+
+            // Alternate filenames so writing the prefetched next chunk never
+            // clobbers the file the previous chunk might still be playing.
+            const file = new File(Paths.cache, `imotara_tts_${i % 2}.mp3`);
+            file.write(new Uint8Array(buf));
+            await playChunkAndWait(file, rate, i === 0 ? onStart : undefined);
+
+            if (myGen !== _generation) return;
         }
 
-        // If stop was called while fetching, bail out now.
-        if (_fetchAbort !== abort) return;
-        _fetchAbort = null;
-
-        if (!res.ok) throw new Error(`TTS API ${res.status}`);
-        const arrayBuf = await res.arrayBuffer();
-        const base64   = Buffer.from(arrayBuf).toString("base64");
-        // Write to a real temp file — data URIs are unreliable on Android MediaPlayer
-        const tmpPath  = (FileSystem.cacheDirectory ?? "") + "imotara_tts.mp3";
-        await FileSystem.writeAsStringAsync(tmpPath, base64, {
-            encoding: FileSystem.EncodingType.Base64,
-        });
-        await playSound(tmpPath, onDone, rate);
+        clearTimeout(timer);
+        if (_fetchAbort === controller) _fetchAbort = null;
+        _speakingId = null;
+        onDone?.();
     } catch (err: unknown) {
+        clearTimeout(timer);
+        if (myGen !== _generation) return; // stopped/superseded — no fallback needed
+
         // User-initiated stop: abort throws DOMException "AbortError" — don't fall back.
         if (err instanceof Error && err.name === "AbortError") {
             _speakingId = null;
@@ -306,6 +480,7 @@ export async function speakMessage(
             playThroughEarpieceAndroid: false,
             staysActiveInBackground:    false,
         }).catch(() => {});
+        onStart?.();
         Speech.speak(text, {
             language: toBCP47(lang),
             pitch:    isFinite(pitch) ? pitch : 1.0,
@@ -416,10 +591,23 @@ export async function speakPreview(
 }
 
 export function stopSpeaking(): void {
+    // Mirrors stopAll()'s cancellation (bump generation, abort in-flight
+    // fetch, wake a hung chunk-playback await) — this is a separate public
+    // entry point the UI calls directly, so without the same bookkeeping a
+    // chunked speakMessage() loop would hang forever mid-await and its
+    // prefetch would keep running after the user thought playback stopped.
+    _generation++;
+    _fetchAbort?.abort();
+    _fetchAbort = null;
     Speech.stop();
     _soundObject?.unloadAsync().catch(() => {});
     _soundObject = null;
-    _speakingId  = null;
+    if (_resolveCurrentChunk) {
+        const resolve = _resolveCurrentChunk;
+        _resolveCurrentChunk = null;
+        resolve();
+    }
+    _speakingId = null;
 }
 
 export function currentSpeakingId(): string | null {
