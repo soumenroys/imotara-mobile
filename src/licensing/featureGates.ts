@@ -104,6 +104,19 @@ const ALL: Record<LicenseTier, Set<FeatureKey>> = {
     ]),
 };
 
+// Soft launch (2026-07): mirrors web's license_mode="off" (see serverGate.ts) —
+// every mobile user gets the individual Plus/Pro consumer experience for free
+// right now, by evaluating gates as if every tier were PREMIUM ("Pro" in the
+// reasonFor() copy below). PREMIUM deliberately does NOT include
+// MULTI_PROFILE / CHILD_SAFE_MODE / ADMIN_DASHBOARD — those are Family/EDU/
+// Enterprise institutional entitlements, not part of "everyone gets Plus or
+// Pro," so they stay gated to their real tiers even during soft launch. The
+// user's real tier is untouched elsewhere (e.g. Settings' "Current plan"
+// still shows the truth) — only feature *checks* are bypassed. Flip to false
+// once tiers are actually sold and enforcement should start for real.
+const SOFT_LAUNCH_BYPASS_ALL_GATES = true;
+const SOFT_LAUNCH_EFFECTIVE_TIER: LicenseTier = "PREMIUM";
+
 /**
  * Central feature gate resolver.
  * Always call this rather than sprinkling `tier === ...` checks around the app.
@@ -112,7 +125,7 @@ export function gate(
     feature: FeatureKey,
     tier: LicenseTier | undefined | null
 ): FeatureGateResult {
-    const t: LicenseTier = tier ?? "FREE";
+    const t: LicenseTier = SOFT_LAUNCH_BYPASS_ALL_GATES ? SOFT_LAUNCH_EFFECTIVE_TIER : (tier ?? "FREE");
 
     // Parameterized gates first
     if (feature === "HISTORY_DAYS_LIMIT") {
