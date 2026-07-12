@@ -118,6 +118,7 @@ import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { detectCountryCode } from "../lib/safety/detectCountry";
 import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adultContentGuard";
 import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
+import { isEnabled as isFeatureEnabled } from "../licensing/featureGates";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ── Sentiment seed chips — quick-tap mood starters ────────────────────────────
@@ -3768,6 +3769,8 @@ export default function ChatScreen() {
               () => { setSpeakingMessageId(null); },
               ttsRate, ttsPitch, accessToken ?? undefined,
               () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
+              isFeatureEnabled("TTS_ADVANCED", licenseTier),
+              () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
             );
           }
         } catch (error) {
@@ -3875,6 +3878,8 @@ export default function ChatScreen() {
               () => { setSpeakingMessageId(null); },
               ttsRate, ttsPitch, accessToken ?? undefined,
               () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
+              isFeatureEnabled("TTS_ADVANCED", licenseTier),
+              () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
             );
           }
         } finally {
@@ -4201,6 +4206,8 @@ export default function ChatScreen() {
                   () => { setSpeakingMessageId(null); },
                   ttsRate, ttsPitch, accessToken ?? undefined,
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
+                  isFeatureEnabled("TTS_ADVANCED", licenseTier),
+                  () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
                 );
               }
               setActionMessage(null);
@@ -4675,6 +4682,8 @@ export default function ChatScreen() {
                   () => { setSpeakingMessageId(null); },
                   ttsRate, ttsPitch, accessToken ?? undefined,
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
+                  isFeatureEnabled("TTS_ADVANCED", licenseTier),
+                  () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
                 );
               }}
               onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); setPreparingSpeechId(null); }}

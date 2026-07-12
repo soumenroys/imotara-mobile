@@ -45,13 +45,13 @@ export const Toast = forwardRef<ToastHandle>(function Toast(_, ref) {
         Animated.timing(translateY, { toValue: 0, duration: 220, useNativeDriver: true }),
       ]).start();
 
-      // Auto-dismiss after 3.5s
+      // Auto-dismiss after 6s
       timerRef.current = setTimeout(() => {
         Animated.parallel([
           Animated.timing(opacity, { toValue: 0, duration: 280, useNativeDriver: true }),
           Animated.timing(translateY, { toValue: 12, duration: 280, useNativeDriver: true }),
         ]).start();
-      }, 3500);
+      }, 6000);
     },
   }));
 

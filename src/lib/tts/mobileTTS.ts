@@ -385,6 +385,44 @@ async function playSound(uri: string, onDone?: () => void, rate = 0.95): Promise
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+/** Plays `text` with the on-device voice engine — shared by the Free-tier gate and the Azure-failure fallback below. */
+async function playNativeFallback(
+    text: string,
+    lang: string,
+    rate: number,
+    pitch: number,
+    onDone?: () => void,
+    onStart?: () => void,
+    // Fires instead of speaking when the device has no installed voice for
+    // `lang` — some Android TTS engines (notably Samsung's) silently produce
+    // no sound at all in this case rather than erroring or falling back to a
+    // different language, so callers need an explicit signal to tell the
+    // user rather than leaving them staring at a silently-reset UI.
+    onUnavailable?: () => void,
+): Promise<void> {
+    if (!(await hasNativeVoice(lang))) {
+        onUnavailable?.();
+        _speakingId = null;
+        onDone?.();
+        return;
+    }
+    // Ensure audio plays even in silent mode before using native TTS
+    await Audio.setAudioModeAsync({
+        allowsRecordingIOS:         false,
+        playsInSilentModeIOS:       true,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground:    false,
+    }).catch(() => {});
+    onStart?.();
+    Speech.speak(text, {
+        language: toBCP47(lang),
+        pitch:    isFinite(pitch) ? pitch : 1.0,
+        rate:     isFinite(rate) ? rate : 0.95,
+        onDone:  () => { _speakingId = null; onDone?.(); },
+        onError: () => { _speakingId = null; onDone?.(); },
+    });
+}
+
 /**
  * Speak a chat message aloud.
  * Uses native TTS when available, calls /api/tts for languages not on the device.
@@ -404,6 +442,16 @@ export async function speakMessage(
     // "preparing voice…" state during the network+synthesis wait instead of
     // a misleading "now speaking" state that shows before any sound plays.
     onStart?: () => void,
+    // Gate for Azure Neural TTS (the TTS_ADVANCED feature — Plus and above).
+    // Defaults to true so existing callers that don't pass it keep today's
+    // behavior; ChatScreen passes the real gate result for the chat speaker
+    // button specifically.
+    useNeuralVoice: boolean = true,
+    // Fires when playback falls back to the on-device voice AND the device
+    // has no installed voice for the message's language — see
+    // playNativeFallback's doc comment for why this needs to be explicit
+    // rather than inferred from silence.
+    onUnavailable?: () => void,
 ): Promise<void> {
     const isSpeaking = await Speech.isSpeakingAsync();
     if (isSpeaking || _soundObject) {
@@ -417,6 +465,13 @@ export async function speakMessage(
     // The reply's actual script may not match the passed-in `lang` (the app's
     // static preferredLang setting) — see detectMessageLang's doc comment.
     lang = detectMessageLang(text, lang);
+
+    if (!useNeuralVoice) {
+        // Free tier — device voice only, matching the TTS_ADVANCED gate.
+        console.log("[mobileTTS] TTS_ADVANCED gate closed — using native device voice");
+        await playNativeFallback(text, lang, rate, pitch, onDone, onStart, onUnavailable);
+        return;
+    }
 
     const myGen      = ++_generation;
     const controller = new AbortController();
@@ -473,21 +528,7 @@ export async function speakMessage(
             return;
         }
         console.warn("[mobileTTS] Azure TTS failed, falling back to native:", err);
-        // Ensure audio plays even in silent mode before using native TTS
-        await Audio.setAudioModeAsync({
-            allowsRecordingIOS:         false,
-            playsInSilentModeIOS:       true,
-            playThroughEarpieceAndroid: false,
-            staysActiveInBackground:    false,
-        }).catch(() => {});
-        onStart?.();
-        Speech.speak(text, {
-            language: toBCP47(lang),
-            pitch:    isFinite(pitch) ? pitch : 1.0,
-            rate:     isFinite(rate) ? rate : 0.95,
-            onDone:  () => { _speakingId = null; onDone?.(); },
-            onError: () => { _speakingId = null; onDone?.(); },
-        });
+        await playNativeFallback(text, lang, rate, pitch, onDone, onStart, onUnavailable);
     }
 }
 
