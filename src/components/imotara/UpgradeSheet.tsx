@@ -289,7 +289,17 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
             let serverVerified = false;
             try {
                 const productId = iosSkuToProductId(purchase.productId ?? "");
-                if (!productId) return;
+                if (!productId) {
+                    // Unmapped product ID — still finish the transaction so it doesn't
+                    // stay pending/unacknowledged (App Store/Play can auto-refund after
+                    // 3 days). We don't know if this was a token pack or subscription;
+                    // isConsumable: true is the safer guess — correct if it really was a
+                    // token pack, and a harmless no-op (same as not calling it at all) if
+                    // it was actually a subscription, since Android rejects consumeAsync
+                    // on subscription purchase tokens.
+                    try { await finishTransaction({ purchase, isConsumable: true }); } catch { /* ignore */ }
+                    return;
+                }
 
                 const isTokenPack = productId.startsWith("tokens_");
 
@@ -333,6 +343,10 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                     // ── Android: Google Play Billing verification ──────────────────
                     const purchaseToken = (purchase as any).purchaseToken ?? (purchase as any).transactionReceipt ?? "";
                     if (!purchaseToken) {
+                        // Still finish the transaction — we can't verify it server-side
+                        // without a token, but leaving it unacknowledged risks Play
+                        // auto-refunding it after 3 days.
+                        try { await finishTransaction({ purchase, isConsumable: isTokenPack }); } catch { /* ignore */ }
                         Alert.alert("Purchase error", "No purchase token received. Please try again.");
                         return;
                     }
