@@ -12,6 +12,7 @@ import React, {
     useEffect,
     useState,
     useCallback,
+    useRef,
 } from "react";
 import { Alert, Linking, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -70,6 +71,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [status, setStatus] = useState<AuthStatus>("loading");
     const [appleAvailable, setAppleAvailable] = useState(false);
 
+    // Epoch ms until which an incoming auth/callback deep link is expected —
+    // set right before opening the sign-in browser, cleared once consumed.
+    // Without this, an attacker who signs up normally and grabs their own
+    // valid tokens can craft imotara://auth/callback#access_token=...&refresh_token=...
+    // and deliver it via SMS/email/QR; tapping it would silently sign the
+    // victim into the attacker's account (session fixation) since nothing
+    // previously verified the callback corresponded to a locally-initiated
+    // sign-in. 0 = not currently expecting a callback (default/rejects).
+    const expectingAuthCallbackUntil = useRef(0);
+
     // Check Apple Sign In availability once on mount
     useEffect(() => {
         if (Platform.OS === "ios") {
@@ -118,6 +129,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const handleAuthUrl = async (url: string) => {
             if (!url.includes("auth/callback")) return;
+            // Reject any callback that doesn't correspond to a sign-in this
+            // app actually started — see expectingAuthCallbackUntil's comment.
+            if (Date.now() > expectingAuthCallbackUntil.current) return;
+            expectingAuthCallbackUntil.current = 0; // single-use
             try {
                 const u = new URL(url);
                 const src = u.hash.startsWith("#") ? u.hash.slice(1) : u.search.startsWith("?") ? u.search.slice(1) : "";
@@ -169,6 +184,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return { success: false };
             }
 
+            // Arm the deep-link gate — see expectingAuthCallbackUntil's comment.
+            // A 2-minute window comfortably covers a normal sign-in flow.
+            expectingAuthCallbackUntil.current = Date.now() + 120_000;
+
             // callbackURLScheme:"imotara" tells ASWebAuthenticationSession (iOS) to
             // intercept ANY navigation to imotara://, including the relay page's redirect.
             const result = await WebBrowser.openAuthSessionAsync(
@@ -178,7 +197,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             if (result.type === "success" && result.url) {
                 // iOS path: relay page redirected to imotara://auth/callback#<tokens>
-                // and ASWebAuthenticationSession intercepted it synchronously.
+                // and ASWebAuthenticationSession intercepted it synchronously — this
+                // result is scoped to the openAuthSessionAsync call above, not the
+                // global Linking listener, so it's inherently tied to this flow already.
+                expectingAuthCallbackUntil.current = 0; // consumed — close the window
                 const u = new URL(result.url);
                 const src = u.hash.startsWith("#") ? u.hash.slice(1) : u.search.startsWith("?") ? u.search.slice(1) : "";
                 const params = new URLSearchParams(src);
