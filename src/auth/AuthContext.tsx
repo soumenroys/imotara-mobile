@@ -48,7 +48,8 @@ export type AuthContextValue = {
      * accountable, recoverable-across-reinstall account" — merging the two
      * would silently let anonymous identities into money-moving flows they
      * were never designed for. Use this ONLY for narrowly-scoped guest
-     * features (currently: chat TTS); use accessToken for everything else.
+     * features (currently: chat TTS, voice-input transcription); use
+     * accessToken for everything else.
      */
     anonymousAccessToken: string | null;
     /** Returns {success:true} if a session was established synchronously, {success:false} otherwise.

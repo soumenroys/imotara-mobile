@@ -16,6 +16,7 @@ import {
 } from "../../data/settingsCatalog";
 import { buildApiUrl } from "../../config/api";
 import { fetchWithTimeout } from "../../lib/fetchWithTimeout";
+import { useAuth } from "../../auth/AuthContext";
 
 type Props = {
   onResultSelect: (sectionKey: string, settingId: string) => void;
@@ -23,6 +24,8 @@ type Props = {
 
 export default function SettingsSearch({ onResultSelect }: Props) {
   const colors = useColors();
+  const { accessToken, anonymousAccessToken } = useAuth();
+  const guestAccessToken = accessToken ?? anonymousAccessToken ?? undefined;
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -50,7 +53,14 @@ export default function SettingsSearch({ onResultSelect }: Props) {
     try {
       const res = await fetchWithTimeout(
         buildApiUrl("/api/settings-search"),
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) },
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(guestAccessToken ? { Authorization: `Bearer ${guestAccessToken}` } : {}),
+          },
+          body: JSON.stringify({ query: q }),
+        },
         6_000,
       );
       if (res.ok) {
@@ -69,7 +79,7 @@ export default function SettingsSearch({ onResultSelect }: Props) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [guestAccessToken]);
 
   const handleChange = useCallback((text: string) => {
     setQuery(text);

@@ -1499,6 +1499,16 @@ export default function ChatScreen() {
   const { isDark, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
 
+  // ── Auth: get Supabase session token for mobile API calls ──────────────────
+  // Declared early — used by useVoiceInput below, which is set up before the
+  // rest of the component's hooks.
+  const { accessToken, anonymousAccessToken } = useAuth();
+  // Real accessToken wins when signed in; anonymousAccessToken covers guests
+  // (TTS + voice-input only — see anonymousAccessToken's doc comment in
+  // AuthContext.tsx for why this must not be used for anything beyond these
+  // narrow, free-to-everyone purposes).
+  const guestAccessToken = accessToken ?? anonymousAccessToken ?? undefined;
+
   // Companion quick panel — opened by swiping right from the left edge strip
   const [companionPanelVisible, setCompanionPanelVisible] = useState(false);
   const companionPanelVisibleRef = useRef(false);
@@ -1758,7 +1768,7 @@ export default function ChatScreen() {
   const voiceInput = useVoiceInput(
     onTranscript,
     process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL,
-    { maxDurationMs: voiceMaxDurationMs, quality: voiceQuality, cloudTranscription: voiceCloudTranscription, lang: voiceLang },
+    { maxDurationMs: voiceMaxDurationMs, quality: voiceQuality, cloudTranscription: voiceCloudTranscription, lang: voiceLang, accessToken: guestAccessToken },
   );
 
   // voiceStateRef keeps the live recording state accessible from callbacks that
@@ -2239,13 +2249,6 @@ export default function ChatScreen() {
       .then((v) => setShowMsgTimestamps(v === null ? true : v === "1"))
       .catch(() => {});
   }, []);
-
-  // ── Auth: get Supabase session token for mobile API calls ──────────────────
-  const { accessToken, anonymousAccessToken } = useAuth();
-  // Real accessToken wins when signed in; anonymousAccessToken covers guests
-  // (TTS-only — see anonymousAccessToken's doc comment in AuthContext.tsx for
-  // why this must not be used for anything beyond this narrow purpose).
-  const ttsAccessToken = accessToken ?? anonymousAccessToken ?? undefined;
 
   // Weekly mood recap — compute from history once it's loaded
   useEffect(() => {
@@ -3771,7 +3774,7 @@ export default function ChatScreen() {
             speakMessage(
               botMessage.id, botMessage.text, g, l,
               () => { setSpeakingMessageId(null); },
-              ttsRate, ttsPitch, ttsAccessToken,
+              ttsRate, ttsPitch, guestAccessToken,
               () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
               isFeatureEnabled("TTS_ADVANCED", licenseTier),
               () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
@@ -3880,7 +3883,7 @@ export default function ChatScreen() {
             speakMessage(
               botMessage.id, botMessage.text, g, l,
               () => { setSpeakingMessageId(null); },
-              ttsRate, ttsPitch, ttsAccessToken,
+              ttsRate, ttsPitch, guestAccessToken,
               () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
               isFeatureEnabled("TTS_ADVANCED", licenseTier),
               () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
@@ -4208,7 +4211,7 @@ export default function ChatScreen() {
                 speakMessage(
                   id, text, gender, lang,
                   () => { setSpeakingMessageId(null); },
-                  ttsRate, ttsPitch, ttsAccessToken,
+                  ttsRate, ttsPitch, guestAccessToken,
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
                   isFeatureEnabled("TTS_ADVANCED", licenseTier),
                   () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
@@ -4684,7 +4687,7 @@ export default function ChatScreen() {
                 speakMessage(
                   id, text, gender, lang,
                   () => { setSpeakingMessageId(null); },
-                  ttsRate, ttsPitch, ttsAccessToken,
+                  ttsRate, ttsPitch, guestAccessToken,
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
                   isFeatureEnabled("TTS_ADVANCED", licenseTier),
                   () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),

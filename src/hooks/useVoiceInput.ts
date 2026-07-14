@@ -33,6 +33,9 @@ export type VoiceInputOptions = {
     quality?: "high" | "low";
     cloudTranscription?: boolean;
     lang?: string;
+    /** Real accessToken if signed in, else the anonymous identity's token —
+     *  /api/voice/transcribe requires some identity (no longer open/unauthenticated). */
+    accessToken?: string;
 };
 
 /**
@@ -49,6 +52,7 @@ async function transcribeAudio(
     apiBaseUrl: string,
     lang: string,
     mimeType: string,
+    accessToken?: string,
 ): Promise<string> {
     const endpoint = `${apiBaseUrl}/api/voice/transcribe`;
 
@@ -61,6 +65,7 @@ async function transcribeAudio(
         fieldName: "file",
         mimeType,
         parameters: { lang },
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     });
 
     if (uploadResult.status === 503) {
@@ -96,6 +101,9 @@ export function useVoiceInput(
     const langRef = useRef(opts?.lang ?? "en");
     const optsLang = opts?.lang;
     useEffect(() => { langRef.current = optsLang ?? "en"; }, [optsLang]);
+    const accessTokenRef = useRef(opts?.accessToken);
+    const optsAccessToken = opts?.accessToken;
+    useEffect(() => { accessTokenRef.current = optsAccessToken; }, [optsAccessToken]);
     const [state, setState] = useState<VoiceInputState>("idle");
     const [durationMs, setDurationMs] = useState(0);
     const recordingRef = useRef<Audio.Recording | null>(null);
@@ -153,7 +161,7 @@ export function useVoiceInput(
                     // All presets produce MPEG_4/AAC/.m4a on both platforms.
                     // (Android LOW_QUALITY is overridden at record time to avoid
                     // THREE_GPP/3gp which Whisper v1 does not accept.)
-                    transcript = await transcribeAudio(uri, apiBaseUrl!, langRef.current, "audio/m4a");
+                    transcript = await transcribeAudio(uri, apiBaseUrl!, langRef.current, "audio/m4a", accessTokenRef.current);
                 } catch (err: any) {
                     console.warn("[useVoiceInput] Transcription failed:", err);
                     if (err?.message === "quota_exceeded") {
