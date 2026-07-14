@@ -38,6 +38,19 @@ export type AuthContextValue = {
     session: Session | null;
     /** Supabase JWT — pass as Authorization: Bearer header to /api/respond */
     accessToken: string | null;
+    /**
+     * Real Supabase JWT for a signed-out user's anonymous identity —
+     * intentionally NOT the same as accessToken. Every guest gets a real,
+     * persistent (but anonymous) Supabase session so auth-gated-but-free
+     * features like TTS work without requiring signup, but dozens of call
+     * sites elsewhere (Connect wallet/payouts/sessions, "sign in to restore
+     * your plan") already treat `accessToken` truthy as "this is a real,
+     * accountable, recoverable-across-reinstall account" — merging the two
+     * would silently let anonymous identities into money-moving flows they
+     * were never designed for. Use this ONLY for narrowly-scoped guest
+     * features (currently: chat TTS); use accessToken for everything else.
+     */
+    anonymousAccessToken: string | null;
     /** Returns {success:true} if a session was established synchronously, {success:false} otherwise.
      *  On Android the session may still arrive async via onAuthStateChange after success:false. */
     signInWithGoogle: () => Promise<{ success: boolean }>;
@@ -54,6 +67,7 @@ const AuthContext = createContext<AuthContextValue>({
     user: null,
     session: null,
     accessToken: null,
+    anonymousAccessToken: null,
     signInWithGoogle: async () => ({ success: false }),
     signInWithApple: async () => {},
     signOut: async () => {},
@@ -70,6 +84,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [status, setStatus] = useState<AuthStatus>("loading");
     const [appleAvailable, setAppleAvailable] = useState(false);
+    const [anonymousToken, setAnonymousToken] = useState<string | null>(null);
+    const anonymousSignInInFlight = useRef(false);
 
     // Epoch ms until which an incoming auth/callback deep link is expected —
     // set right before opening the sign-in browser, cleared once consumed.
@@ -90,24 +106,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
-    // Restore persisted session on mount, then subscribe to auth state changes
+    // Restore persisted session on mount, then subscribe to auth state changes.
+    // Anonymous sessions are routed to anonymousToken only — session/status/
+    // accessToken keep representing "real signed-in or not," exactly as
+    // before, so every existing accessToken-truthy check elsewhere in the
+    // app (Connect wallet/payouts, "sign in to restore your plan", etc.)
+    // stays unaffected. See anonymousAccessToken's doc comment for why.
     useEffect(() => {
+        const applySession = (s: Session | null) => {
+            if (s?.user?.is_anonymous) {
+                setAnonymousToken(s.access_token);
+                setSession(null);
+                setStatus("unauthenticated");
+                return;
+            }
+            setAnonymousToken(null);
+            setSession(s);
+            setStatus(s ? "authenticated" : "unauthenticated");
+
+            if (!s && !anonymousSignInInFlight.current) {
+                // No real session (fresh install, explicit sign-out, or an
+                // anonymous session that expired) — establish a fresh
+                // anonymous identity so guest features like TTS keep
+                // working. The result re-enters this function via
+                // onAuthStateChange below.
+                anonymousSignInInFlight.current = true;
+                supabase.auth.signInAnonymously()
+                    .catch((err) => console.warn("[Auth] Anonymous sign-in failed:", err))
+                    .finally(() => { anonymousSignInInFlight.current = false; });
+            }
+        };
+
         supabase.auth.getSession().then(({ data }) => {
-            setSession(data.session);
-            setStatus(data.session ? "authenticated" : "unauthenticated");
+            applySession(data.session);
         }).catch(() => {
             // Network error or Supabase outage — treat as unauthenticated so
             // the app is usable rather than stuck on "loading" forever.
-            setStatus("unauthenticated");
+            applySession(null);
         });
 
         const { data: listener } = supabase.auth.onAuthStateChange(
             (_event, newSession) => {
-                setSession(newSession);
-                setStatus(newSession ? "authenticated" : "unauthenticated");
+                applySession(newSession);
 
-                // LIC-4: seed free license row on sign-in (no-op if already exists)
-                if (newSession?.access_token) {
+                // LIC-4: seed free license row on sign-in (no-op if already
+                // exists) — real sign-ins only. Anonymous identities are
+                // already treated as free-tier by a missing license row
+                // (see chat-reply's quota logic), so seeding one for a
+                // throwaway anonymous account is unnecessary DB clutter.
+                if (newSession?.access_token && !newSession.user?.is_anonymous) {
                     fetchWithTimeout(buildApiUrl("/api/license/seed"), {
                         method: "POST",
                         headers: { Authorization: `Bearer ${newSession.access_token}` },
@@ -292,6 +339,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user: session?.user ?? null,
         session,
         accessToken: session?.access_token ?? null,
+        anonymousAccessToken: anonymousToken,
         signInWithGoogle,
         signInWithApple,
         signOut,
