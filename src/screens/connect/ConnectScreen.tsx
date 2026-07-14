@@ -52,7 +52,9 @@ interface Consultant {
     rating_count: number;
     sessions_completed: number;
     availability_note: string | null;
-    availability_windows: Array<{ day: string; start: string; end: string }> | null;
+    // Registration writes `days` (multi-day picker); the profile-edit UI
+    // writes singular `day` — both shapes can exist in the same DB column.
+    availability_windows: Array<{ day?: string; days?: string[]; start: string; end: string }> | null;
     preferred_lang?: string;
 }
 
@@ -1695,10 +1697,10 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                         <Text style={[s.cardBio, { marginBottom: 8, fontWeight: "600" }]}>Availability</Text>
                         {c.availability_windows && c.availability_windows.length > 0 ? (
                             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-                                {c.availability_windows.map((w: { day: string; start: string; end: string }, i: number) => (
+                                {c.availability_windows.map((w: { day?: string; days?: string[]; start: string; end: string }, i: number) => (
                                     <View key={i} style={{ backgroundColor: "rgba(139,92,246,0.12)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, flexDirection: "row", alignItems: "center", gap: 4 }}>
                                         <Text style={[s.cardBio, { fontSize: 12, color: colors.primary }]}>🕐</Text>
-                                        <Text style={[s.cardBio, { fontSize: 12 }]}>{w.day} {w.start}–{w.end}</Text>
+                                        <Text style={[s.cardBio, { fontSize: 12 }]}>{(w.days?.length ? w.days.join(", ") : w.day) ?? ""} {w.start}–{w.end}</Text>
                                     </View>
                                 ))}
                             </View>
