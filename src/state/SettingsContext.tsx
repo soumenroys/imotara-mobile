@@ -144,6 +144,8 @@ type SettingsContextValue = {
     orgName: string | null;
     /** User's role in the org: owner | admin | member | null */
     orgRole: string | null;
+    /** commercial | ngo | edu | govt | null — for a billing-type-aware badge, not just a generic one. */
+    orgBillingType: string | null;
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(
@@ -288,6 +290,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const [orgId,   setOrgId]   = useState<string | null>(null);
     const [orgName, setOrgName] = useState<string | null>(null);
     const [orgRole, setOrgRole] = useState<string | null>(null);
+    const [orgBillingType, setOrgBillingType] = useState<string | null>(null);
 
     const refreshCloudSyncAllowed = async () => {
         try {
@@ -347,13 +350,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                     const orgCtx = statusData?.org;
                     const orgName = orgCtx?.orgName ?? null;
                     const orgRole = orgCtx?.orgRole ?? null;
+                    const orgBillingType = orgCtx?.billingType ?? null;
                     setOrgId(licOrgId);
                     setOrgName(orgName);
                     setOrgRole(orgRole);
-                    await AsyncStorage.setItem(ORG_CONTEXT_KEY, JSON.stringify({ orgId: licOrgId, orgName, orgRole }));
+                    setOrgBillingType(orgBillingType);
+                    await AsyncStorage.setItem(ORG_CONTEXT_KEY, JSON.stringify({ orgId: licOrgId, orgName, orgRole, orgBillingType }));
                 } catch { /* fail open */ }
             } else {
-                setOrgId(null); setOrgName(null); setOrgRole(null);
+                setOrgId(null); setOrgName(null); setOrgRole(null); setOrgBillingType(null);
                 await AsyncStorage.removeItem(ORG_CONTEXT_KEY);
             }
         } catch {
@@ -419,6 +424,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                         if (orgCtx?.orgId)   setOrgId(orgCtx.orgId);
                         if (orgCtx?.orgName) setOrgName(orgCtx.orgName);
                         if (orgCtx?.orgRole) setOrgRole(orgCtx.orgRole);
+                        if (orgCtx?.orgBillingType) setOrgBillingType(orgCtx.orgBillingType);
                     } catch { /* ignore */ }
                 }
 
@@ -788,6 +794,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 orgId,
                 orgName,
                 orgRole,
+                orgBillingType,
             }}
         >
             {children}

@@ -11,6 +11,7 @@ import IOSTipJar from "./IOSTipJar";
 import UpgradeSheet from "./UpgradeSheet";
 import { DONATION_PRESETS } from "../../payments/donations";
 import type { LicenseTier } from "../../licensing/featureGates";
+import { orgBillingTypeMeta } from "../../lib/imotara/orgBilling";
 
 type DonationItem = { id: string; label: string; amount: number };
 const DONATE_PRESETS = DONATION_PRESETS as readonly DonationItem[];
@@ -50,6 +51,7 @@ type Props = {
   orgId?: string | null;
   orgName?: string | null;
   orgRole?: string | null;
+  orgBillingType?: string | null;
 };
 
 // ── small layout helpers ──────────────────────────────────────────────────────
@@ -77,7 +79,7 @@ export function PlanSupportQuickPanel({
   licenseTier, licenseExpiresAt,
   emotionInsightsEnabled, setEmotionInsightsEnabled,
   refreshLicense, setLicenseTier,
-  orgId, orgName, orgRole,
+  orgId, orgName, orgRole, orgBillingType,
 }: Props) {
   const colors = useColors();
   const { isDark } = useTheme();
@@ -192,16 +194,20 @@ export function PlanSupportQuickPanel({
               {tierLabel}
             </Text>
 
-            {orgName ? (
-              <View style={{ marginTop: 2, marginBottom: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 10, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Text style={{ fontSize: 11, color: colors.primary }}>🏢</Text>
-                <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>
-                  Managed by{" "}
-                  <Text style={{ fontWeight: "700", color: colors.textPrimary }}>{orgName}</Text>
-                  {orgRole ? <Text style={{ color: colors.textSecondary }}> · {orgRole}</Text> : null}
-                </Text>
-              </View>
-            ) : null}
+            {orgName ? (() => {
+              const { icon, label } = orgBillingTypeMeta(orgBillingType);
+              return (
+                <View style={{ marginTop: 2, marginBottom: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 10, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={{ fontSize: 11, color: colors.primary }}>{icon}</Text>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>
+                    Managed by{" "}
+                    <Text style={{ fontWeight: "700", color: colors.textPrimary }}>{orgName}</Text>
+                    {label ? <Text style={{ color: colors.textSecondary }}> · {label}</Text> : null}
+                    {orgRole ? <Text style={{ color: colors.textSecondary }}> · {orgRole}</Text> : null}
+                  </Text>
+                </View>
+              );
+            })() : null}
             {licenseExpiresAt ? (
               <Text style={{ fontSize: 12, color: colors.textSecondary }}>
                 {new Date(licenseExpiresAt).getTime() > Date.now()

@@ -2081,6 +2081,7 @@ export default function ChatScreen() {
     orgId,
     orgName,
     orgRole,
+    orgBillingType,
   } = useSettings();
 
 
@@ -5801,6 +5802,7 @@ export default function ChatScreen() {
         orgId={orgId}
         orgName={orgName}
         orgRole={orgRole}
+        orgBillingType={orgBillingType}
       />
     </View>
     </KeyboardAvoidingView>

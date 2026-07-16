@@ -278,6 +278,14 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
     keywords: ["sign in", "sign out", "login", "logout", "google", "apple", "account", "साइन इन", "সাইন ইন"],
   },
   {
+    id: "org_membership",
+    title: "Organization membership",
+    section: "Your plan",
+    sectionKey: "account",
+    description: "See which organization, NGO, school, or company manages your plan and your role there",
+    keywords: ["organization", "org", "ngo", "company", "school", "managed by", "who manages my plan", "enterprise", "workplace", "employer", "संगठन", "সংস্থা"],
+  },
+  {
     id: "donate",
     title: "Donate to Imotara",
     section: "Plan & support",
