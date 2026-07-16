@@ -2078,6 +2078,9 @@ export default function ChatScreen() {
 
     showSyncBadge,
     companionReactionsEnabled,
+    orgId,
+    orgName,
+    orgRole,
   } = useSettings();
 
 
@@ -2629,13 +2632,15 @@ export default function ChatScreen() {
     if (showReturnGreeting && returnGreetingEnabled) return "returnGreeting";
     if (sessionGreeting && sessionGreetingEnabled) return "sessionGreeting";
     if (showDailyCheckin && intakeStep === 0 && dailyCheckinEnabled) return "dailyCheckin";
-    if (showTrialBanner && licenseExpiresAt && trialBannerEnabled) return "trialCountdown";
+    // Org-issued licenses aren't something the member can personally renew/upgrade —
+    // a trial-expiry countdown pushing them to UpgradeSheet doesn't apply to them.
+    if (showTrialBanner && licenseExpiresAt && trialBannerEnabled && !orgId) return "trialCountdown";
     if (milestoneLoop && milestoneEnabled) return "milestoneLoop";
     if (weeklyRecap && !weeklyRecapDismissed && weeklyRecapSettingEnabled) return "weeklyRecap";
     if (collectivePulse && !pulseDismissed && collectivePulseEnabled) return "collectivePulse";
     if (!growNudgeDismissed && messages.filter((m) => m.from === "user").length >= 3) return "growNudge";
     return null;
-  }, [showReturnGreeting, returnGreetingEnabled, sessionGreeting, sessionGreetingEnabled, showDailyCheckin, dailyCheckinEnabled, intakeStep, showTrialBanner, trialBannerEnabled, licenseExpiresAt, milestoneLoop, milestoneEnabled, weeklyRecap, weeklyRecapDismissed, weeklyRecapSettingEnabled, collectivePulse, pulseDismissed, collectivePulseEnabled, growNudgeDismissed, messages]);
+  }, [showReturnGreeting, returnGreetingEnabled, sessionGreeting, sessionGreetingEnabled, showDailyCheckin, dailyCheckinEnabled, intakeStep, showTrialBanner, trialBannerEnabled, licenseExpiresAt, orgId, milestoneLoop, milestoneEnabled, weeklyRecap, weeklyRecapDismissed, weeklyRecapSettingEnabled, collectivePulse, pulseDismissed, collectivePulseEnabled, growNudgeDismissed, messages]);
 
   useEffect(() => {
     if (!isTyping) {
@@ -4647,12 +4652,14 @@ export default function ChatScreen() {
               <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 18, marginBottom: 12 }}>
                 I'm still here. My responses now come from on-device mode — a little simpler, but present.
               </Text>
-              <TouchableOpacity
-                onPress={() => setShowUpgradeSheet(true)}
-                style={{ alignSelf: "flex-start", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: "#7c3aed" }}
-              >
-                <Text style={{ fontSize: 12, fontWeight: "600", color: "#ffffff" }}>Upgrade for unlimited replies →</Text>
-              </TouchableOpacity>
+              {!orgId && (
+                <TouchableOpacity
+                  onPress={() => setShowUpgradeSheet(true)}
+                  style={{ alignSelf: "flex-start", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: "#7c3aed" }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: "#ffffff" }}>Upgrade for unlimited replies →</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             <MemoMessageBubble
@@ -5791,6 +5798,9 @@ export default function ChatScreen() {
         setEmotionInsightsEnabled={setEmotionInsightsEnabled}
         refreshLicense={refreshLicense}
         setLicenseTier={setLicenseTier}
+        orgId={orgId}
+        orgName={orgName}
+        orgRole={orgRole}
       />
     </View>
     </KeyboardAvoidingView>

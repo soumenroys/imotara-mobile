@@ -45,6 +45,11 @@ type Props = {
   setEmotionInsightsEnabled: (v: boolean) => void;
   refreshLicense: () => Promise<void>;
   setLicenseTier: (tier: LicenseTier) => void;
+  // Org-issued licenses aren't something the member can personally upgrade —
+  // used to hide the Upgrade card and show a "Managed by" note instead.
+  orgId?: string | null;
+  orgName?: string | null;
+  orgRole?: string | null;
 };
 
 // ── small layout helpers ──────────────────────────────────────────────────────
@@ -72,6 +77,7 @@ export function PlanSupportQuickPanel({
   licenseTier, licenseExpiresAt,
   emotionInsightsEnabled, setEmotionInsightsEnabled,
   refreshLicense, setLicenseTier,
+  orgId, orgName, orgRole,
 }: Props) {
   const colors = useColors();
   const { isDark } = useTheme();
@@ -186,6 +192,16 @@ export function PlanSupportQuickPanel({
               {tierLabel}
             </Text>
 
+            {orgName ? (
+              <View style={{ marginTop: 2, marginBottom: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 10, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={{ fontSize: 11, color: colors.primary }}>🏢</Text>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>
+                  Managed by{" "}
+                  <Text style={{ fontWeight: "700", color: colors.textPrimary }}>{orgName}</Text>
+                  {orgRole ? <Text style={{ color: colors.textSecondary }}> · {orgRole}</Text> : null}
+                </Text>
+              </View>
+            ) : null}
             {licenseExpiresAt ? (
               <Text style={{ fontSize: 12, color: colors.textSecondary }}>
                 {new Date(licenseExpiresAt).getTime() > Date.now()
@@ -199,30 +215,34 @@ export function PlanSupportQuickPanel({
             ) : null}
           </Card>
 
-          {/* ── Upgrade ── */}
-          <SectionTitle label="Upgrade" colors={colors} />
-          <Card colors={colors}>
-            <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, marginBottom: 4 }}>
-              Upgrade your plan
-            </Text>
-            <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
-              Unlock unlimited replies, 90-day history, all companion tones, and more.
-            </Text>
-            <TouchableOpacity
-              onPress={() => setShowUpgrade(true)}
-              style={{
-                alignSelf: "flex-start",
-                paddingHorizontal: 16, paddingVertical: 8,
-                borderRadius: 12,
-                backgroundColor: "rgba(99,102,241,0.2)",
-                borderWidth: 1, borderColor: "rgba(99,102,241,0.4)",
-              }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primary }}>
-                View plans →
-              </Text>
-            </TouchableOpacity>
-          </Card>
+          {/* ── Upgrade — hidden for org members, their plan is managed by their org ── */}
+          {!orgId && (
+            <>
+              <SectionTitle label="Upgrade" colors={colors} />
+              <Card colors={colors}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, marginBottom: 4 }}>
+                  Upgrade your plan
+                </Text>
+                <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
+                  Unlock unlimited replies, 90-day history, all companion tones, and more.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setShowUpgrade(true)}
+                  style={{
+                    alignSelf: "flex-start",
+                    paddingHorizontal: 16, paddingVertical: 8,
+                    borderRadius: 12,
+                    backgroundColor: "rgba(99,102,241,0.2)",
+                    borderWidth: 1, borderColor: "rgba(99,102,241,0.4)",
+                  }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primary }}>
+                    View plans →
+                  </Text>
+                </TouchableOpacity>
+              </Card>
+            </>
+          )}
 
           {/* ── Emotion Insights ── */}
           <SectionTitle label="Insights" colors={colors} />
