@@ -87,6 +87,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [appleAvailable, setAppleAvailable] = useState(false);
     const [anonymousToken, setAnonymousToken] = useState<string | null>(null);
     const anonymousSignInInFlight = useRef(false);
+    // Distinguishes a voluntary signOut() call from an involuntary session
+    // loss (e.g. a superadmin banned/suspended this account, so the next
+    // token refresh fails) — both fire the identical SIGNED_OUT event, so
+    // there's no way to tell them apart from the event name alone.
+    const explicitSignOutInFlight = useRef(false);
+    // Was there a real (non-anonymous) authenticated session right before
+    // this change — used to only show the "signed out" notice when a real
+    // session was actually lost, never on fresh install / already-signed-out.
+    const wasAuthenticatedRef = useRef(false);
 
     // Epoch ms until which an incoming auth/callback deep link is expected —
     // set right before opening the sign-in browser, cleared once consumed.
@@ -114,16 +123,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // app (Connect wallet/payouts, "sign in to restore your plan", etc.)
     // stays unaffected. See anonymousAccessToken's doc comment for why.
     useEffect(() => {
-        const applySession = (s: Session | null) => {
+        const applySession = (s: Session | null, event?: string) => {
             if (s?.user?.is_anonymous) {
                 setAnonymousToken(s.access_token);
                 setSession(null);
                 setStatus("unauthenticated");
+                wasAuthenticatedRef.current = false;
                 return;
             }
+            const wasAuthenticated = wasAuthenticatedRef.current;
             setAnonymousToken(null);
             setSession(s);
             setStatus(s ? "authenticated" : "unauthenticated");
+            wasAuthenticatedRef.current = !!s;
+
+            // A real session was lost, this wasn't our own signOut() call, and
+            // it happened via a genuine auth-state event (not the initial
+            // getSession() resolution on app launch, which passes no event) —
+            // most likely the account was banned/suspended. Silently falling
+            // back to an anonymous session with zero explanation left the
+            // user unable to tell this apart from a fresh install.
+            if (!s && wasAuthenticated && event === "SIGNED_OUT" && !explicitSignOutInFlight.current) {
+                Alert.alert(
+                    "You've been signed out",
+                    "Your session has ended unexpectedly. If you believe this is a mistake, please contact support@imotara.com.",
+                );
+            }
 
             if (!s && !anonymousSignInInFlight.current) {
                 // No real session (fresh install, explicit sign-out, or an
@@ -148,7 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const { data: listener } = supabase.auth.onAuthStateChange(
             (_event, newSession) => {
-                applySession(newSession);
+                applySession(newSession, _event);
 
                 // LIC-4: seed free license row on sign-in (no-op if already
                 // exists) — real sign-ins only. Anonymous identities are
@@ -324,13 +349,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // ── Sign Out ──────────────────────────────────────────────────────────────
 
     const signOut = useCallback(async () => {
-        await supabase.auth.signOut();
-        // Clear all user-specific local data so a subsequent user on this device starts fresh
-        await Promise.allSettled([
-            AsyncStorage.removeItem("imotara.companion.memories.v1"),
-            AsyncStorage.removeItem("imotara_settings_v1"),
-            AsyncStorage.removeItem("imotara_license_tier_v1"),
-        ]);
+        explicitSignOutInFlight.current = true;
+        try {
+            await supabase.auth.signOut();
+            // Clear all user-specific local data so a subsequent user on this device starts fresh
+            await Promise.allSettled([
+                AsyncStorage.removeItem("imotara.companion.memories.v1"),
+                AsyncStorage.removeItem("imotara_settings_v1"),
+                AsyncStorage.removeItem("imotara_license_tier_v1"),
+            ]);
+        } finally {
+            explicitSignOutInFlight.current = false;
+        }
     }, []);
 
     // ── Context value ─────────────────────────────────────────────────────────
