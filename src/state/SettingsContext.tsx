@@ -383,38 +383,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                     // Non-fatal — chatLinkKey will remain empty and pull will be skipped this session
                 }
 
-                try {
-                    const { data: licRow } = await supabase
-                        .from("licenses")
-                        .select("tier, expires_at")
-                        .eq("user_id", session.user.id)
-                        .maybeSingle();
-
-                    if (!licRow) return;
-
-                    const t = String(licRow.tier || "free").toLowerCase();
-                    const mobileTier: LicenseTier =
-                        t === "pro" ? "PREMIUM" :
-                        t === "plus" ? "PLUS" :
-                        t === "family" ? "FAMILY" :
-                        t === "edu" ? "EDU" :
-                        t === "enterprise" ? "ENTERPRISE" : "FREE";
-
-                    const expiresAt: string | null = licRow.expires_at ?? null;
-
-                    await AsyncStorage.setItem(LICENSE_TIER_KEY, mobileTier);
-                    if (expiresAt) {
-                        await AsyncStorage.setItem(LICENSE_EXPIRES_AT_KEY, expiresAt);
-                    } else {
-                        await AsyncStorage.removeItem(LICENSE_EXPIRES_AT_KEY);
-                    }
-
-                    const g = gate("CLOUD_SYNC", mobileTier);
-                    setCloudSyncAllowed(g.enabled);
-                    setLicenseExpiresAt(expiresAt);
-                } catch {
-                    // Fail-open: keep current tier if Supabase is unreachable
-                }
+                // Delegates to refreshLicense() (hits /api/license/status, the
+                // authoritative resolveUserTier() source) rather than a direct
+                // Supabase query, so org context (orgId/orgName/orgRole) — and
+                // pool assignments / tier overrides — stay in sync on every
+                // auth event, not just once at app-launch hydration. Previously
+                // this ran its own lighter tier-only query that never touched
+                // org fields, so a mid-session org membership change (e.g.
+                // removed from org) left a stale "Managed by" badge showing
+                // until the next full app restart.
+                await refreshLicense();
             }
         );
         return () => subscription.unsubscribe();
