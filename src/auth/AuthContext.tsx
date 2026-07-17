@@ -146,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!s && wasAuthenticated && event === "SIGNED_OUT" && !explicitSignOutInFlight.current) {
                 Alert.alert(
                     "You've been signed out",
-                    "Your session has ended unexpectedly. If you believe this is a mistake, please contact support@imotara.com.",
+                    "Your session has ended unexpectedly. If you believe this is a mistake, please contact info@imotara.com.",
                 );
             }
 
