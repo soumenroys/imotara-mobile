@@ -476,9 +476,16 @@ export async function speakMessage(
     const myGen      = ++_generation;
     const controller = new AbortController();
     _fetchAbort      = controller;
-    // Ceiling across the whole chunked sequence, not per-chunk — a long reply
-    // legitimately takes longer in total even though each chunk is quick.
-    const timer = setTimeout(() => controller.abort(), 45_000);
+    // Per-chunk-fetch ceiling, armed fresh before each individual chunk fetch
+    // and disarmed as soon as that fetch resolves — NOT a ceiling on the
+    // whole sequence. A long reply legitimately takes longer in total
+    // (many chunks, each played in full before the next starts), but any
+    // single chunk's own fetch — a few hundred characters over the network —
+    // should still complete quickly; only that is worth aborting on.
+    const CHUNK_FETCH_TIMEOUT_MS = 20_000;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const armTimer    = () => { timer = setTimeout(() => controller.abort(), CHUNK_FETCH_TIMEOUT_MS); };
+    const disarmTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
 
     const chunks = splitIntoSpeechChunks(stripMarkdown(text));
     console.log(`[mobileTTS] speakMessage start lang=${lang} textLen=${text.length} chunks=${chunks.length}`);
@@ -489,6 +496,7 @@ export async function speakMessage(
         // Pipeline: fetch chunk N+1 while chunk N plays, so speech starts as
         // soon as the first (small) chunk is ready instead of waiting for the
         // entire reply to synthesize.
+        armTimer();
         let nextFetch: Promise<ArrayBuffer> | null =
             fetchChunkAudio(chunks[0], lang, gender, accessToken, controller.signal);
 
@@ -497,13 +505,16 @@ export async function speakMessage(
 
             const t0  = Date.now();
             const buf = await nextFetch!;
+            disarmTimer(); // this chunk's fetch completed within budget
             console.log(`[mobileTTS] chunk ${i + 1}/${chunks.length} fetched in ${Date.now() - t0}ms bytes=${buf.byteLength}`);
 
             if (myGen !== _generation) return;
 
-            nextFetch = i + 1 < chunks.length
-                ? fetchChunkAudio(chunks[i + 1], lang, gender, accessToken, controller.signal)
-                : null;
+            nextFetch = null;
+            if (i + 1 < chunks.length) {
+                armTimer();
+                nextFetch = fetchChunkAudio(chunks[i + 1], lang, gender, accessToken, controller.signal);
+            }
 
             // Alternate filenames so writing the prefetched next chunk never
             // clobbers the file the previous chunk might still be playing.
@@ -514,12 +525,12 @@ export async function speakMessage(
             if (myGen !== _generation) return;
         }
 
-        clearTimeout(timer);
+        disarmTimer();
         if (_fetchAbort === controller) _fetchAbort = null;
         _speakingId = null;
         onDone?.();
     } catch (err: unknown) {
-        clearTimeout(timer);
+        disarmTimer();
         if (myGen !== _generation) return; // stopped/superseded — no fallback needed
 
         // User-initiated stop: abort throws DOMException "AbortError" — don't fall back.
