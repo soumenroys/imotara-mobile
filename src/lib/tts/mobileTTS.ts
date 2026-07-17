@@ -200,7 +200,7 @@ async function pickNativeVoice(gender: string | undefined, lang: string): Promis
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Strip markdown formatting so Azure TTS reads clean prose, not asterisks and dashes. */
-function stripMarkdown(text: string): string {
+export function stripMarkdown(text: string): string {
     return text
         .replace(/\*\*(.+?)\*\*/gs, "$1")   // **bold**
         .replace(/\*(.+?)\*/gs,     "$1")   // *italic*
@@ -241,7 +241,7 @@ async function stopAll(): Promise<void> {
  * reply to synthesize. Later chunks are capped larger to limit round trips
  * on long replies. A short reply naturally produces just one chunk.
  */
-function splitIntoSpeechChunks(text: string, firstMax = 110, restMax = 240): string[] {
+export function splitIntoSpeechChunks(text: string, firstMax = 110, restMax = 240): string[] {
     // Terminators: Latin . ! ? — Devanagari (hi/mr/bn etc.) । — Urdu ۔ —
     // Arabic ؟ — CJK ideographic 。 and fullwidth ！？ (zh/ja).
     const sentences = text.match(/[^.!?।۔؟。！？]+[.!?।۔؟。！？]*\s*/g) ?? [text];

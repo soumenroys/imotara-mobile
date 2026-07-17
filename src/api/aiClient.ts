@@ -211,7 +211,7 @@ function normalizeToneContext(
 
 // Maps mobile toneContext to /api/chat-reply's tone parameter.
 // Mirrors the server's deriveFormatterTone() in route.ts.
-function deriveToneForChatReply(
+export function deriveToneForChatReply(
   toneContext?: ToneContextPayload,
   settings?: { relationshipTone?: string },
 ): "close_friend" | "calm_companion" | "coach" | "mentor" {
@@ -238,7 +238,7 @@ function deriveToneForChatReply(
 // Detects the script/language from the message so /api/chat-reply can:
 // (a) use the right language in formatImotaraReply (server-side post-processing)
 // (b) include the right mythology/quote cultural instructions in the system prompt
-function detectLangFromScript(message: string): string {
+export function detectLangFromScript(message: string): string {
   if (!message) return "en";
   if (/[\u0980-\u09FF]/.test(message)) return "bn";        // Bengali
   if (/[\u0904-\u0939\u0958-\u0963\u0971-\u097F]/.test(message)) return "hi"; // Hindi/Devanagari
@@ -262,7 +262,7 @@ function detectLangFromScript(message: string): string {
 /** Secondary language detection for Roman-script (transliterated) Indian languages.
  *  Called only when detectLangFromScript() returns "en" to avoid overriding native-script hits.
  *  Uses global flag to count all matches per regex, picks the highest-scoring language. */
-function detectLangFromRomanHints(message: string): string {
+export function detectLangFromRomanHints(message: string): string {
   if (!message) return "en";
   const scores: Record<string, number> = {};
   const tally = (lang: string, regex: RegExp) => {
@@ -290,7 +290,7 @@ function detectLangFromRomanHints(message: string): string {
  *  Only fires when a clear switch verb is present alongside a language name —
  *  bare language mentions ("I love Arabic poetry") will NOT match.
  *  Returns ISO code if found, otherwise null. Identical logic to web respondRemote.ts. */
-function detectExplicitLangRequest(text: string): string | null {
+export function detectExplicitLangRequest(text: string): string | null {
   if (!text) return null;
   const t = text.toLowerCase().trim();
 
