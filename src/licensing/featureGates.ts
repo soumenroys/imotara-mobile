@@ -114,8 +114,19 @@ const ALL: Record<LicenseTier, Set<FeatureKey>> = {
 // user's real tier is untouched elsewhere (e.g. Settings' "Current plan"
 // still shows the truth) — only feature *checks* are bypassed. Flip to false
 // once tiers are actually sold and enforcement should start for real.
-const SOFT_LAUNCH_BYPASS_ALL_GATES = true;
+export const SOFT_LAUNCH_BYPASS_ALL_GATES = true;
 const SOFT_LAUNCH_EFFECTIVE_TIER: LicenseTier = "PREMIUM";
+
+// Institutional entitlements that must NOT be affected by the soft-launch
+// bypass (see the comment above): they are granted by Family/EDU/Enterprise
+// membership, not by the "everyone gets Pro" launch offer. Evaluating them at
+// the bypass tier (PREMIUM) would wrongly *revoke* them from real Family/EDU/
+// Enterprise users during soft launch, since PREMIUM doesn't include them.
+export const INSTITUTIONAL_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>([
+    "MULTI_PROFILE",
+    "CHILD_SAFE_MODE",
+    "ADMIN_DASHBOARD",
+]);
 
 /**
  * Central feature gate resolver.
@@ -125,7 +136,11 @@ export function gate(
     feature: FeatureKey,
     tier: LicenseTier | undefined | null
 ): FeatureGateResult {
-    const t: LicenseTier = SOFT_LAUNCH_BYPASS_ALL_GATES ? SOFT_LAUNCH_EFFECTIVE_TIER : (tier ?? "FREE");
+    const realTier: LicenseTier = tier ?? "FREE";
+    const t: LicenseTier =
+        SOFT_LAUNCH_BYPASS_ALL_GATES && !INSTITUTIONAL_FEATURES.has(feature)
+            ? SOFT_LAUNCH_EFFECTIVE_TIER
+            : realTier;
 
     // Parameterized gates first
     if (feature === "HISTORY_DAYS_LIMIT") {
