@@ -195,20 +195,16 @@ function scopedKey(base: string, chatLinkKey: unknown, localUserScopeId: unknown
 const LICENSE_TIER_KEY = "imotara_license_tier_v1";
 
 // 🚀 Launch Phase Override (temporary: free cloud sync for all users)
-// This is tied to the same launch offer logic used by the web app.
-// Set EXPO_PUBLIC_IMOTARA_LAUNCH_DATE to an ISO date and optionally
-// EXPO_PUBLIC_IMOTARA_FREE_DAYS to the duration (default 90).
-const LAUNCH_CLOUD_SYNC_FREE_FOR_ALL = (() => {
-    const raw = process.env.EXPO_PUBLIC_IMOTARA_LAUNCH_DATE;
-    if (!raw) return true; // no launch date set → soft-launch free-for-all (matches web LICENSE_MODE=off)
-
-    const launchMs = Date.parse(raw);
-    if (Number.isNaN(launchMs)) return true;
-
-    const freeDays = parseInt(process.env.EXPO_PUBLIC_IMOTARA_FREE_DAYS ?? "90", 10) || 90;
-    const endsAt = launchMs + freeDays * 24 * 60 * 60 * 1000;
-    return Date.now() < endsAt;
-})();
+// Single switch, same pattern as featureGates.ts's SOFT_LAUNCH_BYPASS_ALL_GATES:
+// eas.json sets EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL per build profile
+// ("true" for the current soft launch, flip to "false" in ~3-4 months to start
+// real cloud-sync enforcement). Previously this read a different, never-set
+// env var pair (EXPO_PUBLIC_IMOTARA_LAUNCH_DATE/FREE_DAYS) and always fell
+// through to the "no date set" default — silently ignoring whatever eas.json
+// actually set. Defaults to true (free-for-all) only when the var is entirely
+// absent, e.g. local dev with no env configured.
+const LAUNCH_CLOUD_SYNC_FREE_FOR_ALL =
+    process.env.EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL !== "false";
 
 // ✅ Validation helper (keeps stored values safe)
 function isValidTier(v: unknown): v is LicenseTier {
