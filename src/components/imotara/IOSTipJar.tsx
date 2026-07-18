@@ -2,12 +2,17 @@
 // Apple IAP "tip jar" for iOS — satisfies guideline 3.1.1 by routing all
 // in-app payments through StoreKit 2 / App Store.
 //
-// Product IDs must match the Consumable IAP products created in App Store Connect:
-//   com.imotara.imotara.tip1  ~₹79
-//   com.imotara.imotara.tip2  ~₹149
-//   com.imotara.imotara.tip3  ~₹299
-//   com.imotara.imotara.tip4  ~₹499
-//   com.imotara.imotara.tip5  ~₹999
+// Product IDs below must match the Consumable IAP products already created in
+// App Store Connect exactly — Apple doesn't support renaming a live product
+// ID, so don't "fix" these to match their real prices without also creating
+// new App Store Connect products and migrating. The name-vs-price mismatch is
+// cosmetic only: the button always renders Apple's real displayPrice, never
+// these names, so no user ever sees the wrong number.
+//   donation_49   really priced ~₹79
+//   donation_99   really priced ~₹149
+//   donation_199  really priced ~₹299
+//   donation_499  really priced ~₹499  (matches)
+//   donation_999  really priced ~₹999  (matches)
 
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
