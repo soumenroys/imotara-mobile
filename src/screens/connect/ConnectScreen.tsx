@@ -591,7 +591,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                     <Text style={{ fontSize: 13, color: "#a78bfa" }}>💰 Wallet balance</Text>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                         <Text style={{ fontSize: 15, fontWeight: "700", color: "#a78bfa" }}>{sym}{walletBalance.toFixed(2)}</Text>
-                        <Text style={{ fontSize: 11, color: "#a78bfa", opacity: 0.7 }}>+ Add →</Text>
+                        <Text style={{ fontSize: 11, color: "#a78bfa", opacity: 0.7 }}>View →</Text>
                     </View>
                 </TouchableOpacity>
             )}
@@ -950,105 +950,10 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
 }
 
 // ── Wallet Tab ─────────────────────────────────────────────────────────────────
-const TOPUP_PRESETS = [1000, 2000, 5000, 10000];
 const RAZORPAY_MAX_INR = 500_000; // ₹5,00,000 Razorpay domestic ceiling
 
 // Defined at module scope so React sees a stable component type and does NOT unmount/remount
 // the TextInput inside on every WalletTab re-render (which would lose keyboard focus).
-function TopUpForm({ label, colors, s, topupAmount, setTopupAmount, isCustom, setIsCustom, customAmount,
-    setCustomAmount, ageConfirmed, setAgeConfirmed, termsAccepted, setTermsAccepted, topupError, setTopupError, topupLoading, handleTopUp, isDormant }: {
-    label: string; colors: any; s: any;
-    topupAmount: number; setTopupAmount: (v: number) => void;
-    isCustom: boolean; setIsCustom: (v: boolean | ((p: boolean) => boolean)) => void;
-    customAmount: string; setCustomAmount: (v: string) => void;
-    ageConfirmed: boolean; setAgeConfirmed: (v: boolean | ((p: boolean) => boolean)) => void;
-    termsAccepted: boolean; setTermsAccepted: (v: boolean | ((p: boolean) => boolean)) => void;
-    topupError: string; setTopupError: (v: string) => void;
-    topupLoading: boolean; handleTopUp: () => void; isDormant: boolean;
-}) {
-    return (
-        <View style={s.card}>
-            <Text style={[s.cardName, { marginBottom: 12 }]}>{label}</Text>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-                {TOPUP_PRESETS.map((p) => (
-                    <TouchableOpacity key={p}
-                        style={[s.durationBtn, !isCustom && topupAmount === p && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
-                        onPress={() => { setIsCustom(false); setTopupAmount(p); setTopupError(""); }}>
-                        <Text style={[s.durationBtnText, !isCustom && topupAmount === p && s.durationBtnTextActive]} numberOfLines={1}>
-                            ₹{p.toLocaleString("en-IN")}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
-                <TouchableOpacity
-                    style={[s.durationBtn, isCustom && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
-                    onPress={() => { setIsCustom(true); setTopupError(""); }}>
-                    <Text style={[s.durationBtnText, isCustom && s.durationBtnTextActive]} numberOfLines={1}>Custom</Text>
-                </TouchableOpacity>
-            </View>
-            {isCustom && (
-                <TextInput
-                    style={[s.messageInput, { marginBottom: 10 }]}
-                    value={customAmount}
-                    onChangeText={setCustomAmount}
-                    placeholder="Enter amount (₹)"
-                    placeholderTextColor={colors.textSecondary}
-                    keyboardType="numeric"
-                />
-            )}
-            {/* Age confirmation */}
-            <TouchableOpacity
-                style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}
-                onPress={() => setAgeConfirmed((v) => !v)}
-                activeOpacity={0.7}>
-                <View style={{
-                    width: 20, height: 20, borderRadius: 4, borderWidth: 1.5,
-                    borderColor: ageConfirmed ? colors.primary : colors.border,
-                    backgroundColor: ageConfirmed ? colors.primary : "transparent",
-                    alignItems: "center", justifyContent: "center",
-                }}>
-                    {ageConfirmed && <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>✓</Text>}
-                </View>
-                <Text style={[s.cardBio, { fontSize: 12, flex: 1 }]}>
-                    I confirm I am 18 years of age or older.
-                </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-                style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 10 }}
-                onPress={() => setTermsAccepted((v) => !v)}
-                activeOpacity={0.7}>
-                <View style={{
-                    width: 20, height: 20, borderRadius: 4, borderWidth: 1.5,
-                    borderColor: termsAccepted ? colors.primary : colors.border,
-                    backgroundColor: termsAccepted ? colors.primary : "transparent",
-                    alignItems: "center", justifyContent: "center", marginTop: 2,
-                }}>
-                    {termsAccepted && <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>✓</Text>}
-                </View>
-                <Text style={[s.cardBio, { fontSize: 12, flex: 1 }]}>
-                    I accept the{" "}
-                    <Text style={{ color: colors.primary, textDecorationLine: "underline" }}
-                        onPress={() => Linking.openURL("https://imotara.com/connect/wallet-terms")}>
-                        Wallet Terms & Policy
-                    </Text>
-                    {" "}including the 2-year inactivity and dormancy rules.
-                </Text>
-            </TouchableOpacity>
-            {topupError !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{topupError}</Text>}
-            <TouchableOpacity
-                style={[s.primaryBtn, (topupLoading || !ageConfirmed || !termsAccepted || (isCustom && (!customAmount || parseFloat(customAmount) < 1))) && { opacity: 0.5 }]}
-                onPress={handleTopUp}
-                disabled={topupLoading || !ageConfirmed || !termsAccepted || (isCustom && (!customAmount || parseFloat(customAmount) < 1))}>
-                {topupLoading
-                    ? <ActivityIndicator color="#fff" />
-                    : <Text style={s.primaryBtnText}>
-                        {isDormant ? "Reactivate & Add " : "Add "}
-                        ₹{isCustom ? (customAmount || "0") : topupAmount.toLocaleString("en-IN")} to Wallet
-                    </Text>}
-            </TouchableOpacity>
-        </View>
-    );
-}
-
 function WalletTab({ colors, accessToken }: { colors: any; accessToken: string | null }) {
     const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const [isSigningIn, setIsSigningIn] = useState(false);
@@ -1058,15 +963,6 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
     const [daysUntilExpiry, setDaysUntilExpiry] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
     const [walletFetchFailed, setWalletFetchFailed] = useState(false);
-
-    const [topupAmount, setTopupAmount] = useState(1000);
-    const [customAmount, setCustomAmount] = useState("");
-    const [isCustom, setIsCustom] = useState(false);
-    const [ageConfirmed, setAgeConfirmed] = useState(false);
-    const [termsAccepted, setTermsAccepted] = useState(false);
-    const [topupLoading, setTopupLoading] = useState(false);
-    const [topupError, setTopupError] = useState("");
-    const walletTabPayingRef = React.useRef(false);
 
     const [showRefund, setShowRefund] = useState(false);
     const [refundMethod, setRefundMethod] = useState<"upi" | "bank">("upi");
@@ -1121,73 +1017,6 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
         finally { setHistoryLoading(false); }
     }
 
-    async function handleTopUp() {
-        const amt = isCustom ? parseFloat(customAmount) : topupAmount;
-        if (walletTabPayingRef.current) return;
-        if (!accessToken || isNaN(amt) || amt < 1) { setTopupError("Enter a valid amount"); return; }
-        if (amt > RAZORPAY_MAX_INR) { setTopupError("Maximum top-up is ₹5,00,000 per transaction"); return; }
-        walletTabPayingRef.current = true;
-        if (!ageConfirmed) { setTopupError("Please confirm you are 18 or older to continue"); return; }
-        if (!termsAccepted) { setTopupError("Please accept the Wallet Terms to continue"); return; }
-        setTopupLoading(true); setTopupError("");
-        try {
-            const res = await pfetch(buildApiUrl("/api/connect/wallet/topup/create"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-                body: JSON.stringify({ amount: amt, terms_accepted: true }),
-            });
-            const d = await res.json();
-            if (!d.ok) { setTopupError(d.error ?? "Failed to create order"); return; }
-
-            const RazorpayCheckout = require("react-native-razorpay").default;
-            const paymentData = await RazorpayCheckout.open({
-                key: d.razorpay_key_id ?? process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID,
-                order_id: d.razorpay_order_id,
-                amount: String(d.amount_paise),
-                currency: "INR",
-                name: "Imotara Wallet",
-                description: `Add ₹${amt} to your wallet`,
-                theme: { color: "#6366f1" },
-            });
-
-            const verifyRes = await pfetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-                body: JSON.stringify({
-                    razorpay_order_id:   paymentData.razorpay_order_id,
-                    razorpay_payment_id: paymentData.razorpay_payment_id,
-                    razorpay_signature:  paymentData.razorpay_signature,
-                }),
-            });
-            const v = await verifyRes.json();
-            if (!v.ok) { setTopupError(v.error ?? "Verification failed"); return; }
-            setWalletBalance(Math.max(0, Number(v.new_balance ?? 0)));
-            setWalletStatus("active");
-            // Refresh expiry data — topup resets the wallet expiry on the server but the
-            // verify response only includes new_balance. Fetch fresh wallet data so the
-            // expiry banner immediately reflects the new expiry date.
-            void cfetch(buildApiUrl("/api/connect/wallet"), {
-                headers: { Authorization: `Bearer ${accessToken}` },
-            }).then((r) => r.json()).then((d) => {
-                if (!d.ok) return;
-                setExpiresAt(d.expires_at ?? null);
-                setDaysUntilExpiry(d.days_until_expiry ?? null);
-            }).catch(() => {});
-            setTransactions([]);
-            setShowHistory(false);
-            setAgeConfirmed(false);
-            setTermsAccepted(false);
-            Alert.alert("Success", `₹${v.amount_credited ?? "?"} added to your wallet!`);
-        } catch (err: any) {
-            if (err?.code !== 0 && !String(err?.description ?? "").toLowerCase().includes("cancel")) {
-                setTopupError(String(err?.message ?? "Payment failed"));
-            }
-        } finally {
-            walletTabPayingRef.current = false;
-            setTopupLoading(false);
-        }
-    }
-
     async function handleRefundRequest() {
         if (!accessToken) return;
         const isUpi = refundMethod === "upi";
@@ -1228,7 +1057,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
         <View style={[s.center, { paddingHorizontal: 32 }]}>
             <Text style={{ fontSize: 32, marginBottom: 12 }}>🔒</Text>
             <Text style={[s.emptyText, { marginBottom: 6 }]}>Sign in to use your Wallet</Text>
-            <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", marginBottom: 24, opacity: 0.7 }}>Add funds and pay for sessions with your Imotara Wallet.</Text>
+            <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", marginBottom: 24, opacity: 0.7 }}>View your Imotara Wallet balance or request a refund.</Text>
             <TouchableOpacity
                 disabled={isSigningIn}
                 onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
@@ -1273,7 +1102,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                         ⚠ Wallet expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? "s" : ""}
                     </Text>
                     <Text style={[s.cardBio, { fontSize: 12, marginTop: 4 }]}>
-                        Top up or book a session to reset the 2-year inactivity clock.
+                        Request a refund before then to keep your balance active.
                     </Text>
                 </View>
             )}
@@ -1283,7 +1112,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                 <View style={[s.card, { backgroundColor: "rgba(239,68,68,0.1)", borderColor: "rgba(239,68,68,0.3)", borderWidth: 1 }]}>
                     <Text style={{ color: "#ef4444", fontWeight: "700", fontSize: 13 }}>Wallet Dormant</Text>
                     <Text style={[s.cardBio, { fontSize: 12, marginTop: 4 }]}>
-                        2 years of inactivity. Your ₹{walletBalance.toFixed(2)} is safe — reactivate with a top-up or request a cash refund below.
+                        2 years of inactivity. Your ₹{walletBalance.toFixed(2)} is safe — request a cash refund below.
                     </Text>
                 </View>
             )}
@@ -1298,30 +1127,27 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                 </View>
             )}
 
-            {/* Top-up form */}
+            {/* Top-ups retired */}
             {!isRefundRequested && (
-                <TopUpForm
-                    label={isDormant ? "Reactivate Wallet" : "Add Money to Wallet"}
-                    colors={colors} s={s}
-                    topupAmount={topupAmount} setTopupAmount={setTopupAmount}
-                    isCustom={isCustom} setIsCustom={setIsCustom}
-                    customAmount={customAmount} setCustomAmount={setCustomAmount}
-                    ageConfirmed={ageConfirmed} setAgeConfirmed={setAgeConfirmed}
-                    termsAccepted={termsAccepted} setTermsAccepted={setTermsAccepted}
-                    topupError={topupError} setTopupError={setTopupError}
-                    topupLoading={topupLoading} handleTopUp={handleTopUp}
-                    isDormant={isDormant}
-                />
+                <View style={s.card}>
+                    <Text style={[s.cardName, { marginBottom: 6 }]}>Paying for sessions</Text>
+                    <Text style={s.cardBio}>
+                        Imotara Wallet no longer accepts new top-ups. To pay for a session, purchase minutes
+                        directly with a companion from their profile or during a session.
+                    </Text>
+                </View>
             )}
 
-            {/* Dormant refund panel */}
-            {isDormant && !isRefundRequested && (
+            {/* Request Refund panel — shown for any positive balance, since top-ups are
+                retired and the API never actually required "dormant" status (only this
+                UI used to gate on it). */}
+            {walletBalance > 0 && !isRefundRequested && (
                 <View style={s.card}>
                     <TouchableOpacity
                         style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}
                         onPress={() => setShowRefund((v) => !v)}
                         activeOpacity={0.7}>
-                        <Text style={[s.cardName, { fontSize: 14 }]}>💸 Request Refund Instead</Text>
+                        <Text style={[s.cardName, { fontSize: 14 }]}>💸 Request Refund</Text>
                         <Text style={s.cardBio}>{showRefund ? "▲" : "▼"}</Text>
                     </TouchableOpacity>
 
@@ -1457,10 +1283,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     onBack: () => void; onStartSession: (s: Session) => void;
 }) {
     const { isDark } = useTheme();
-    const [topUpVisible, setTopUpVisible] = useState(false);
     const [rechargeBeforeStartVisible, setRechargeBeforeStartVisible] = useState(false);
-    const [walletBalance, setWalletBalance] = useState<number | null>(null);
-    const [walletCurrency, setWalletCurrency] = useState("INR");
     const [loading, setLoading] = useState(false);
     const [scheduleVisible, setScheduleVisible] = useState(false);
     const [scheduleNote, setScheduleNote] = useState("");
@@ -1500,13 +1323,6 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
         return () => { mounted = false; };
     }, [c.id]);
 
-    useEffect(() => {
-        if (!accessToken) return;
-        cfetch(buildApiUrl("/api/connect/wallet"), { headers: { Authorization: `Bearer ${accessToken}` } })
-            .then((r) => r.json())
-            .then((d) => { if (d.ok) { setWalletBalance(Math.max(0, Number(d.wallet_balance ?? 0))); setWalletCurrency(d.wallet_currency ?? "INR"); } })
-            .catch(() => {});
-    }, [accessToken]);
 
     async function startSession(sessionType: "instant" | "scheduled" = "instant", note?: string, translationRequested = false) {
         if (!accessToken) { Alert.alert("Sign in required", "Please sign in to start a session."); return; }
@@ -1550,6 +1366,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     setPendingTranslation(translationRequested);
                     setPendingSessionType(sessionType);
                     setPendingNote(note);
+                    setScheduleVisible(false); // no-op if not open (instant path); closes it for the scheduled path
                     setRechargeBeforeStartVisible(true);
                 } else if (d.redirect && d.existing_session_id) {
                     // Fetch full session so rate_per_min and translation_enabled are correct
@@ -1629,21 +1446,12 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
 
                 {c.bio && <View style={s.card}><Text style={s.cardBio}>{c.bio}</Text></View>}
 
-                {/* Rate + wallet balance */}
+                {/* Rate */}
                 <View style={{ flexDirection: "row", gap: 10 }}>
                     <View style={[s.card, { flex: 1, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
                         <Text style={s.cardName}>Rate</Text>
                         <Text style={[s.rateText, { fontSize: 18 }]}>{sym}{c.rate_per_min}/min</Text>
                     </View>
-                    {accessToken && walletBalance !== null && (
-                        <TouchableOpacity
-                            onPress={() => setTopUpVisible(true)}
-                            style={{ borderRadius: 14, borderWidth: 1, borderColor: "rgba(139,92,246,0.3)", backgroundColor: "rgba(139,92,246,0.08)", paddingHorizontal: 14, paddingVertical: 10, alignItems: "center", justifyContent: "center", gap: 2 }}>
-                            <Text style={{ fontSize: 10, color: "#a78bfa", fontWeight: "700" }}>Wallet</Text>
-                            <Text style={{ fontSize: 14, fontWeight: "700", color: "#a78bfa" }}>{CURRENCY_SYMBOLS[walletCurrency] ?? "₹"}{walletBalance.toFixed(0)}</Text>
-                            <Text style={{ fontSize: 9, color: "#a78bfa", opacity: 0.7 }}>+ Add</Text>
-                        </TouchableOpacity>
-                    )}
                 </View>
 
                 {/* Tags */}
@@ -1718,10 +1526,9 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 <TouchableOpacity
                     style={[s.primaryBtn, (loading || !isOnline || isBusy || rechargeBeforeStartVisible) && { opacity: 0.6 }]}
                     onPress={() => {
-                        if ((walletBalance ?? 0) < c.rate_per_min) {
-                            setRechargeBeforeStartVisible(true);
-                            return;
-                        }
+                        // No client-side balance pre-check — startSession() itself checks
+                        // the real per-consultant recharge balance server-side and opens
+                        // the recharge modal (rechargeBeforeStartVisible) on a 402.
                         if (!langsMatch) {
                             Alert.alert(
                                 "Enable Translation?",
@@ -1752,20 +1559,6 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     <Text style={[s.primaryBtnText, { color: colors.primary }]}>Request Meeting</Text>
                 </TouchableOpacity>
             </ScrollView>
-
-            {/* Wallet top-up modal (general INR wallet — triggered by "+" button only) */}
-            <WalletTopUpModal
-                visible={topUpVisible}
-                accessToken={accessToken}
-                walletBalance={walletBalance ?? 0}
-                walletCurrency={walletCurrency}
-                onClose={() => { setTopUpVisible(false); }}
-                onSuccess={(newBal) => {
-                    setWalletBalance(newBal);
-                    setTopUpVisible(false);
-                }}
-                colors={colors}
-            />
 
             {/* Per-consultant minute recharge — shown when session creation returns 402.
                 Uses connect_recharges (not imotara_wallets); retry startSession on success. */}
@@ -1983,11 +1776,6 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                                         Alert.alert("Message required", "Please add a message describing what you would like to discuss.");
                                         return;
                                     }
-                                    if ((walletBalance ?? 0) < c.rate_per_min) {
-                                        setScheduleVisible(false);
-                                        setRechargeBeforeStartVisible(true);
-                                        return;
-                                    }
                                     startSession("scheduled", scheduleNote, translationEnabled && !langsMatch);
                                 }}
                                 disabled={scheduleLoading}>
@@ -2000,220 +1788,6 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 </KeyboardAvoidingView>
             </Modal>
         </View>
-    );
-}
-
-// ── Wallet Top-Up Modal ────────────────────────────────────────────────────────
-function WalletTopUpModal({ visible, accessToken, walletBalance, walletCurrency, onClose, onSuccess, colors }: {
-    visible: boolean;
-    accessToken: string | null;
-    walletBalance: number;
-    walletCurrency: string;
-    onClose: () => void;
-    onSuccess: (newBalance: number) => void;
-    colors: any;
-}) {
-    const [selectedAmt, setSelectedAmt]   = useState(1000);
-    const [customAmt, setCustomAmt]       = useState("");
-    const [isCustom, setIsCustom]         = useState(false);
-    const [ageConfirmed, setAgeConfirmed] = useState(false);
-    const [termsAccepted, setTerms]       = useState(false);
-    const [loading, setLoading]           = useState(false);
-    const [error, setError]               = useState("");
-    const s = styles(colors);
-    const sym = CURRENCY_SYMBOLS[walletCurrency] ?? "₹";
-    // Max(0, ...) — NOT Max(1, ...) — so an empty custom field gives 0 and
-    // the Pay button stays disabled via the topupAmt < 1 guard below.
-    const topupAmt = isCustom ? Math.max(0, parseFloat(customAmt) || 0) : selectedAmt;
-
-    // Reset all form state when the modal opens so stale errors / accepted terms
-    // from a prior open don't carry over to a new payment attempt.
-    useEffect(() => {
-        if (visible) {
-            setSelectedAmt(1000); setCustomAmt(""); setIsCustom(false);
-            setAgeConfirmed(false); setTerms(false); setError("");
-        }
-    }, [visible]);
-
-    // Ref-based guard prevents double-tap from launching two Razorpay flows before the
-    // async setLoading(true) re-render has propagated and disabled the button.
-    const payingRef = React.useRef(false);
-    async function handlePay() {
-        if (payingRef.current) return;
-        if (!accessToken) return;
-        if (topupAmt < 1) { setError("Please enter a valid amount"); return; }
-        if (topupAmt > RAZORPAY_MAX_INR) { setError("Maximum top-up is ₹5,00,000 per transaction"); return; }
-        if (!ageConfirmed) { setError("Please confirm you are 18 or older to continue"); return; }
-        if (!termsAccepted) { setError("Please accept the Wallet Terms to continue"); return; }
-        payingRef.current = true;
-        setLoading(true); setError("");
-        try {
-            const res = await pfetch(buildApiUrl("/api/connect/wallet/topup/create"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-                body: JSON.stringify({ amount: topupAmt, terms_accepted: true }),
-            });
-            const d = await res.json();
-            if (!d.ok) { setError(d.error ?? "Failed to create order"); return; }
-
-            const RazorpayCheckout = require("react-native-razorpay").default;
-            const paymentData = await RazorpayCheckout.open({
-                key: d.razorpay_key_id ?? process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID,
-                order_id: d.razorpay_order_id,
-                amount: String(d.amount_paise),
-                currency: "INR",
-                name: "Imotara Wallet",
-                description: `Add ${sym}${topupAmt} to your wallet`,
-                theme: { color: "#6366f1" },
-            });
-
-            const vRes = await pfetch(buildApiUrl("/api/connect/wallet/topup/verify"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-                body: JSON.stringify({
-                    razorpay_order_id:   paymentData.razorpay_order_id,
-                    razorpay_payment_id: paymentData.razorpay_payment_id,
-                    razorpay_signature:  paymentData.razorpay_signature,
-                }),
-            });
-            const v = await vRes.json();
-            if (!v.ok) { setError(v.error ?? "Verification failed"); return; }
-            Alert.alert("Success", `${sym}${v.amount_credited ?? "?"} added to your wallet!`);
-            onSuccess(Math.max(0, Number(v.new_balance ?? 0)));
-        } catch (err: any) {
-            if (err?.code !== 0 && !String(err?.description ?? "").toLowerCase().includes("cancel")) {
-                setError(String(err?.message ?? "Payment failed"));
-            }
-        } finally {
-            payingRef.current = false;
-            setLoading(false);
-        }
-    }
-
-    return (
-        <Modal visible={visible} transparent animationType="slide" onRequestClose={loading ? undefined : onClose}>
-            <View style={s.modalBackdrop}>
-                <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
-                    {/* Header */}
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-                        <View>
-                            <Text style={[s.cardBio, { fontSize: 10, color: "#a78bfa", fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 2 }]}>
-                                Imotara Wallet
-                            </Text>
-                            <Text style={[s.cardName, { fontSize: 18 }]}>Add Balance</Text>
-                        </View>
-                        <TouchableOpacity onPress={loading ? undefined : onClose} disabled={loading}>
-                            <Ionicons name="close" size={20} color={loading ? "transparent" : colors.textSecondary} />
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Current balance */}
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderRadius: 12, borderWidth: 1, borderColor: "rgba(139,92,246,0.25)", backgroundColor: "rgba(139,92,246,0.08)", paddingHorizontal: 14, paddingVertical: 10, marginBottom: 14 }}>
-                        <Text style={[s.cardBio, { color: "#a78bfa" }]}>💰 Current balance</Text>
-                        <Text style={{ fontSize: 18, fontWeight: "700", color: "#a78bfa" }}>{sym}{walletBalance.toFixed(2)}</Text>
-                    </View>
-
-                    {/* Preset amounts */}
-                    <Text style={[s.cardBio, { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }]}>Choose amount</Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-                        {TOPUP_PRESETS.map((p) => (
-                            <TouchableOpacity key={p}
-                                style={[s.durationBtn, !isCustom && selectedAmt === p && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
-                                onPress={() => { setIsCustom(false); setSelectedAmt(p); setError(""); }}>
-                                <Text style={[s.durationBtnText, !isCustom && selectedAmt === p && s.durationBtnTextActive]} numberOfLines={1}>
-                                    {sym}{(p / 1000).toFixed(0)}K
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                        <TouchableOpacity
-                            style={[s.durationBtn, isCustom && s.durationBtnActive, { flex: 0, paddingHorizontal: 16 }]}
-                            onPress={() => { setIsCustom(true); setError(""); }}>
-                            <Text style={[s.durationBtnText, isCustom && s.durationBtnTextActive]} numberOfLines={1}>Custom</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {isCustom && (
-                        <TextInput
-                            style={[s.messageInput, { marginBottom: 10 }]}
-                            value={customAmt}
-                            onChangeText={setCustomAmt}
-                            placeholder={`Amount in ${walletCurrency}`}
-                            placeholderTextColor={colors.textSecondary}
-                            keyboardType="numeric"
-                        />
-                    )}
-
-                    {/* Summary */}
-                    <View style={[s.card, { gap: 4, marginBottom: 12 }]}>
-                        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                            <Text style={s.cardBio}>Top-up amount</Text>
-                            <Text style={[s.cardBio, { fontWeight: "700", color: colors.textPrimary }]}>{sym}{topupAmt.toFixed(2)}</Text>
-                        </View>
-                        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                            <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>New balance after top-up</Text>
-                            <Text style={[s.cardBio, { opacity: 0.6, fontSize: 11 }]}>{sym}{(walletBalance + topupAmt).toFixed(2)}</Text>
-                        </View>
-                    </View>
-
-                    {/* Age confirmation */}
-                    <TouchableOpacity
-                        style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}
-                        onPress={() => setAgeConfirmed((v) => !v)}
-                        activeOpacity={0.7}>
-                        <View style={{
-                            width: 18, height: 18, borderRadius: 3, borderWidth: 1.5,
-                            borderColor: ageConfirmed ? colors.primary : colors.border,
-                            backgroundColor: ageConfirmed ? colors.primary : "transparent",
-                            alignItems: "center", justifyContent: "center",
-                        }}>
-                            {ageConfirmed && <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>✓</Text>}
-                        </View>
-                        <Text style={[s.cardBio, { fontSize: 11, flex: 1 }]}>
-                            I confirm I am 18 years of age or older.
-                        </Text>
-                    </TouchableOpacity>
-
-                    {/* Consent */}
-                    <TouchableOpacity
-                        style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 }}
-                        onPress={() => setTerms((v) => !v)}
-                        activeOpacity={0.7}>
-                        <View style={{
-                            width: 18, height: 18, borderRadius: 3, borderWidth: 1.5,
-                            borderColor: termsAccepted ? colors.primary : colors.border,
-                            backgroundColor: termsAccepted ? colors.primary : "transparent",
-                            alignItems: "center", justifyContent: "center", marginTop: 2,
-                        }}>
-                            {termsAccepted && <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>✓</Text>}
-                        </View>
-                        <Text style={[s.cardBio, { fontSize: 11, flex: 1 }]}>
-                            I agree to the{" "}
-                            <Text style={{ color: colors.primary, textDecorationLine: "underline" }}
-                                onPress={() => Linking.openURL("https://imotara.com/connect/wallet-terms")}>
-                                Wallet Terms
-                            </Text>
-                            . Balance is valid for 2 years of inactivity and is non-transferable.
-                        </Text>
-                    </TouchableOpacity>
-
-                    {error !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{error}</Text>}
-
-                    <TouchableOpacity
-                        style={[s.primaryBtn, (loading || topupAmt < 1 || !ageConfirmed || !termsAccepted) && { opacity: 0.5 }]}
-                        onPress={handlePay}
-                        disabled={loading || topupAmt < 1 || !ageConfirmed || !termsAccepted}>
-                        {loading
-                            ? <ActivityIndicator color="#fff" />
-                            : <Text style={s.primaryBtnText}>Add {sym}{topupAmt.toFixed(0)} to Wallet</Text>
-                        }
-                    </TouchableOpacity>
-
-                    <Text style={[s.cardBio, { fontSize: 10, textAlign: "center", marginTop: 8, opacity: 0.5 }]}>
-                        Secured by Razorpay · Balance used across all Connect sessions
-                    </Text>
-                </View>
-            </View>
-        </Modal>
     );
 }
 
