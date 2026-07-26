@@ -701,7 +701,9 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                                     <Text style={s.cardName}>{c.display_name}</Text>
                                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                                        <Text style={s.rateText}>{CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code}{c.rate_per_min ?? "—"}/min</Text>
+                                        <Text style={[s.rateText, Number(c.rate_per_min) === 0 && { color: "#34d399" }]}>
+                                            {Number(c.rate_per_min) === 0 ? "Free" : `${CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code}${c.rate_per_min ?? "—"}/min`}
+                                        </Text>
                                         {/* Favorite heart button */}
                                         <TouchableOpacity onPress={() => toggleFavorite(c.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                                             <Text style={{ fontSize: 16, opacity: favLoading === c.id ? 0.4 : 1 }}>
@@ -1450,7 +1452,9 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                 <View style={{ flexDirection: "row", gap: 10 }}>
                     <View style={[s.card, { flex: 1, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
                         <Text style={s.cardName}>Rate</Text>
-                        <Text style={[s.rateText, { fontSize: 18 }]}>{sym}{c.rate_per_min}/min</Text>
+                        <Text style={[s.rateText, { fontSize: 18 }, Number(c.rate_per_min) === 0 && { color: "#34d399" }]}>
+                            {Number(c.rate_per_min) === 0 ? "Free" : `${sym}${c.rate_per_min}/min`}
+                        </Text>
                     </View>
                 </View>
 
@@ -1814,6 +1818,7 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
     // the user sees a readable label instead of the wrong INR symbol.
     const sym = CURRENCY_SYMBOLS[currencyCode] ?? `${currencyCode} `;
 
+    const isFree = Number(ratePerMin ?? 0) === 0;
     const rechargePayingRef = React.useRef(false);
     async function handlePay() {
         if (rechargePayingRef.current) return;
@@ -1830,6 +1835,14 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
             });
             const d = await res.json();
             if (!d.ok) { setError(d.error ?? "Failed to create order"); return; }
+
+            // Free companion (rate_per_min = 0) — recharge/create already
+            // completed the recharge directly, no payment to collect.
+            if (d.free) {
+                Alert.alert("Time Added", `${selectedMin} minutes added to your session!`);
+                onSuccess(Number(d.minutes_credited ?? selectedMin));
+                return;
+            }
 
             const RazorpayCheckout = require("react-native-razorpay").default;
             const paymentData = await RazorpayCheckout.open({
@@ -1897,14 +1910,22 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
                         })}
                     </View>
 
-                    <View style={{ borderRadius: 10, borderWidth: 1, borderColor: "rgba(248,113,113,0.25)", backgroundColor: "rgba(248,113,113,0.08)", padding: 12, marginBottom: 14 }}>
-                        <Text style={{ color: "#f87171", fontSize: 13, fontWeight: "600" }}>
-                            Total: {sym}{(selectedMin * ratePerMin).toFixed(2)} for {selectedMin} minutes
-                        </Text>
-                        <Text style={[s.cardBio, { fontSize: 11, marginTop: 4 }]}>
-                            Payment goes directly to your consultant's session balance. Minutes are available immediately after payment.
-                        </Text>
-                    </View>
+                    {isFree ? (
+                        <View style={{ borderRadius: 10, borderWidth: 1, borderColor: "rgba(52,211,153,0.3)", backgroundColor: "rgba(52,211,153,0.08)", padding: 12, marginBottom: 14 }}>
+                            <Text style={{ color: "#34d399", fontSize: 13, fontWeight: "700", textAlign: "center" }}>
+                                This companion is free — no payment needed
+                            </Text>
+                        </View>
+                    ) : (
+                        <View style={{ borderRadius: 10, borderWidth: 1, borderColor: "rgba(248,113,113,0.25)", backgroundColor: "rgba(248,113,113,0.08)", padding: 12, marginBottom: 14 }}>
+                            <Text style={{ color: "#f87171", fontSize: 13, fontWeight: "600" }}>
+                                Total: {sym}{(selectedMin * ratePerMin).toFixed(2)} for {selectedMin} minutes
+                            </Text>
+                            <Text style={[s.cardBio, { fontSize: 11, marginTop: 4 }]}>
+                                Payment goes directly to your consultant's session balance. Minutes are available immediately after payment.
+                            </Text>
+                        </View>
+                    )}
 
                     {error !== "" && <Text style={[s.errorText, { marginBottom: 8 }]}>{error}</Text>}
                     <TouchableOpacity
@@ -1913,10 +1934,10 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
                         disabled={loading}>
                         {loading
                             ? <ActivityIndicator color="#fff" />
-                            : <Text style={s.primaryBtnText}>Pay {sym}{(selectedMin * ratePerMin).toFixed(2)} via Razorpay</Text>}
+                            : <Text style={s.primaryBtnText}>{isFree ? `Get ${selectedMin} min free` : `Pay ${sym}${(selectedMin * ratePerMin).toFixed(2)} via Razorpay`}</Text>}
                     </TouchableOpacity>
                     <Text style={[s.cardBio, { fontSize: 10, textAlign: "center", marginTop: 8, opacity: 0.5 }]}>
-                        Secured by Razorpay · Extends your time with this companion
+                        {isFree ? "Extends your time with this companion" : "Secured by Razorpay · Extends your time with this companion"}
                     </Text>
                 </View>
             </View>
@@ -3010,8 +3031,8 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
 
     async function saveRate() {
         const rate = parseFloat(newRate);
-        if (!accessToken || isNaN(rate) || rate <= 0) {
-            setRateMsg({ ok: false, text: "Enter a valid positive rate." });
+        if (!accessToken || isNaN(rate) || rate < 0 || (rate !== 0 && !Number.isInteger(rate))) {
+            setRateMsg({ ok: false, text: "Enter 0 for free, or a whole number of 1 or more — no decimals." });
             return;
         }
         setRateSaving(true); setRateMsg(null);
@@ -3500,7 +3521,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                     {editingRate && (
                         <View style={s.card}>
                             <Text style={[s.cardBio, { marginBottom: 10, opacity: 0.7 }]}>
-                                Update your per-minute rate. New sessions will use this rate; ongoing sessions are unaffected.
+                                Update your per-minute rate — whole numbers only, or 0 to offer free sessions. New sessions will use this rate; ongoing sessions are unaffected.
                             </Text>
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
                                 <Text style={[s.cardBio, { opacity: 0.7 }]}>{profile.currency_code ?? "INR"}</Text>
@@ -3508,8 +3529,8 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                                     style={[s.messageInput, { flex: 1, height: 40, marginBottom: 0 }]}
                                     value={newRate}
                                     onChangeText={setNewRate}
-                                    keyboardType="decimal-pad"
-                                    placeholder="e.g. 5.00"
+                                    keyboardType="number-pad"
+                                    placeholder="e.g. 5, or 0 for free"
                                     placeholderTextColor={colors.textSecondary}
                                 />
                                 <Text style={[s.cardBio, { opacity: 0.7 }]}>/ min</Text>
@@ -4326,7 +4347,8 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
     const step1Valid = displayNameValid && gender.length > 0 &&
         expertiseTags.length > 0 && languages.length > 0 && sessionTypes.length > 0 &&
         contactEmail.trim().length > 0 && emailValid && phoneValid;
-    const step2Valid = bio.trim().length >= 30 && bio.trim().length <= 500 && rateNum > 0 && rateNum <= 10000;
+    const rateValid = !isNaN(rateNum) && rateNum >= 0 && rateNum <= 10000 && (rateNum === 0 || Number.isInteger(rateNum));
+    const step2Valid = bio.trim().length >= 30 && bio.trim().length <= 500 && rateValid;
     const requiredDocs = (["selfie", "photo_id", "address_proof", "age_proof"] as DocKey[]);
     const docsValid = requiredDocs.every(k => k === "selfie" ? (selfieFromProfile || docs.selfie !== null) : docs[k] !== null);
     let step3Valid = false;
@@ -4598,19 +4620,22 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
 
                         <View style={{ marginBottom: 4 }}>
                             <Text style={[s.cardBio, { marginBottom: 4, fontWeight: "600" }]}>Rate per minute *</Text>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6 }}>
+                                Whole numbers only — no decimals. Enter 0 to offer free sessions.
+                            </Text>
                             <View style={{ flexDirection: "row", gap: 8, marginBottom: 6 }}>
                                 <TextInput style={[s.messageInput, { flex: 1 }]}
                                     value={ratePerMin} onChangeText={setRatePerMin}
-                                    keyboardType="numeric" placeholderTextColor={colors.textSecondary} />
+                                    keyboardType="number-pad" placeholder="e.g. 5, or 0 for free" placeholderTextColor={colors.textSecondary} />
                             </View>
-                            {ratePerMin.trim().length > 0 && (rateNum <= 0 || isNaN(rateNum)) && (
+                            {ratePerMin.trim().length > 0 && ratePerMin.trim() !== "0" && !rateValid && (
                                 <Text style={{ fontSize: 11, color: "#ef4444", marginTop: -2, marginBottom: 6 }}>
-                                    Rate must be greater than 0
+                                    Enter 0 for free, or a whole number from 1 to 10,000
                                 </Text>
                             )}
-                            {ratePerMin.trim().length > 0 && rateNum > 10000 && (
-                                <Text style={{ fontSize: 11, color: "#ef4444", marginTop: -2, marginBottom: 6 }}>
-                                    Rate cannot exceed 10,000 per minute
+                            {ratePerMin.trim() === "0" && (
+                                <Text style={{ fontSize: 11, color: "#34d399", marginTop: -2, marginBottom: 6 }}>
+                                    Your sessions will be free — users won&apos;t be asked to pay anything.
                                 </Text>
                             )}
                             <Text style={[s.cardBio, { marginBottom: 6, fontSize: 11 }]}>Currency</Text>
