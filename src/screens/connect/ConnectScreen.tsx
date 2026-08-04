@@ -199,7 +199,7 @@ const LANGUAGE_OPTIONS = [
     { code: "ru", label: "Russian" },        { code: "zh", label: "Chinese" },
     { code: "ja", label: "Japanese" },       { code: "es", label: "Spanish" },
     { code: "fr", label: "French" },         { code: "de", label: "German" },
-    { code: "pt", label: "Portuguese" },
+    { code: "pt", label: "Portuguese" },     { code: "id", label: "Indonesian" },
 ];
 
 // ── View type ──────────────────────────────────────────────────────────────────
