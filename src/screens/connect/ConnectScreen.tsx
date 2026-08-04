@@ -129,6 +129,15 @@ interface WalletTx {
     created_at: string;
 }
 
+interface SessionWallet {
+    consultant_id:   string;
+    display_name:    string;
+    photo_url:       string | null;
+    gender:          string | null;
+    balance_minutes: number;
+    currency_code:   string;
+}
+
 const CURRENCY_SYMBOLS: Record<string, string> = {
     INR: "₹", USD: "$", EUR: "€", GBP: "£", AED: "د.إ", SGD: "S$", AUD: "A$",
     CAD: "CA$", NZD: "NZ$", CHF: "CHF ", JPY: "¥", CNY: "¥", HKD: "HK$",
@@ -965,6 +974,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
     const [daysUntilExpiry, setDaysUntilExpiry] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
     const [walletFetchFailed, setWalletFetchFailed] = useState(false);
+    const [sessionWallets, setSessionWallets] = useState<SessionWallet[]>([]);
 
     const [showRefund, setShowRefund] = useState(false);
     const [refundMethod, setRefundMethod] = useState<"upi" | "bank">("upi");
@@ -991,6 +1001,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                 setWalletStatus(d.wallet_status ?? "active");
                 setExpiresAt(d.expires_at ?? null);
                 setDaysUntilExpiry(d.days_until_expiry ?? null);
+                setSessionWallets(d.wallets ?? []);
             })
             .catch(() => setWalletFetchFailed(true))
             .finally(() => setLoading(false));
@@ -1050,7 +1061,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
     if (walletFetchFailed) return (
         <View style={s.center}>
             <Text style={s.emptyText}>Could not load wallet. Check your connection.</Text>
-            <TouchableOpacity onPress={() => { setWalletFetchFailed(false); setLoading(true); cfetch(buildApiUrl("/api/connect/wallet"), { headers: { Authorization: `Bearer ${accessToken}` } }).then((r) => r.json()).then((d) => { if (!d.ok) return; setWalletBalance(Math.max(0, Number(d.wallet_balance ?? 0))); setWalletStatus(d.wallet_status ?? "active"); setExpiresAt(d.expires_at ?? null); setDaysUntilExpiry(d.days_until_expiry ?? null); }).catch(() => setWalletFetchFailed(true)).finally(() => setLoading(false)); }} style={{ marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8, backgroundColor: "#7c3aed" }}>
+            <TouchableOpacity onPress={() => { setWalletFetchFailed(false); setLoading(true); cfetch(buildApiUrl("/api/connect/wallet"), { headers: { Authorization: `Bearer ${accessToken}` } }).then((r) => r.json()).then((d) => { if (!d.ok) return; setWalletBalance(Math.max(0, Number(d.wallet_balance ?? 0))); setWalletStatus(d.wallet_status ?? "active"); setExpiresAt(d.expires_at ?? null); setDaysUntilExpiry(d.days_until_expiry ?? null); setSessionWallets(d.wallets ?? []); }).catch(() => setWalletFetchFailed(true)).finally(() => setLoading(false)); }} style={{ marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8, backgroundColor: "#7c3aed" }}>
                 <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>Retry</Text>
             </TouchableOpacity>
         </View>
@@ -1096,6 +1107,39 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                     </Text>
                 )}
             </View>
+
+            {/* Pre-purchased Session Minutes per companion — matches imotaraapp's
+                connect/page.tsx "Session Minutes per Companion" card. */}
+            {sessionWallets.length > 0 && (
+                <View style={s.card}>
+                    <Text style={[s.cardName, { marginBottom: 10, fontSize: 14 }]}>Pre-purchased Session Minutes</Text>
+                    <View style={{ gap: 8 }}>
+                        {sessionWallets.map((sw) => {
+                            const swSym = CURRENCY_SYMBOLS[sw.currency_code] ?? sw.currency_code;
+                            return (
+                                <View key={sw.consultant_id} style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.03)", paddingHorizontal: 10, paddingVertical: 8 }}>
+                                    <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(124,58,237,0.2)", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                                        {sw.photo_url
+                                            ? <Image source={{ uri: sw.photo_url }} style={{ width: 32, height: 32 }} />
+                                            : <Text style={{ fontSize: 15 }}>{sw.gender === "female" ? "👩" : "👨"}</Text>}
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[s.cardName, { fontSize: 13 }]} numberOfLines={1}>{sw.display_name}</Text>
+                                        <Text style={[s.cardBio, { fontSize: 10 }]}>{swSym} balance</Text>
+                                    </View>
+                                    <View style={{ alignItems: "flex-end" }}>
+                                        <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primary }}>{sw.balance_minutes} min</Text>
+                                        <Text style={[s.cardBio, { fontSize: 9 }]}>remaining</Text>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </View>
+                    <Text style={[s.cardBio, { fontSize: 10, marginTop: 8, lineHeight: 14 }]}>
+                        These are pre-purchased minutes with specific companions. Minutes are deducted during active sessions.
+                    </Text>
+                </View>
+            )}
 
             {/* Expiry warning (≤30 days) */}
             {daysUntilExpiry !== null && daysUntilExpiry <= 30 && !isDormant && (
@@ -1325,6 +1369,27 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
         return () => { mounted = false; };
     }, [c.id]);
 
+    // Pre-purchased balance with THIS specific companion — informational only,
+    // does not gate "Talk Now" (startSession() still does the real server-side
+    // check and opens the recharge modal on a 402, unchanged). Purely display,
+    // scoped to this one consultant via ?consultant_id= — the previous mobile
+    // balance chip on this screen was removed because it showed the wrong,
+    // retired generic wallet figure; this reads the correct per-companion one.
+    const [companionBalanceMin, setCompanionBalanceMin] = useState<number | null>(null);
+    useEffect(() => {
+        if (!accessToken || Number(c.rate_per_min) <= 0) return;
+        let mounted = true;
+        cfetch(buildApiUrl(`/api/connect/wallet?consultant_id=${c.id}`), {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        })
+            .then((r) => r.json())
+            .then((d) => {
+                if (!mounted || !d.ok) return;
+                setCompanionBalanceMin(Math.max(0, Math.floor(Number(d.balances?.[c.id]?.minutes ?? 0))));
+            })
+            .catch(() => {});
+        return () => { mounted = false; };
+    }, [c.id, c.rate_per_min, accessToken]);
 
     async function startSession(sessionType: "instant" | "scheduled" = "instant", note?: string, translationRequested = false) {
         if (!accessToken) { Alert.alert("Sign in required", "Please sign in to start a session."); return; }
@@ -1457,6 +1522,16 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                         </Text>
                     </View>
                 </View>
+
+                {/* Your pre-purchased balance with this companion */}
+                {companionBalanceMin !== null && (
+                    <View style={[s.card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
+                        <Text style={s.cardName}>Your balance</Text>
+                        <Text style={[s.rateText, { fontSize: 18 }, companionBalanceMin === 0 && { color: "#f87171" }]}>
+                            {companionBalanceMin} min
+                        </Text>
+                    </View>
+                )}
 
                 {/* Tags */}
                 {c.expertise_tags.length > 0 && (
@@ -1955,6 +2030,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [input, setInput] = useState("");
     const [sending, setSending] = useState(false);
     const [remaining, setRemaining] = useState<number | null>(null);
+    const [totalCreditedMin, setTotalCreditedMin] = useState<number | null>(null);
     const [displaySeconds, setDisplaySeconds] = useState<number | null>(null);
     const [status, setStatus] = useState(session.status);
     const [showEmergency, setShowEmergency] = useState(false);
@@ -2015,6 +2091,30 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 if (d.session.started_at) setStartedAt(d.session.started_at);
                 if (d.session.minutes_used != null) setMinutesUsed(Number(d.session.minutes_used));
                 if (d.session.amount_charged != null) setAmountCharged(Number(d.session.amount_charged));
+            })
+            .catch(() => {});
+        return () => { active = false; };
+    }, [session.id, accessToken]);
+
+    // Session balance (remaining minutes + total credited) — called by both the
+    // user (on mount) and the consultant (on mount). The user also gets
+    // remaining_minutes from tick responses; the consultant infers live updates
+    // from Realtime minutes_used changes instead (see the connect_sessions
+    // UPDATE handler below) — the consultant's device never calls /tick itself
+    // (tick is user-only server-side, see the 60s billing tick effect below).
+    // Mirrors imotaraapp's src/app/connect/session/[id]/page.tsx balance effect.
+    useEffect(() => {
+        if (!accessToken) return;
+        let active = true;
+        setRemaining(null);
+        cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/balance`), {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        })
+            .then((r) => r.json())
+            .then((d) => {
+                if (!active || !d.ok) return;
+                setTotalCreditedMin(Number(d.total_credited_minutes ?? 0));
+                setRemaining(Number(d.remaining_minutes ?? 0));
             })
             .catch(() => {});
         return () => { active = false; };
@@ -2117,7 +2217,18 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 }
                 if (updated.amount_charged != null) setAmountCharged(updated.amount_charged);
                 if (updated.started_at) setStartedAt(updated.started_at);
-                if (updated.minutes_used != null) setMinutesUsed(Number(updated.minutes_used));
+                if (updated.minutes_used != null) {
+                    setMinutesUsed(Number(updated.minutes_used));
+                    // Consultant side: recompute remaining from server-authoritative
+                    // minutes_used (the user side gets remaining_minutes directly from
+                    // tick responses instead — see the 60s billing tick effect below).
+                    if (session.user_id !== userId) {
+                        setTotalCreditedMin((tc) => {
+                            if (tc !== null) setRemaining(Math.max(0, tc - Number(updated.minutes_used)));
+                            return tc;
+                        });
+                    }
+                }
             })
             .subscribe((status) => {
                 // On reconnect after a channel error (network drop/recovery), fire a tick
@@ -2130,7 +2241,18 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     (prevRealtimeStatus === "CHANNEL_ERROR" || prevRealtimeStatus === "TIMED_OUT") &&
                     !cancelled && accessToken && !tickInFlightRef.current
                 ) {
-                    if (Date.now() - lastTickAtRef.current < 55_000) {
+                    if (session.user_id !== userId) {
+                        // Consultant: no billing tick (the server rejects non-owner tick
+                        // calls) — re-fetch the shared balance endpoint to resync
+                        // `remaining` instead, mirroring the on-mount balance fetch above.
+                        cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/balance`), {
+                            headers: { Authorization: `Bearer ${accessToken}` },
+                        }).then((r) => r.json()).then((d) => {
+                            if (cancelled || !d.ok) return;
+                            setTotalCreditedMin(Number(d.total_credited_minutes ?? 0));
+                            setRemaining(Number(d.remaining_minutes ?? 0));
+                        }).catch(() => {});
+                    } else if (Date.now() - lastTickAtRef.current < 55_000) {
                         // Network blip shorter than 55s — re-anchor the countdown interval to
                         // prevent display drift without billing an extra minute.
                         if (!cancelled) { stopTick(); startTick(); }
@@ -2219,9 +2341,12 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         }, 60_000);
     }
 
-    // 60s billing tick
+    // 60s billing tick — user only. The server rejects non-owner tick calls (403);
+    // the consultant's balance is kept live via Realtime instead (see the
+    // connect_sessions UPDATE handler above) — ticking from the consultant's
+    // device would just 403 and surface a spurious "Billing Paused" alert.
     useEffect(() => {
-        if (status !== "active") {
+        if (status !== "active" || session.user_id !== userId) {
             stopTick();
             return;
         }
@@ -2229,12 +2354,13 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         startTick();
         return () => { tickMountedRef.current = false; stopTick(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status, session.id, accessToken]);
+    }, [status, session.id, session.user_id, userId, accessToken]);
 
     // AppState foreground-resume: re-fire a tick immediately if >= 55s elapsed while backgrounded.
     // React Native pauses JS execution when backgrounded, causing setInterval to miss ticks.
+    // User only — see the 60s billing tick effect above for why.
     useEffect(() => {
-        if (status !== "active") return;
+        if (status !== "active" || session.user_id !== userId) return;
         let cancelled = false;
         const sub = AppState.addEventListener("change", (nextState) => {
             if (nextState !== "active") return;
@@ -2290,7 +2416,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             })();
         });
         return () => { cancelled = true; sub.remove(); };
-    }, [status, session.id, accessToken]);
+    }, [status, session.id, session.user_id, userId, accessToken]);
 
     // Register user push token on session entry so the server can notify on accept/decline/force-close
     useEffect(() => {
