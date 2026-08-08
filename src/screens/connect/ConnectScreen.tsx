@@ -1259,7 +1259,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             {/* Policy summary */}
             <View style={[s.card, { padding: 14 }]}>
                 <Text style={[s.cardBio, { fontSize: 12 }]}>
-                    ✦ Balance active for 2 years from last top-up or session{"\n"}
+                    ✦ Balance is never reduced — marked dormant 2 years after last activity{"\n"}
                     ✦ 6 email reminders before dormancy{"\n"}
                     ✦ Dormant balance preserved — never zeroed{"\n"}
                     ✦ 1-year grace refund period after dormancy
