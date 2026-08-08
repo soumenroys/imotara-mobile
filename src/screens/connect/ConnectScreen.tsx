@@ -2689,7 +2689,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     </Text>
                 </View>
             )}
-            {isActive && displaySeconds !== null && displaySeconds <= 120 && displaySeconds > 0 && (
+            {isActive && !isConsultantView && displaySeconds !== null && displaySeconds <= 120 && displaySeconds > 0 && (
                 <TouchableOpacity
                     style={{ backgroundColor: "rgba(248,113,113,0.08)", padding: 10 }}
                     onPress={() => setShowRecharge(true)}>
