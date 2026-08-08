@@ -996,7 +996,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                         "GDPR & data deletion request",
                                         "Community docs & FAQ",
                                         "Imotara Connect — browse & book human wellness companions",
-                                        "Imotara Wallet — prepaid session balance",
+                                        "Prepaid session minutes — recharge per companion",
                                         "Real-time session translation",
                                         "Scheduled sessions & companion favourites",
                                         "Session notes & ratings",
