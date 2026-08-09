@@ -144,6 +144,9 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
     MYR: "RM", THB: "฿", IDR: "Rp", PHP: "₱", ZAR: "R", BRL: "R$",
 };
 
+// All 22 languages Imotara supports — this list previously had only 16,
+// silently missing Odia, Russian, Chinese, Japanese, Hebrew, and Indonesian
+// as in-session translate targets.
 const CHAT_LANGUAGES = [
     { code: "en", label: "English",    flag: "🇬🇧" },
     { code: "hi", label: "Hindi",      flag: "🇮🇳" },
@@ -155,12 +158,18 @@ const CHAT_LANGUAGES = [
     { code: "pa", label: "Punjabi",    flag: "🇮🇳" },
     { code: "kn", label: "Kannada",    flag: "🇮🇳" },
     { code: "ml", label: "Malayalam",  flag: "🇮🇳" },
+    { code: "or", label: "Odia",       flag: "🇮🇳" },
     { code: "ur", label: "Urdu",       flag: "🇵🇰" },
     { code: "ar", label: "Arabic",     flag: "🇸🇦" },
+    { code: "he", label: "Hebrew",     flag: "🇮🇱" },
+    { code: "ru", label: "Russian",    flag: "🇷🇺" },
+    { code: "zh", label: "Chinese",    flag: "🇨🇳" },
+    { code: "ja", label: "Japanese",   flag: "🇯🇵" },
     { code: "es", label: "Spanish",    flag: "🇪🇸" },
     { code: "fr", label: "French",     flag: "🇫🇷" },
     { code: "de", label: "German",     flag: "🇩🇪" },
     { code: "pt", label: "Portuguese", flag: "🇵🇹" },
+    { code: "id", label: "Indonesian", flag: "🇮🇩" },
 ] as const;
 
 const CRISIS_LINES = [
