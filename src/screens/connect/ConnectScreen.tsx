@@ -71,6 +71,7 @@ interface Session {
     started_at: string | null;
     amount_charged: number | null;
     rate_per_min: number | null;
+    base_rate_per_min?: number | null;
     user_timezone: string | null;
     consultant_timezone: string | null;
     translation_enabled?: boolean;
@@ -2066,6 +2067,21 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     const [translating, setTranslating] = useState<Set<string>>(new Set());
     const [showLangPicker, setShowLangPicker] = useState(false);
     const chatLangRef = useRef("");
+    // Mid-session auto-translation toggle. `session` is an immutable prop with no
+    // setSession — mirror the two live-toggled fields into their own state, seeded
+    // from the prop, and update them from the Realtime handler below (same pattern
+    // as amountCharged/startedAt/minutesUsed above).
+    const [translationEnabled, setTranslationEnabled] = useState<boolean>(!!session.translation_enabled);
+    const [ratePerMin, setRatePerMin] = useState<number>(
+        Number(session.rate_per_min ?? session.connect_consultants?.rate_per_min ?? 0)
+    );
+    const [translateNotice, setTranslateNotice] = useState<string | null>(null);
+    const [translateToggleInFlight, setTranslateToggleInFlight] = useState(false);
+    // The Realtime handler's effect only has [session.id, accessToken] in its deps
+    // (see below), so it closes over a stale `translationEnabled` — read this ref
+    // instead to detect on/off transitions correctly.
+    const translationEnabledRef = useRef<boolean>(!!session.translation_enabled);
+    useEffect(() => { translationEnabledRef.current = translationEnabled; }, [translationEnabled]);
     const flatRef = useRef<FlatList>(null);
     const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -2204,7 +2220,27 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 table: "connect_sessions", filter: `id=eq.${session.id}`,
             }, (payload) => {
                 if (!tickMountedRef.current) return;
-                const updated = payload.new as { status?: string; amount_charged?: number; started_at?: string; minutes_used?: number };
+                const updated = payload.new as {
+                    status?: string; amount_charged?: number; started_at?: string; minutes_used?: number;
+                    translation_enabled?: boolean; rate_per_min?: number;
+                };
+                // Detect a translation toggle BEFORE applying it — compares against the ref
+                // (not the `translationEnabled` state, which is stale in this effect's
+                // closure) so both parties, including whoever just confirmed the toggle,
+                // see the transient notice.
+                if (
+                    updated.translation_enabled !== undefined &&
+                    updated.translation_enabled !== translationEnabledRef.current
+                ) {
+                    setTranslateNotice(
+                        updated.translation_enabled
+                            ? "Auto-translation was turned on for this session"
+                            : "Auto-translation was turned off for this session"
+                    );
+                    setTimeout(() => setTranslateNotice(null), 4000);
+                }
+                if (updated.translation_enabled !== undefined) setTranslationEnabled(updated.translation_enabled);
+                if (updated.rate_per_min != null) setRatePerMin(Number(updated.rate_per_min));
                 if (updated.status) {
                     setStatus(updated.status);
                     // Alert the user when a session is declined or cancelled so they
@@ -2487,13 +2523,13 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         const text = input.trim();
         if (!text || sending) return;
         if (status !== "active") return; // guard: don't send to completed/cancelled sessions
-        if (session.translation_enabled && !accessToken) {
+        if (translationEnabled && !accessToken) {
             Alert.alert("Signed out", "Please sign in again to continue.");
             return;
         }
         setSending(true); setInput("");
         try {
-            if (session.translation_enabled) {
+            if (translationEnabled) {
                 if (!accessToken) { setInput(text); return; }
                 const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}/messages`), {
                     method: "POST",
@@ -2560,12 +2596,68 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         }
     }
 
+    // Mid-session auto-translation toggle. Either party may call this, reversibly,
+    // any number of times while the session is active. Confirmation via Alert.alert
+    // (2-button) matches every other mid-session confirmation in this file — a
+    // custom Modal is reserved for larger forms (language picker, recharge).
+    function toggleTranslation() {
+        if (translateToggleInFlight || session.base_rate_per_min == null || !accessToken) return;
+        const targetEnabled = !translationEnabled;
+        const baseRate = Number(session.base_rate_per_min);
+        const newRate = targetEnabled ? +(baseRate * 1.10).toFixed(4) : baseRate;
+        const isConsultant = session.user_id !== userId;
+        const sym = CURRENCY_SYMBOLS[session.currency_code ?? "INR"] ?? "₹";
+
+        Alert.alert(
+            targetEnabled ? "Turn On Auto-Translation" : "Turn Off Auto-Translation",
+            `Rate: ${sym}${rate.toFixed(2)}/min → ${sym}${newRate.toFixed(2)}/min. Takes effect from the next billing minute, not immediately.` +
+                (isConsultant ? " This changes the rate the other person is charged, not you." : ""),
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: targetEnabled ? "Turn On" : "Turn Off",
+                    onPress: async () => {
+                        setTranslateToggleInFlight(true);
+                        try {
+                            const res = await cfetch(buildApiUrl(`/api/connect/sessions/${session.id}`), {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                                body: JSON.stringify({ action: "toggle_translation", enabled: targetEnabled }),
+                            });
+                            const d = await res.json().catch(() => null);
+                            if (!res.ok || !d?.ok) {
+                                Alert.alert("Error", d?.error ?? "Could not update translation setting.");
+                                return;
+                            }
+                            // Optimistic local update — immediate feedback for the confirming
+                            // party, mirroring the complete/userEnd PATCH handlers above. By the
+                            // time the Realtime echo arrives, translationEnabledRef is already
+                            // synced, so it won't fire a duplicate notice for this party.
+                            setTranslationEnabled(d.translation_enabled);
+                            setRatePerMin(Number(d.rate_per_min));
+                            setTranslateNotice(
+                                d.translation_enabled
+                                    ? "Auto-translation turned on for this session"
+                                    : "Auto-translation turned off for this session"
+                            );
+                            setTimeout(() => setTranslateNotice(null), 4000);
+                        } catch {
+                            Alert.alert("Network error", "Please check your connection and try again.");
+                        } finally {
+                            setTranslateToggleInFlight(false);
+                        }
+                    },
+                },
+            ]
+        );
+    }
+
     const isActive = status === "active";
     const isCompleted = status === "completed";
     const isPending = status === "pending";
     const isConsultantView = session.user_id !== userId;
     const sym = CURRENCY_SYMBOLS[session.currency_code ?? "INR"] ?? "₹";
-    const rate = Number(session.rate_per_min ?? session.connect_consultants?.rate_per_min ?? 0);
+    const rate = ratePerMin;
     // Use server-confirmed amount_charged; fall back to local clock estimate between ticks
     const consumed = amountCharged ?? (elapsedSecs / 60) * rate;
     const isLow = displaySeconds !== null && displaySeconds <= 120 && isActive;
@@ -2617,12 +2709,31 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     </TouchableOpacity>
                 )}
                 {/* Language picker button — hidden when session-level translation is active */}
-                {!session.translation_enabled && (
+                {!translationEnabled && (
                     <TouchableOpacity
                         onPress={() => setShowLangPicker(true)}
                         style={{ flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5, borderWidth: 1, borderColor: chatLang ? "rgba(96,165,250,0.4)" : "rgba(255,255,255,0.1)", backgroundColor: chatLang ? "rgba(96,165,250,0.15)" : "rgba(255,255,255,0.04)" }}>
                         <Text style={{ fontSize: 13 }}>🌐</Text>
                         {chatLang && <Text style={{ fontSize: 10, fontWeight: "700", color: "#60a5fa" }}>{chatLang.toUpperCase()}</Text>}
+                    </TouchableOpacity>
+                )}
+                {/* Mid-session auto-translation toggle — only for sessions that opted in
+                    at booking (base_rate_per_min set). Either party may toggle, reversibly. */}
+                {isActive && session.base_rate_per_min != null && (
+                    <TouchableOpacity
+                        onPress={toggleTranslation}
+                        disabled={translateToggleInFlight}
+                        style={{
+                            flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 8,
+                            paddingHorizontal: 7, paddingVertical: 5, borderWidth: 1,
+                            borderColor: translationEnabled ? "rgba(96,165,250,0.4)" : "rgba(255,255,255,0.1)",
+                            backgroundColor: translationEnabled ? "rgba(96,165,250,0.15)" : "rgba(255,255,255,0.04)",
+                            opacity: translateToggleInFlight ? 0.5 : 1,
+                        }}>
+                        <Text style={{ fontSize: 13 }}>🌐</Text>
+                        <Text style={{ fontSize: 9, fontWeight: "700", color: translationEnabled ? "#60a5fa" : colors.textSecondary }}>
+                            {translationEnabled ? "ON" : "OFF"}
+                        </Text>
                     </TouchableOpacity>
                 )}
                 <TouchableOpacity style={s.emergencyBtn} onPress={() => setShowEmergency(true)}>
@@ -2674,9 +2785,15 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             <Text style={[s.disclaimer, { textAlign: "center", paddingVertical: 6 }]}>
                 Peer wellness support — not professional care
             </Text>
-            {session.translation_enabled && (
+            {translationEnabled && (
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "rgba(59,130,246,0.08)", borderBottomWidth: 1, borderBottomColor: "rgba(59,130,246,0.15)", paddingVertical: 6 }}>
                     <Text style={{ fontSize: 10, color: "#60a5fa" }}>🌐 Auto-translation active — 1–3s delay · Machine translation</Text>
+                </View>
+            )}
+            {/* Transient auto-translation toggle notice — shown to both parties */}
+            {translateNotice && (
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "rgba(59,130,246,0.1)", borderBottomWidth: 1, borderBottomColor: "rgba(59,130,246,0.15)", paddingVertical: 6 }}>
+                    <Text style={{ fontSize: 10, color: "#60a5fa" }}>🌐 {translateNotice}</Text>
                 </View>
             )}
 
@@ -2728,7 +2845,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     const isMe = m.sender_id === userId;
 
                     // Session-level translation: show pre-translated content from DB
-                    if (session.translation_enabled) {
+                    if (translationEnabled) {
                         const primaryText   = isMe ? m.content : (m.translated_content || m.content);
                         const secondaryText = isMe ? m.translated_content : m.content;
                         return (
