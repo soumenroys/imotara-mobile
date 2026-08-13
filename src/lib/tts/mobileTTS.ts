@@ -467,11 +467,13 @@ export async function speakMessage(
     // The USER's detected emotional state (canonical 8-value vocabulary from
     // web's src/types/history.ts — this module stays type-agnostic so it can
     // accept the same plain-string values without importing that type),
-    // forwarded to /api/tts for English-only emotion-aware style selection
-    // (see resolveStyle() in voices.ts). Callers passing mobile's own local
-    // emotion labels ("stressed", "angry", etc.) must normalize to the
-    // canonical vocabulary first — see mapUserEmotionForTTS() in
-    // ChatScreen.tsx — this function does not translate them itself.
+    // forwarded to /api/tts for emotion-aware delivery — a named Azure style
+    // for the 9 languages with real style-capable voices, or a small prosody
+    // rate/pitch nudge for the other 13 (see resolveStyle()/resolveProsody()
+    // in voices.ts). Callers passing mobile's own local emotion labels
+    // ("stressed", "angry", etc.) must normalize to the canonical vocabulary
+    // first — see mapUserEmotionForTTS() in ChatScreen.tsx — this function
+    // does not translate them itself.
     emotion?: string,
 ): Promise<void> {
     const isSpeaking = await Speech.isSpeakingAsync();
