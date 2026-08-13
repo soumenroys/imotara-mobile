@@ -296,7 +296,12 @@ function playChunkAndWait(file: File, rate: number, onStart?: () => void): Promi
                 });
                 const { sound } = await Audio.Sound.createAsync(
                     { uri: file.uri },
-                    { shouldPlay: true, rate: isFinite(rate) ? rate : 0.95, volume: 1.0 },
+                    // shouldCorrectPitch: without it, expo-av's default resampling shifts
+                    // pitch along with speed — a 0.95x rate doesn't just slow the voice,
+                    // it drops it ~0.9 semitone, shifting formants and reading as a
+                    // slightly different, "off" voice. Azure's own audio is already at
+                    // the correct pitch; only the rate should change on playback.
+                    { shouldPlay: true, rate: isFinite(rate) ? rate : 0.95, shouldCorrectPitch: true, volume: 1.0 },
                 );
                 _soundObject = sound;
                 onStart?.();
@@ -369,7 +374,9 @@ async function playSound(uri: string, onDone?: () => void, rate = 0.95): Promise
     });
     const { sound } = await Audio.Sound.createAsync(
         { uri },
-        { shouldPlay: true, rate: isFinite(rate) ? rate : 0.95, volume: 1.0 },
+        // shouldCorrectPitch: see playChunkAndWait's identical fix above — without
+        // it, the playback rate also shifts pitch, not just speed.
+        { shouldPlay: true, rate: isFinite(rate) ? rate : 0.95, shouldCorrectPitch: true, volume: 1.0 },
     );
     _soundObject = sound;
     sound.setOnPlaybackStatusUpdate((status) => {
