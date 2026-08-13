@@ -14,6 +14,10 @@ import { File, Paths }    from "expo-file-system";
 import { fetchWithTimeout } from "../fetchWithTimeout";
 
 // ── BCP-47 map ────────────────────────────────────────────────────────────────
+// Only consulted for the on-device native-fallback path (Azure request
+// failed) — matched to es-MX 2026-08-14 for accent consistency with the
+// Azure voice web's voices.ts now assigns for Spanish (es-ES → es-MX, part
+// of the MAI-Voice-2 emotion-style upgrade), not a functional requirement.
 
 const LANG_TO_BCP47: Record<string, string> = {
     en: "en-US", hi: "hi-IN", mr: "mr-IN", bn: "bn-IN",
@@ -21,7 +25,7 @@ const LANG_TO_BCP47: Record<string, string> = {
     kn: "kn-IN", ml: "ml-IN", or: "or-IN", ur: "ur-PK",
     ar: "ar-SA", zh: "zh-CN", fr: "fr-FR", de: "de-DE",
     he: "he-IL", id: "id-ID", ja: "ja-JP", pt: "pt-BR",
-    ru: "ru-RU", es: "es-ES",
+    ru: "ru-RU", es: "es-MX",
 };
 
 export function toBCP47(lang: string): string {
