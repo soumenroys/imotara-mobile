@@ -512,6 +512,12 @@ export async function speakMessage(
 
     const chunks = splitIntoSpeechChunks(stripMarkdown(text));
     console.log(`[mobileTTS] speakMessage start lang=${lang} textLen=${text.length} chunks=${chunks.length}`);
+    // How many chunks fully finished playing before any failure — the
+    // native-fallback call below must only speak what's LEFT, not the whole
+    // message again. Only incremented after playChunkAndWait resolves, so a
+    // chunk whose playback itself errors is correctly treated as unheard and
+    // included in the fallback range, not skipped.
+    let playedChunks = 0;
 
     // Always use Azure Neural TTS — native Speech.speak() ignores gender,
     // so the companion voice setting would be silently overridden by the device default.
@@ -546,6 +552,7 @@ export async function speakMessage(
             await playChunkAndWait(file, rate, i === 0 ? onStart : undefined);
 
             if (myGen !== _generation) return;
+            playedChunks = i + 1;
         }
 
         disarmTimer();
@@ -562,7 +569,15 @@ export async function speakMessage(
             return;
         }
         console.warn("[mobileTTS] Azure TTS failed, falling back to native:", err);
-        await playNativeFallback(text, lang, rate, pitch, onDone, onStart, onUnavailable);
+        // Previously always spoke the full original `text` here, so a failure
+        // partway through a multi-chunk reply made the fallback repeat
+        // already-heard content from the very start (confirmed live 2026-08-14:
+        // an Android test hit a mid-reply 429 after 3 of 5 chunks had already
+        // played real Azure audio, then native fallback re-read the entire
+        // message from the beginning). Speak only the chunks that never
+        // successfully played instead.
+        const remainingText = chunks.slice(playedChunks).join(" ").trim() || text;
+        await playNativeFallback(remainingText, lang, rate, pitch, onDone, onStart, onUnavailable);
     }
 }
 
