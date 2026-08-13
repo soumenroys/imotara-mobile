@@ -3213,9 +3213,14 @@ export default function ChatScreen() {
 
     // networkNote removed — was intrusive in every offline bubble
 
-    typingTimeoutRef.current = setTimeout(() => {
-      (async () => {
-        try {
+    // Previously wrapped in a flat 800ms setTimeout before the send pipeline
+    // even started — pure added latency with no debounce/coalescing purpose
+    // (isSendingRef above already blocks double-sends). Removed so the
+    // pipeline starts immediately; resetTypingState()'s clearTimeout(
+    // typingTimeoutRef.current) calls elsewhere remain as harmless no-ops
+    // for this path since nothing sets the ref here anymore.
+    (async () => {
+      try {
           // ── Adult content safety gate ─────────────────────────
           // "relaxed" skips the check to reduce false positives on mature-but-safe topics
           if (contentGuardSensitivity !== "relaxed" && detectAdultContent(trimmed)) {
@@ -3737,13 +3742,11 @@ export default function ChatScreen() {
             intensity: finalIntensity,
           });
 
-          // UX-5: pacing delay on heavy emotions — typing indicator stays visible during wait
-          const HEAVY_EMOTIONS_MOBILE = new Set(["sad", "stressed", "anxious", "grief", "hopeless", "lonely", "frustrated", "hurt", "depressed", "empty"]);
-          if (finalEmotion && HEAVY_EMOTIONS_MOBILE.has(finalEmotion)) {
-            await new Promise<void>((resolve) => setTimeout(resolve, 1500));
-            if (!mountedRef.current) return;
-          }
-
+          // Previously an artificial 1.5s pacing delay sat here for heavy
+          // emotions — but by this point the stream placeholder already
+          // shows the full final text (set above), so the delay added pure
+          // dead time with nothing left to pace. Removed for consistency
+          // with the equivalent web fix (see chat/page.tsx's Phase 2.2a).
           setTypingStatus("responding");
           haptic.receive();
           const extraMessages: ChatMessage[] = [];
@@ -3870,13 +3873,10 @@ export default function ChatScreen() {
           // Do NOT call addToHistory again here — addToHistory always appends
           // and would create a duplicate entry in history on every cloud failure.
 
-          // UX-5: pacing delay on heavy emotions (local fallback path)
-          const HEAVY_EMOTIONS_FB = new Set(["sad", "stressed", "anxious", "grief", "hopeless", "lonely", "frustrated", "hurt", "depressed", "empty"]);
-          if (userEmotion && HEAVY_EMOTIONS_FB.has(userEmotion)) {
-            await new Promise<void>((resolve) => setTimeout(resolve, 1500));
-            if (!mountedRef.current) return;
-          }
-
+          // Previously an artificial 1.5s pacing delay sat here too (local
+          // fallback path) — removed for the same reason and for consistency
+          // with the web fix (Phase 2.2a): it only added dead time before the
+          // locally-generated reply was shown, no pacing purpose served.
           setTypingStatus("responding");
           haptic.receive();
           setMessages((prev) => [...prev, botMessage]);
@@ -3905,8 +3905,7 @@ export default function ChatScreen() {
           setIsTyping(false);
           setTypingStatus("idle");
         }
-      })();
-    }, 800);
+    })();
   };
 
   function handleUndo() {
