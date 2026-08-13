@@ -36,7 +36,24 @@ export type VoiceInputOptions = {
     /** Real accessToken if signed in, else the anonymous identity's token —
      *  /api/voice/transcribe requires some identity (no longer open/unauthenticated). */
     accessToken?: string;
+    // When true, recording auto-stops after a period of silence following
+    // some actual speech — used by hands-free mode so each turn ends on its
+    // own instead of requiring a manual mic tap. Off by default: regular
+    // (non-hands-free) recording keeps today's tap-to-stop-only behavior,
+    // since a user composing a longer message by voice may intentionally
+    // pause mid-thought and shouldn't get cut off.
+    autoStopOnSilence?: boolean;
 };
+
+// Lightweight amplitude-based silence detection (not a real VAD model) via
+// expo-av's built-in metering — good enough to end a hands-free turn without
+// pulling in a speech-detection library. Metering is dBFS, roughly -160
+// (silence) to 0 (max); thresholds below are deliberately conservative
+// (require real speech first, then a full 1.5s of continuous quiet) to avoid
+// cutting someone off during a normal mid-sentence breath.
+const SILENCE_DB_THRESHOLD = -35;
+const SILENCE_STOP_MS = 1500;
+const MIN_SPEECH_MS_BEFORE_AUTOSTOP = 600;
 
 /**
  * Upload an audio file to /api/voice/transcribe.
@@ -104,10 +121,18 @@ export function useVoiceInput(
     const accessTokenRef = useRef(opts?.accessToken);
     const optsAccessToken = opts?.accessToken;
     useEffect(() => { accessTokenRef.current = optsAccessToken; }, [optsAccessToken]);
+    const autoStopOnSilenceRef = useRef(opts?.autoStopOnSilence ?? false);
+    const optsAutoStopOnSilence = opts?.autoStopOnSilence;
+    useEffect(() => { autoStopOnSilenceRef.current = optsAutoStopOnSilence ?? false; }, [optsAutoStopOnSilence]);
     const [state, setState] = useState<VoiceInputState>("idle");
     const [durationMs, setDurationMs] = useState(0);
     const recordingRef = useRef<Audio.Recording | null>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    // Silence-detection state (only touched when autoStopOnSilence is on) —
+    // reset at the start of each recording in startRecording.
+    const hasSpokenRef = useRef(false);
+    const firstSpeechAtRef = useRef(0);
+    const silenceStartRef = useRef<number | null>(null);
     const startTsRef = useRef<number>(0);
     // BUG-12B: synchronous in-flight flag for startRecording. recordingRef is only
     // set after createAsync resolves, so the BUG-11A guard (recordingRef.current)
@@ -261,11 +286,42 @@ export function useVoiceInput(
                     },
                 }
                 : Audio.RecordingOptionsPresets.HIGH_QUALITY;
-            const { recording } = await Audio.Recording.createAsync(preset);
+            // isMeteringEnabled: only actually consumed when autoStopOnSilence is
+            // on (below), but harmless to always request — expo-av just adds a
+            // metering field to status updates the app already isn't using
+            // otherwise.
+            const { recording } = await Audio.Recording.createAsync({ ...preset, isMeteringEnabled: true });
             recordingRef.current = recording;
             startTsRef.current = Date.now();
             setDurationMs(0);
             setState("recording");
+
+            if (autoStopOnSilenceRef.current) {
+                hasSpokenRef.current = false;
+                firstSpeechAtRef.current = 0;
+                silenceStartRef.current = null;
+                recording.setProgressUpdateInterval(200);
+                recording.setOnRecordingStatusUpdate((status) => {
+                    if (!status.isRecording || typeof status.metering !== "number") return;
+                    const now = Date.now();
+                    const isLoud = status.metering > SILENCE_DB_THRESHOLD;
+                    if (isLoud) {
+                        if (!hasSpokenRef.current) {
+                            hasSpokenRef.current = true;
+                            firstSpeechAtRef.current = now;
+                        }
+                        silenceStartRef.current = null;
+                        return;
+                    }
+                    if (!hasSpokenRef.current) return; // still waiting for the user to start
+                    if (silenceStartRef.current === null) silenceStartRef.current = now;
+                    const sinceFirstSpeech = now - firstSpeechAtRef.current;
+                    const sinceSilenceStart = now - silenceStartRef.current;
+                    if (sinceFirstSpeech >= MIN_SPEECH_MS_BEFORE_AUTOSTOP && sinceSilenceStart >= SILENCE_STOP_MS) {
+                        void stopRecordingRef.current();
+                    }
+                });
+            }
 
             timerRef.current = setInterval(() => {
                 const elapsed = Date.now() - startTsRef.current;

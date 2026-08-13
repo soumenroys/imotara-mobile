@@ -266,12 +266,13 @@ async function fetchChunkAudio(
     gender: string | undefined,
     accessToken: string | undefined,
     signal: AbortSignal,
+    emotion?: string,
 ): Promise<ArrayBuffer> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
     const res = await fetch(
         `${apiBase()}/api/tts`,
-        { method: "POST", headers, body: JSON.stringify({ text, lang, gender: gender ?? "neutral" }), signal },
+        { method: "POST", headers, body: JSON.stringify({ text, lang, gender: gender ?? "neutral", ...(emotion ? { emotion } : {}) }), signal },
     );
     if (!res.ok) throw new Error(`TTS API ${res.status}`);
     return res.arrayBuffer();
@@ -459,6 +460,15 @@ export async function speakMessage(
     // playNativeFallback's doc comment for why this needs to be explicit
     // rather than inferred from silence.
     onUnavailable?: () => void,
+    // The USER's detected emotional state (canonical 8-value vocabulary from
+    // web's src/types/history.ts — this module stays type-agnostic so it can
+    // accept the same plain-string values without importing that type),
+    // forwarded to /api/tts for English-only emotion-aware style selection
+    // (see resolveStyle() in voices.ts). Callers passing mobile's own local
+    // emotion labels ("stressed", "angry", etc.) must normalize to the
+    // canonical vocabulary first — see mapUserEmotionForTTS() in
+    // ChatScreen.tsx — this function does not translate them itself.
+    emotion?: string,
 ): Promise<void> {
     const isSpeaking = await Speech.isSpeakingAsync();
     if (isSpeaking || _soundObject) {
@@ -505,7 +515,7 @@ export async function speakMessage(
         // entire reply to synthesize.
         armTimer();
         let nextFetch: Promise<ArrayBuffer> | null =
-            fetchChunkAudio(chunks[0], lang, gender, accessToken, controller.signal);
+            fetchChunkAudio(chunks[0], lang, gender, accessToken, controller.signal, emotion);
 
         for (let i = 0; i < chunks.length; i++) {
             if (myGen !== _generation) return; // stopped/superseded
@@ -520,7 +530,7 @@ export async function speakMessage(
             nextFetch = null;
             if (i + 1 < chunks.length) {
                 armTimer();
-                nextFetch = fetchChunkAudio(chunks[i + 1], lang, gender, accessToken, controller.signal);
+                nextFetch = fetchChunkAudio(chunks[i + 1], lang, gender, accessToken, controller.signal, emotion);
             }
 
             // Alternate filenames so writing the prefetched next chunk never

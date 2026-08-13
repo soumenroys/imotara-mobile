@@ -713,6 +713,29 @@ function getDefaultIntensityForPrimary(primary?: string): number | undefined {
   return undefined;
 }
 
+// Normalizes this file's own local emotion labels ("sad"/"sadness",
+// "stressed", "angry"/"anger", "hopeful", "joy", "confused", "neutral", or an
+// arbitrary raw backend string) to the canonical 8-value Emotion vocabulary
+// (src/types/history.ts on web) that voices.ts's EN_EMOTION_STYLE actually
+// keys on. Without this, e.g. "stressed" or "angry" would silently miss that
+// lookup (case-sensitive-looking but really just wrong-string) and fall
+// through to the default style — the exact class of silent Azure-style bug
+// 2.1f found and fixed for the style config itself, now avoided here too.
+// Unrecognized values are passed through unchanged (safe no-op on the
+// receiving end, same as passing undefined) rather than discarded.
+function mapUserEmotionForTTS(local?: string): string | undefined {
+  if (!local) return undefined;
+  const p = local.trim().toLowerCase();
+  if (p === "sad" || p === "sadness") return "sadness";
+  if (p === "stressed") return "fear";
+  if (p === "angry" || p === "anger") return "anger";
+  if (p === "hopeful") return "gratitude";
+  if (p === "joy") return "joy";
+  if (p === "neutral") return "neutral";
+  if (p === "confused") return undefined; // no reasonable canonical match — default style
+  return local;
+}
+
 // ✅ DEV-ONLY QA helper (debug gated)
 // Allows quick replay of prompts 1–10 and logs mismatches.
 // This is DEV-only and does not change chat behavior.
@@ -1768,7 +1791,13 @@ export default function ChatScreen() {
   const voiceInput = useVoiceInput(
     onTranscript,
     process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL,
-    { maxDurationMs: voiceMaxDurationMs, quality: voiceQuality, cloudTranscription: voiceCloudTranscription, lang: voiceLang, accessToken: guestAccessToken },
+    {
+      maxDurationMs: voiceMaxDurationMs, quality: voiceQuality, cloudTranscription: voiceCloudTranscription,
+      lang: voiceLang, accessToken: guestAccessToken,
+      // Only hands-free auto-ends a turn on silence — manual recording keeps
+      // tap-to-stop-only behavior (see useVoiceInput.ts's doc comment).
+      autoStopOnSilence: handsfree,
+    },
   );
 
   // voiceStateRef keeps the live recording state accessible from callbacks that
@@ -1798,6 +1827,19 @@ export default function ChatScreen() {
       await voiceInputRef.current.stopRecording();
     }
   }, []); // intentional [] — state via voiceStateRef; functions via voiceInputRef
+
+  // Reopens the mic once a hands-free reply finishes speaking — pass as (part
+  // of) speakMessage's onDone. Without this, hands-free mode spoke each reply
+  // and then just sat idle waiting for a manual mic tap: the loop only ever
+  // auto-advanced mic → reply, never reply → mic, contradicting the shipped
+  // copy in featureTips.ts/settingsCatalog.ts that describes it as fully
+  // hands-free. Mirrors handleMicPress's own idle-check exactly.
+  const reopenMicIfHandsfree = useCallback(() => {
+    if (!handsfreeRef.current) return;
+    if (!mountedRef.current) return;
+    if (voiceStateRef.current !== "idle") return;
+    void voiceInputRef.current.startRecording();
+  }, []); // intentional [] — all mutable values via refs, same pattern as handleMicPress
 
   // Message reactions — messageId → emoji (persisted to AsyncStorage)
   const REACTIONS_KEY = "imotara.reactions.v1";
@@ -3782,11 +3824,12 @@ export default function ChatScreen() {
             setPreparingSpeechId(botMessage.id);
             speakMessage(
               botMessage.id, botMessage.text, g, l,
-              () => { setSpeakingMessageId(null); },
+              () => { setSpeakingMessageId(null); reopenMicIfHandsfree(); },
               ttsRate, ttsPitch, guestAccessToken,
               () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
               isFeatureEnabled("TTS_ADVANCED", licenseTier),
               () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
+              mapUserEmotionForTTS(finalEmotion),
             );
           }
         } catch (error) {
@@ -3888,11 +3931,12 @@ export default function ChatScreen() {
             setPreparingSpeechId(botMessage.id);
             speakMessage(
               botMessage.id, botMessage.text, g, l,
-              () => { setSpeakingMessageId(null); },
+              () => { setSpeakingMessageId(null); reopenMicIfHandsfree(); },
               ttsRate, ttsPitch, guestAccessToken,
               () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
               isFeatureEnabled("TTS_ADVANCED", licenseTier),
               () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
+              mapUserEmotionForTTS(userEmotion),
             );
           }
         } finally {
