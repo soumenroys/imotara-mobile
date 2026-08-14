@@ -9,6 +9,7 @@ import HistoryProvider from "./src/state/HistoryContext";
 import { SettingsProvider } from "./src/state/SettingsContext";
 import { AuthProvider } from "./src/auth/AuthContext";
 import Constants from "expo-constants";
+import * as Sentry from "@sentry/react-native";
 
 // ✅ API base URL (fail-fast in prod; friendly screen here)
 import { IMOTARA_API_BASE_URL } from "./src/config/api";
@@ -34,6 +35,12 @@ class ErrorBoundary extends React.Component<
   static getDerivedStateFromError(e: Error) { return { error: e }; }
   componentDidCatch(e: Error, info: React.ErrorInfo) {
     console.error("[imotara] ErrorBoundary caught:", e, info.componentStack);
+    // P2-10 (code_review_audit_2026_08_14 finding F2): previously the only
+    // way a crash was ever reported was the user manually tapping "Send
+    // crash report" below — no automatic telemetry at all. captureException
+    // no-ops safely when Sentry was never initialized (no
+    // EXPO_PUBLIC_SENTRY_DSN configured) — see src/lib/sentry.ts.
+    Sentry.captureException(e, { contexts: { react: { componentStack: info.componentStack } } });
     this.setState({ componentStack: info.componentStack ?? "" });
   }
   render() {

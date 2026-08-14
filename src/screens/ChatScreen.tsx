@@ -163,7 +163,7 @@ function getWeeklyRecapText(topEmotion: string, count: number, lang: string): st
 // Tier 1: hopelessness, worthlessness, trapped — distress without explicit ideation
 // Tier 0: no crisis signal
 
-const MOBILE_CRISIS_TIER2_RE = CRISIS_HINT_REGEX; // already covers EN + 13 languages
+const MOBILE_CRISIS_TIER2_RE = CRISIS_HINT_REGEX; // covers all 22 Imotara-supported languages (synced 2026-08-14)
 
 const MOBILE_CRISIS_TIER1_RE =
   /\b(hopeless|helpless|worthless|nothing matters|give up|can'?t take (it|this) anymore|breaking down|falling apart|no one cares|all alone|empty inside|numbing|disappear|feel like a burden|i'?m a burden|everyone (would be )?better off without me|trapped|feel(ing)? trapped|no way out|no escape|can'?t see a future|thinking about (death|ending|disappearing)|thoughts of (death|ending it)|pointless|life is pointless|don'?t deserve to (live|be here)|i\s+am\s+nothing)\b/i;

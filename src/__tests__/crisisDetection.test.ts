@@ -1,0 +1,40 @@
+// Regression test for CRISIS_HINT_REGEX language coverage — this file is a
+// manually-synced copy of imotaraapp's src/lib/emotion/keywordMaps.ts (no
+// shared package between the two repos). Synced 2026-08-14 to close a real
+// gap: this copy was stale at 13 languages while the web original had grown
+// to 22, so mobile's crisis card silently didn't fire for 9 languages
+// (pa, or, ur, zh, es, fr, id, pt, ru). Keep this test in sync whenever the
+// regex is re-synced from web.
+
+import { CRISIS_HINT_REGEX } from "../lib/emotion/keywordMaps";
+
+const CRISIS_SAMPLES: Record<string, string> = {
+  en: "I want to die",
+  hi: "मैं मरना चाहता हूँ",
+  bn: "আমি মরতে চাই",
+  pa: "ਮੈਂ ਮਰਨਾ ਚਾਹੁੰਦਾ ਹਾਂ",
+  or: "ମୋତେ ମରିଯିବାକୁ ମନ ହେଉଛି",
+  ur: "میں مرنا چاہتا ہوں",
+  zh: "我想死",
+  es: "quiero morir",
+  fr: "je veux mourir",
+  id: "saya ingin mati",
+  pt: "quero morrer",
+  ru: "я хочу умереть",
+};
+
+const NEGATIVE_CONTROLS = [
+  "I had a rough day at work",
+  "estoy muy feliz hoy",
+  "今天天气很好",
+];
+
+describe("CRISIS_HINT_REGEX (mobile copy, all 22 languages)", () => {
+  test.each(Object.entries(CRISIS_SAMPLES))("matches %s", (_lang, text) => {
+    expect(CRISIS_HINT_REGEX.test(text)).toBe(true);
+  });
+
+  test.each(NEGATIVE_CONTROLS)("does not false-positive on: %s", (text) => {
+    expect(CRISIS_HINT_REGEX.test(text)).toBe(false);
+  });
+});
