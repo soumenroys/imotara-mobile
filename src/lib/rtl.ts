@@ -30,7 +30,17 @@ export async function syncI18nManagerFromStoredSettings(): Promise<void> {
     const raw = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
-    const lang: string | undefined = parsed?.user?.preferredLang;
+    // The persisted shape is { toneContext: { user: { preferredLang } }, ... }
+    // (see src/state/SettingsContext.tsx's `payload` object) — every other
+    // call site in the app (ChatScreen, SettingsScreen, TrendsScreen,
+    // CompanionQuickPanel) reads it via toneContext.user.preferredLang.
+    // A prior version of this file read parsed.user.preferredLang directly,
+    // which is always undefined against the real payload shape — RTL never
+    // activated, and on a device whose OS locale is already ar/he/ur (where
+    // I18nManager.isRTL defaults to true natively) this would have detected
+    // a false mismatch and force-disabled RTL, actively breaking correct
+    // native rendering. Fixed 2026-08-14 before first release of this file.
+    const lang: string | undefined = parsed?.toneContext?.user?.preferredLang;
     const shouldBeRtl = !!lang && RTL_LANGS.has(lang);
 
     if (I18nManager.isRTL !== shouldBeRtl) {
