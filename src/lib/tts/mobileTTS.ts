@@ -69,6 +69,52 @@ const SCRIPT_RANGES: Array<{ lang: string; re: RegExp }> = [
 const URDU_HINT    = /[ٹڈڑںے]/;
 const MARATHI_HINT = /आहे|नाही|माझ[ेा]|तुझ[ेा]|होत[ेी]|मी |तुम्ही/;
 
+// Romanized-Indic-input TTS pronunciation fix (2026-08-15) — mirrors
+// imotaraapp's src/lib/azure-tts/transliterate.ts (see there for the full
+// root-cause writeup: confirmed via a Whisper STT round-trip on real Azure
+// output that these 7 languages specifically produce badly garbled
+// pronunciation when fed Latin-script text as-is, while hi/ta/mr/pa already
+// sound correct untouched). Mirrored rather than shared — separate repos.
+// Kept in sync manually; server list (the /api/tts/transliterate endpoint)
+// is the source of truth.
+const TTS_TRANSLITERATION_LANGS = new Set(["bn", "gu", "te", "kn", "ml", "ur", "or"]);
+const TRANSLIT_NATIVE_SCRIPT_RANGES: Record<string, RegExp> = {
+    bn: /[ঀ-৿]/, gu: /[઀-૿]/, te: /[ఀ-౿]/,
+    kn: /[ಀ-೿]/, ml: /[ഀ-ൿ]/, ur: /[؀-ۿ]/,
+    or: /[଀-୿]/,
+};
+
+/**
+ * Calls /api/tts/transliterate ONCE per reply (never per chunk) when the
+ * resolved language is one of the 7 known-affected ones and the text has no
+ * native-script characters at all. Fails open on any error — returns the
+ * original text unchanged, exactly today's behavior, never worse.
+ */
+async function transliterateIfNeeded(
+    text: string,
+    lang: string,
+    accessToken: string | undefined,
+    signal: AbortSignal,
+): Promise<string> {
+    if (!TTS_TRANSLITERATION_LANGS.has(lang)) return text;
+    const scriptRe = TRANSLIT_NATIVE_SCRIPT_RANGES[lang];
+    if (scriptRe?.test(text)) return text; // already native script
+
+    try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+        const res = await fetch(`${apiBase()}/api/tts/transliterate`, {
+            method: "POST", headers, body: JSON.stringify({ text, lang }), signal,
+        });
+        if (!res.ok) return text;
+        const data = await res.json();
+        if (data?.transliterated && typeof data.text === "string") return data.text;
+        return text;
+    } catch {
+        return text;
+    }
+}
+
 /** Detect the dominant non-Latin script in `text`; falls back to `fallbackLang` when the text is pure Latin script or empty. */
 export function detectMessageLang(text: string, fallbackLang: string): string {
     let best: { lang: string; count: number } | null = null;
@@ -514,7 +560,12 @@ export async function speakMessage(
             .finally(() => clearTimeout(t));
     };
 
-    const chunks = splitIntoSpeechChunks(stripMarkdown(text));
+    let cleanText = stripMarkdown(text);
+    // Romanized-Indic-input TTS pronunciation fix — see
+    // transliterateIfNeeded's doc comment above. Runs once here, before
+    // chunking, not per chunk.
+    cleanText = await transliterateIfNeeded(cleanText, lang, accessToken, controller.signal);
+    const chunks = splitIntoSpeechChunks(cleanText);
     console.log(`[mobileTTS] speakMessage start lang=${lang} textLen=${text.length} chunks=${chunks.length}`);
     // How many chunks fully finished playing before any failure — the
     // native-fallback call below must only speak what's LEFT, not the whole
