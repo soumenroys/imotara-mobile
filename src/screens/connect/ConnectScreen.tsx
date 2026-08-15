@@ -4056,8 +4056,9 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                                                 <Text style={[s.cardBio, { fontSize: 12, flex: 1 }]}>
                                                     {displayName} · {new Date(h.created_at).toLocaleDateString()} · {h.type} · {Math.round(h.minutes_used ?? 0)} min
                                                     {(() => {
-                                                        const rate = (h.rate_per_min as number | null | undefined) || earnings?.rate_per_min;
-                                                        const earned = rate ? rate * (h.minutes_used ?? 0) * 0.80 : null;
+                                                        const rateRaw = h.rate_per_min as number | null | undefined;
+                                                        const rate = rateRaw != null ? rateRaw : earnings?.rate_per_min;
+                                                        const earned = rate != null ? rate * (h.minutes_used ?? 0) * 0.80 : null;
                                                         return earned != null ? ` · ${CURRENCY_SYMBOLS[earnings?.earned_currency ?? "INR"] ?? "₹"}${earned.toFixed(2)} earned` : "";
                                                     })()}
                                                 </Text>
