@@ -499,16 +499,20 @@ export async function speakMessage(
     const myGen      = ++_generation;
     const controller = new AbortController();
     _fetchAbort      = controller;
-    // Per-chunk-fetch ceiling, armed fresh before each individual chunk fetch
-    // and disarmed as soon as that fetch resolves — NOT a ceiling on the
-    // whole sequence. A long reply legitimately takes longer in total
-    // (many chunks, each played in full before the next starts), but any
-    // single chunk's own fetch — a few hundred characters over the network —
-    // should still complete quickly; only that is worth aborting on.
+    // Per-chunk-fetch ceiling — NOT a ceiling on the whole sequence. A long
+    // reply legitimately takes longer in total (many chunks, each played in
+    // full before the next starts), but any single chunk's own fetch — a
+    // few hundred characters over the network — should still complete
+    // quickly; only that is worth aborting on. Each fetch now arms and
+    // disarms its own independent timer (rather than one shared `timer`
+    // variable) since up to PREFETCH_DEPTH fetches can be in flight at once
+    // — a shared timer would only ever track the most recent one.
     const CHUNK_FETCH_TIMEOUT_MS = 20_000;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const armTimer    = () => { timer = setTimeout(() => controller.abort(), CHUNK_FETCH_TIMEOUT_MS); };
-    const disarmTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    const armedFetch = (chunkText: string): Promise<ArrayBuffer> => {
+        const t = setTimeout(() => controller.abort(), CHUNK_FETCH_TIMEOUT_MS);
+        return fetchChunkAudio(chunkText, lang, gender, accessToken, controller.signal, emotion)
+            .finally(() => clearTimeout(t));
+    };
 
     const chunks = splitIntoSpeechChunks(stripMarkdown(text));
     console.log(`[mobileTTS] speakMessage start lang=${lang} textLen=${text.length} chunks=${chunks.length}`);
@@ -522,28 +526,34 @@ export async function speakMessage(
     // Always use Azure Neural TTS — native Speech.speak() ignores gender,
     // so the companion voice setting would be silently overridden by the device default.
     try {
-        // Pipeline: fetch chunk N+1 while chunk N plays, so speech starts as
-        // soon as the first (small) chunk is ready instead of waiting for the
-        // entire reply to synthesize.
-        armTimer();
-        let nextFetch: Promise<ArrayBuffer> | null =
-            fetchChunkAudio(chunks[0], lang, gender, accessToken, controller.signal, emotion);
+        // Prefetch depth 2, not 1: a single Azure voice (e.g. the newer
+        // MAI-Voice-2 family used for en/hi/zh/fr/pt/ru/de/es) can take ~3s
+        // to synthesize a short chunk — longer than that chunk's own
+        // playback duration — so a 1-chunk lookahead sometimes ran dry
+        // mid-reply, producing an audible pause before the next sentence
+        // (reported by a user, 2026-08-15). A 2-deep queue gives each fetch
+        // roughly two chunks' worth of playback time to land instead of
+        // one; live-tested against real MAI-Voice-2 latency and confirmed
+        // it fully closes the gap for every chunk after the first (the
+        // first chunk's wait is the expected "preparing" delay before
+        // speech starts at all, not a between-sentence pause).
+        const PREFETCH_DEPTH = 2;
+        const queue: Promise<ArrayBuffer>[] = [];
+        for (let i = 0; i < Math.min(PREFETCH_DEPTH, chunks.length); i++) {
+            queue.push(armedFetch(chunks[i]));
+        }
 
         for (let i = 0; i < chunks.length; i++) {
             if (myGen !== _generation) return; // stopped/superseded
 
             const t0  = Date.now();
-            const buf = await nextFetch!;
-            disarmTimer(); // this chunk's fetch completed within budget
+            const buf = await queue.shift()!;
             console.log(`[mobileTTS] chunk ${i + 1}/${chunks.length} fetched in ${Date.now() - t0}ms bytes=${buf.byteLength}`);
 
             if (myGen !== _generation) return;
 
-            nextFetch = null;
-            if (i + 1 < chunks.length) {
-                armTimer();
-                nextFetch = fetchChunkAudio(chunks[i + 1], lang, gender, accessToken, controller.signal, emotion);
-            }
+            const nextIndex = i + PREFETCH_DEPTH;
+            if (nextIndex < chunks.length) queue.push(armedFetch(chunks[nextIndex]));
 
             // Alternate filenames so writing the prefetched next chunk never
             // clobbers the file the previous chunk might still be playing.
@@ -555,12 +565,12 @@ export async function speakMessage(
             playedChunks = i + 1;
         }
 
-        disarmTimer();
         if (_fetchAbort === controller) _fetchAbort = null;
         _speakingId = null;
         onDone?.();
     } catch (err: unknown) {
-        disarmTimer();
+        // Each fetch disarms its own timer via .finally() in armedFetch —
+        // no shared timer to clean up here.
         if (myGen !== _generation) return; // stopped/superseded — no fallback needed
 
         // User-initiated stop: abort throws DOMException "AbortError" — don't fall back.
