@@ -1125,6 +1125,13 @@ function SettingsScreenContent() {
     React.useEffect(() => { AsyncStorage.getItem(TONE_REFLECTION_SHOW_KEY).then((v) => setToneReflectionShow(v !== "0")).catch(() => {}); }, []);
     const handleToneReflectionShowToggle = async (val: boolean) => { setToneReflectionShow(val); await AsyncStorage.setItem(TONE_REFLECTION_SHOW_KEY, val ? "1" : "0").catch(() => {}); };
 
+    // Feature discovery cards (Trends/Companion/Offline/etc. tips in Chat) — distinct
+    // from the hourly "Feature tips" capsule in Trends (featureTipsEnabled below).
+    const DISCOVERY_CARDS_SHOW_KEY = "imotara.onboarding.discovery.enabled.v1";
+    const [discoveryCardsShow, setDiscoveryCardsShow] = React.useState(true);
+    React.useEffect(() => { AsyncStorage.getItem(DISCOVERY_CARDS_SHOW_KEY).then((v) => setDiscoveryCardsShow(v !== "0")).catch(() => {}); }, []);
+    const handleDiscoveryCardsShowToggle = async (val: boolean) => { setDiscoveryCardsShow(val); await AsyncStorage.setItem(DISCOVERY_CARDS_SHOW_KEY, val ? "1" : "0").catch(() => {}); };
+
     const RETURN_GREETING_SHOW_KEY = "imotara.return.greeting.show.v1";
     const [returnGreetingShow, setReturnGreetingShow] = React.useState(true);
     React.useEffect(() => { AsyncStorage.getItem(RETURN_GREETING_SHOW_KEY).then((v) => setReturnGreetingShow(v !== "0")).catch(() => {}); }, []);
@@ -4855,8 +4862,19 @@ function SettingsScreenContent() {
 
                 {/* O-1: Feature discovery reset */}
                 <AppSurface style={{ marginBottom: 16 }}>
-                    <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 4 }}>Feature discovery cards</Text>
-                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>Cards that introduce Trends, Offline mode, Companion, and more. Reset to see them again.</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Feature discovery cards</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Cards that introduce Trends, Offline mode, Companion, and more</Text>
+                        </View>
+                        <Switch
+                            value={discoveryCardsShow}
+                            onValueChange={handleDiscoveryCardsShowToggle}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>Already dismissed a card? Reset to see them again.</Text>
                     <TouchableOpacity
                         onPress={handleDiscoveryReset}
                         style={{ alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}

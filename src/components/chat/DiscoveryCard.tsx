@@ -91,6 +91,7 @@ export function DiscoveryCard({ cardId, colors, onDismiss, onAction }: Props) {
 // ── Storage helpers ──────────────────────────────────────────────────────────
 
 export const DISCOVERY_CARDS_KEY = "imotara.onboarding.discovery.v1";
+export const DISCOVERY_CARDS_ENABLED_KEY = "imotara.onboarding.discovery.enabled.v1";
 export const CARD_ORDER: DiscoveryCardId[] = ["trends", "companion", "offline", "unsent_letter"];
 
 export function getNextCard(dismissed: DiscoveryCardId[]): DiscoveryCardId | null {

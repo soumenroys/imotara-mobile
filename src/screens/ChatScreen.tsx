@@ -72,7 +72,7 @@ import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
-import { DiscoveryCard, DISCOVERY_CARDS_KEY, CARD_ORDER, getNextCard, type DiscoveryCardId } from "../components/chat/DiscoveryCard";
+import { DiscoveryCard, DISCOVERY_CARDS_KEY, DISCOVERY_CARDS_ENABLED_KEY, CARD_ORDER, getNextCard, type DiscoveryCardId } from "../components/chat/DiscoveryCard";
 import { OpenLoopCard } from "../components/chat/OpenLoopCard";
 import { CompanionInsightCard } from "../components/imotara/CompanionInsightCard";
 import { UnsentLetterModal, buildUnsentLetterSystemPrompt, type UnsentLetterSetup } from "../components/imotara/UnsentLetterModal";
@@ -2002,13 +2002,16 @@ export default function ChatScreen() {
   useEffect(() => {
     const userCount = messages.filter((m) => m.from === "user").length;
     if (userCount < 3 || discoveryShownThisSession.current || discoveryCard) return;
-    AsyncStorage.getItem(DISCOVERY_CARDS_KEY).then((raw) => {
-      const dismissed: DiscoveryCardId[] = raw ? JSON.parse(raw) : [];
-      const next = getNextCard(dismissed);
-      if (next) {
-        setDiscoveryCard(next);
-        discoveryShownThisSession.current = true;
-      }
+    AsyncStorage.getItem(DISCOVERY_CARDS_ENABLED_KEY).then((enabledRaw) => {
+      if (enabledRaw === "0") return;
+      AsyncStorage.getItem(DISCOVERY_CARDS_KEY).then((raw) => {
+        const dismissed: DiscoveryCardId[] = raw ? JSON.parse(raw) : [];
+        const next = getNextCard(dismissed);
+        if (next) {
+          setDiscoveryCard(next);
+          discoveryShownThisSession.current = true;
+        }
+      }).catch(() => { });
     }).catch(() => { });
   }, [messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
