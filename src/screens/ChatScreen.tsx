@@ -101,14 +101,15 @@ import {
   type LocalRecentContext,
 } from "../lib/ai/local/localReplyEngine";
 import {
-  BN_SAD_REGEX, BN_STRESS_REGEX, BN_ANGER_REGEX,
+  BN_STRESS_REGEX, BN_ANGER_REGEX,
   HI_STRESS_REGEX,
-  TA_SAD_REGEX, TA_STRESS_REGEX,
-  GU_SAD_REGEX, GU_STRESS_REGEX,
-  KN_SAD_REGEX, KN_STRESS_REGEX,
-  ML_SAD_REGEX, ML_STRESS_REGEX,
-  PA_SAD_REGEX, PA_STRESS_REGEX,
-  OR_SAD_REGEX, OR_STRESS_REGEX, MR_SAD_REGEX, MR_STRESS_REGEX,
+  TA_STRESS_REGEX,
+  GU_STRESS_REGEX,
+  KN_STRESS_REGEX,
+  ML_STRESS_REGEX,
+  PA_STRESS_REGEX,
+  OR_STRESS_REGEX, MR_STRESS_REGEX,
+  isSadText,
   GRATITUDE_REGEX,
   CONFUSED_EN_REGEX,
   CRISIS_HINT_REGEX,
@@ -543,13 +544,7 @@ function getLocalMoodHint(text: string): string {
       /\b(stuck|lost|confused|don't know|dont know|no idea|numb|not sure what to do)\b/.test(lower)) {
     return "You sound a bit stuck or unsure. It's okay to take time to untangle things.";
   }
-  if (
-    BN_SAD_REGEX.test(raw) || TA_SAD_REGEX.test(raw) ||
-    GU_SAD_REGEX.test(raw) || KN_SAD_REGEX.test(raw) ||
-    ML_SAD_REGEX.test(raw) || PA_SAD_REGEX.test(raw) ||
-    OR_SAD_REGEX.test(raw) || MR_SAD_REGEX.test(raw) ||
-    /\b(sad|down|lonely|tired|upset|hurt|empty|depressed|blue|cry|crying|hopeless)\b/.test(lower)
-  ) {
+  if (isSadText(raw)) {
     return "You seem a bit low. It's okay to feel this way — Imotara is here with you.";
   }
   if (
@@ -634,18 +629,8 @@ function getLocalMoodHintWithPrimary(text: string): {
     };
   }
 
-  // Sad — 10 Indian languages
-  if (
-    BN_SAD_REGEX.test(raw) ||
-    TA_SAD_REGEX.test(raw) ||
-    GU_SAD_REGEX.test(raw) ||
-    KN_SAD_REGEX.test(raw) ||
-    ML_SAD_REGEX.test(raw) ||
-    PA_SAD_REGEX.test(raw) ||
-    OR_SAD_REGEX.test(raw) ||
-    MR_SAD_REGEX.test(raw) ||
-    /\b(sad|lonely|hopeless|empty|down|depressed|cry|miserable)\b/.test(t)
-  ) {
+  // Sad — every language we detect on-device, via one shared list
+  if (isSadText(raw)) {
     return {
       primary: "sadness",
       hint: "You seem a bit low. It's okay to feel this way — Imotara is here with you.",
@@ -3701,7 +3686,7 @@ export default function ChatScreen() {
                   // 2) If backend didn't send emotion, derive from input text (safe fallback)
                   const t = raw.toLowerCase().replace(/\s+/g, " ");
                   if (HI_STRESS_REGEX.test(raw)) return "stressed";
-                  if (BN_SAD_REGEX.test(raw)) return "sad";
+                  if (isSadText(raw)) return "sad";
                   if (
                     isConfusedText(raw) ||
                     /\bsamajh nahi aa raha\b/.test(t) ||
@@ -3720,7 +3705,7 @@ export default function ChatScreen() {
 
                     // ✅ Mixed Hindi/Bengali + romanized Bengali should never fall to neutral
                     if (HI_STRESS_REGEX.test(raw)) return "stressed";
-                    if (BN_SAD_REGEX.test(raw) || /\bmood\s+off\b/i.test(raw))
+                    if (isSadText(raw) || /\bmood\s+off\b/i.test(raw))
                       return "sad";
 
                     // Use localPrimary if available (keeps existing behavior)

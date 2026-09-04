@@ -438,3 +438,34 @@ export function isConfusedText(text: string): boolean {
         JP_CONFUSED_REGEX.test(input)
     );
 }
+
+/**
+ * Does this text read as sadness, in any language we detect on-device?
+ *
+ * This exists because the same list was written out by hand in four places in
+ * ChatScreen and every copy was different. Hindi — the largest non-English
+ * language in the product — was missing from all four, so on-device sadness
+ * detection never fired for it despite HI_SAD_REGEX being defined and exported
+ * right here. Two of the four checked BN_SAD_REGEX and nothing else, so they
+ * also missed Tamil, Gujarati, Kannada, Malayalam, Punjabi, Odia and Marathi.
+ *
+ * One list, one place. Adding a language is now a single edit rather than four
+ * that drift.
+ *
+ * JP/HE/AR/DE_SAD_REGEX are defined above but deliberately not included yet —
+ * that is UX-38, which wants its own look at whether those patterns are good
+ * enough to act on. When it happens, it is one line here.
+ */
+const SAD_REGEXES = [
+  HI_SAD_REGEX, BN_SAD_REGEX, TA_SAD_REGEX, GU_SAD_REGEX, KN_SAD_REGEX,
+  ML_SAD_REGEX, PA_SAD_REGEX, OR_SAD_REGEX, MR_SAD_REGEX,
+];
+
+/** English sadness words, kept here so the callers share one definition too. */
+const EN_SAD_RE = /\b(sad|down|lonely|tired|upset|hurt|empty|depressed|blue|cry|crying|hopeless|miserable)\b/;
+
+export function isSadText(raw: string): boolean {
+  if (!raw) return false;
+  if (SAD_REGEXES.some((re) => re.test(raw))) return true;
+  return EN_SAD_RE.test(raw.toLowerCase());
+}
