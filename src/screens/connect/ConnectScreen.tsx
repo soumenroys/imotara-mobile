@@ -417,6 +417,11 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
     const [filterOnline, setFilterOnline] = useState(false);
     const [filterTag, setFilterTag] = useState("");
     const [filterCategory, setFilterCategory] = useState("");
+    // The API has accepted `lang` and `gender` all along; mobile never sent
+    // either, so a person looking for someone who speaks their language had to
+    // read every card.
+    const [filterLang, setFilterLang] = useState("");
+    const [filterGender, setFilterGender] = useState("");
     const [sort, setSort] = useState<"rating" | "price_asc" | "price_desc" | "sessions">("rating");
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
     const [favLoading, setFavLoading] = useState<string | null>(null);
@@ -435,7 +440,11 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
         const params = new URLSearchParams();
         if (filterOnline)   params.set("online", "true");
         if (filterCategory) params.set("category", filterCategory);
-        const cacheKey = `${accessToken ?? ""}|${filterOnline}|${filterCategory}`;
+        if (filterLang)     params.set("lang", filterLang);
+        if (filterGender)   params.set("gender", filterGender);
+        // The new filters belong in the cache key too — without them a
+        // language change would be served the previous language's results.
+        const cacheKey = `${accessToken ?? ""}|${filterOnline}|${filterCategory}|${filterLang}|${filterGender}`;
         const STALE_MS = 30_000;
         // Serve from cache when data is fresh and this is not a manual pull-to-refresh.
         // refreshKey increments only on explicit user pull-to-refresh, so checking
@@ -493,7 +502,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 if (wd.ok) { setWalletBalance(Math.max(0, Number(wd.wallet_balance ?? 0))); setWalletCurrency(wd.wallet_currency ?? "INR"); }
             })
             .finally(() => { setLoading(false); setRefreshing(false); });
-    }, [accessToken, filterOnline, filterCategory, refreshKey]);
+    }, [accessToken, filterOnline, filterCategory, filterLang, filterGender, refreshKey]);
 
     async function loadMoreConsultants() {
         if (!hasMore || loadingMore) return;
@@ -502,6 +511,8 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
         const params = new URLSearchParams();
         if (filterOnline)   params.set("online", "true");
         if (filterCategory) params.set("category", filterCategory);
+        if (filterLang)     params.set("lang", filterLang);
+        if (filterGender)   params.set("gender", filterGender);
         params.set("page", String(nextPage));
         const authHeaders: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
         try {
@@ -690,6 +701,39 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 ))}
             </ScrollView>
 
+            {/* Divider before the language + gender row */}
+            <View style={{ height: 1, marginHorizontal: 16, backgroundColor: "rgba(255,255,255,0.06)" }} />
+
+            {/* Row 3: Language + gender — web has had both; mobile had neither.
+                Language leads because "someone I can actually talk to" narrows
+                the list far more usefully than gender does. */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 12, paddingBottom: 14, gap: 8, flexDirection: "row", alignItems: "center" }}>
+                <TouchableOpacity
+                    style={[s.filterChip, !filterLang && s.filterChipActive]}
+                    onPress={() => setFilterLang("")}>
+                    <Text style={[s.filterChipText, !filterLang && s.filterChipTextActive]}>Any language</Text>
+                </TouchableOpacity>
+                {LANGUAGE_OPTIONS.map((l) => (
+                    <TouchableOpacity key={l.code}
+                        style={[s.filterChip, filterLang === l.code && s.filterChipActive]}
+                        onPress={() => setFilterLang((v) => (v === l.code ? "" : l.code))}>
+                        <Text style={[s.filterChipText, filterLang === l.code && s.filterChipTextActive]}>{l.label}</Text>
+                    </TouchableOpacity>
+                ))}
+                <View style={{ width: 1, height: 20, backgroundColor: "rgba(255,255,255,0.10)", marginHorizontal: 4 }} />
+                {([
+                    { key: "female", label: "Female" },
+                    { key: "male",   label: "Male" },
+                ] as const).map((g) => (
+                    <TouchableOpacity key={g.key}
+                        style={[s.filterChip, filterGender === g.key && s.filterChipActive]}
+                        onPress={() => setFilterGender((v) => (v === g.key ? "" : g.key))}>
+                        <Text style={[s.filterChipText, filterGender === g.key && s.filterChipTextActive]}>{g.label}</Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
+
             <FlatList
                 data={displayed}
                 keyExtractor={(c) => c.id}
@@ -700,7 +744,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                     consultants.length > 0 ? (
                         <View style={[s.center, { paddingTop: 40 }]}>
                             <Text style={s.emptyText}>No companions match this filter.</Text>
-                            <Text style={[s.emptyText, { marginTop: 4, fontSize: 12, opacity: 0.6 }]}>Try a different specialty or remove filters.</Text>
+                            <Text style={[s.emptyText, { marginTop: 4, fontSize: 12, opacity: 0.6 }]}>Try another language, specialty, or remove filters.</Text>
                         </View>
                     ) : null
                 }
