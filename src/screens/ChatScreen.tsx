@@ -115,6 +115,7 @@ import {
   isConfusedText,
 } from "../lib/emotion/keywordMaps";
 import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
+import { getCrisisCopy } from "../lib/safety/crisisCopy";
 import { detectCountryCode } from "../lib/safety/detectCountry";
 import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adultContentGuard";
 import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
@@ -1016,6 +1017,8 @@ type MessageBubbleProps = {
   onStopSpeak: () => void;
   onBookmark: (id: string) => void;
   onReact: (id: string, emoji: string) => void;
+  /** The person's chosen language, so the crisis card speaks it too. */
+  lang?: string;
 };
 
 function MessageBubble({
@@ -1037,6 +1040,7 @@ function MessageBubble({
   showSyncBadge = false,
   reactionsSet = "default",
   crisisThreshold = "standard",
+  lang = "en",
   onLongPress,
   onDismissCrisisCard,
   onRetry,
@@ -1410,17 +1414,21 @@ function MessageBubble({
         if (tier === 0 || tier < minTier) return null;
         if (dismissedCrisisCards.has(message.id)) return null;
 
+        // The card has to speak the language the person just wrote in. Detection
+        // has been multilingual for months; the help offered afterwards was not.
+        const copy = getCrisisCopy(lang);
+
         if (tier === 1) {
           return (
             <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: Math.min(screenWidth * 0.88, 560), borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.30)", backgroundColor: "rgba(99,102,241,0.08)", paddingHorizontal: 14, paddingVertical: 12 }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <Text style={{ fontSize: 13, fontWeight: "700", color: "rgba(167,139,250,1)", flex: 1 }}>💜 You don't have to carry this alone</Text>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: "rgba(167,139,250,1)", flex: 1 }}>{"\u{1F49C}"} {copy.t1Title}</Text>
                 <TouchableOpacity onPress={() => onDismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Text style={{ fontSize: 14, color: "rgba(167,139,250,0.7)", marginLeft: 8 }}>x</Text>
                 </TouchableOpacity>
               </View>
               <Text style={{ marginTop: 8, fontSize: 12, color: "rgba(196,181,253,0.9)", lineHeight: 18 }}>
-                It sounds like things are feeling really heavy. I'm here. If it ever feels like too much, free crisis support is just a call away.
+                {copy.t1Body}
               </Text>
               {(() => {
                 const resources = getCrisisResourcesForCountry(detectCountryCode());
@@ -1446,7 +1454,7 @@ function MessageBubble({
         return (
           <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: Math.min(screenWidth * 0.88, 560), borderRadius: 14, borderWidth: 1, borderColor: "rgba(251, 191, 36, 0.35)", backgroundColor: "rgba(251, 191, 36, 0.10)", paddingHorizontal: 14, paddingVertical: 12 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: "#fde68a", flex: 1 }}>{"\u{1F49B}"} If things feel urgent right now</Text>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#fde68a", flex: 1 }}>{"\u{1F49B}"} {copy.t2Title}</Text>
               <TouchableOpacity onPress={() => onDismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Text style={{ fontSize: 14, color: "#fde68a", opacity: 0.7, marginLeft: 8 }}>x</Text>
               </TouchableOpacity>
@@ -1474,7 +1482,7 @@ function MessageBubble({
               })()}
             </View>
             <Text style={{ marginTop: 10, fontSize: 11, color: "#fde68a", opacity: 0.7 }}>
-              You don't have to face this alone.
+              {copy.t2Footer}
             </Text>
           </View>
         );
@@ -1488,6 +1496,10 @@ const MemoMessageBubble = React.memo(MessageBubble, (prev, next) => {
   if (prev.prevMessage !== next.prevMessage) return false;
   if (prev.prevPrevMessage !== next.prevPrevMessage) return false;
   if (prev.colors !== next.colors) return false;
+  // Language is part of what the bubble renders now — the crisis card is
+  // written in it. Leaving this out would keep a card in the old language
+  // until something else happened to invalidate the row.
+  if (prev.lang !== next.lang) return false;
   if (prev.speakingMessageId !== next.speakingMessageId) {
     const wasPlaying = prev.speakingMessageId === prev.message.id;
     const isPlaying = next.speakingMessageId === next.message.id;
@@ -4754,6 +4766,7 @@ export default function ChatScreen() {
               showSyncBadge={showSyncBadge}
               reactionsSet={chatReactionsSet}
               crisisThreshold={crisisThresholdSetting}
+              lang={toneContext?.user?.preferredLang ?? "en"}
             />
           );}}
           initialNumToRender={15}
