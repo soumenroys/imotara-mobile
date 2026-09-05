@@ -75,7 +75,7 @@ export function UnsentLetterModal({ visible, colors, onStart, onCancel }: Props)
 
             {/* Header */}
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
-              <Ionicons name="pencil-outline" size={18} color="#a78bfa" style={{ marginRight: 8 }} />
+              <Ionicons name="pencil-outline" size={18} color={colors.accent} style={{ marginRight: 8 }} />
               <Text style={{ fontSize: 17, fontWeight: "700", color: colors.textPrimary, flex: 1 }}>
                 Write an unsent letter
               </Text>

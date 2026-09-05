@@ -1306,7 +1306,7 @@ function MessageBubble({
                 accessibilityLabel={isPreparingSpeech ? "Preparing voice…" : isSpeaking ? "Stop speaking" : "Read message aloud"}
               >
                 {isPreparingSpeech ? (
-                  <ActivityIndicator size="small" color="#7dd3fc" />
+                  <ActivityIndicator size="small" color={colors.sky} />
                 ) : (
                   <Ionicons
                     name={isSpeaking ? "stop-circle-outline" : "volume-high-outline"}
@@ -4508,7 +4508,7 @@ export default function ChatScreen() {
               accessibilityRole="button"
               accessibilityLabel="Start new conversation"
             >
-              <Ionicons name="add-outline" size={16} color="#818cf8" />
+              <Ionicons name="add-outline" size={16} color={colors.indigo} />
             </TouchableOpacity>
 
             {/* More (⋯) — breathing, unsent letter, search, bookmarks, clear */}
@@ -5759,7 +5759,7 @@ export default function ChatScreen() {
                 onPress={() => { setShowHeaderMenu(false); handleClearLocalChat(); }}
                 style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13 }}
               >
-                <Ionicons name="trash-outline" size={17} color="#f87171" />
+                <Ionicons name="trash-outline" size={17} color={colors.danger} />
                 <Text style={{ color: colors.danger, fontSize: 14 }}>Clear chat</Text>
               </TouchableOpacity>
             )}

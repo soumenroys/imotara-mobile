@@ -1004,7 +1004,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
                             }}
                             disabled={cancelling === item.id}>
                             {cancelling === item.id
-                                ? <ActivityIndicator color="#f87171" size="small" />
+                                ? <ActivityIndicator color={colors.danger} size="small" />
                                 : <Text style={{ color: colors.danger, fontWeight: "600", fontSize: 13 }}>Cancel Request</Text>}
                         </TouchableOpacity>
                     )}
@@ -2796,7 +2796,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     </TouchableOpacity>
                 )}
                 <TouchableOpacity accessibilityRole="button" accessibilityLabel="Emergency help and crisis numbers" style={s.emergencyBtn} onPress={() => setShowEmergency(true)}>
-                    <Ionicons name="call" size={16} color="#f87171" />
+                    <Ionicons name="call" size={16} color={colors.danger} />
                 </TouchableOpacity>
             </View>
 

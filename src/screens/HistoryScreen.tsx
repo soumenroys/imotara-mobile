@@ -1167,7 +1167,7 @@ function HistoryScreenContent() {
                                                 onPress={() => { startNewThread(); navigation.navigate("Chat"); }}
                                                 style={{ flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.4)", backgroundColor: "rgba(99,102,241,0.10)", padding: 12, marginBottom: 12 }}
                                             >
-                                                <Ionicons name="add-circle-outline" size={20} color="#818cf8" />
+                                                <Ionicons name="add-circle-outline" size={20} color={colors.indigo} />
                                                 <Text style={{ fontSize: 14, fontWeight: "600", color: colors.indigo }}>Start new conversation</Text>
                                             </TouchableOpacity>
 

@@ -78,6 +78,58 @@ describe("every semantic accent is readable in its own theme", () => {
     }
   });
 
+  it("no hardcoded dark-only colour is left in a style or an icon prop", () => {
+    // Two shapes exist and the first sweep only caught one of them:
+    //   style:  color: "#fbbf24"
+    //   icon:   <Ionicons color="#fbbf24" />
+    // The second is a JSX prop, so a regex looking for `color:` walks straight
+    // past it. Both are checked here.
+    const fs = require("fs") as typeof import("fs");
+    const path = require("path") as typeof import("path");
+
+    const walk = (dir: string): string[] =>
+      fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) return e.name === "__tests__" ? [] : walk(p);
+        return e.name.endsWith(".tsx") ? [p] : [];
+      });
+
+    const parseHex = (c: string): [number, number, number] | null => {
+      const m = /^#([0-9a-fA-F]{6})$/.exec(c);
+      if (!m) return null;
+      const h = m[1];
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    };
+
+    const offenders: string[] = [];
+    // Known-good exceptions, each for a stated reason.
+    const ALLOWED = new Set([
+      "#ffffff", // white on a filled button (Apple sign-in, primary CTA)
+      "#fff",
+      "#7c3aed", // the filled violet CTA background itself
+      "#ef4444", // heart reaction — a red heart is the icon's meaning, not text
+      "#4285f4", // Google's brand blue on the Google sign-in button. Brand
+                 // marks are exempt from contrast rules and Google's own
+                 // guidelines require this exact value.
+      "#1a1a2e", // the spinner on that same light-backed Google button
+    ]);
+
+    for (const file of walk(path.join(process.cwd(), "src"))) {
+      const src = fs.readFileSync(file, "utf8");
+      const re = /\bcolor(?::\s*|=\{?)"(#[0-9a-fA-F]{6})"/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(src))) {
+        if (ALLOWED.has(m[1].toLowerCase())) continue;
+        const rgb = parseHex(m[1]);
+        if (!rgb) continue;
+        if (contrast(rgb, SURFACES.light[1]) < 3) {
+          offenders.push(`${path.relative(process.cwd(), file)}: ${m[1]}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it("light and dark define exactly the same roles", () => {
     for (const role of ROLES) {
       expect(Object.keys(DARK)).toContain(role);

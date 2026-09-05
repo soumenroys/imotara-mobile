@@ -4802,7 +4802,7 @@ function SettingsScreenContent() {
                         onPress={shareFamilySnapshot}
                         style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.35)", backgroundColor: "rgba(16,185,129,0.1)" }}
                     >
-                        <Ionicons name="share-outline" size={15} color="#6ee7b7" />
+                        <Ionicons name="share-outline" size={15} color={colors.successSoft} />
                         <Text style={{ fontSize: 12, fontWeight: "600", color: colors.successSoft }}>Share my snapshot</Text>
                     </TouchableOpacity>
                     {familySnapUrl && (
