@@ -7,17 +7,13 @@
 
 import React, { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { Animated, Text, View } from "react-native";
+import { useTheme } from "../../theme/ThemeContext";
+import { TOAST_COLORS, type ToastKind } from "./toastColors";
 
-export type ToastKind = "error" | "info" | "success";
+export type { ToastKind };
 
 export type ToastHandle = {
   show: (message: string, kind?: ToastKind) => void;
-};
-
-const COLORS: Record<ToastKind, { bg: string; border: string; text: string }> = {
-  error:   { bg: "rgba(239,68,68,0.14)",  border: "rgba(239,68,68,0.55)",   text: "#fca5a5" },
-  info:    { bg: "rgba(56,189,248,0.12)",  border: "rgba(56,189,248,0.45)",  text: "#7dd3fc" },
-  success: { bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.45)",   text: "#86efac" },
 };
 
 const ICONS: Record<ToastKind, string> = {
@@ -27,6 +23,7 @@ const ICONS: Record<ToastKind, string> = {
 };
 
 export const Toast = forwardRef<ToastHandle>(function Toast(_, ref) {
+  const { isDark } = useTheme();
   const [message, setMessage] = useState("");
   const [kind, setKind] = useState<ToastKind>("error");
   const opacity = useRef(new Animated.Value(0)).current;
@@ -55,7 +52,7 @@ export const Toast = forwardRef<ToastHandle>(function Toast(_, ref) {
     },
   }));
 
-  const c = COLORS[kind];
+  const c = TOAST_COLORS[isDark ? "dark" : "light"][kind];
 
   return (
     <Animated.View
