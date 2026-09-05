@@ -96,6 +96,7 @@ import {
 } from "../lib/emotion/keywordMaps";
 import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { getCrisisCopy } from "../lib/safety/crisisCopy";
+import { CRISIS_CARD_COLORS } from "../lib/safety/crisisCardColors";
 import { detectCountryCode } from "../lib/safety/detectCountry";
 import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adultContentGuard";
 import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
@@ -972,6 +973,8 @@ type MessageBubbleProps = {
   onReact: (id: string, emoji: string) => void;
   /** The person's chosen language, so the crisis card speaks it too. */
   lang?: string;
+  /** The crisis card picks its palette from this — it is unreadable in the wrong one. */
+  isDarkTheme?: boolean;
 };
 
 function MessageBubble({
@@ -994,6 +997,7 @@ function MessageBubble({
   reactionsSet = "default",
   crisisThreshold = "standard",
   lang = "en",
+  isDarkTheme = true,
   onLongPress,
   onDismissCrisisCard,
   onRetry,
@@ -1370,17 +1374,20 @@ function MessageBubble({
         // The card has to speak the language the person just wrote in. Detection
         // has been multilingual for months; the help offered afterwards was not.
         const copy = getCrisisCopy(lang);
+        // The card was written dark-only; on a light screen its text — the
+        // helpline number included — measured 1.19-2.36:1. See crisisCardColors.
+        const cc = CRISIS_CARD_COLORS[isDarkTheme ? "dark" : "light"];
 
         if (tier === 1) {
           return (
-            <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: Math.min(screenWidth * 0.88, 560), borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.30)", backgroundColor: "rgba(99,102,241,0.08)", paddingHorizontal: 14, paddingVertical: 12 }}>
+            <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: Math.min(screenWidth * 0.88, 560), borderRadius: 14, borderWidth: 1, borderColor: cc.tier1.border, backgroundColor: cc.tier1.bg, paddingHorizontal: 14, paddingVertical: 12 }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <Text style={{ fontSize: 13, fontWeight: "700", color: "rgba(167,139,250,1)", flex: 1 }}>{"\u{1F49C}"} {copy.t1Title}</Text>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: cc.tier1.title, flex: 1 }}>{"\u{1F49C}"} {copy.t1Title}</Text>
                 <TouchableOpacity onPress={() => onDismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={{ fontSize: 14, color: "rgba(167,139,250,0.7)", marginLeft: 8 }}>x</Text>
+                  <Text style={{ fontSize: 14, color: cc.tier1.dismiss, opacity: cc.tier1.dismissOpacity, marginLeft: 8 }}>x</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={{ marginTop: 8, fontSize: 12, color: "rgba(196,181,253,0.9)", lineHeight: 18 }}>
+              <Text style={{ marginTop: 8, fontSize: 12, color: cc.tier1.body, opacity: cc.tier1.bodyOpacity, lineHeight: 18 }}>
                 {copy.t1Body}
               </Text>
               {(() => {
@@ -1395,8 +1402,8 @@ function MessageBubble({
                     accessibilityLabel={`Call ${primary.label}: ${primary.contact}`}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text style={{ fontSize: 13, color: "rgba(196,181,253,0.85)" }}>{primary.label}:</Text>
-                    <Text style={{ fontSize: 13, color: "rgba(196,181,253,1)", fontWeight: "700", textDecorationLine: "underline" }}>{primary.contact}</Text>
+                    <Text style={{ fontSize: 13, color: cc.tier1.label, opacity: cc.tier1.labelOpacity }}>{primary.label}:</Text>
+                    <Text style={{ fontSize: 13, color: cc.tier1.contact, fontWeight: "700", textDecorationLine: "underline" }}>{primary.contact}</Text>
                   </TouchableOpacity>
                 );
               })()}
@@ -1405,11 +1412,11 @@ function MessageBubble({
         }
 
         return (
-          <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: Math.min(screenWidth * 0.88, 560), borderRadius: 14, borderWidth: 1, borderColor: "rgba(251, 191, 36, 0.35)", backgroundColor: "rgba(251, 191, 36, 0.10)", paddingHorizontal: 14, paddingVertical: 12 }}>
+          <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: Math.min(screenWidth * 0.88, 560), borderRadius: 14, borderWidth: 1, borderColor: cc.tier2.border, backgroundColor: cc.tier2.bg, paddingHorizontal: 14, paddingVertical: 12 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: "#fde68a", flex: 1 }}>{"\u{1F49B}"} {copy.t2Title}</Text>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: cc.tier2.title, flex: 1 }}>{"\u{1F49B}"} {copy.t2Title}</Text>
               <TouchableOpacity onPress={() => onDismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={{ fontSize: 14, color: "#fde68a", opacity: 0.7, marginLeft: 8 }}>x</Text>
+                <Text style={{ fontSize: 14, color: cc.tier2.dismiss, opacity: cc.tier2.dismissOpacity, marginLeft: 8 }}>x</Text>
               </TouchableOpacity>
             </View>
             <View style={{ marginTop: 10, gap: 6 }}>
@@ -1428,13 +1435,13 @@ function MessageBubble({
                     accessibilityLabel={`Call ${label}: ${number}`}
                     hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
                   >
-                    <Text style={{ fontSize: 13, color: "#fde68a", opacity: 0.85 }}>{label}</Text>
-                    <Text style={{ fontSize: 13, color: "#fde68a", fontWeight: "700", textDecorationLine: "underline" }}>{number}</Text>
+                    <Text style={{ fontSize: 13, color: cc.tier2.label, opacity: cc.tier2.labelOpacity }}>{label}</Text>
+                    <Text style={{ fontSize: 13, color: cc.tier2.contact, fontWeight: "700", textDecorationLine: "underline" }}>{number}</Text>
                   </TouchableOpacity>
                 ));
               })()}
             </View>
-            <Text style={{ marginTop: 10, fontSize: 11, color: "#fde68a", opacity: 0.7 }}>
+            <Text style={{ marginTop: 10, fontSize: 11, color: cc.tier2.title, opacity: cc.tier2.footerOpacity }}>
               {copy.t2Footer}
             </Text>
           </View>
@@ -1453,6 +1460,9 @@ const MemoMessageBubble = React.memo(MessageBubble, (prev, next) => {
   // written in it. Leaving this out would keep a card in the old language
   // until something else happened to invalidate the row.
   if (prev.lang !== next.lang) return false;
+  // The crisis card's colours come from this. Leaving it out would keep the
+  // card in the previous theme's palette — which is the unreadable case.
+  if (prev.isDarkTheme !== next.isDarkTheme) return false;
   if (prev.speakingMessageId !== next.speakingMessageId) {
     const wasPlaying = prev.speakingMessageId === prev.message.id;
     const isPlaying = next.speakingMessageId === next.message.id;
@@ -4720,6 +4730,7 @@ export default function ChatScreen() {
               reactionsSet={chatReactionsSet}
               crisisThreshold={crisisThresholdSetting}
               lang={toneContext?.user?.preferredLang ?? "en"}
+              isDarkTheme={isDark}
             />
           );}}
           initialNumToRender={15}
