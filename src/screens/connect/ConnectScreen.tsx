@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useColors, useTheme } from "../../theme/ThemeContext";
+import { Toast, type ToastHandle } from "../../components/ui/Toast";
+import { registerToast, showToast } from "../../components/ui/toastBus";
 import { useAuth } from "../../auth/AuthContext";
 import { useSettings } from "../../state/SettingsContext";
 import { buildApiUrl } from "../../config/api";
@@ -241,6 +243,15 @@ export default function ConnectScreen() {
     const navigation = useNavigation<any>();
     const [view, setView] = useState<ConnectView>({ name: "browse" });
 
+    // Failure messages used to be blocking "Error" alerts that named nothing.
+    // They now surface here; registerToast wires the bus to this instance for
+    // as long as the screen is mounted (UX-17).
+    const toastRef = useRef<ToastHandle>(null);
+    useEffect(
+        () => registerToast((message, kind) => toastRef.current?.show(message, kind)),
+        [],
+    );
+
     // Navigate directly to register when launched from "Join Imotara Movement" in Settings
     useEffect(() => {
         if (route.params?.startRegister) {
@@ -388,6 +399,10 @@ export default function ConnectScreen() {
                 onSelectSession={(s) => setView({ name: "chat", session: s })} />}
             {tab === "wallet" && <WalletTab colors={colors} accessToken={accessToken} />}
 
+            {/* One toast for the whole screen. Failure messages from any of the
+                tabs and views below reach it through the bus, and fall back to
+                an Alert if it is ever not mounted (UX-17). */}
+            <Toast ref={toastRef} />
         </View>
     );
 }
@@ -566,7 +581,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
             });
             const d = await res.json().catch(() => null);
             if (!res.ok || !d?.ok) {
-                Alert.alert("Error", d?.error ?? "Could not update favourite. Please try again.");
+                showToast(d?.error ?? "Could not update favourite. Please try again.");
                 return;
             }
             setFavorites((prev) => {
@@ -575,7 +590,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                 return next;
             });
         } catch {
-            Alert.alert("Error", "Could not update favourite. Please try again.");
+            showToast("Could not update favourite. Please try again.");
         } finally { setFavLoading(null); }
     }
 
@@ -633,14 +648,14 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                     <View style={{ flexDirection: "row", gap: 8, marginLeft: 10 }}>
                         <TouchableOpacity
                             disabled={isSigningIn}
-                            onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                            onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { showToast("Please try again."); } finally { setIsSigningIn(false); } }}
                             style={{ backgroundColor: "rgba(139,92,246,0.7)", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, opacity: isSigningIn ? 0.5 : 1 }}>
                             {isSigningIn ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Google</Text>}
                         </TouchableOpacity>
                         {appleSignInAvailable && (
                             <TouchableOpacity
                                 disabled={isSigningIn}
-                                onPress={async () => { setIsSigningIn(true); try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                                onPress={async () => { setIsSigningIn(true); try { await signInWithApple(); } catch { showToast("Please try again."); } finally { setIsSigningIn(false); } }}
                                 style={{ backgroundColor: "#000", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, opacity: isSigningIn ? 0.5 : 1 }}>
                                 <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Apple</Text>
                             </TouchableOpacity>
@@ -895,7 +910,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
             const d = await res.json();
             if (d.ok) setSessions((prev) => prev.map((s) => s.id === id ? { ...s, status: "cancelled" } : s));
             else {
-                Alert.alert("Error", d.error ?? "Could not cancel");
+                showToast(d.error ?? "Could not cancel");
                 if (res.status === 409) {
                     // Re-fetch to get the true session state (may now be active if consultant accepted)
                     const r2 = await cfetch(buildApiUrl("/api/connect/sessions"), { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -904,7 +919,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
                 }
             }
         } catch {
-            Alert.alert("Error", "Network error");
+            showToast("Couldn't reach Imotara — check your connection and try again.");
         } finally {
             setCancelling(null);
         }
@@ -918,7 +933,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
             <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", marginBottom: 24, opacity: 0.7 }}>Your past and upcoming sessions with companions will appear here.</Text>
             <TouchableOpacity
                 disabled={isSigningIn}
-                onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { showToast("Please try again."); } finally { setIsSigningIn(false); } }}
                 style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", opacity: isSigningIn ? 0.5 : 1 }}>
                 {isSigningIn ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={{ fontSize: 18 }}>G</Text>}
                 <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>{isSigningIn ? "Signing in…" : "Continue with Google"}</Text>
@@ -926,7 +941,7 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
             {appleSignInAvailable && (
                 <TouchableOpacity
                     disabled={isSigningIn}
-                    onPress={async () => { setIsSigningIn(true); try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                    onPress={async () => { setIsSigningIn(true); try { await signInWithApple(); } catch { showToast("Please try again."); } finally { setIsSigningIn(false); } }}
                     style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10, opacity: isSigningIn ? 0.5 : 1 }}>
                     <Text style={{ fontSize: 18 }}></Text>
                     <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Apple</Text>
@@ -1073,13 +1088,13 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             const d = await res.json();
             if (!res.ok || !d.ok) {
                 setShowHistory(false);
-                Alert.alert("Error", d?.error ?? "Could not load transaction history. Please try again.");
+                showToast(d?.error ?? "Couldn't load your transactions. Pull down to retry.");
                 return;
             }
             setTransactions(d.transactions ?? []);
         } catch {
             setShowHistory(false);
-            Alert.alert("Error", "Could not load transaction history. Please try again.");
+            showToast("Couldn't load your transactions. Pull down to retry.");
         }
         finally { setHistoryLoading(false); }
     }
@@ -1087,9 +1102,9 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
     async function handleRefundRequest() {
         if (!accessToken) return;
         const isUpi = refundMethod === "upi";
-        if (isUpi && !refundUpi.trim()) { Alert.alert("Error", "Please enter your UPI ID"); return; }
+        if (isUpi && !refundUpi.trim()) { showToast("Enter your UPI ID to continue.", "info"); return; }
         if (!isUpi && (!refundBank.account || !refundBank.ifsc || !refundBank.holder)) {
-            Alert.alert("Error", "Please fill in all bank details"); return;
+            showToast("Fill in all the bank details to continue.", "info"); return;
         }
         setRefundLoading(true);
         try {
@@ -1127,7 +1142,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", marginBottom: 24, opacity: 0.7 }}>View your Imotara Wallet balance or request a refund.</Text>
             <TouchableOpacity
                 disabled={isSigningIn}
-                onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                onPress={async () => { setIsSigningIn(true); try { await signInWithGoogle(); } catch { showToast("Please try again."); } finally { setIsSigningIn(false); } }}
                 style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", opacity: isSigningIn ? 0.5 : 1 }}>
                 {isSigningIn ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={{ fontSize: 18 }}>G</Text>}
                 <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>{isSigningIn ? "Signing in…" : "Continue with Google"}</Text>
@@ -1135,7 +1150,7 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
             {appleSignInAvailable && (
                 <TouchableOpacity
                     disabled={isSigningIn}
-                    onPress={async () => { setIsSigningIn(true); try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } finally { setIsSigningIn(false); } }}
+                    onPress={async () => { setIsSigningIn(true); try { await signInWithApple(); } catch { showToast("Please try again."); } finally { setIsSigningIn(false); } }}
                     style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10, opacity: isSigningIn ? 0.5 : 1 }}>
                     <Text style={{ fontSize: 18 }}></Text>
                     <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Apple</Text>
@@ -1499,20 +1514,20 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                         if (sd.ok && sd.session) {
                             onStartSession(sd.session);
                         } else {
-                            Alert.alert("Error", "Could not resume existing session.");
+                            showToast("Couldn't resume your session. Pull down to refresh and try again.");
                         }
                     } catch {
-                        Alert.alert("Error", "Network error resuming session.");
+                        showToast("Couldn't reach Imotara to resume your session — check your connection.");
                     }
                 } else {
-                    Alert.alert("Error", d.error ?? "Could not start session");
+                    showToast(d.error ?? "Couldn't start the session. Please try again.");
                 }
                 return;
             }
             setScheduleVisible(false);
             onStartSession(d.session);
         } catch {
-            Alert.alert("Error", "Network error — please try again.");
+            showToast("Couldn't reach Imotara — check your connection and try again.");
         } finally {
             startingSessionRef.current = false;
             setLoading(false);
@@ -2583,7 +2598,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 const d = await res.json();
                 if (!res.ok || !d.ok) {
                     setInput(text);
-                    Alert.alert("Message not sent", d?.error ?? "Please try again.");
+                    showToast(d?.error ?? "Please try again.");
                 } else if (d.message) {
                     // Append immediately with translated_content populated.
                     // Realtime dedup (prev.find by id) prevents the Realtime INSERT from doubling it.
@@ -2593,7 +2608,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                 } else {
                     // ok:true but message missing (server-side serialization edge case)
                     setInput(text);
-                    Alert.alert("Message not sent", "Server error — please try again.");
+                    showToast("Server error — please try again.");
                 }
             } else {
                 if (!userId) { setInput(text); return; }
@@ -2604,7 +2619,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     .single();
                 if (error) {
                     setInput(text);
-                    Alert.alert("Message not sent", "Please try again.");
+                    showToast("Please try again.");
                 } else if (sentMsg) {
                     // Optimistic append: prevents the message being invisible if the Realtime
                     // INSERT event is dropped (network partition, WebSocket reconnect lag).
@@ -2616,7 +2631,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             }
         } catch {
             setInput(text);
-            Alert.alert("Message not sent", "Network error — please try again.");
+            showToast("Network error — please try again.");
         }
         finally { setSending(false); }
     }
@@ -2632,9 +2647,9 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             });
             const d = await res.json();
             if (d.ok) { setShowReview(false); setReviewSubmitted(true); }
-            else { Alert.alert("Error", d.error ?? "Could not submit review."); }
+            else { showToast(d.error ?? "Could not submit review."); }
         } catch {
-            Alert.alert("Network error", "Please check your connection and try again.");
+            showToast("Please check your connection and try again.");
         } finally {
             setSubmittingReview(false);
         }
@@ -2670,7 +2685,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                             });
                             const d = await res.json().catch(() => null);
                             if (!res.ok || !d?.ok) {
-                                Alert.alert("Error", d?.error ?? "Could not update translation setting.");
+                                showToast(d?.error ?? "Could not update translation setting.");
                                 return;
                             }
                             // Optimistic local update — immediate feedback for the confirming
@@ -2686,7 +2701,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                             );
                             setTimeout(() => setTranslateNotice(null), 4000);
                         } catch {
-                            Alert.alert("Network error", "Please check your connection and try again.");
+                            showToast("Please check your connection and try again.");
                         } finally {
                             setTranslateToggleInFlight(false);
                         }
@@ -3021,9 +3036,9 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                             });
                             const d = await res.json().catch(() => null);
                             if (d?.ok) { onBack(); }
-                            else { Alert.alert("Error", d?.error ?? "Could not end session"); }
+                            else { showToast(d?.error ?? "Couldn't end the session. Please try again."); }
                         } catch {
-                            Alert.alert("Network error", "Please check your connection and try again.");
+                            showToast("Please check your connection and try again.");
                         } finally {
                             setEndingSession(false);
                         }
@@ -3057,9 +3072,9 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                             });
                             const d = await res.json().catch(() => null);
                             if (d?.ok) { onBack(); }
-                            else { Alert.alert("Error", d?.error ?? "Could not end session"); }
+                            else { showToast(d?.error ?? "Couldn't end the session. Please try again."); }
                         } catch {
-                            Alert.alert("Network error", "Please check your connection and try again.");
+                            showToast("Please check your connection and try again.");
                         } finally {
                             setEndingSession(false);
                         }
@@ -3317,11 +3332,11 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             });
             const d = await res.json().catch(() => null);
             if (!d?.ok) {
-                Alert.alert("Save Failed", d?.error ?? "Could not save availability. Please try again.");
+                showToast(d?.error ?? "Could not save availability. Please try again.");
                 return;
             }
             setEditingAvail(false);
-        } catch { Alert.alert("Error", "Network error — please try again."); }
+        } catch { showToast("Couldn't reach Imotara — check your connection and try again."); }
         finally { setAvailSaving(false); }
     }
 
@@ -3375,13 +3390,13 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             });
             const d = await res.json().catch(() => null);
             if (!d?.ok) {
-                Alert.alert("Save Failed", d?.error ?? "Could not save note. Please try again.");
+                showToast(d?.error ?? "Could not save note. Please try again.");
                 return;
             }
             setNoteSaved(true);
             setTimeout(() => setNoteSaved(false), 2000);
         } catch {
-            Alert.alert("Error", "Network error — could not save note. Please try again.");
+            showToast("Couldn't save your note — check your connection and try again.");
         } finally { setNoteSaving(false); }
     }
 
@@ -3401,11 +3416,11 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                         });
                         const d = await res.json().catch(() => null);
                         if (!res.ok || !d?.ok) {
-                            Alert.alert("Error", d?.error ?? "Could not block user. Please try again.");
+                            showToast(d?.error ?? "Could not block user. Please try again.");
                             return;
                         }
                         setHistory((prev) => prev.filter((h) => h.user_id !== userId));
-                    } catch { Alert.alert("Error", "Network error. Please try again."); }
+                    } catch { showToast("Couldn't reach Imotara — check your connection and try again."); }
                     finally { setBlockingId(null); }
                 },
             },
@@ -3592,14 +3607,14 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             const d = await res.json();
             if (!res.ok || !d.ok) {
                 setShowHistory(false);
-                Alert.alert("Error", d?.error ?? "Could not load session history. Please try again.");
+                showToast(d?.error ?? "Couldn't load your sessions. Pull down to retry.");
                 return;
             }
             setHistory(d.sessions ?? []);
             setHistoryLoaded(true);
         } catch {
             setShowHistory(false);
-            Alert.alert("Error", "Could not load session history. Please try again.");
+            showToast("Couldn't load your sessions. Pull down to retry.");
         }
         finally { setHistoryLoading(false); }
     }
@@ -3660,9 +3675,9 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
                 // would show a ghost Accept/Decline after a Realtime reconnect misses
                 // the status UPDATE.
                 setIncoming((prev) => prev.filter((s) => s.id !== sessionId));
-                Alert.alert("Error", d.error ?? `Could not ${action} session`);
+                showToast(d.error ?? `Could not ${action} session`);
             }
-        } catch { Alert.alert("Error", "Network error — please try again."); }
+        } catch { showToast("Couldn't reach Imotara — check your connection and try again."); }
         finally { actionInFlightRef.current = null; setActionLoading(null); }
     }
 
@@ -3681,9 +3696,9 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
             });
             const d = await res.json();
             if (d.ok) setProfile((p: any) => ({ ...p, is_online: !p.is_online }));
-            else Alert.alert("Error", d.error ?? "Could not update status");
+            else showToast(d.error ?? "Couldn't update your status. Please try again.");
         } catch {
-            Alert.alert("Error", "Network error — please try again.");
+            showToast("Couldn't reach Imotara — check your connection and try again.");
         } finally {
             setToggling(false);
         }
@@ -4526,7 +4541,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
             if (result.canceled || !result.assets[0]) return;
             const asset = result.assets[0];
             if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
-                Alert.alert("File too large", "Profile photo must be under 10 MB."); return;
+                showToast("Profile photo must be under 10 MB."); return;
             }
             setPhotoLocalUri(asset.uri);
             setPhotoUploading(true);
@@ -4538,9 +4553,9 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
             });
             const data = JSON.parse(uploadResult.body);
             if (data.url) setPhotoUrl(data.url);
-            else Alert.alert("Upload failed", data.error ?? "Could not upload photo");
+            else showToast(data.error ?? "Could not upload photo");
         } catch {
-            Alert.alert("Upload failed", "Please try again.");
+            showToast("Please try again.");
         } finally {
             setPhotoUploading(false);
         }
@@ -4554,7 +4569,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
             if (result.canceled || !result.assets?.[0]) return;
             const asset = result.assets[0];
             if (asset.size && asset.size > 20 * 1024 * 1024) {
-                Alert.alert("File too large", "Documents must be under 20 MB."); return;
+                showToast("Documents must be under 20 MB."); return;
             }
             setDocUploading(key);
             const uploadResult = await FileSystem.uploadAsync(buildApiUrl("/api/connect/upload-doc"), asset.uri, {
@@ -4568,10 +4583,10 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
             if (data.path) {
                 setDocs(prev => ({ ...prev, [key]: { path: data.path, name: asset.name ?? key } }));
             } else {
-                Alert.alert("Upload failed", data.error ?? "Could not upload document");
+                showToast(data.error ?? "Could not upload document");
             }
         } catch {
-            Alert.alert("Upload failed", "Please try again.");
+            showToast("Please try again.");
         } finally {
             setDocUploading(null);
         }

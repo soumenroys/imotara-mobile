@@ -51,6 +51,16 @@ describe("toast text is readable on the screen it sits on", () => {
     }
   }
 
+  it("backgrounds are opaque — a toast floats over real content", () => {
+    // At 10-14% alpha the list text underneath bled through the message. This
+    // is not a contrast property, so the contrast maths above cannot catch it.
+    for (const theme of ["dark", "light"] as const) {
+      for (const kind of KINDS) {
+        expect(parse(TOAST_COLORS[theme][kind].bg).a).toBe(1);
+      }
+    }
+  });
+
   it("the check can actually fail", () => {
     // A guard that cannot distinguish "readable" from "did not run" is worse
     // than no guard — this session has already been fooled by one that could not.
