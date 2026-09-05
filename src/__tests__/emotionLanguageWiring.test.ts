@@ -14,20 +14,27 @@ import * as KM from "../lib/emotion/keywordMaps";
 
 /** A literal term taken from the pattern itself, so the test cannot drift. */
 function sampleFor(re: RegExp): string {
+  // Patterns start in a few shapes: /(a|b)/, /\b(a|b)\b/i, /(?:a|b)/.
+  // Peel those off before taking the first alternative, or the "sample" comes
+  // back as literal regex syntax and the language looks broken when it is not.
   return re.source
-    .replace(/^[/(]+/, "")
+    .replace(/^\/+/, "")
+    .replace(/^\\b/, "")
+    .replace(/^\(\?:?/, "")
+    .replace(/^\(/, "")
+    .replace(/^\\b/, "")
     .split("|")[0]
+    .replace(/\\b$/, "")
     .replace(/[()\\^$?*+\[\]{}]/g, "")
-    .replace(/\bb\b/g, "")
     .trim();
 }
 
-// JP/HE/AR/DE sad patterns are defined but deliberately NOT wired — that is
-// UX-38, and measurement on 2026-09-05 showed why: the Japanese pattern reads
-// 4 of 6 neutral sentences as sadness (bare うつ and 一人 match inside ordinary
-// words) and German matches "Ich gehe allein einkaufen". Keep them listed here
-// so the exclusion stays a decision on the record rather than another oversight.
-const DELIBERATELY_UNWIRED_SAD = new Set(["JP", "HE", "AR", "DE"]);
+// UX-38 is now done: all four are wired. Arabic and Hebrew went in unchanged
+// because they measured clean; Japanese and German were tightened first (bare
+// うつ matched inside うつくしい, 一人 inside 一人暮らし, and "allein" matched
+// "Ich gehe allein einkaufen"). Nothing is deliberately unwired any more, and
+// this empty set is what makes the sweep below cover every language.
+const DELIBERATELY_UNWIRED_SAD = new Set<string>([]);
 
 function langsWith(suffix: string): string[] {
   return Object.keys(KM)
@@ -109,6 +116,39 @@ describe("UX-41 — Telugu", () => {
 });
 
 // Adding languages must not make other languages' ordinary sentences emotional.
+// UX-38. These four were held back because their patterns were too loose to
+// act on. Wiring them in without fixing that would have made the mood hint
+// wrong for Japanese and German speakers writing perfectly ordinary sentences.
+describe("UX-38 — the four late arrivals do not misread ordinary speech", () => {
+  const NEUTRAL: Array<[string, string]> = [
+    ["ja", "今日はいい天気ですね"],
+    ["ja", "一人暮らしを始めました"],      // "I started living alone" — a fact
+    ["ja", "一人で買い物に行きます"],       // going shopping by myself
+    ["ja", "写真をうつす"],                 // to take a photo
+    ["ja", "うつくしい景色でした"],         // "it was a beautiful view"
+    ["ja", "仕事が終わりました"],
+    ["de", "Das Wetter ist heute schön"],
+    ["de", "Ich gehe allein einkaufen"],    // shopping by myself
+    ["de", "Mir geht es gut"],
+    ["ar", "الطقس جميل اليوم"],
+    ["ar", "أنا سعيد جدا"],
+    ["he", "מזג האוויר נעים היום"],
+    ["he", "אני שמח מאוד"],
+  ];
+  for (const [lang, text] of NEUTRAL) {
+    it(`${lang}: ${text}`, () => expect(KM.isSadText(text)).toBe(false));
+  }
+
+  const SAD: Array<[string, string]> = [
+    ["ja", "悲しいです"], ["ja", "一人ぼっちで寂しい"], ["ja", "憂鬱です"],
+    ["de", "Ich bin traurig"], ["de", "Ich fühle mich einsam"],
+    ["ar", "أنا حزين"], ["he", "אני עצוב"],
+  ];
+  for (const [lang, text] of SAD) {
+    it(`${lang} sadness still detected: ${text}`, () => expect(KM.isSadText(text)).toBe(true));
+  }
+});
+
 describe("no cross-language bleed from the new patterns", () => {
   for (const s of ["I had a rough day at work", "आज मौसम बहुत अच्छा है", "আজ আবহাওয়া ভালো", "the download finished"]) {
     it(`${s}`, () => {
