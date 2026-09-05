@@ -1611,7 +1611,7 @@ function TrendsScreenContent() {
         <View style={{ marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.3)", backgroundColor: isDark ? "rgba(30,27,75,0.5)" : "rgba(238,242,255,0.85)", paddingHorizontal: 14, paddingVertical: 10 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={{ flex: 1, fontSize: 12, color: isDark ? "rgba(196,181,253,0.85)" : "#4338ca", lineHeight: 18 }}>{pendingInsights.weeklyRecap}</Text>
-            <TouchableOpacity onPress={() => { clearPendingInsight("weeklyRecap").catch(() => {}); setPendingInsights((p) => { const n = { ...p }; delete n.weeklyRecap; return n; }); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Dismiss weekly recap" onPress={() => { clearPendingInsight("weeklyRecap").catch(() => {}); setPendingInsights((p) => { const n = { ...p }; delete n.weeklyRecap; return n; }); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close-outline" size={16} color={isDark ? "rgba(165,180,252,0.6)" : "rgba(67,56,202,0.5)"} />
             </TouchableOpacity>
           </View>
@@ -1625,7 +1625,7 @@ function TrendsScreenContent() {
             <Text style={{ flex: 1, fontSize: 12, color: isDark ? "rgba(196,181,253,0.85)" : "#4338ca", lineHeight: 18 }}>
               <Text style={{ fontWeight: "600", color: isDark ? "#a5b4fc" : "#4f46e5" }}>{pendingInsights.collectivePulse.heavyPercent}% of people</Text> are carrying something heavy today. You're not alone.
             </Text>
-            <TouchableOpacity onPress={() => { clearPendingInsight("collectivePulse").catch(() => {}); setPendingInsights((p) => { const n = { ...p }; delete n.collectivePulse; return n; }); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Dismiss collective pulse" onPress={() => { clearPendingInsight("collectivePulse").catch(() => {}); setPendingInsights((p) => { const n = { ...p }; delete n.collectivePulse; return n; }); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close-outline" size={16} color={isDark ? "rgba(165,180,252,0.6)" : "rgba(67,56,202,0.5)"} />
             </TouchableOpacity>
           </View>

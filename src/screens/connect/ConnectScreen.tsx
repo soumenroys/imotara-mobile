@@ -329,7 +329,7 @@ export default function ConnectScreen() {
         return (
             <View style={[s.header, { paddingTop: insets.top + 8 }]}>
                 {onBack ? (
-                    <TouchableOpacity onPress={onBack} style={s.backBtn}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={onBack} style={s.backBtn}>
                         <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
                     </TouchableOpacity>
                 ) : <View style={{ width: 36 }} />}
@@ -375,7 +375,7 @@ export default function ConnectScreen() {
             {/* Header */}
             <View style={s.header}>
                 <Text style={s.headerTitle}>Connect</Text>
-                <TouchableOpacity onPress={() => setView({ name: "dashboard" })} style={s.headerAction}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Your companion dashboard" onPress={() => setView({ name: "dashboard" })} style={s.headerAction}>
                     <Ionicons name="person-circle-outline" size={22} color={colors.textSecondary} />
                 </TouchableOpacity>
             </View>
@@ -1538,7 +1538,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
     return (
         <View style={[s.container, { paddingTop: insets.top }]}>
             <View style={s.header}>
-                <TouchableOpacity onPress={onBack} style={s.backBtn} disabled={loading || scheduleLoading}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={onBack} style={s.backBtn} disabled={loading || scheduleLoading}>
                     <Ionicons name="arrow-back" size={20} color={loading || scheduleLoading ? colors.textSecondary : colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={s.headerTitle}>{c.display_name}</Text>
@@ -1740,7 +1740,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                     <View style={[s.modalSheet, { backgroundColor: colors.surface, maxHeight: "90%" }]}>
                         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                             <Text style={[s.cardName, { fontSize: 18 }]}>Request a Meeting</Text>
-                            <TouchableOpacity onPress={scheduleLoading ? undefined : () => setScheduleVisible(false)} disabled={scheduleLoading}>
+                            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close scheduling" onPress={scheduleLoading ? undefined : () => setScheduleVisible(false)} disabled={scheduleLoading}>
                                 <Ionicons name="close" size={20} color={scheduleLoading ? colors.textSecondary : colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
@@ -2033,7 +2033,7 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
                             </Text>
                             <Text style={[s.cardName, { fontSize: 18 }]}>Extend with {consultantName}</Text>
                         </View>
-                        <TouchableOpacity onPress={onClose} disabled={loading}>
+                        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close add time" onPress={onClose} disabled={loading}>
                             <Ionicons name="close" size={20} color={loading ? colors.textSecondary + "55" : colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
@@ -2735,7 +2735,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
         >
             {/* Header */}
             <View style={s.header}>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back"
                     onPress={() => {
                         if (status === "active") {
                             Alert.alert(
@@ -2795,7 +2795,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                         </Text>
                     </TouchableOpacity>
                 )}
-                <TouchableOpacity style={s.emergencyBtn} onPress={() => setShowEmergency(true)}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Emergency help and crisis numbers" style={s.emergencyBtn} onPress={() => setShowEmergency(true)}>
                     <Ionicons name="call" size={16} color="#f87171" />
                 </TouchableOpacity>
             </View>
@@ -3002,7 +3002,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                         multiline
                         maxLength={2000}
                     />
-                    <TouchableOpacity style={[s.sendBtn, sending && { opacity: 0.5 }]} onPress={send} disabled={sending || !input.trim()}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Send message" style={[s.sendBtn, sending && { opacity: 0.5 }]} onPress={send} disabled={sending || !input.trim()}>
                         <Ionicons name="send" size={16} color="#fff" />
                     </TouchableOpacity>
                 </View>
@@ -3096,7 +3096,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                                 </Text>
                                 <Text style={[s.cardName, { fontSize: 17 }]}>Choose your language</Text>
                             </View>
-                            <TouchableOpacity onPress={() => setShowLangPicker(false)}>
+                            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close language picker" onPress={() => setShowLangPicker(false)}>
                                 <Ionicons name="close" size={20} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
@@ -3206,7 +3206,7 @@ function EmergencyModal({ visible, onClose, colors }: { visible: boolean; onClos
                 <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 16 }}>
                         <Text style={[s.cardName, { color: colors.danger }]}>Crisis Support</Text>
-                        <TouchableOpacity onPress={onClose}>
+                        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close crisis support" onPress={onClose}>
                             <Ionicons name="close" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
@@ -3710,7 +3710,7 @@ function DashboardView({ colors, insets, accessToken, onBack, onJoinSession, onR
     return (
         <View style={[s.container, { paddingTop: insets.top }]}>
             <View style={s.header}>
-                <TouchableOpacity onPress={onBack} style={s.backBtn}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={onBack} style={s.backBtn}>
                     <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={s.headerTitle}>My Dashboard</Text>
@@ -4325,7 +4325,7 @@ function LangDropdown({ value, onChange, colors, style }: {
                 }}>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottomWidth: 1, borderColor: colors.border }}>
                         <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary }}>Select Language</Text>
-                        <TouchableOpacity onPress={() => setOpen(false)}>
+                        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close language picker" onPress={() => setOpen(false)}>
                             <Ionicons name="close" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
@@ -4694,7 +4694,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
             behavior={Platform.OS === "ios" ? "padding" : "height"}>
 
             <View style={s.header}>
-                <TouchableOpacity onPress={step > 1 ? () => { setStep(step - 1); setError(""); } : onBack} style={s.backBtn}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={step > 1 ? () => { setStep(step - 1); setError(""); } : onBack} style={s.backBtn}>
                     <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={s.headerTitle}>Become a Companion ({step}/{TOTAL_STEPS})</Text>
@@ -4820,7 +4820,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                                         placeholderTextColor={colors.textSecondary}
                                         keyboardType="url" autoCapitalize="none" />
                                     {socialLinks.length > 1 && (
-                                        <TouchableOpacity style={[s.durationBtn, { paddingHorizontal: 10 }]}
+                                        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Remove this link" style={[s.durationBtn, { paddingHorizontal: 10 }]}
                                             onPress={() => setSocialLinks(socialLinks.filter((_,i)=>i!==idx))}>
                                             <Ionicons name="close" size={16} color={colors.textSecondary} />
                                         </TouchableOpacity>
@@ -4980,7 +4980,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                                 <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
                                     <Text style={[s.cardBio, { fontWeight: "600" }]}>Window {idx+1}</Text>
                                     {availSlots.length > 1 && (
-                                        <TouchableOpacity onPress={() => setAvailSlots(availSlots.filter((_,i)=>i!==idx))}>
+                                        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Remove this availability slot" onPress={() => setAvailSlots(availSlots.filter((_,i)=>i!==idx))}>
                                             <Ionicons name="trash-outline" size={16} color="#ef4444" />
                                         </TouchableOpacity>
                                     )}
@@ -5308,7 +5308,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                     <View style={{ backgroundColor: colors.surface, borderTopLeftRadius:20, borderTopRightRadius:20, maxHeight:"70%", padding:16 }}>
                         <View style={{ flexDirection:"row", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
                             <Text style={[s.headerTitle, { fontSize:16 }]}>Country Code</Text>
-                            <TouchableOpacity onPress={()=>setDialPickerOpen(false)}>
+                            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close country code picker" onPress={()=>setDialPickerOpen(false)}>
                                 <Ionicons name="close" size={22} color={colors.textPrimary} />
                             </TouchableOpacity>
                         </View>
@@ -5333,7 +5333,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                     <View style={{ backgroundColor: colors.surface, borderTopLeftRadius:20, borderTopRightRadius:20, maxHeight:"60%", padding:16 }}>
                         <View style={{ flexDirection:"row", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
                             <Text style={[s.headerTitle, { fontSize:16 }]}>Timezone</Text>
-                            <TouchableOpacity onPress={()=>setTzPickerIdx(null)}>
+                            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close time zone picker" onPress={()=>setTzPickerIdx(null)}>
                                 <Ionicons name="close" size={22} color={colors.textPrimary} />
                             </TouchableOpacity>
                         </View>

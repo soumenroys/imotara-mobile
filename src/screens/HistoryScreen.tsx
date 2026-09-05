@@ -1468,7 +1468,7 @@ function HistoryScreenContent() {
                                                             </View>
                                                             <Text style={{ fontSize: 14, color: colors.textSecondary, marginRight: 6, transform: [{ rotate: isExpanded ? "180deg" : "0deg" }] }}>▾</Text>
                                                         </TouchableOpacity>
-                                                        <TouchableOpacity
+                                                        <TouchableOpacity accessibilityRole="button" accessibilityLabel="More options for this insight"
                                                             onPress={() => Alert.alert(label, "What would you like to do?", [
                                                                 { text: "Dismiss forever", style: "destructive", onPress: async () => {
                                                                     const next = { ...mindsetPrefs, [key]: false };

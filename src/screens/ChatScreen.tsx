@@ -1246,15 +1246,18 @@ function MessageBubble({
         const isBookmarked = bookmarks.has(message.id);
 
         // Original Ionicons reaction set — reverted to match preferred UI
-        const ALL_REACTION_OPTIONS: { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string }[] = [
-          { icon: "heart",        color: "#ef4444" },
-          { icon: "sad-outline",  color: colors.info },
-          { icon: "happy-outline",color: colors.warning },
-          { icon: "thumbs-up",    color: colors.successAlt },
-          { icon: "hand-left",    color: colors.accent },
-          { icon: "flame",        color: colors.orange },
-          { icon: "star",         color: colors.warningStrong },
-          { icon: "leaf",         color: colors.success },
+        // `label` is what a screen reader says. Without it each of these
+        // announces only as "button", so the whole reaction row is eight
+        // identical, meaningless controls (UX-14).
+        const ALL_REACTION_OPTIONS: { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string; label: string }[] = [
+          { icon: "heart",        color: "#ef4444",              label: "Love" },
+          { icon: "sad-outline",  color: colors.info,            label: "Sad" },
+          { icon: "happy-outline",color: colors.warning,         label: "Happy" },
+          { icon: "thumbs-up",    color: colors.successAlt,      label: "Agree" },
+          { icon: "hand-left",    color: colors.accent,          label: "Hold on" },
+          { icon: "flame",        color: colors.orange,          label: "Strong feeling" },
+          { icon: "star",         color: colors.warningStrong,   label: "Important" },
+          { icon: "leaf",         color: colors.success,         label: "Calm" },
         ];
         const REACTION_OPTIONS = reactionsSet === "minimal"
           ? ALL_REACTION_OPTIONS.slice(0, 3)
@@ -1331,6 +1334,9 @@ function MessageBubble({
                     key={opt.icon}
                     onPress={() => { onReact(message.id, opt.icon); setReactionPickerOpen(false); }}
                     hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: activeReaction === opt.icon }}
+                    accessibilityLabel={`React with ${opt.label}`}
                   >
                     <Ionicons
                       name={opt.icon}
@@ -4852,7 +4858,7 @@ export default function ChatScreen() {
             <View style={{ marginBottom: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.35)", backgroundColor: "rgba(99,102,241,0.08)" }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ fontSize: 13, color: colors.textPrimary }}>Welcome back 👋</Text>
-                <TouchableOpacity onPress={() => showCapsuleMenu("Return greeting", () => { setReturnGreetingEnabled(false); AsyncStorage.setItem(RETURN_GREETING_ENABLED_KEY, "0").catch(() => {}); }, () => setShowReturnGreeting(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for return greeting" onPress={() => showCapsuleMenu("Return greeting", () => { setReturnGreetingEnabled(false); AsyncStorage.setItem(RETURN_GREETING_ENABLED_KEY, "0").catch(() => {}); }, () => setShowReturnGreeting(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
@@ -4867,7 +4873,7 @@ export default function ChatScreen() {
             <View style={{ marginBottom: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: "rgba(100,116,139,0.3)", backgroundColor: "rgba(51,65,85,0.45)" }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <Text style={{ fontSize: 13, color: colors.textPrimary, flex: 1, lineHeight: 19 }}>{sessionGreeting}</Text>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for session greeting"
                   onPress={() => showCapsuleMenu(
                     "Session greeting",
                     () => { AsyncStorage.setItem(SESSION_GREETING_KEY, "0").catch(() => {}); setSessionGreetingEnabled(false); setSessionGreeting(null); },
@@ -4896,7 +4902,7 @@ export default function ChatScreen() {
             >
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ fontSize: 11, color: colors.textSecondary }}>Mood glimpse</Text>
-                <TouchableOpacity onPress={() => showCapsuleMenu("Mood glimpse", () => { setMoodGlimpseEnabled(false); AsyncStorage.setItem(MOOD_GLIMPSE_ENABLED_KEY, "0").catch(() => {}); }, () => setMoodGlimpseDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for mood glimpse" onPress={() => showCapsuleMenu("Mood glimpse", () => { setMoodGlimpseEnabled(false); AsyncStorage.setItem(MOOD_GLIMPSE_ENABLED_KEY, "0").catch(() => {}); }, () => setMoodGlimpseDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
@@ -5306,7 +5312,7 @@ export default function ChatScreen() {
           <Text style={{ flex: 1, fontSize: 12, color: isDark ? "#a78bfa" : "#4c1d95" }}>
             Writing to <Text style={{ fontWeight: "700" }}>{unsentLetterSetup.recipientName}</Text> — Imotara will respond in their voice.
           </Text>
-          <TouchableOpacity onPress={() => showCapsuleMenu("Unsent Letter mode", () => setUnsentLetterSetup(null), () => setUnsentLetterSetup(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for Unsent Letter mode" onPress={() => showCapsuleMenu("Unsent Letter mode", () => setUnsentLetterSetup(null), () => setUnsentLetterSetup(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(167,139,250,0.6)" : "rgba(109,40,217,0.5)"} />
           </TouchableOpacity>
         </View>
@@ -5324,7 +5330,7 @@ export default function ChatScreen() {
           <Text style={{ flex: 1, fontSize: 12, color: isDark ? "#fda4af" : "#9f1239" }}>
             Grief &amp; Loss space — Imotara will hold this with you, without rushing.
           </Text>
-          <TouchableOpacity onPress={() => showCapsuleMenu("Grief & Loss mode", () => setGriefMode(false), () => setGriefMode(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for Grief and Loss mode" onPress={() => showCapsuleMenu("Grief & Loss mode", () => setGriefMode(false), () => setGriefMode(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(253,164,175,0.6)" : "rgba(159,18,57,0.5)"} />
           </TouchableOpacity>
         </View>
@@ -5358,7 +5364,7 @@ export default function ChatScreen() {
                 <Text style={{ color: isDark ? "#fcd34d" : "#92400e", fontSize: 12, fontWeight: "600" }}>Upgrade →</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={() => showCapsuleMenu("Trial countdown", () => { setTrialBannerEnabled(false); AsyncStorage.setItem(TRIAL_BANNER_ENABLED_KEY, "0").catch(() => {}); }, dismissTrialBanner)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for trial countdown" onPress={() => showCapsuleMenu("Trial countdown", () => { setTrialBannerEnabled(false); AsyncStorage.setItem(TRIAL_BANNER_ENABLED_KEY, "0").catch(() => {}); }, dismissTrialBanner)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
@@ -5395,6 +5401,8 @@ export default function ChatScreen() {
             <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Continue</Text>
           </TouchableOpacity>
           <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss this reminder"
             onPress={() => dismissLoop(activeOpenLoop.id).then(() => setActiveOpenLoop(null)).catch(() => {})}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
@@ -5443,7 +5451,7 @@ export default function ChatScreen() {
               <TouchableOpacity onPress={handleUndo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Text style={{ fontSize: 12, fontWeight: "700", color: isDark ? "#fbbf24" : "#b45309", textDecorationLine: "underline" }}>Undo</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => showCapsuleMenu("Message undo", () => { setUndoSettingEnabled(false); AsyncStorage.setItem("imotara.undo.enabled.v1", "0").catch(() => {}); }, () => setPendingUndo(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for message undo" onPress={() => showCapsuleMenu("Message undo", () => { setUndoSettingEnabled(false); AsyncStorage.setItem("imotara.undo.enabled.v1", "0").catch(() => {}); }, () => setPendingUndo(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(253,230,138,0.5)" : "rgba(146,64,14,0.5)"} />
               </TouchableOpacity>
             </View>
@@ -5470,7 +5478,7 @@ export default function ChatScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          <TouchableOpacity onPress={() => showCapsuleMenu("Sentiment chips", () => { setSentimentChipsEnabled(false); AsyncStorage.setItem("imotara.sentiment.chips.enabled.v1", "0").catch(() => {}); }, () => setSentimentChipsDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ paddingLeft: 6 }}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for sentiment chips" onPress={() => showCapsuleMenu("Sentiment chips", () => { setSentimentChipsEnabled(false); AsyncStorage.setItem("imotara.sentiment.chips.enabled.v1", "0").catch(() => {}); }, () => setSentimentChipsDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ paddingLeft: 6 }}>
             <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(161,161,170,0.5)" : "rgba(71,85,105,0.5)"} />
           </TouchableOpacity>
         </View>
