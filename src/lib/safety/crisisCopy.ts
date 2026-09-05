@@ -4,9 +4,15 @@
 // Crisis DETECTION on mobile has been multilingual for a long time —
 // CRISIS_HINT_REGEX covers 22 languages for tier 2, and the Indic tier-1
 // patterns cover the rest. The card that appeared afterwards was hardcoded
-// English. So someone writing "मुझे जीने का मन नहीं करता" was correctly
-// recognised and then handed help they might not be able to read, at the exact
-// moment reading is hardest.
+// English. So someone writing "मुझे मर जाना है" was correctly recognised and
+// then handed help they might not be able to read, at the exact moment reading
+// is hardest.
+//
+// This comment used to cite "मुझे जीने का मन नहीं करता" as the example. That
+// sentence was NOT in fact detected: the pattern carried only the "...है" form
+// and scored the "...करता" form tier 0 — no card at all. Caught on the
+// simulator 2026-09-05 and fixed in keywordMaps.ts; the example is now one
+// that genuinely matched at the time.
 //
 // Two things are deliberate here.
 //

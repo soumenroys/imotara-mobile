@@ -38,3 +38,32 @@ describe("CRISIS_HINT_REGEX (mobile copy, all 22 languages)", () => {
     expect(CRISIS_HINT_REGEX.test(text)).toBe(false);
   });
 });
+
+// Found on the iPhone simulator, 2026-09-05. The pattern carried only the
+// "...है" form of this sentence, so the "...करता" form — which is at least as
+// common in ordinary Hindi — scored tier 0 and produced no crisis card and no
+// helpline. Both forms are pinned here so the narrower one cannot come back.
+describe("Hindi says this more than one way", () => {
+  const SAME_MEANING = [
+    "जीने का मन नहीं है",
+    "मुझे जीने का मन नहीं करता",
+    "मुझे जीने का मन नहीं करती",
+    "अब जीने का मन नहीं",
+    "मुझे जीने की इच्छा नहीं",
+  ];
+  test.each(SAME_MEANING)("detects: %s", (text) => {
+    expect(CRISIS_HINT_REGEX.test(text)).toBe(true);
+  });
+
+  // Widening the pattern must not make ordinary Hindi look like a crisis.
+  const ORDINARY_HINDI = [
+    "आज मौसम बहुत अच्छा है",
+    "मुझे यह फिल्म देखने का मन नहीं है",
+    "मुझे आज बाहर जाने का मन नहीं करता",
+    "खाने का मन नहीं है",
+    "मैं ठीक हूँ",
+  ];
+  test.each(ORDINARY_HINDI)("does not fire on: %s", (text) => {
+    expect(CRISIS_HINT_REGEX.test(text)).toBe(false);
+  });
+});
