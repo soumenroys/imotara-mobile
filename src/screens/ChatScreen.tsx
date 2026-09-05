@@ -85,19 +85,14 @@ import {
   type LocalRecentContext,
 } from "../lib/ai/local/localReplyEngine";
 import {
-  BN_STRESS_REGEX, BN_ANGER_REGEX,
+  BN_ANGER_REGEX,
   HI_STRESS_REGEX,
-  TA_STRESS_REGEX,
-  GU_STRESS_REGEX,
-  KN_STRESS_REGEX,
-  ML_STRESS_REGEX,
-  PA_STRESS_REGEX,
-  OR_STRESS_REGEX, MR_STRESS_REGEX,
   isSadText,
   GRATITUDE_REGEX,
   CONFUSED_EN_REGEX,
   CRISIS_HINT_REGEX,
   isConfusedText,
+  isStressText,
 } from "../lib/emotion/keywordMaps";
 import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { getCrisisCopy } from "../lib/safety/crisisCopy";
@@ -532,10 +527,7 @@ function getLocalMoodHint(text: string): string {
     return "You seem a bit low. It's okay to feel this way — Imotara is here with you.";
   }
   if (
-    HI_STRESS_REGEX.test(raw) || BN_STRESS_REGEX.test(raw) ||
-    TA_STRESS_REGEX.test(raw) || GU_STRESS_REGEX.test(raw) ||
-    KN_STRESS_REGEX.test(raw) || ML_STRESS_REGEX.test(raw) ||
-    PA_STRESS_REGEX.test(raw) || MR_STRESS_REGEX.test(raw) ||
+    isStressText(raw) ||
     /\b(worry|worried|anxious|scared|panic|nervous|stressed|overwhelmed|afraid|fear)\b/.test(lower)
   ) {
     return "It sounds like something is making you feel tense or worried.";
@@ -623,15 +615,7 @@ function getLocalMoodHintWithPrimary(text: string): {
 
   // Stressed / anxious — 10 Indian languages
   if (
-    HI_STRESS_REGEX.test(raw) ||
-    BN_STRESS_REGEX.test(raw) ||
-    TA_STRESS_REGEX.test(raw) ||
-    GU_STRESS_REGEX.test(raw) ||
-    KN_STRESS_REGEX.test(raw) ||
-    ML_STRESS_REGEX.test(raw) ||
-    PA_STRESS_REGEX.test(raw) ||
-    OR_STRESS_REGEX.test(raw) ||
-    MR_STRESS_REGEX.test(raw) ||
+    isStressText(raw) ||
     /\b(anxious|anxiety|panic|panicking|scared|fear|worried|worry|nervous|tense|stress|stressed)\b/.test(t)
   ) {
     return {

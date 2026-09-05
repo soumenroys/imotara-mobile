@@ -7,15 +7,15 @@
 import { IMOTARA_API_BASE_URL } from "../config/api";
 import { debugLog, debugWarn } from "../config/debug";
 import {
-  BN_SAD_REGEX, BN_STRESS_REGEX, BN_ANGER_REGEX, BN_FEAR_REGEX,
-  HI_SAD_REGEX, HI_STRESS_REGEX, HI_ANGER_REGEX, HI_FEAR_REGEX,
-  TA_SAD_REGEX, TA_STRESS_REGEX, TA_ANGER_REGEX, TA_FEAR_REGEX,
-  GU_SAD_REGEX, GU_STRESS_REGEX, GU_ANGER_REGEX, GU_FEAR_REGEX,
-  KN_SAD_REGEX, KN_STRESS_REGEX, KN_ANGER_REGEX, KN_FEAR_REGEX,
-  ML_SAD_REGEX, ML_STRESS_REGEX, ML_ANGER_REGEX, ML_FEAR_REGEX,
-  PA_SAD_REGEX, PA_STRESS_REGEX, PA_ANGER_REGEX, PA_FEAR_REGEX,
-  OR_SAD_REGEX, OR_STRESS_REGEX, OR_ANGER_REGEX, OR_FEAR_REGEX,
-  MR_SAD_REGEX, MR_STRESS_REGEX, MR_ANGER_REGEX, MR_FEAR_REGEX,
+  BN_SAD_REGEX, BN_ANGER_REGEX, BN_FEAR_REGEX,
+  HI_SAD_REGEX, HI_ANGER_REGEX, HI_FEAR_REGEX,
+  TA_SAD_REGEX, TA_ANGER_REGEX, TA_FEAR_REGEX,
+  GU_SAD_REGEX, GU_ANGER_REGEX, GU_FEAR_REGEX,
+  KN_SAD_REGEX, KN_ANGER_REGEX, KN_FEAR_REGEX,
+  ML_SAD_REGEX, ML_ANGER_REGEX, ML_FEAR_REGEX,
+  PA_SAD_REGEX, PA_ANGER_REGEX, PA_FEAR_REGEX,
+  OR_SAD_REGEX, OR_ANGER_REGEX, OR_FEAR_REGEX,
+  MR_SAD_REGEX, MR_ANGER_REGEX, MR_FEAR_REGEX,
   GRATITUDE_REGEX,
   isConfusedText,
   ROMAN_HI_LANG_HINT_REGEX,
@@ -28,6 +28,7 @@ import {
   ROMAN_PA_LANG_HINT_REGEX,
   ROMAN_MR_LANG_HINT_REGEX,
   ROMAN_OR_LANG_HINT_REGEX,
+  isStressText,
 } from "../lib/emotion/keywordMaps";
 import {
   fetchWithTimeout,
@@ -363,11 +364,7 @@ function deriveEmotionHintFromMessage(message: string): string | undefined {
     MR_SAD_REGEX.test(raw)
   ) return "sad";
   if (
-    HI_STRESS_REGEX.test(raw) || BN_STRESS_REGEX.test(raw) ||
-    TA_STRESS_REGEX.test(raw) || GU_STRESS_REGEX.test(raw) ||
-    KN_STRESS_REGEX.test(raw) || ML_STRESS_REGEX.test(raw) ||
-    PA_STRESS_REGEX.test(raw) || OR_STRESS_REGEX.test(raw) ||
-    MR_STRESS_REGEX.test(raw)
+    isStressText(raw)
   ) return "stressed";
   if (
     HI_ANGER_REGEX.test(raw) || BN_ANGER_REGEX.test(raw) ||
@@ -864,11 +861,7 @@ export async function callImotaraAI(
         MR_SAD_REGEX.test(raw)
       ) return "sad";
       if (
-        HI_STRESS_REGEX.test(raw) || BN_STRESS_REGEX.test(raw) ||
-        TA_STRESS_REGEX.test(raw) || GU_STRESS_REGEX.test(raw) ||
-        KN_STRESS_REGEX.test(raw) || ML_STRESS_REGEX.test(raw) ||
-        PA_STRESS_REGEX.test(raw) || OR_STRESS_REGEX.test(raw) ||
-        MR_STRESS_REGEX.test(raw)
+        isStressText(raw)
       ) return "stressed";
       if (
         HI_ANGER_REGEX.test(raw) || BN_ANGER_REGEX.test(raw) ||

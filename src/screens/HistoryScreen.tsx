@@ -22,17 +22,16 @@ import { gate } from "../licensing/featureGates";
 
 // ✅ Multilingual emotion detection
 import {
-    BN_SAD_REGEX, BN_STRESS_REGEX, BN_ANGER_REGEX,
-    HI_STRESS_REGEX,
-    TA_SAD_REGEX, TA_STRESS_REGEX,
-    GU_SAD_REGEX, GU_STRESS_REGEX, GU_ANGER_REGEX,
-    KN_SAD_REGEX, KN_STRESS_REGEX, KN_ANGER_REGEX,
-    ML_SAD_REGEX, ML_STRESS_REGEX, ML_ANGER_REGEX,
-    PA_SAD_REGEX, PA_STRESS_REGEX, PA_ANGER_REGEX,
-    OR_SAD_REGEX, OR_STRESS_REGEX, OR_ANGER_REGEX,
-    MR_SAD_REGEX, MR_STRESS_REGEX, MR_ANGER_REGEX,
+    BN_SAD_REGEX, BN_ANGER_REGEX,
+    TA_SAD_REGEX, GU_SAD_REGEX, GU_ANGER_REGEX,
+    KN_SAD_REGEX, KN_ANGER_REGEX,
+    ML_SAD_REGEX, ML_ANGER_REGEX,
+    PA_SAD_REGEX, PA_ANGER_REGEX,
+    OR_SAD_REGEX, OR_ANGER_REGEX,
+    MR_SAD_REGEX, MR_ANGER_REGEX,
     GRATITUDE_REGEX,
     isConfusedText,
+    isStressText,
 } from "../lib/emotion/keywordMaps";
 
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
@@ -59,11 +58,7 @@ function getMoodEmojiForText(text: string): string {
 
     // Anxious / stress — multilingual
     if (
-        HI_STRESS_REGEX.test(t) || BN_STRESS_REGEX.test(t) ||
-        TA_STRESS_REGEX.test(t) || GU_STRESS_REGEX.test(t) ||
-        KN_STRESS_REGEX.test(t) || ML_STRESS_REGEX.test(t) ||
-        PA_STRESS_REGEX.test(t) || OR_STRESS_REGEX.test(t) ||
-        MR_STRESS_REGEX.test(t) ||
+        isStressText(t) ||
         /\b(worry|worried|anxious|scared|panic|nervous|stressed|overwhelmed|afraid|fear|tension)\b/.test(lower)
     ) return "💛";
 

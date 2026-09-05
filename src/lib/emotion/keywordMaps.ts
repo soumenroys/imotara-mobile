@@ -105,10 +105,10 @@ export const HI_FEAR_REGEX =
 // --------------------------------------------------
 
 export const TA_SAD_REGEX =
-    /(romba kashtama irukku|kashtama irukku|manasu kashtama irukku|romba kastama irukku|kastama irukku|manasu kastama irukku|manasu sari illa|manasu seriya illa|romba sogama irukku|sogama irukku|azhuga varudhu|azhudha pola irukku|udalum manasum tired aa irukku)/i;
+    /(romba kashtama irukku|kashtama irukku|manasu kashtama irukku|romba kastama irukku|kastama irukku|manasu kastama irukku|manasu sari illa|manasu seriya illa|romba sogama irukku|sogama irukku|azhuga varudhu|azhudha pola irukku|udalum manasum tired aa irukku|சோகமா|சோகமாக|சோகம்|வருத்தமா|வருத்தம்|மனசு கஷ்டமா|மனசு சரியில்ல|மனது சரியில்லை|அழுகை|அழ வருது|அழுவ வருது|தனிமையா|தனிமை|துக்கம்|வேதனை|மனசு வலிக்குது|ஒன்னும் பிடிக்கல)/i;
 
 export const TA_STRESS_REGEX =
-    /(romba pressure irukku|pressure aa irukku|romba tension aa irukku|tension aa irukku|romba stress aa irukku|stress aa irukku|bayama irukku|romba bayama irukku|manasu romba odudhu|thalaila neraya oditu irukku|thalaila romba load irukku)/i;
+    /(romba pressure irukku|pressure aa irukku|romba tension aa irukku|tension aa irukku|romba stress aa irukku|stress aa irukku|bayama irukku|romba bayama irukku|manasu romba odudhu|thalaila neraya oditu irukku|thalaila romba load irukku|கவலையா|கவலை|பதட்டமா|பதட்டம்|பதற்றமா|பதற்றம்|மன அழுத்தம்|டென்ஷன்|மனசு பதறுது|நிம்மதி இல்ல)/i;
 
 export const TA_ANGER_REGEX =
     /(கோபம்|கோபமாக இருக்கு|ரொம்ப கோபம்|எரிச்சல்|எரிச்சல் ஆகுது|மனசு சேதம்|kopam|kopama irukku|romba kopam|erichal|erichal agudhu|manasu sedharam|sedharam irukku|kopam irukku|romba erichal|aattiram|aattiram irukku)/i;
@@ -137,6 +137,30 @@ export const GU_FEAR_REGEX =
 
 export const GU_CONFUSED_REGEX =
     /(સમજાતું નથી|માથું ચકરાય છે|શું કરવું|ગૂંચવણ|ગૂંચવાઈ ગયો|ગૂંચવાઈ ગઈ|\bsamjhay na\b|\bsamjatu nathi\b|\bshu karvu\b|\bmathu chakray\b|\bgoonchan\b|\bgumchdvayu\b|\bkya karu\b|\bsamjhay nathi\b)/i;
+
+// --------------------------------------------------
+// Telugu emotion regexes
+//
+// Telugu is one of the 22 languages Imotara ships, and had crisis copy and a
+// romanised language hint, but not a single emotion regex — so a Telugu
+// speaker writing plainly that they felt low got nothing from any mood path.
+// Every other Indic language here has all five. Added 2026-09-05 (UX-41).
+// --------------------------------------------------
+
+export const TE_SAD_REGEX =
+    /(బాధగా|బాధపడుతున్నాను|బాధలో|దుఃఖంగా|దుఃఖం|ఏడుపు వస్తోంది|ఏడ్వాలని|ఏడుపు|మనసు బాగోలేదు|మనసు బాగాలేదు|నిరాశగా|నిరాశ|విచారంగా|విచారం|ఒంటరిగా|ఒంటరి|దిగులుగా|దిగులు)/i;
+
+export const TE_STRESS_REGEX =
+    /(ఒత్తిడిగా|ఒత్తిడి|ఆందోళనగా|ఆందోళన|టెన్షన్|కంగారుగా|కంగారు|మనసు కుదుటపడట్లేదు|ఆత్రుత)/i;
+
+export const TE_ANGER_REGEX =
+    /(కోపంగా|కోపం వస్తోంది|కోపం|చిరాకుగా|చిరాకు|అసహనం)/i;
+
+export const TE_FEAR_REGEX =
+    /(భయంగా|భయపడుతున్నాను|భయమేస్తోంది|భయపడ్డాను|భయం)/i;
+
+export const TE_CONFUSED_REGEX =
+    /(అర్థం కావట్లేదు|అర్థం కావడం లేదు|ఏం చేయాలో తెలియట్లేదు|ఏమి చేయాలో తెలియడం లేదు|గందరగోళం|అయోమయంగా|అయోమయం)/i;
 
 // --------------------------------------------------
 // Kannada emotion regexes
@@ -420,6 +444,7 @@ export function isConfusedText(text: string): boolean {
     AR_CONFUSED_REGEX.lastIndex = 0;
     DE_CONFUSED_REGEX.lastIndex = 0;
     JP_CONFUSED_REGEX.lastIndex = 0;
+    TE_CONFUSED_REGEX.lastIndex = 0;
 
     return (
         CONFUSED_EN_REGEX.test(input) ||
@@ -435,7 +460,8 @@ export function isConfusedText(text: string): boolean {
         HE_CONFUSED_REGEX.test(input) ||
         AR_CONFUSED_REGEX.test(input) ||
         DE_CONFUSED_REGEX.test(input) ||
-        JP_CONFUSED_REGEX.test(input)
+        JP_CONFUSED_REGEX.test(input) ||
+        TE_CONFUSED_REGEX.test(input)
     );
 }
 
@@ -457,12 +483,37 @@ export function isConfusedText(text: string): boolean {
  * enough to act on. When it happens, it is one line here.
  */
 const SAD_REGEXES = [
-  HI_SAD_REGEX, BN_SAD_REGEX, TA_SAD_REGEX, GU_SAD_REGEX, KN_SAD_REGEX,
-  ML_SAD_REGEX, PA_SAD_REGEX, OR_SAD_REGEX, MR_SAD_REGEX,
+  HI_SAD_REGEX, BN_SAD_REGEX, TA_SAD_REGEX, TE_SAD_REGEX, GU_SAD_REGEX,
+  KN_SAD_REGEX, ML_SAD_REGEX, PA_SAD_REGEX, OR_SAD_REGEX, MR_SAD_REGEX,
 ];
 
 /** English sadness words, kept here so the callers share one definition too. */
 const EN_SAD_RE = /\b(sad|down|lonely|tired|upset|hurt|empty|depressed|blue|cry|crying|hopeless|miserable)\b/;
+
+/**
+ * Stress/anxiety, in every Indic language the app defines a pattern for.
+ *
+ * Written out by hand in five places — ChatScreen twice, HistoryScreen,
+ * aiClient twice — and one of the five had quietly lost Odia, so the same
+ * Odia sentence was read as stress on the history screen and as nothing at
+ * all in the chat mood hint.
+ *
+ * English deliberately stays at the call site. The five callers do NOT agree
+ * on their English wording (one has "tension", another "overwhelmed", and
+ * aiClient checks no English at all), so folding one English list in here
+ * would silently change four call sites while fixing one. Adding a LANGUAGE
+ * is what this list is for.
+ */
+const STRESS_REGEXES = [
+  HI_STRESS_REGEX, BN_STRESS_REGEX, TA_STRESS_REGEX, TE_STRESS_REGEX,
+  GU_STRESS_REGEX, KN_STRESS_REGEX, ML_STRESS_REGEX, PA_STRESS_REGEX,
+  OR_STRESS_REGEX, MR_STRESS_REGEX,
+];
+
+export function isStressText(raw: string): boolean {
+  if (!raw) return false;
+  return STRESS_REGEXES.some((re) => re.test(raw));
+}
 
 export function isSadText(raw: string): boolean {
   if (!raw) return false;
