@@ -234,7 +234,7 @@ export const ImotaraChatBubble: React.FC<ImotaraChatBubbleProps> = ({
                                     <AppText
                                         size={11}
                                         style={{
-                                            color: "#93c5fd",
+                                            color: colors.infoSoft,
                                             marginTop: 4,
                                             textDecorationLine: "underline",
                                             alignSelf: "flex-end",

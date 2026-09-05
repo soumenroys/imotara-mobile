@@ -21,6 +21,37 @@ export const DARK = {
     emotionConfused: "rgba(147, 51, 234, 0.22)",
     emotionHopeful: "rgba(16, 185, 129, 0.22)",
     emotionNeutral: "rgba(148, 163, 184, 0.18)",
+
+    // Semantic accents (UX-44).
+    //
+    // These roles were written as bare hex literals in ~105 places across ten
+    // screens, with no light-mode counterpart — 26 distinct colours, all of
+    // them chosen to sit on a dark screen. Measured against the light
+    // background they land between 1.19:1 and 2.85:1, where WCAG AA wants
+    // 4.5:1. It did not matter while light mode was a setting almost nobody
+    // found; UX-19 made the app follow the phone.
+    //
+    // The DARK values below are the exact literals that were already in use,
+    // so dark mode cannot change. Only light gets new values, and every one of
+    // them is checked in semanticColors.test.ts against both the page
+    // background and the darkest common light surface.
+    warning:       "#fbbf24",
+    warningStrong: "#f59e0b",
+    warningSoft:   "#fde68a",
+    orange:        "#fb923c",
+    success:       "#34d399",
+    successSoft:   "#6ee7b7",
+    successAlt:    "#4ade80",
+    accent:        "#a78bfa",
+    accentSoft:    "#c4b5fd",
+    indigo:        "#818cf8",
+    indigoSoft:    "#a5b4fc",
+    danger:        "#f87171",
+    dangerSoft:    "#fca5a5",
+    dangerSofter:  "#fecaca",
+    info:          "#60a5fa",
+    infoSoft:      "#93c5fd",
+    sky:           "#7dd3fc",
 };
 
 export const LIGHT: ColorPalette = {
@@ -40,6 +71,26 @@ export const LIGHT: ColorPalette = {
     emotionConfused: "rgba(124, 58, 237, 0.14)",
     emotionHopeful: "rgba(5, 150, 105, 0.14)",
     emotionNeutral: "rgba(100, 116, 139, 0.12)",
+
+    // Darkened counterparts of the dark-mode accents above. Every one measures
+    // at least 4.5:1 against both the page background and surfaceSoft.
+    warning:       "#92400e",
+    warningStrong: "#92400e",
+    warningSoft:   "#78350f",
+    orange:        "#9a3412",
+    success:       "#047857",
+    successSoft:   "#065f46",
+    successAlt:    "#166534",
+    accent:        "#6d28d9",
+    accentSoft:    "#5b21b6",
+    indigo:        "#4338ca",
+    indigoSoft:    "#3730a3",
+    danger:        "#b91c1c",
+    dangerSoft:    "#991b1b",
+    dangerSofter:  "#7f1d1d",
+    info:          "#1d4ed8",
+    infoSoft:      "#1e40af",
+    sky:           "#0369a1",
 };
 
 // Default export stays DARK for all existing direct imports (backward compat).

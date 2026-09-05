@@ -183,7 +183,7 @@ export function HowItWorksModal({ visible, onClose }: Props) {
             <Text
               style={{
                 fontSize: 13,
-                color: "rgba(165,180,252,0.9)",
+                color: colors.indigoSoft,
                 lineHeight: 19,
                 textAlign: "center",
               }}

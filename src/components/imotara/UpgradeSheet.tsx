@@ -949,7 +949,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                     backgroundColor: "rgba(167,139,250,0.2)", borderWidth: 1,
                                     borderColor: "rgba(167,139,250,0.3)",
                                 }}>
-                                    <Text style={{ fontSize: 9, fontWeight: "700", color: "#c4b5fd", letterSpacing: 0.5 }}>
+                                    <Text style={{ fontSize: 9, fontWeight: "700", color: colors.accentSoft, letterSpacing: 0.5 }}>
                                         CUSTOM PRICING
                                     </Text>
                                 </View>
@@ -965,7 +965,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                     borderWidth: 1, borderColor: "rgba(167,139,250,0.3)",
                                 }}
                             >
-                                <Text style={{ fontSize: 13, fontWeight: "700", color: "#c4b5fd" }}>
+                                <Text style={{ fontSize: 13, fontWeight: "700", color: colors.accentSoft }}>
                                     Contact us for Enterprise
                                 </Text>
                             </TouchableOpacity>
@@ -980,7 +980,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                             {([
                                 {
                                     tier: "Free",
-                                    color: "#a1a1aa",
+                                    color: colors.textSecondary,
                                     badge: "#27272a",
                                     items: [
                                         "20 enhanced replies / day",
@@ -1005,7 +1005,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                 },
                                 {
                                     tier: "Plus",
-                                    color: "#38bdf8",
+                                    color: colors.primary,
                                     badge: "rgba(14,165,233,0.15)",
                                     items: [
                                         "Unlimited cloud replies",
@@ -1030,7 +1030,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                 },
                                 {
                                     tier: "Pro",
-                                    color: "#818cf8",
+                                    color: colors.indigo,
                                     badge: "rgba(99,102,241,0.15)",
                                     items: [
                                         "Everything in Plus",
@@ -1049,7 +1049,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                 },
                                 {
                                     tier: "Enterprise",
-                                    color: "#c4b5fd",
+                                    color: colors.accentSoft,
                                     badge: "rgba(139,92,246,0.15)",
                                     items: [
                                         "Everything in Pro",

@@ -440,7 +440,7 @@ function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useC
                   <Text style={{ fontSize: 11, color: colors.primary }}>Edit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => handleDelete(entry.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={{ fontSize: 11, color: "#fca5a5" }}>Delete</Text>
+                  <Text style={{ fontSize: 11, color: colors.dangerSoft }}>Delete</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -506,7 +506,7 @@ function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useC
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
             {themes.map((theme) => (
               <View key={theme} style={{ borderRadius: 999, borderWidth: 1, borderColor: "rgba(99,102,241,0.3)", backgroundColor: "rgba(99,102,241,0.1)", paddingHorizontal: 10, paddingVertical: 4 }}>
-                <Text style={{ fontSize: 11, color: "#a5b4fc", textTransform: "capitalize" }}>{theme}</Text>
+                <Text style={{ fontSize: 11, color: colors.indigoSoft, textTransform: "capitalize" }}>{theme}</Text>
               </View>
             ))}
           </View>
@@ -651,7 +651,7 @@ function FutureLetterSection({ colors }: { colors: ReturnType<typeof useColors> 
 
       {unlocked.map((l) => (
         <View key={l.id} style={{ borderRadius: 14, borderWidth: 1, borderColor: "rgba(52,211,153,0.35)", backgroundColor: "rgba(52,211,153,0.06)", padding: 14, marginBottom: 8 }}>
-          <Text style={{ fontSize: 11, fontWeight: "600", color: "#34d399", marginBottom: 6 }}>
+          <Text style={{ fontSize: 11, fontWeight: "600", color: colors.success, marginBottom: 6 }}>
             ✉ Unlocked · written {Math.round((now - l.createdAt) / 86_400_000)} days ago
           </Text>
           {revealedId === l.id ? (
@@ -1152,10 +1152,10 @@ function ChallengeWidget({ colors }: { colors: any }) {
               style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.35)", backgroundColor: "rgba(16,185,129,0.1)" }}
             >
               <Ionicons name="checkmark-outline" size={13} color="#6ee7b7" />
-              <Text style={{ fontSize: 11, fontWeight: "600", color: "#6ee7b7" }}>Mark today done</Text>
+              <Text style={{ fontSize: 11, fontWeight: "600", color: colors.successSoft }}>Mark today done</Text>
             </TouchableOpacity>
           ) : (
-            <Text style={{ fontSize: 11, color: "#6ee7b7" }}>✓ Today&apos;s reflection marked complete</Text>
+            <Text style={{ fontSize: 11, color: colors.successSoft }}>✓ Today&apos;s reflection marked complete</Text>
           )}
         </>
       )}
@@ -1552,7 +1552,7 @@ function TrendsScreenContent() {
             onPress={() => navigation.navigate("Chat")}
             style={{ paddingHorizontal: 20, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: "rgba(99,102,241,0.5)", backgroundColor: "rgba(99,102,241,0.12)" }}
           >
-            <Text style={{ fontSize: 13, color: "#a5b4fc", fontWeight: "600" }}>Start a conversation →</Text>
+            <Text style={{ fontSize: 13, color: colors.indigoSoft, fontWeight: "600" }}>Start a conversation →</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -1690,9 +1690,9 @@ function TrendsScreenContent() {
         <View style={{ borderRadius: 14, borderWidth: 1, borderColor: "rgba(56,189,248,0.2)", backgroundColor: "rgba(8,47,73,0.4)", paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16 }}>
           <Text style={{ fontSize: 12, color: "rgba(186,230,253,0.8)", lineHeight: 18 }}>
             You{"'"}ve been reflecting{" "}
-            <Text style={{ color: "#7dd3fc", fontWeight: "600" }}>{socialProof.userActiveDays} day{socialProof.userActiveDays !== 1 ? "s" : ""} this week</Text>
+            <Text style={{ color: colors.sky, fontWeight: "600" }}>{socialProof.userActiveDays} day{socialProof.userActiveDays !== 1 ? "s" : ""} this week</Text>
             {" "}— more consistently than{" "}
-            <Text style={{ color: "#7dd3fc", fontWeight: "600" }}>{socialProof.percentileBetter}%</Text>
+            <Text style={{ color: colors.sky, fontWeight: "600" }}>{socialProof.percentileBetter}%</Text>
             {" "}of Imotara users.
           </Text>
         </View>
@@ -1711,9 +1711,9 @@ function TrendsScreenContent() {
           {/* Header */}
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Text style={{ fontSize: 16, color: "#fbbf24" }}>✦</Text>
+              <Text style={{ fontSize: 16, color: colors.warning }}>✦</Text>
               <View>
-                <Text style={{ fontSize: 10, fontWeight: "700", color: "#fbbf24", textTransform: "uppercase", letterSpacing: 0.8 }}>
+                <Text style={{ fontSize: 10, fontWeight: "700", color: colors.warning, textTransform: "uppercase", letterSpacing: 0.8 }}>
                   Year in Review
                 </Text>
                 <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textPrimary }}>
@@ -1733,7 +1733,7 @@ function TrendsScreenContent() {
                   paddingVertical: 5,
                 }}
               >
-                <Text style={{ fontSize: 11, fontWeight: "600", color: "#fbbf24" }}>
+                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.warning }}>
                   {yearReviewExpanded ? "Collapse" : "Read →"}
                 </Text>
               </TouchableOpacity>
@@ -1781,7 +1781,7 @@ function TrendsScreenContent() {
                   paddingVertical: 5,
                 }}
               >
-                <Text style={{ fontSize: 11, fontWeight: "600", color: "#fbbf24" }}>Share ↗</Text>
+                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.warning }}>Share ↗</Text>
               </TouchableOpacity>
             </View>
           )}

@@ -2157,7 +2157,7 @@ function SettingsScreenContent() {
                         onPress={() => navigation.navigate("Connect", { startRegister: true })}
                         style={{ alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: "rgba(52,211,153,0.35)", backgroundColor: "rgba(52,211,153,0.12)" }}
                     >
-                        <Text style={{ fontSize: 12, fontWeight: "600", color: "#34d399" }}>🤝 As Wellness Companion →</Text>
+                        <Text style={{ fontSize: 12, fontWeight: "600", color: colors.success }}>🤝 As Wellness Companion →</Text>
                     </TouchableOpacity>
                 </AppSurface>
 
@@ -4618,7 +4618,7 @@ function SettingsScreenContent() {
                             </TouchableOpacity>
                             {memories.length > 0 && (
                                 <TouchableOpacity onPress={handleClearMemories} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                    <Text style={{ fontSize: 12, color: "rgba(248,113,113,0.9)", fontWeight: "600" }}>Clear</Text>
+                                    <Text style={{ fontSize: 12, color: colors.danger, fontWeight: "600" }}>Clear</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -4772,7 +4772,7 @@ function SettingsScreenContent() {
                         Applies strict content filters — removes adult themes, violence, and scary content from all reflections.
                     </Text>
                     {!childSafeModeGate.enabled && (
-                        <Text style={{ fontSize: 11, color: "#fbbf24", marginTop: 2 }}>
+                        <Text style={{ fontSize: 11, color: colors.warning, marginTop: 2 }}>
                             {childSafeModeGate.reason ?? "Requires Family, EDU, or Enterprise plan."}
                         </Text>
                     )}
@@ -4803,7 +4803,7 @@ function SettingsScreenContent() {
                         style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.35)", backgroundColor: "rgba(16,185,129,0.1)" }}
                     >
                         <Ionicons name="share-outline" size={15} color="#6ee7b7" />
-                        <Text style={{ fontSize: 12, fontWeight: "600", color: "#6ee7b7" }}>Share my snapshot</Text>
+                        <Text style={{ fontSize: 12, fontWeight: "600", color: colors.successSoft }}>Share my snapshot</Text>
                     </TouchableOpacity>
                     {familySnapUrl && (
                         <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 8 }} numberOfLines={2}>
@@ -5137,7 +5137,7 @@ function SettingsScreenContent() {
                             opacity: isDeletingAccount ? 0.5 : 1,
                         }}
                     >
-                        <Text style={{ fontSize: 13, fontWeight: "600", color: "#f87171" }}>
+                        <Text style={{ fontSize: 13, fontWeight: "600", color: colors.danger }}>
                             {isDeletingAccount ? "Deleting…" : "Delete My Account"}
                         </Text>
                     </TouchableOpacity>

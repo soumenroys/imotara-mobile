@@ -33,7 +33,7 @@ export function OpenLoopCard({ loop, colors, onExplore, onDefer, onDismiss }: Pr
       {/* Header row */}
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
         <Ionicons name="infinite-outline" size={14} color="#fbbf24" style={{ marginRight: 6 }} />
-        <Text style={{ fontSize: 10, fontWeight: "700", color: "#fbbf24", letterSpacing: 0.5, textTransform: "uppercase", flex: 1 }}>
+        <Text style={{ fontSize: 10, fontWeight: "700", color: colors.warning, letterSpacing: 0.5, textTransform: "uppercase", flex: 1 }}>
           Open loop · {loop.themeName}
         </Text>
         <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -61,7 +61,7 @@ export function OpenLoopCard({ loop, colors, onExplore, onDefer, onDismiss }: Pr
             alignItems: "center",
           }}
         >
-          <Text style={{ fontSize: 12, fontWeight: "700", color: "#fbbf24" }}>
+          <Text style={{ fontSize: 12, fontWeight: "700", color: colors.warning }}>
             Open a thread for this
           </Text>
         </TouchableOpacity>

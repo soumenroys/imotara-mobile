@@ -1183,7 +1183,7 @@ function MessageBubble({
           }}
           style={{ alignSelf: "flex-start", marginTop: 6, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: "rgba(251,191,36,0.4)", backgroundColor: "rgba(251,191,36,0.08)" }}
         >
-          <Text style={{ fontSize: 10, color: "#fde68a", fontWeight: "600" }}>↺ Retry with cloud</Text>
+          <Text style={{ fontSize: 10, color: colors.warningSoft, fontWeight: "600" }}>↺ Retry with cloud</Text>
         </TouchableOpacity>
       )}
 
@@ -1211,7 +1211,7 @@ function MessageBubble({
           companionAvatarSource
             ? <Image source={companionAvatarSource} style={{ width: 26, height: 26, borderRadius: 13, marginTop: 4, flexShrink: 0 }} />
             : <View style={{ width: 26, height: 26, borderRadius: 13, marginTop: 4, flexShrink: 0, backgroundColor: "rgba(99,102,241,0.25)", alignItems: "center", justifyContent: "center" }}>
-                <Text style={{ fontSize: 9, color: "#a5b4fc", fontWeight: "800" }}>I</Text>
+                <Text style={{ fontSize: 9, color: colors.indigoSoft, fontWeight: "800" }}>I</Text>
               </View>
         )}
         <Pressable
@@ -1248,13 +1248,13 @@ function MessageBubble({
         // Original Ionicons reaction set — reverted to match preferred UI
         const ALL_REACTION_OPTIONS: { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string }[] = [
           { icon: "heart",        color: "#ef4444" },
-          { icon: "sad-outline",  color: "#60a5fa" },
-          { icon: "happy-outline",color: "#fbbf24" },
-          { icon: "thumbs-up",    color: "#4ade80" },
-          { icon: "hand-left",    color: "#a78bfa" },
-          { icon: "flame",        color: "#fb923c" },
-          { icon: "star",         color: "#f59e0b" },
-          { icon: "leaf",         color: "#34d399" },
+          { icon: "sad-outline",  color: colors.info },
+          { icon: "happy-outline",color: colors.warning },
+          { icon: "thumbs-up",    color: colors.successAlt },
+          { icon: "hand-left",    color: colors.accent },
+          { icon: "flame",        color: colors.orange },
+          { icon: "star",         color: colors.warningStrong },
+          { icon: "leaf",         color: colors.success },
         ];
         const REACTION_OPTIONS = reactionsSet === "minimal"
           ? ALL_REACTION_OPTIONS.slice(0, 3)
@@ -4333,7 +4333,7 @@ export default function ChatScreen() {
             }}
             style={{ paddingVertical: 10 }}
           >
-            <Text style={{ fontSize: 14, color: "#fecaca" }}>
+            <Text style={{ fontSize: 14, color: colors.dangerSofter }}>
               {deleteLabel}
             </Text>
           </TouchableOpacity>
@@ -4556,7 +4556,7 @@ export default function ChatScreen() {
             }}
           >
             <Text style={{ fontSize: 10, marginRight: 4 }}>{"\uD83D\uDD12"}</Text>
-            <Text style={{ fontSize: 10, color: "#86efac", fontWeight: "600" }}>
+            <Text style={{ fontSize: 10, color: colors.successSoft, fontWeight: "600" }}>
               Device only — no data leaves your phone
             </Text>
           </View>
@@ -5752,7 +5752,7 @@ export default function ChatScreen() {
                 style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13 }}
               >
                 <Ionicons name="trash-outline" size={17} color="#f87171" />
-                <Text style={{ color: "#f87171", fontSize: 14 }}>Clear chat</Text>
+                <Text style={{ color: colors.danger, fontSize: 14 }}>Clear chat</Text>
               </TouchableOpacity>
             )}
           </View>

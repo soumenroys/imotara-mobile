@@ -1008,7 +1008,7 @@ function HistoryScreenContent() {
                         )}
                         <Text style={{ fontSize: 11, color: chipColor }}>{topChip.label}</Text>
                         {unsyncedCount > 0 && (
-                            <Text style={{ fontSize: 11, color: "#fbbf24", marginLeft: 8 }}>
+                            <Text style={{ fontSize: 11, color: colors.warning, marginLeft: 8 }}>
                                 · {unsyncedCount} message{unsyncedCount !== 1 ? "s" : ""} not yet backed up
                             </Text>
                         )}
@@ -1168,7 +1168,7 @@ function HistoryScreenContent() {
                                                 style={{ flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 14, borderWidth: 1, borderColor: "rgba(99,102,241,0.4)", backgroundColor: "rgba(99,102,241,0.10)", padding: 12, marginBottom: 12 }}
                                             >
                                                 <Ionicons name="add-circle-outline" size={20} color="#818cf8" />
-                                                <Text style={{ fontSize: 14, fontWeight: "600", color: "#818cf8" }}>Start new conversation</Text>
+                                                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.indigo }}>Start new conversation</Text>
                                             </TouchableOpacity>
 
                                             {threadList.length === 0 && (
@@ -1211,7 +1211,7 @@ function HistoryScreenContent() {
                                                             )}
                                                             {isActive && (
                                                                 <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999, backgroundColor: "rgba(99,102,241,0.25)" }}>
-                                                                    <Text style={{ fontSize: 10, color: "#818cf8", fontWeight: "600" }}>Active</Text>
+                                                                    <Text style={{ fontSize: 10, color: colors.indigo, fontWeight: "600" }}>Active</Text>
                                                                 </View>
                                                             )}
                                                         </View>
@@ -1235,7 +1235,7 @@ function HistoryScreenContent() {
                                                                             { text: "Delete", style: "destructive", onPress: () => deleteThread(thread.id) },
                                                                         ]);
                                                                     }}>
-                                                                        <Text style={{ fontSize: 11, color: "#f87171" }}>Delete</Text>
+                                                                        <Text style={{ fontSize: 11, color: colors.danger }}>Delete</Text>
                                                                     </TouchableOpacity>
                                                                 )}
                                                             </View>
@@ -1315,7 +1315,7 @@ function HistoryScreenContent() {
                                                 Tap to review and resolve
                                             </Text>
                                         </View>
-                                        <Text style={{ fontSize: 12, color: "#fbbf24", fontWeight: "600" }}>Review →</Text>
+                                        <Text style={{ fontSize: 12, color: colors.warning, fontWeight: "600" }}>Review →</Text>
                                     </TouchableOpacity>
                                 )}
                                 {formattedLastSync && (
@@ -1533,13 +1533,13 @@ function HistoryScreenContent() {
                                                                     );
                                                                     if (insight && (insight.analysis || insight.advice)) return (
                                                                         <View style={{ borderTopWidth: 0.5, borderTopColor: colors.border, paddingTop: 12, marginTop: 4, gap: 8 }}>
-                                                                            <Text style={{ fontSize: 10, fontWeight: "600", color: "rgba(167,139,250,0.9)", textTransform: "uppercase", letterSpacing: 1 }}>Psychological Insight</Text>
+                                                                            <Text style={{ fontSize: 10, fontWeight: "600", color: colors.accent, textTransform: "uppercase", letterSpacing: 1 }}>Psychological Insight</Text>
                                                                             {!!insight.analysis && (
                                                                                 <Text style={{ fontSize: 13, color: colors.textPrimary, lineHeight: 19 }}>{insight.analysis}</Text>
                                                                             )}
                                                                             {!!insight.advice && (
                                                                                 <View style={{ borderRadius: 12, backgroundColor: "rgba(124,58,237,0.1)", borderWidth: 0.5, borderColor: "rgba(167,139,250,0.25)", padding: 12, gap: 4 }}>
-                                                                                    <Text style={{ fontSize: 10, fontWeight: "600", color: "rgba(167,139,250,0.9)", textTransform: "uppercase", letterSpacing: 1 }}>Guidance</Text>
+                                                                                    <Text style={{ fontSize: 10, fontWeight: "600", color: colors.accent, textTransform: "uppercase", letterSpacing: 1 }}>Guidance</Text>
                                                                                     <Text style={{ fontSize: 13, color: colors.textPrimary, lineHeight: 19 }}>{insight.advice}</Text>
                                                                                 </View>
                                                                             )}
@@ -1768,7 +1768,7 @@ function HistoryScreenContent() {
                                             variant="ghost"
                                             size="sm"
                                             style={{ alignSelf: isUser ? "flex-end" : "flex-start", marginTop: 4, borderWidth: 0, paddingHorizontal: 0, paddingVertical: 0, opacity: isLoadingRemote || !canCloudSync ? 0.7 : 1 }}
-                                            textStyle={{ fontSize: 11, fontWeight: "500", color: "#93c5fd", textDecorationLine: "underline" }}
+                                            textStyle={{ fontSize: 11, fontWeight: "500", color: colors.infoSoft, textDecorationLine: "underline" }}
                                         />
                                     )}
                                 </TouchableOpacity>
@@ -1883,7 +1883,7 @@ function HistoryScreenContent() {
                                                 onPress={() => { if (typeof deleteFromHistory === "function") deleteFromHistory(b.id); dismissPair(a, b); }}
                                                 style={{ marginTop: 8, alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: "rgba(99,102,241,0.18)" }}
                                             >
-                                                <Text style={{ fontSize: 12, color: "#818cf8", fontWeight: "600" }}>Keep A, delete B</Text>
+                                                <Text style={{ fontSize: 12, color: colors.indigo, fontWeight: "600" }}>Keep A, delete B</Text>
                                             </TouchableOpacity>
                                         </View>
 
@@ -1897,7 +1897,7 @@ function HistoryScreenContent() {
                                                 onPress={() => { if (typeof deleteFromHistory === "function") deleteFromHistory(a.id); dismissPair(a, b); }}
                                                 style={{ marginTop: 8, alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: "rgba(52,211,153,0.18)" }}
                                             >
-                                                <Text style={{ fontSize: 12, color: "#34d399", fontWeight: "600" }}>Keep B, delete A</Text>
+                                                <Text style={{ fontSize: 12, color: colors.success, fontWeight: "600" }}>Keep B, delete A</Text>
                                             </TouchableOpacity>
                                         </View>
 
