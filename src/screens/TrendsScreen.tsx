@@ -4,7 +4,8 @@
 
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
-import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, Vibration, ActivityIndicator, InteractionManager } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, ActivityIndicator, InteractionManager } from "react-native";
+import { haptic } from "../lib/haptics";
 import CompanionLetterCard from "../components/imotara/CompanionLetterCard";
 import FeatureDiscoveryCard from "../components/imotara/FeatureDiscoveryCard";
 import { loadLetterArchive, type CompanionLetter } from "../lib/imotara/companionLetter";
@@ -66,7 +67,9 @@ function FeelSection({
     setNote("");
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2000);
-    try { Vibration.vibrate([0, 8, 40, 8]); } catch {}
+    // Was Vibration.vibrate([0, 8, 40, 8]) — a pattern, so silent on iOS,
+    // and it ignored the user's haptic setting entirely.
+    haptic.receive();
   }
 
   return (

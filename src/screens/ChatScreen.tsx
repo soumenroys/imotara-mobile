@@ -9,7 +9,6 @@ import {
   Alert,
   Pressable,
   Animated,
-  Vibration,
   Share,
   Linking,
   NativeSyntheticEvent,
@@ -23,23 +22,8 @@ import {
   PanResponder,
 } from "react-native";
 
-// Haptic helpers (Vibration API — intensity read from AsyncStorage at runtime)
-let _hapticIntensity: "off" | "light" | "strong" = "light";
-const haptic = {
-  tap: () => {
-    if (_hapticIntensity === "off") return;
-    try { Vibration.vibrate(_hapticIntensity === "strong" ? 20 : 10); } catch {}
-  },
-  receive: () => {
-    if (_hapticIntensity === "off") return;
-    try { Vibration.vibrate(_hapticIntensity === "strong" ? [0, 15, 60, 15] : [0, 8, 40, 8]); } catch {}
-  },
-  error: () => {
-    if (_hapticIntensity === "off") return;
-    try { Vibration.vibrate(_hapticIntensity === "strong" ? [0, 50, 80, 50] : [0, 30, 60, 30]); } catch {}
-  },
-};
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { haptic, setHapticIntensity } from "../lib/haptics";
 import * as Clipboard from "expo-clipboard";
 import { Image } from "react-native";
 import { resolveAvatarImage } from "../assets/avatarImages";
@@ -1709,7 +1693,7 @@ export default function ChatScreen() {
         if (isFinite(timeoutSecs) && timeoutSecs > 0) setApiTimeoutMs(timeoutSecs * 1000);
         const pollSecs = parseInt(poll ?? "15", 10);
         if (isFinite(pollSecs) && pollSecs > 0) setStatusPollMs(pollSecs * 1000);
-        if (intensity === "off" || intensity === "light" || intensity === "strong") _hapticIntensity = intensity;
+        setHapticIntensity(intensity);
         if (reactSet === "minimal" || reactSet === "default" || reactSet === "extended") setChatReactionsSet(reactSet as "default" | "minimal" | "extended");
         if (typSpeed === "slow" || typSpeed === "normal" || typSpeed === "fast") setChatTypingSpeed(typSpeed as "slow" | "normal" | "fast");
         if (guard === "strict" || guard === "standard" || guard === "relaxed") setContentGuardSensitivity(guard as "strict" | "standard" | "relaxed");

@@ -11,6 +11,7 @@ import * as FileSystem from "expo-file-system/legacy";
 let Sharing: typeof import("expo-sharing") | null = null;
 try { Sharing = require("expo-sharing"); } catch { /* not available in dev builds */ }
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { setHapticIntensity as applyHapticIntensity } from "../lib/haptics";
 
 
 import {
@@ -930,6 +931,10 @@ function SettingsScreenContent() {
     }, []);
     const handleHapticIntensityChange = async (val: "off" | "light" | "strong") => {
         setHapticIntensity(val);
+        // Apply it now, not just on disk. The stored value was only read when
+        // ChatScreen mounted, so changing this setting and going straight back
+        // to a chat already open did nothing until the app was restarted.
+        applyHapticIntensity(val);
         await AsyncStorage.setItem(HAPTIC_INTENSITY_KEY, val).catch(() => {});
     };
 
