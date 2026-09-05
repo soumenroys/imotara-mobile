@@ -1,5 +1,6 @@
 // App.tsx
-import React from "react";
+import React, { useEffect } from "react";
+import { startConnectivityWatch } from "./src/lib/network/online";
 import { StatusBar } from "expo-status-bar";
 import { Platform, View, Text, TouchableOpacity, Linking } from "react-native";
 import RootNavigator from "./src/navigation/RootNavigator";
@@ -129,6 +130,11 @@ function AppShell() {
 }
 
 export default function App() {
+  // Start listening before anything can make a request. Without this the
+  // connectivity state stays "unknown" forever, every fetch behaves exactly
+  // as it did before, and the offline short-circuit never fires (UX-10).
+  useEffect(() => startConnectivityWatch(), []);
+
   return (
     <ErrorBoundary>
       <AppShell />

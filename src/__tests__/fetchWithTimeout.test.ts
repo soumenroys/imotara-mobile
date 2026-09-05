@@ -74,9 +74,14 @@ describe("lib/fetchWithTimeout (simple, 15s default)", () => {
     });
 });
 
-describe("lib/network/fetchWithTimeout (20s default, external signal)", () => {
-    test("exports a 20s default", () => {
-        expect(DEFAULT_REMOTE_TIMEOUT_MS).toBe(20_000);
+describe("lib/network/fetchWithTimeout (10s default, external signal)", () => {
+    test("the default is short enough to not strand an offline user", () => {
+        // Was 20s, and it was spent twice — /api/chat-reply then /api/respond
+        // — before the on-device engine got a turn, so a message sent with no
+        // signal meant forty seconds of typing indicator. Cut to 10s (UX-11);
+        // the offline short-circuit below is what handles the common case.
+        expect(DEFAULT_REMOTE_TIMEOUT_MS).toBe(10_000);
+        expect(DEFAULT_REMOTE_TIMEOUT_MS).toBeLessThanOrEqual(12_000);
     });
 
     test("aborts when the timeout elapses", async () => {
