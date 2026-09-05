@@ -1,5 +1,6 @@
 // src/screens/SettingsScreen.tsx
-import React, { useCallback } from "react";
+import React, { useCallback, useRef } from "react";
+import { Toast, type ToastHandle } from "../components/ui/Toast";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import Constants from "expo-constants";
 import IOSTipJar from "../components/imotara/IOSTipJar";
@@ -405,6 +406,9 @@ function SettingsScreenContent() {
     } = useSettings();
 
     const { themePref, setThemePref, isDark, colors, accent, setAccent, fontSize, setFontSize } = useTheme();
+    const toastRef = useRef<ToastHandle>(null);
+    const notify = (message: string, kind: "error" | "info" | "success" = "error") =>
+        toastRef.current?.show(message, kind);
 
     const messageCount = (history as HistoryRecord[]).length;
 
@@ -1493,10 +1497,10 @@ function SettingsScreenContent() {
             if (canShare && Sharing) {
                 await Sharing.shareAsync(fileUri, { mimeType: "application/json", dialogTitle: "Export Imotara data" });
             } else {
-                Alert.alert("Export unavailable", "Sharing is not available on this device.");
+                notify("Sharing isn’t available on this device.", "info");
             }
         } catch (e) {
-            Alert.alert("Export failed", "Could not export your data. Please try again.");
+            notify("Couldn’t export your data. Please try again.");
         }
     };
 
@@ -1516,10 +1520,10 @@ function SettingsScreenContent() {
             if (canShare && Sharing) {
                 await Sharing.shareAsync(fileUri, { mimeType: "text/csv", dialogTitle: "Export Imotara data (CSV)" });
             } else {
-                Alert.alert("Export unavailable", "Sharing is not available on this device.");
+                notify("Sharing isn’t available on this device.", "info");
             }
         } catch {
-            Alert.alert("Export failed", "Could not export your data. Please try again.");
+            notify("Couldn’t export your data. Please try again.");
         }
     };
 
@@ -1568,10 +1572,10 @@ function SettingsScreenContent() {
             if (canShare && Sharing) {
                 await Sharing.shareAsync(fileUri, { mimeType: "text/plain", dialogTitle: "Export Journal" });
             } else {
-                Alert.alert("Export unavailable", "Sharing is not available on this device.");
+                notify("Sharing isn’t available on this device.", "info");
             }
         } catch {
-            Alert.alert("Export failed", "Could not export your journal. Please try again.");
+            notify("Couldn’t export your journal. Please try again.");
         }
     };
 
@@ -1824,7 +1828,7 @@ function SettingsScreenContent() {
                 presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
             });
         } catch {
-            Alert.alert("Error", "Could not open donation page. Please try again.", [{ text: "OK" }]);
+            notify("Couldn’t open the donation page. Please try again.");
         } finally {
             setDonatingId(null);
         }
@@ -5256,6 +5260,10 @@ function SettingsScreenContent() {
                     }}
                 />
             )}
+            {/* A local Toast, deliberately not the shared toastBus: that bus is
+                single-owner and ConnectScreen holds it. Two registrants would
+                send one screen's messages to the other. */}
+            <Toast ref={toastRef} />
         </KeyboardAvoidingView>
     );
 }

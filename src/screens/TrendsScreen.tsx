@@ -2,7 +2,7 @@
 // Emotion trends — local history analysis, no external chart library needed.
 // Shows: streak, weekly emotion frequency bars, dominant emotion per day, summary.
 
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, ActivityIndicator, InteractionManager } from "react-native";
 import { haptic } from "../lib/haptics";
@@ -14,6 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useColors, useTheme } from "../theme/ThemeContext";
+import { Toast, type ToastHandle } from "../components/ui/Toast";
 import { loadPendingInsights, clearPendingInsight, clearBadge, type InsightPayload } from "../lib/pendingInsights";
 import { CompanionInsightCard } from "../components/imotara/CompanionInsightCard";
 import { useSettings } from "../state/SettingsContext";
@@ -266,7 +267,13 @@ const JOURNAL_EMOTION_PROMPTS: Record<string, string[]> = {
   ],
 };
 
-function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useColors>; topEmotion?: EmotionBucket }) {
+function JournalSection({ colors, topEmotion, notify }: {
+  colors: ReturnType<typeof useColors>;
+  topEmotion?: EmotionBucket;
+  // Owned by TrendsScreenContent: one Toast per screen, passed down explicitly
+  // rather than through the shared bus, which ConnectScreen already holds.
+  notify: (message: string, kind?: "error" | "info" | "success") => void;
+}) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -328,7 +335,7 @@ function JournalSection({ colors, topEmotion }: { colors: ReturnType<typeof useC
   };
 
   const handleExport = async () => {
-    if (entries.length === 0) { Alert.alert("Nothing to export", "Write a journal entry first."); return; }
+    if (entries.length === 0) { notify("Write a journal entry first.", "info"); return; }
     const lines = entries.map((e) => {
       const date = new Date(e.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
       return `── ${date} ──\nPrompt: ${e.prompt}\n${e.body}`;
@@ -1280,6 +1287,11 @@ export default function TrendsScreen() {
 
 function TrendsScreenContent() {
   const colors = useColors();
+  const toastRef = useRef<ToastHandle>(null);
+  const notify = useCallback(
+    (message: string, kind: "error" | "info" | "success" = "error") => toastRef.current?.show(message, kind),
+    [],
+  );
   const { isDark } = useTheme();
   const navigation = useNavigation<any>();
   const store = useHistoryStore() as any;
@@ -1489,7 +1501,7 @@ function TrendsScreenContent() {
   // ---- Journal export ----
   const handleExportJournal = async () => {
     if (userMsgs.length === 0) {
-      Alert.alert("Nothing to export", "Start chatting and your journal will appear here.");
+      notify("Start chatting and your journal will appear here.", "info");
       return;
     }
     const lines: string[] = [];
@@ -1560,6 +1572,9 @@ function TrendsScreenContent() {
   }
 
   return (
+    // The Toast is absolutely positioned, so it sits outside the ScrollView:
+    // inside it, it would anchor to the scroll content and drift off-screen.
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: 16 }}
@@ -2197,7 +2212,7 @@ function TrendsScreenContent() {
       {challengeShow && <ChallengeWidget colors={colors} />}
 
       {/* Daily Journal */}
-      {journalShow && <JournalSection colors={colors} topEmotion={topEmotion as EmotionBucket | undefined} />}
+      {journalShow && <JournalSection colors={colors} topEmotion={topEmotion as EmotionBucket | undefined} notify={notify} />}
 
       {/* Letters from Imotara — archive with TTS, reactions, replies */}
       <LettersFromImotara
@@ -2211,5 +2226,7 @@ function TrendsScreenContent() {
 
       <View style={{ height: 32 }} />
     </ScrollView>
+    <Toast ref={toastRef} />
+    </View>
   );
 }
