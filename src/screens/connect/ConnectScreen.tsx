@@ -776,14 +776,26 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                                 {c.is_online && <View style={s.onlineDot} />}
                             </View>
                             <View style={{ flex: 1 }}>
-                                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                                    <Text style={s.cardName}>{c.display_name}</Text>
-                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                {/* gap + flex so a long name, or a large OS font
+                                    size, pushes the price onto its own space
+                                    instead of running into it — at the largest
+                                    accessibility size this read as
+                                    "Full Test CompanionFree" (UX-28). */}
+                                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                                    <Text style={[s.cardName, { flex: 1 }]} numberOfLines={2}>{c.display_name}</Text>
+                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 }}>
                                         <Text style={[s.rateText, Number(c.rate_per_min) === 0 && { color: colors.success }]}>
                                             {Number(c.rate_per_min) === 0 ? "Free" : `${CURRENCY_SYMBOLS[c.currency_code] ?? c.currency_code}${c.rate_per_min ?? "—"}/min`}
                                         </Text>
                                         {/* Favorite heart button */}
-                                        <TouchableOpacity onPress={() => toggleFavorite(c.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                        <TouchableOpacity
+                                            onPress={() => toggleFavorite(c.id)}
+                                            accessibilityRole="button"
+                                            accessibilityState={{ selected: favorites.has(c.id) }}
+                                            accessibilityLabel={favorites.has(c.id)
+                                                ? `Remove ${c.display_name} from favourites`
+                                                : `Add ${c.display_name} to favourites`}
+                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                                             <Text style={{ fontSize: 16, opacity: favLoading === c.id ? 0.4 : 1 }}>
                                                 {favorites.has(c.id) ? "❤️" : "🤍"}
                                             </Text>
