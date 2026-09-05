@@ -8,6 +8,7 @@
 import React, { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { Animated, Text, View } from "react-native";
 import { useTheme } from "../../theme/ThemeContext";
+import { motionDuration } from "../../lib/a11y/reduceMotion";
 import { TOAST_COLORS, type ToastKind } from "./toastColors";
 
 export type { ToastKind };
@@ -23,7 +24,7 @@ const ICONS: Record<ToastKind, string> = {
 };
 
 export const Toast = forwardRef<ToastHandle>(function Toast(_, ref) {
-  const { isDark } = useTheme();
+  const { isDark, reduceMotion } = useTheme();
   const [message, setMessage] = useState("");
   const [kind, setKind] = useState<ToastKind>("error");
   const opacity = useRef(new Animated.Value(0)).current;
@@ -38,15 +39,15 @@ export const Toast = forwardRef<ToastHandle>(function Toast(_, ref) {
 
       // Slide in
       Animated.parallel([
-        Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 0, duration: 220, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: motionDuration(220, reduceMotion), useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: motionDuration(220, reduceMotion), useNativeDriver: true }),
       ]).start();
 
       // Auto-dismiss after 6s
       timerRef.current = setTimeout(() => {
         Animated.parallel([
-          Animated.timing(opacity, { toValue: 0, duration: 280, useNativeDriver: true }),
-          Animated.timing(translateY, { toValue: 12, duration: 280, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0, duration: motionDuration(280, reduceMotion), useNativeDriver: true }),
+          Animated.timing(translateY, { toValue: 12, duration: motionDuration(280, reduceMotion), useNativeDriver: true }),
         ]).start();
       }, 6000);
     },

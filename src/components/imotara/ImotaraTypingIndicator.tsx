@@ -2,7 +2,8 @@
 import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Animated } from "react-native";
 import AppSurface from "../ui/AppSurface";
-import { useColors } from "../../theme/ThemeContext";
+import { useColors, useTheme } from "../../theme/ThemeContext";
+import { shouldLoopDecoration } from "../../lib/a11y/reduceMotion";
 
 export type ImotaraTypingIndicatorProps = {
     isUser?: boolean;
@@ -14,8 +15,16 @@ const BASE_DELAYS = [0, 150, 300];
 
 function AnimatedDot({ delay, duration, color }: { delay: number; duration: number; color?: string }) {
     const anim = useRef(new Animated.Value(0)).current;
+    const { reduceMotion } = useTheme();
 
     useEffect(() => {
+        // Ornament, not information — the dots say "typing" by being there, not
+        // by bouncing. Left at rest (translateY 0) they still render, so the
+        // indicator reads exactly the same, just still (UX-27).
+        if (!shouldLoopDecoration(reduceMotion)) {
+            anim.setValue(0);
+            return;
+        }
         const loop = Animated.loop(
             Animated.sequence([
                 Animated.delay(delay),
@@ -34,7 +43,7 @@ function AnimatedDot({ delay, duration, color }: { delay: number; duration: numb
         );
         loop.start();
         return () => loop.stop();
-    }, [anim, delay, duration]);
+    }, [anim, delay, duration, reduceMotion]);
 
     return (
         <Animated.View

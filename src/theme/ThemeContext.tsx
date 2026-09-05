@@ -18,7 +18,7 @@
 // nothing, which is the same bug UX-07 found in the haptics.
 
 import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
-import { useColorScheme } from "react-native";
+import { AccessibilityInfo, useColorScheme } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DARK, LIGHT, type ColorPalette } from "./colors";
 import { resolveThemeMode, initialThemePref, type ThemePref } from "./themeMode";
@@ -60,6 +60,8 @@ type ThemeContextValue = {
     fontSize: FontSize;
     setFontSize: (s: FontSize) => void;
     fontScale: number;
+    /** The system "Reduce Motion" setting. Animations run instantly when true. */
+    reduceMotion: boolean;
 };
 
 const THEME_KEY   = "imotara.theme.mode.v1";   // now holds a ThemePref
@@ -78,6 +80,7 @@ const ThemeContext = createContext<ThemeContextValue>({
     fontSize: "md",
     setFontSize: () => {},
     fontScale: 1.0,
+    reduceMotion: false,
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -90,6 +93,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Subscribes to Appearance, so the app follows the phone live rather than
     // only at launch.
     const systemScheme = useColorScheme();
+
+    // The system Reduce Motion setting (UX-27). Read once, then kept in step —
+    // someone turning it on in Settings should not have to relaunch the app.
+    // Defaults to false so a device that cannot answer animates as it always has.
+    const [reduceMotion, setReduceMotion] = useState(false);
+    useEffect(() => {
+        let alive = true;
+        AccessibilityInfo.isReduceMotionEnabled()
+            .then((v) => { if (alive) setReduceMotion(!!v); })
+            .catch(() => {});
+        const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", (v) =>
+            setReduceMotion(!!v),
+        );
+        return () => { alive = false; sub?.remove?.(); };
+    }, []);
 
     useEffect(() => {
         Promise.all([
@@ -168,6 +186,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
                 fontSize,
                 setFontSize,
                 fontScale: FONT_SCALE[fontSize],
+                reduceMotion,
             }}
         >
             {children}
