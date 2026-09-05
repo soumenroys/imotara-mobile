@@ -57,6 +57,19 @@ describe("when a Toast is mounted", () => {
     expect(shown[1][1]).toBe("info");
   });
 
+  it("warns in development if a second screen registers", () => {
+    // A tab navigator keeps several screens mounted, so a second registrant
+    // would silently take everyone's messages and show them on a screen the
+    // person is not looking at. There is no safe way to guess the visible one
+    // from here, so this is loud instead of clever.
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    registerToast(() => {});
+    registerToast(() => {});
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain("toastBus");
+    warn.mockRestore();
+  });
+
   it("unregistering only clears its own handler, not a newer one", () => {
     // Two screens mounting and unmounting out of order must not leave the bus
     // pointing at a dead component or, worse, clear a live one.

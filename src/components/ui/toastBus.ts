@@ -20,8 +20,24 @@ type Show = (message: string, kind?: ToastKind) => void;
 
 let current: Show | null = null;
 
-/** Called by the screen that mounts <Toast/>. Returns an unregister function. */
+/**
+ * Called by the screen that mounts <Toast/>. Returns an unregister function.
+ *
+ * ONE screen at a time. With a tab navigator several screens are mounted at
+ * once, so a second registrant would quietly take ownership of everyone's
+ * messages and show them on a screen the person is not looking at. There is no
+ * safe way to guess which one is visible from here, so the rule is: if another
+ * screen needs toasts, give it its own local ref and <Toast/> rather than
+ * reaching for this. The warning fires in development only.
+ */
 export function registerToast(show: Show): () => void {
+  if (__DEV__ && current !== null) {
+    console.warn(
+      "[toastBus] a second screen registered while one was still active. " +
+      "Toasts will go to the newest registrant, which may not be the screen " +
+      "the person is looking at. Use a local <Toast/> ref instead.",
+    );
+  }
   current = show;
   return () => {
     if (current === show) current = null;
