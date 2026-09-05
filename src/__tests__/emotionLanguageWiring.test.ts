@@ -43,7 +43,7 @@ describe("every SAD pattern defined is reachable from isSadText", () => {
   });
   for (const L of langs) {
     it(`${L}`, () => {
-      const re = (KM as Record<string, RegExp>)[`${L}_SAD_REGEX`];
+      const re = (KM as unknown as Record<string, RegExp>)[`${L}_SAD_REGEX`];
       const sample = sampleFor(re);
       expect(re.test(sample)).toBe(true);   // the sample really is one of its own terms
       expect(KM.isSadText(sample)).toBe(true);
@@ -58,7 +58,7 @@ describe("every STRESS pattern defined is reachable from isStressText", () => {
   it("finds them", () => expect(langsWith("_STRESS_REGEX").length).toBeGreaterThanOrEqual(10));
   for (const L of WIRED) {
     it(`${L}`, () => {
-      const re = (KM as Record<string, RegExp>)[`${L}_STRESS_REGEX`];
+      const re = (KM as unknown as Record<string, RegExp>)[`${L}_STRESS_REGEX`];
       expect(re).toBeDefined();
       const sample = sampleFor(re);
       expect(re.test(sample)).toBe(true);

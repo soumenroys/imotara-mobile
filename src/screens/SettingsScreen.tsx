@@ -404,7 +404,7 @@ function SettingsScreenContent() {
         orgBillingType,
     } = useSettings();
 
-    const { themeMode, toggleTheme, isDark, colors, accent, setAccent, fontSize, setFontSize } = useTheme();
+    const { themePref, setThemePref, isDark, colors, accent, setAccent, fontSize, setFontSize } = useTheme();
 
     const messageCount = (history as HistoryRecord[]).length;
 
@@ -2543,29 +2543,63 @@ function SettingsScreenContent() {
                     <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", marginBottom: 6 }}>
                         Appearance
                     </Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                            {isDark ? "Dark mode" : "Light mode"}
-                        </Text>
-                        <TouchableOpacity
-                            onPress={toggleTheme}
-                            style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                paddingHorizontal: 14,
-                                paddingVertical: 8,
-                                borderRadius: 999,
-                                borderWidth: 1,
-                                borderColor: colors.border,
-                                backgroundColor: isDark ? "rgba(30,41,59,0.7)" : "rgba(226,232,240,0.9)",
-                                gap: 6,
-                            }}
-                        >
-                            <Ionicons name={isDark ? "moon-outline" : "sunny-outline"} size={16} color={colors.textPrimary} />
-                            <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600" }}>
-                                Switch to {isDark ? "Light" : "Dark"}
-                            </Text>
-                        </TouchableOpacity>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                        {themePref === "system"
+                            ? `Following your device — currently ${isDark ? "dark" : "light"}`
+                            : `Always ${themePref === "dark" ? "dark" : "light"}`}
+                    </Text>
+                    <View
+                        style={{ flexDirection: "row", gap: 8 }}
+                        accessibilityRole="radiogroup"
+                        accessibilityLabel="Appearance"
+                    >
+                        {([
+                            { key: "system", label: "System", icon: "phone-portrait-outline" },
+                            { key: "light",  label: "Light",  icon: "sunny-outline" },
+                            { key: "dark",   label: "Dark",   icon: "moon-outline" },
+                        ] as const).map((opt) => {
+                            const selected = themePref === opt.key;
+                            return (
+                                <TouchableOpacity
+                                    key={opt.key}
+                                    onPress={() => setThemePref(opt.key)}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ selected }}
+                                    accessibilityLabel={
+                                        opt.key === "system"
+                                            ? "Appearance: match my device"
+                                            : `Appearance: always ${opt.label.toLowerCase()}`
+                                    }
+                                    style={{
+                                        flex: 1,
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        paddingVertical: 10,
+                                        borderRadius: 12,
+                                        borderWidth: 1,
+                                        borderColor: selected ? colors.primary : colors.border,
+                                        backgroundColor: selected ? colors.primaryTint : "transparent",
+                                        gap: 6,
+                                    }}
+                                >
+                                    <Ionicons
+                                        name={opt.icon}
+                                        size={15}
+                                        color={selected ? colors.primary : colors.textSecondary}
+                                    />
+                                    <Text
+                                        style={{
+                                            fontSize: 13,
+                                            fontWeight: selected ? "700" : "500",
+                                            color: selected ? colors.primary : colors.textSecondary,
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
                     </View>
                 </AppSurface>
 
