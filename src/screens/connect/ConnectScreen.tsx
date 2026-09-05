@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useColors, useTheme } from "../../theme/ThemeContext";
 import { Toast, type ToastHandle } from "../../components/ui/Toast";
+import { ConnectListSkeleton } from "../../components/ui/Skeleton";
 import { registerToast, showToast } from "../../components/ui/toastBus";
 import { useAuth } from "../../auth/AuthContext";
 import { useSettings } from "../../state/SettingsContext";
@@ -606,7 +607,11 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
 
     const sym = CURRENCY_SYMBOLS[walletCurrency] ?? "₹";
 
-    if (loading) return <View style={s.center}><ActivityIndicator color={colors.primary} /></View>;
+    // The companion list takes 0.9-2.6s to come back (measured on the emulator),
+    // and until now that was a blank screen with a spinner in the middle. The
+    // skeleton is shaped like the real cards, so their arrival fills the
+    // placeholders in rather than shoving a spinner aside (UX-29).
+    if (loading) return <ConnectListSkeleton />;
     if (consultants.length === 0) return (
         <View style={s.center}>
             {fetchFailed ? (
