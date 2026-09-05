@@ -32,6 +32,8 @@ import {
 import {
   fetchWithTimeout,
   DEFAULT_REMOTE_TIMEOUT_MS,
+  isNetworkFailure,
+  NetworkUnavailableError,
 } from "../lib/network/fetchWithTimeout";
 
 // Mobile safety: avoid UI freezes if server returns an unexpectedly huge string.
@@ -641,6 +643,15 @@ export async function callImotaraAI(
       }
     } catch (chatErr: any) {
       debugWarn("[imotara] chat-reply failed, falling back to /api/respond", chatErr?.message);
+
+      // If the first call could not reach the network at all, the second one
+      // will not either — it would just spend another full timeout proving the
+      // same thing, which is how a message sent with no signal used to cost
+      // twenty seconds and then twenty more. A server that answered and said
+      // no is different: that is worth a second endpoint.
+      if (isNetworkFailure(chatErr)) {
+        throw new NetworkUnavailableError(chatErr?.message ?? "network unavailable");
+      }
     }
     // ── /api/chat-reply failed or returned non-GPT response — fall through to /api/respond ──
 

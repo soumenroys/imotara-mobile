@@ -16,6 +16,32 @@ export class OfflineError extends Error {
   }
 }
 
+/** The first remote call failed for a reason a second call cannot fix. */
+export class NetworkUnavailableError extends Error {
+  constructor(detail: string) {
+    super(detail);
+    this.name = "NetworkUnavailableError";
+  }
+}
+
+/**
+ * Did this fail because the network is unavailable, rather than because a
+ * server answered and said no?
+ *
+ * An aborted request is our own timeout firing; a TypeError from fetch is
+ * React Native's way of saying the request never left. Neither is worth
+ * repeating against a second endpoint. An HTTP error is — that server was
+ * reachable and simply refused.
+ */
+export function isNetworkFailure(err: unknown): boolean {
+  if (err instanceof OfflineError || err instanceof NetworkUnavailableError) return true;
+  const name = (err as { name?: string } | null)?.name ?? "";
+  const message = String((err as { message?: string } | null)?.message ?? "");
+  return name === "AbortError"
+      || name === "TypeError"
+      || /network request failed|timeout|aborted/i.test(message);
+}
+
 export async function fetchWithTimeout(
     url: string,
     init: RequestInit,

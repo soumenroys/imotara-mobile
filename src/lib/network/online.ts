@@ -29,11 +29,31 @@ function classify(state: { isConnected: boolean | null; isInternetReachable: boo
   return "unknown";
 }
 
-/** Start listening. Safe to call more than once. */
+/**
+ * Start listening. Safe to call more than once.
+ *
+ * The reachability probe is pointed at Imotara's own health endpoint rather
+ * than NetInfo's default Google URL, which is what makes a captive portal
+ * detectable: hotel and airport wifi answers every request with its own login
+ * page, so the device is "connected" and nothing works. A probe that expects
+ * HTTP 200 from OUR api sees that HTML for what it is, and — more usefully —
+ * "reachable" then means "can reach Imotara", which is the only question the
+ * app actually needs answered.
+ */
 let started = false;
 export function startConnectivityWatch(): () => void {
   if (started) return () => {};
   started = true;
+
+  NetInfo.configure({
+    reachabilityUrl: "https://www.imotara.com/api/health",
+    reachabilityTest: async (response) => response.status === 200,
+    // Re-probe soon after a failure, lazily while things are working.
+    reachabilityShortTimeout: 5 * 1000,
+    reachabilityLongTimeout: 60 * 1000,
+    reachabilityRequestTimeout: 8 * 1000,
+  });
+
   return NetInfo.addEventListener((state) => {
     const next = classify(state);
     if (next === current) return;
