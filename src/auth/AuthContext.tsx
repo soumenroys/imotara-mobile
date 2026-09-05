@@ -157,9 +157,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // working. The result re-enters this function via
                 // onAuthStateChange below.
                 anonymousSignInInFlight.current = true;
-                supabase.auth.signInAnonymously()
-                    .catch((err) => console.warn("[Auth] Anonymous sign-in failed:", err))
-                    .finally(() => { anonymousSignInInFlight.current = false; });
+                // Deferred out of this callback ON PURPOSE.
+                //
+                // applySession runs from onAuthStateChange, and supabase-js
+                // invokes those subscribers while it is holding the auth lock.
+                // signInAnonymously() needs that same lock, so calling it here
+                // is a re-entrant deadlock: _initialize() never finishes, the
+                // lock is never released, and every later call — getSession,
+                // getUser, and every .from() query, because they all resolve
+                // the session first — queues behind it forever.
+                //
+                // Measured on the iPhone 17 Pro simulator before this change:
+                // lockAcquired stuck true, initializePromise never settling,
+                // and 437 operations queued and never drained. Android
+                // happened to win the race and looked fine, which is what made
+                // this look platform-specific rather than a latent bug in
+                // both.
+                //
+                // setTimeout lets the callback return so the lock is released
+                // first. Everything else about the behaviour is unchanged.
+                setTimeout(() => {
+                    supabase.auth.signInAnonymously()
+                        .catch((err) => console.warn("[Auth] Anonymous sign-in failed:", err))
+                        .finally(() => { anonymousSignInInFlight.current = false; });
+                }, 0);
             }
         };
 
