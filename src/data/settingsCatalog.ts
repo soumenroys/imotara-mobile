@@ -140,6 +140,14 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
     keywords: ["voice quality", "recording quality", "microphone quality", "audio quality", "ध्वनि गुणवत्ता", "রেকর্ডিং গুণমান"],
   },
   {
+    id: "voice_auto_send",
+    title: "Send voice notes automatically",
+    section: "Experience",
+    sectionKey: "experience",
+    description: "Send a voice transcription as soon as it is ready, instead of putting it in the composer to edit first",
+    keywords: ["auto send", "autosend", "send automatically", "voice note", "send voice", "no editing", "send transcription", "straight away", "अपने आप भेजें", "স্বয়ংক্রিয়ভাবে পাঠান"],
+  },
+  {
     id: "hands_free",
     title: "Hands-free mode",
     section: "Experience",

@@ -1692,10 +1692,11 @@ export default function ChatScreen() {
   const [ttsRate, setTtsRate] = useState(0.95);
   const [ttsPitch, setTtsPitch] = useState(1.0);
   const [voiceConfirm, setVoiceConfirm] = useState(false);
+  const [voiceAutoSend, setVoiceAutoSend] = useState(false);
   useEffect(() => {
     const load = async () => {
       try {
-        const [dur, qual, cloud, timeout, poll, intensity, reactSet, typSpeed, guard, crisis, ttsR, ttsP, vConfirm] = await Promise.all([
+        const [dur, qual, cloud, timeout, poll, intensity, reactSet, typSpeed, guard, crisis, ttsR, ttsP, vConfirm, vAutoSend] = await Promise.all([
           AsyncStorage.getItem("imotara.voice.maxDuration.v1"),
           AsyncStorage.getItem("imotara.voice.quality.v1"),
           AsyncStorage.getItem("imotara.voice.cloudTranscription.v1"),
@@ -1709,6 +1710,7 @@ export default function ChatScreen() {
           AsyncStorage.getItem("imotara.tts.rate.v1"),
           AsyncStorage.getItem("imotara.tts.pitch.v1"),
           AsyncStorage.getItem("imotara.voice.confirmTranscription.v1"),
+          AsyncStorage.getItem("imotara.voice.autoSend.v1"),
         ]);
         const durSecs = parseInt(dur ?? "60", 10);
         if (isFinite(durSecs) && durSecs > 0) setVoiceMaxDurationMs(durSecs * 1000);
@@ -1728,6 +1730,7 @@ export default function ChatScreen() {
         if (isFinite(r)) setTtsRate(r);
         if (isFinite(p)) setTtsPitch(p);
         setVoiceConfirm(vConfirm === "1");
+        setVoiceAutoSend(vAutoSend === "1");
         const hf = await AsyncStorage.getItem("imotara:handsfree.v1");
         setHandsfree(hf === "1");
         handsfreeRef.current = hf === "1";
@@ -1746,11 +1749,17 @@ export default function ChatScreen() {
       setHandsfree(val);
       handsfreeRef.current = val;
     }).catch(() => {});
+    AsyncStorage.getItem("imotara.voice.confirmTranscription.v1")
+      .then((v) => setVoiceConfirm(v === "1")).catch(() => {});
+    AsyncStorage.getItem("imotara.voice.autoSend.v1")
+      .then((v) => setVoiceAutoSend(v === "1")).catch(() => {});
   }, []));
 
   // Voice input
   const voiceConfirmRef = React.useRef(voiceConfirm);
   React.useEffect(() => { voiceConfirmRef.current = voiceConfirm; }, [voiceConfirm]);
+  const voiceAutoSendRef = React.useRef(voiceAutoSend);
+  React.useEffect(() => { voiceAutoSendRef.current = voiceAutoSend; }, [voiceAutoSend]);
 
   // voiceLangRef is set to the user's preferredLang once toneContext loads (see effect below).
   // voiceLang (state) mirrors it so useVoiceInput re-renders when the language changes —
@@ -1779,17 +1788,27 @@ export default function ChatScreen() {
         latestInputRef.current = newText;
         setInput(newText);
       };
+      // Auto-send skips the composer entirely. When "ask before using" is also
+      // on, the confirmation still comes first — "Use" then sends instead of
+      // inserting, so the user never loses the chance to discard a bad take.
+      const deliver = () => {
+        if (voiceAutoSendRef.current) {
+          setTimeout(() => handleSendRef.current(text), 80);
+        } else {
+          insertText();
+        }
+      };
       if (voiceConfirmRef.current) {
         Alert.alert(
           "Use this transcription?",
           text,
           [
             { text: "Discard", style: "destructive" },
-            { text: "Use", onPress: insertText },
+            { text: "Use", onPress: deliver },
           ],
         );
       } else {
-        insertText();
+        deliver();
       }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentional [] — all mutable values accessed via refs

@@ -1013,6 +1013,18 @@ function SettingsScreenContent() {
         await AsyncStorage.setItem(VOICE_CONFIRM_KEY, val ? "1" : "0").catch(() => {});
     };
 
+    const VOICE_AUTOSEND_KEY = "imotara.voice.autoSend.v1";
+    const [voiceAutoSend, setVoiceAutoSend] = React.useState(false);
+    React.useEffect(() => {
+        AsyncStorage.getItem(VOICE_AUTOSEND_KEY).then((v) => {
+            setVoiceAutoSend(v === "1");
+        }).catch(() => {});
+    }, []);
+    const handleVoiceAutoSendToggle = async (val: boolean) => {
+        setVoiceAutoSend(val);
+        await AsyncStorage.setItem(VOICE_AUTOSEND_KEY, val ? "1" : "0").catch(() => {});
+    };
+
     // T-1: TTS rate + pitch
     const TTS_RATE_KEY = "imotara.tts.rate.v1";
     const TTS_PITCH_KEY = "imotara.tts.pitch.v1";
@@ -2529,6 +2541,15 @@ function SettingsScreenContent() {
 
                     <SettingRow label="Ask before using" description="Show confirmation before inserting voice text into chat">
                         <Switch value={voiceConfirm} onValueChange={handleVoiceConfirmToggle} />
+                    </SettingRow>
+
+                    <SettingRow
+                        label="Send voice notes automatically"
+                        description={voiceConfirm
+                            ? "After you confirm, the transcription is sent straight away instead of waiting in the composer"
+                            : "Send the transcription straight away instead of putting it in the composer to edit"}
+                    >
+                        <Switch value={voiceAutoSend} onValueChange={handleVoiceAutoSendToggle} />
                     </SettingRow>
 
                     <View style={{ marginTop: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(124,58,237,0.35)", backgroundColor: "rgba(124,58,237,0.08)", paddingHorizontal: 12, paddingVertical: 12 }}>
