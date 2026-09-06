@@ -103,6 +103,16 @@ import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
 import { isEnabled as isFeatureEnabled } from "../licensing/featureGates";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+// Message-action touch target.
+//
+// These were 18px icons with `hitSlop: 8` spaced 10px apart — 34px targets
+// only 28px from each other, so neighbouring hit areas OVERLAPPED by about
+// 6px. That is the whole explanation for a tester reporting that tapping
+// "react" sometimes triggered "copy": both taps were landing in a shared
+// region. A real 44x44 box (the iOS HIG minimum, close to Android's 48dp)
+// with no hitSlop cannot overlap its neighbour.
+const ACTION_HIT = { width: 44, height: 44, alignItems: "center", justifyContent: "center" } as const;
+
 // ── Sentiment seed chips — quick-tap mood starters ────────────────────────────
 const SENTIMENT_SEEDS_BY_LANG: Record<string, [string, string, string]> = {
   en: ["Feeling heavy", "Need to vent", "Just thinking out loud"],
@@ -1267,24 +1277,39 @@ function MessageBubble({
         const activeOption = REACTION_OPTIONS.find((r) => r.icon === activeReaction);
         return (
           <View style={{ marginLeft: 4, marginBottom: 6, gap: 4 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              {/* Source badge */}
-              <View style={{
-                paddingHorizontal: 6, paddingVertical: 4, borderRadius: 999, borderWidth: 1,
-                borderColor: message.source === "cloud" ? "rgba(56,189,248,0.45)" : "rgba(148,163,184,0.35)",
-                backgroundColor: message.source === "cloud" ? "rgba(56,189,248,0.10)" : "rgba(148,163,184,0.10)",
-              }}>
-                <Ionicons
-                  name={message.source === "cloud" ? "cloud-outline" : "phone-portrait-outline"}
-                  size={11}
-                  color={message.source === "cloud" ? "#7dd3fc" : colors.textSecondary}
-                />
-              </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 0, flexWrap: "wrap" }}>
+              {/* Source badge — where this reply was generated.
+                  Now behind showSyncBadge, which every other message badge on
+                  this screen already respects and which defaults to hidden. It
+                  was the one piece of metadata nobody could turn off, and a
+                  tester asked outright what the cloud icon was for and whether
+                  it needed to be there. It also carries a label now, so when it
+                  IS shown a screen reader says what it means instead of
+                  announcing an unnamed image. */}
+              {showSyncBadge && (
+                <View
+                  accessible
+                  accessibilityLabel={message.source === "cloud"
+                    ? "Reply generated in the cloud"
+                    : "Reply generated on this device"}
+                  style={{
+                    paddingHorizontal: 6, paddingVertical: 4, borderRadius: 999, borderWidth: 1,
+                    borderColor: message.source === "cloud" ? "rgba(56,189,248,0.45)" : "rgba(148,163,184,0.35)",
+                    backgroundColor: message.source === "cloud" ? "rgba(56,189,248,0.10)" : "rgba(148,163,184,0.10)",
+                  }}
+                >
+                  <Ionicons
+                    name={message.source === "cloud" ? "cloud-outline" : "phone-portrait-outline"}
+                    size={11}
+                    color={message.source === "cloud" ? "#7dd3fc" : colors.textSecondary}
+                  />
+                </View>
+              )}
 
               {/* Reaction toggle */}
               <TouchableOpacity
                 onPress={() => setReactionPickerOpen((v) => !v)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={ACTION_HIT}
                 accessibilityLabel="React to message"
               >
                 <Ionicons
@@ -1295,14 +1320,14 @@ function MessageBubble({
               </TouchableOpacity>
 
               {/* Copy */}
-              <TouchableOpacity onPress={() => onCopy(message.text)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Copy message">
+              <TouchableOpacity onPress={() => onCopy(message.text)} style={ACTION_HIT} accessibilityLabel="Copy message">
                 <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
 
               {/* TTS */}
               <TouchableOpacity
                 onPress={() => (isSpeaking || isPreparingSpeech) ? onStopSpeak() : onSpeak(message.id, message.text)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={ACTION_HIT}
                 accessibilityLabel={isPreparingSpeech ? "Preparing voice…" : isSpeaking ? "Stop speaking" : "Read message aloud"}
               >
                 {isPreparingSpeech ? (
@@ -1317,7 +1342,7 @@ function MessageBubble({
               </TouchableOpacity>
 
               {/* Bookmark */}
-              <TouchableOpacity onPress={() => onBookmark(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={isBookmarked ? "Remove bookmark" : "Bookmark message"}>
+              <TouchableOpacity onPress={() => onBookmark(message.id)} style={ACTION_HIT} accessibilityLabel={isBookmarked ? "Remove bookmark" : "Bookmark message"}>
                 <Ionicons
                   name={isBookmarked ? "star" : "star-outline"}
                   size={18}
