@@ -18,14 +18,14 @@
 // nothing, which is the same bug UX-07 found in the haptics.
 
 import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
-import { AccessibilityInfo, useColorScheme } from "react-native";
+import { AccessibilityInfo, Appearance, useColorScheme } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DARK, LIGHT, type ColorPalette } from "./colors";
-import { resolveThemeMode, initialThemePref, type ThemePref } from "./themeMode";
+import { resolveThemeMode, initialThemePref, appearanceOverride, type ThemePref } from "./themeMode";
 
 type ThemeMode = "dark" | "light";
 export type { ThemePref };
-export { resolveThemeMode, initialThemePref };
+export { resolveThemeMode, initialThemePref, appearanceOverride };
 export type Accent = "twilight" | "indigo" | "teal" | "rose" | "amber" | "emerald";
 export type FontSize = "sm" | "md" | "lg";
 
@@ -139,6 +139,32 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // "unknown" from the OS counts as dark, which is what the app has always
     // shown. Guessing light on no information would be a visible change made
     // on no evidence.
+    // Native surfaces do not read our React theme. The Alert dialog, the
+    // keyboard and native pickers all ask the OS what appearance to use, so
+    // someone who picked Dark while their phone is Light got a stark white
+    // dialog thrown over a dark app. Reproduced on both simulators.
+    //
+    // setColorScheme sets the app-level override natively — iOS
+    // overrideUserInterfaceStyle, Android AppCompatDelegate night mode — which
+    // is what those surfaces actually consult. app.json's userInterfaceStyle
+    // cannot do this: it is a build-time constant and this is a runtime,
+    // per-person choice. Nor can expo-system-ui, which is why installing it was
+    // considered for this and rejected.
+    //
+    // "system" MUST clear the override rather than pin today's value.
+    // useColorScheme() reports the override once one exists, so pinning it
+    // would feed our own value back in as if it were the phone's, and a later
+    // "follow my phone" would be stuck on whatever was set last. Passing null
+    // hands control back to the OS.
+    useEffect(() => {
+        try {
+            Appearance.setColorScheme(appearanceOverride(themePref));
+        } catch {
+            // Older runtimes without the override API: the app's own theme is
+            // unaffected, native dialogs simply keep following the OS as before.
+        }
+    }, [themePref]);
+
     const themeMode: ThemeMode = resolveThemeMode(themePref, systemScheme);
 
     const setThemePref = (p: ThemePref) => {

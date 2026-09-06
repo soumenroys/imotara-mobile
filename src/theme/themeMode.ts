@@ -32,3 +32,20 @@ export function resolveThemeMode(
 export function initialThemePref(existingKeys: readonly string[]): ThemePref {
   return existingKeys.some((k) => k.startsWith("imotara.")) ? "dark" : "system";
 }
+
+/**
+ * What to hand React Native's Appearance override for a given preference.
+ *
+ * Native surfaces — the Alert dialog, the keyboard, native pickers — read the
+ * OS appearance, not our React theme, so someone who picks Dark while their
+ * phone is Light gets a white dialog over a dark app unless we set this.
+ *
+ * "system" MUST return null rather than today's resolved value. Setting an
+ * override makes useColorScheme() report that override back to us, so pinning
+ * a value here would feed our own answer in as if it were the phone's, and a
+ * later "follow my phone" would be stuck on whatever was set last. null hands
+ * control back to the OS.
+ */
+export function appearanceOverride(pref: ThemePref): ThemeMode | null {
+    return pref === "system" ? null : pref;
+}

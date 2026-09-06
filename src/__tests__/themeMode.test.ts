@@ -4,7 +4,7 @@
 // The two things worth pinning are the two judgement calls: what an unknown
 // system value means, and what happens to people who are ALREADY using the app.
 
-import { resolveThemeMode, initialThemePref } from "../theme/themeMode";
+import { resolveThemeMode, initialThemePref, appearanceOverride } from "../theme/themeMode";
 
 describe("resolveThemeMode", () => {
   it("follows the device when the pref is system", () => {
@@ -42,4 +42,28 @@ describe("initialThemePref — existing users must not be flipped", () => {
   it("keys from other apps do not count as an existing Imotara install", () => {
     expect(initialThemePref(["someotherapp.foo", "rn.async.storage"])).toBe("system");
   });
+});
+
+// The Appearance override is what makes native dialogs follow the person's
+// choice instead of the phone's. The "system" case is the one that matters:
+// useColorScheme() reports the override back, so pinning a value here would
+// feed our own answer in as the phone's and strand a later "follow my phone".
+describe("appearanceOverride", () => {
+    it("hands an explicit choice straight through", () => {
+        expect(appearanceOverride("dark")).toBe("dark");
+        expect(appearanceOverride("light")).toBe("light");
+    });
+
+    it("returns null for system, so the OS keeps control", () => {
+        expect(appearanceOverride("system")).toBeNull();
+    });
+
+    it("never returns a resolved mode for system, whatever the OS says", () => {
+        // Guards the feedback loop: if this ever returned "dark"/"light" for
+        // system, switching back to system would stick on the last override.
+        for (const _ of ["light", "dark"] as const) {
+            expect(appearanceOverride("system")).not.toBe("dark");
+            expect(appearanceOverride("system")).not.toBe("light");
+        }
+    });
 });
