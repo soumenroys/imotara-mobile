@@ -2005,6 +2005,22 @@ function SessionRechargeModal({ visible, accessToken, consultantId, consultantNa
                 return;
             }
 
+            // Deliberately NOT gated to Android, unlike every other payment
+            // surface in the app. UpgradeSheet sends iOS to Apple IAP and
+            // IOSTipJar handles donations, because subscriptions, token packs
+            // and tips are digital content Apple requires IAP for.
+            //
+            // This buys minutes for a realtime one-to-one session with a named
+            // companion, which is the case Apple’s person-to-person services
+            // provision (App Review Guideline 3.1.3(d)) covers alongside
+            // tutoring and medical consultations. Builds carrying this path
+            // have been through App Review — v1.3.2 build 132 was approved and
+            // went live on 2026-08-17.
+            //
+            // If this ever stops being one-to-one and realtime — group
+            // sessions, recorded content, or credit spendable outside a booked
+            // session — the provision stops applying and this needs an IAP
+            // path before it ships. Keep that in mind before widening it.
             const RazorpayCheckout = require("react-native-razorpay").default;
             const paymentData = await RazorpayCheckout.open({
                 key:      d.razorpay_key_id ?? process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID,
