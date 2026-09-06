@@ -4158,7 +4158,7 @@ export default function ChatScreen() {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: "rgba(24, 15, 30, 0.92)",
+            backgroundColor: colors.surface,
             paddingHorizontal: 16,
             paddingTop: 10,
             paddingBottom: 20,
@@ -4390,9 +4390,9 @@ export default function ChatScreen() {
   }, [isTyping, typingStatus, formattedTypingDots]);
 
   const typingBubbleBg = useMemo(() => {
-    if (!isTyping) return "rgba(24, 15, 30, 0.9)";
+    if (!isTyping) return colors.surface;
     if (latestMoodHint) return getMoodTintForHint(latestMoodHint, colors);
-    return "rgba(24, 15, 30, 0.9)";
+    return colors.surface;
   }, [isTyping, latestMoodHint]);
 
   // ✅ 80/20: disable Send while typing or in-flight
@@ -4579,7 +4579,7 @@ export default function ChatScreen() {
             paddingVertical: 6,
             borderTopWidth: 1,
             borderTopColor: colors.border,
-            backgroundColor: "rgba(24, 15, 30, 0.7)",
+            backgroundColor: colors.surfaceSoft,
             gap: 8,
           }}
         >
@@ -4937,7 +4937,7 @@ export default function ChatScreen() {
                 paddingHorizontal: 12,
                 paddingVertical: 8,
                 borderRadius: 12,
-                backgroundColor: "rgba(24, 15, 30, 0.9)",
+                backgroundColor: colors.surface,
                 borderWidth: 1,
                 borderColor: colors.border,
               }}
@@ -4979,7 +4979,7 @@ export default function ChatScreen() {
                     paddingVertical: 8,
                     borderWidth: 1,
                     borderColor: colors.border,
-                    backgroundColor: "rgba(24, 15, 30, 0.9)",
+                    backgroundColor: colors.surface,
                   }}
                 >
                   <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
@@ -5000,7 +5000,7 @@ export default function ChatScreen() {
                     paddingVertical: 8,
                     borderWidth: 1,
                     borderColor: colors.border,
-                    backgroundColor: "rgba(24, 15, 30, 0.9)",
+                    backgroundColor: colors.surface,
                   }}
                 >
                   <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
@@ -5024,7 +5024,7 @@ export default function ChatScreen() {
                     paddingVertical: 8,
                     borderWidth: 1,
                     borderColor: colors.border,
-                    backgroundColor: "rgba(24, 15, 30, 0.9)",
+                    backgroundColor: colors.surface,
                   }}
                 >
                   <Text style={{ color: colors.textPrimary, fontSize: 12 }}>
@@ -5040,7 +5040,7 @@ export default function ChatScreen() {
                   paddingHorizontal: 12,
                   paddingVertical: 10,
                   borderRadius: 12,
-                  backgroundColor: "rgba(24, 15, 30, 0.9)",
+                  backgroundColor: colors.surface,
                   borderWidth: 1,
                   borderColor: colors.border,
                 }}
@@ -5073,7 +5073,7 @@ export default function ChatScreen() {
                       paddingVertical: 6,
                       borderWidth: 1,
                       borderColor: colors.border,
-                      backgroundColor: "rgba(2, 6, 23, 0.6)",
+                      backgroundColor: colors.surface,
                     }}
                   >
                     <Text style={{ fontSize: 11, color: colors.textPrimary }}>
@@ -5104,7 +5104,7 @@ export default function ChatScreen() {
                         paddingVertical: 8,
                         borderWidth: 1,
                         borderColor: colors.border,
-                        backgroundColor: "rgba(2, 6, 23, 0.6)",
+                        backgroundColor: colors.surface,
                         maxWidth: "100%",
                       }}
                     >
@@ -5148,7 +5148,7 @@ export default function ChatScreen() {
                     paddingHorizontal: 12,
                     paddingVertical: 10,
                     borderRadius: 12,
-                    backgroundColor: "rgba(24, 15, 30, 0.9)",
+                    backgroundColor: colors.surface,
                     borderWidth: 1,
                     borderColor: colors.border,
                   }}
