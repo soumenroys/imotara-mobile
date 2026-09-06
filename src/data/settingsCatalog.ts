@@ -84,8 +84,8 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
   {
     id: "companion_reactions",
     title: "Companion reactions",
-    section: "Experience",
-    sectionKey: "experience",
+    section: "Advanced",
+    sectionKey: "advanced",
     description: "Enable or disable Imotara reacting to your messages with emoji",
     keywords: ["companion reactions", "emoji reactions", "imotara emoji", "reaction", "thumbs up", "heart", "disable reactions", "प्रतिक्रिया", "প্রতিক্রিয়া"],
   },
@@ -306,8 +306,8 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
   {
     id: "emotional_arc",
     title: "Emotional arc cadence",
-    section: "Advanced",
-    sectionKey: "advanced",
+    section: "Your companion",
+    sectionKey: "companion",
     description: "How often Imotara generates your monthly emotional journey story",
     keywords: ["emotional arc", "arc cadence", "emotional story", "journey story", "भावनात्मक चाप", "আবেগময় আর্ক"],
   },
