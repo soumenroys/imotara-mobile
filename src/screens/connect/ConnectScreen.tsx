@@ -724,9 +724,8 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
             {/* Divider before the language + gender row */}
             <View style={{ height: 1, marginHorizontal: 16, backgroundColor: "rgba(255,255,255,0.06)" }} />
 
-            {/* Row 3: Language + gender — web has had both; mobile had neither.
-                Language leads because "someone I can actually talk to" narrows
-                the list far more usefully than gender does. */}
+            {/* Row 3: Language. Leads because "someone I can actually talk to"
+                narrows the list far more usefully than gender does. */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 12, paddingBottom: 14, gap: 8, flexDirection: "row", alignItems: "center" }}>
                 <TouchableOpacity
@@ -741,7 +740,21 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                         <Text style={[s.filterChipText, filterLang === l.code && s.filterChipTextActive]}>{l.label}</Text>
                     </TouchableOpacity>
                 ))}
-                <View style={{ width: 1, height: 20, backgroundColor: "rgba(255,255,255,0.10)", marginHorizontal: 4 }} />
+            </ScrollView>
+
+            {/* Row 4: Gender. This used to sit at the end of the language row,
+                which meant scrolling past eleven language chips before you
+                could find out it existed at all. Web shows both filters at
+                once; on a phone that means its own row. "Any gender" mirrors
+                "Any language" so the group reads as a group and has a visible
+                off state, rather than relying on tapping the active chip. */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 14, gap: 8, flexDirection: "row", alignItems: "center" }}>
+                <TouchableOpacity
+                    style={[s.filterChip, !filterGender && s.filterChipActive]}
+                    onPress={() => setFilterGender("")}>
+                    <Text style={[s.filterChipText, !filterGender && s.filterChipTextActive]}>Any gender</Text>
+                </TouchableOpacity>
                 {([
                     { key: "female", label: "Female" },
                     { key: "male",   label: "Male" },
