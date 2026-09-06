@@ -140,6 +140,14 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
     keywords: ["voice quality", "recording quality", "microphone quality", "audio quality", "ध्वनि गुणवत्ता", "রেকর্ডিং গুণমান"],
   },
   {
+    id: "chat_relationship_backdrop",
+    title: "Colour the chat by relationship",
+    section: "Experience",
+    sectionKey: "experience",
+    description: "Give the chat message area a background colour that matches your companion relationship — friend, mentor, coach and the rest each get their own",
+    keywords: ["chat background", "background colour", "background color", "wallpaper", "chat theme", "colour the chat", "relationship colour", "change chat background", "chat colour", "चैट पृष्ठभूमि", "চ্যাটের পটভূমি"],
+  },
+  {
     id: "voice_auto_send",
     title: "Send voice notes automatically",
     section: "Experience",

@@ -32,6 +32,7 @@ import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import { useColors, useTheme } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
+import { chatBackdrop } from "../theme/chatBackdrop";
 import { callImotaraAI, streamChatReply } from "../api/aiClient";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
@@ -1693,10 +1694,11 @@ export default function ChatScreen() {
   const [ttsPitch, setTtsPitch] = useState(1.0);
   const [voiceConfirm, setVoiceConfirm] = useState(false);
   const [voiceAutoSend, setVoiceAutoSend] = useState(false);
+  const [relationshipBackdrop, setRelationshipBackdrop] = useState(false);
   useEffect(() => {
     const load = async () => {
       try {
-        const [dur, qual, cloud, timeout, poll, intensity, reactSet, typSpeed, guard, crisis, ttsR, ttsP, vConfirm, vAutoSend] = await Promise.all([
+        const [dur, qual, cloud, timeout, poll, intensity, reactSet, typSpeed, guard, crisis, ttsR, ttsP, vConfirm, vAutoSend, relBackdrop] = await Promise.all([
           AsyncStorage.getItem("imotara.voice.maxDuration.v1"),
           AsyncStorage.getItem("imotara.voice.quality.v1"),
           AsyncStorage.getItem("imotara.voice.cloudTranscription.v1"),
@@ -1711,6 +1713,7 @@ export default function ChatScreen() {
           AsyncStorage.getItem("imotara.tts.pitch.v1"),
           AsyncStorage.getItem("imotara.voice.confirmTranscription.v1"),
           AsyncStorage.getItem("imotara.voice.autoSend.v1"),
+          AsyncStorage.getItem("imotara.chat.relationshipBackdrop.v1"),
         ]);
         const durSecs = parseInt(dur ?? "60", 10);
         if (isFinite(durSecs) && durSecs > 0) setVoiceMaxDurationMs(durSecs * 1000);
@@ -1731,6 +1734,7 @@ export default function ChatScreen() {
         if (isFinite(p)) setTtsPitch(p);
         setVoiceConfirm(vConfirm === "1");
         setVoiceAutoSend(vAutoSend === "1");
+        setRelationshipBackdrop(relBackdrop === "1");
         const hf = await AsyncStorage.getItem("imotara:handsfree.v1");
         setHandsfree(hf === "1");
         handsfreeRef.current = hf === "1";
@@ -1753,6 +1757,8 @@ export default function ChatScreen() {
       .then((v) => setVoiceConfirm(v === "1")).catch(() => {});
     AsyncStorage.getItem("imotara.voice.autoSend.v1")
       .then((v) => setVoiceAutoSend(v === "1")).catch(() => {});
+    AsyncStorage.getItem("imotara.chat.relationshipBackdrop.v1")
+      .then((v) => setRelationshipBackdrop(v === "1")).catch(() => {});
   }, []));
 
   // Voice input
@@ -4672,8 +4678,13 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* Chat area */}
-      <View style={{ flex: 1 }}>
+      {/* Chat area. The backdrop is the relationship wash when it is turned
+          on, and colors.background — byte-for-byte — when it is not. Only the
+          message list is tinted: the header and composer keep the app's own
+          background, which frames the conversation rather than flooding the
+          whole screen. See src/theme/chatBackdrop.ts for why it is built the
+          way it is. */}
+      <View style={{ flex: 1, backgroundColor: chatBackdrop(toneContext?.companion?.relationship, isDark ? "dark" : "light", relationshipBackdrop) }}>
         {DEBUG_UI_ENABLED && refreshing && (
           <Animated.View
             style={{

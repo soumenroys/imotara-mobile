@@ -110,6 +110,21 @@ function getApiBaseUrl(): string {
     return v.endsWith("/") ? v.slice(0, -1) : v;
 }
 
+// The relationship picker further down renders these as chips. Kept here as
+// well so the chat-backdrop row can name the active one; settingsRelationships
+// .test.ts checks the two stay in step.
+const RELATIONSHIP_LABELS: Record<string, string> = {
+    prefer_not: "Prefer not to specify",
+    mentor: "Mentor",
+    elder: "Elder",
+    friend: "Friend",
+    coach: "Coach",
+    sibling: "Sibling",
+    junior_buddy: "Junior buddy",
+    parent_like: "Parent-like",
+    partner_like: "Partner-like",
+};
+
 const AVATAR_AGES = [6, 16, 26, 36, 46, 56, 66, 76, 86, 96];
 
 const AGE_RANGE_TO_AVATAR: Record<string, number> = {
@@ -1023,6 +1038,18 @@ function SettingsScreenContent() {
     const handleVoiceAutoSendToggle = async (val: boolean) => {
         setVoiceAutoSend(val);
         await AsyncStorage.setItem(VOICE_AUTOSEND_KEY, val ? "1" : "0").catch(() => {});
+    };
+
+    const REL_BACKDROP_KEY = "imotara.chat.relationshipBackdrop.v1";
+    const [relationshipBackdrop, setRelationshipBackdrop] = React.useState(false);
+    React.useEffect(() => {
+        AsyncStorage.getItem(REL_BACKDROP_KEY).then((v) => {
+            setRelationshipBackdrop(v === "1");
+        }).catch(() => {});
+    }, []);
+    const handleRelationshipBackdropToggle = async (val: boolean) => {
+        setRelationshipBackdrop(val);
+        await AsyncStorage.setItem(REL_BACKDROP_KEY, val ? "1" : "0").catch(() => {});
     };
 
     // T-1: TTS rate + pitch
@@ -2656,6 +2683,25 @@ function SettingsScreenContent() {
                     <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 6, textTransform: "capitalize" }}>
                         {accent}
                     </Text>
+                </AppSurface>
+
+                {/* Chat background follows the companion relationship (D) */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <SettingRow
+                        label="Colour the chat by relationship"
+                        description={(() => {
+                            const rel = toneContext?.companion?.relationship;
+                            if (!relationshipBackdrop) {
+                                return "Give the message area a colour that matches how your companion relates to you";
+                            }
+                            if (!rel || rel === "prefer_not") {
+                                return "Pick a relationship style under Your companion to choose the colour — until then the chat looks unchanged";
+                            }
+                            return `The message area follows your ${(RELATIONSHIP_LABELS[rel] || rel).toLowerCase()} setting`;
+                        })()}
+                    >
+                        <Switch value={relationshipBackdrop} onValueChange={handleRelationshipBackdropToggle} />
+                    </SettingRow>
                 </AppSurface>
 
                 {/* Text size */}
