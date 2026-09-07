@@ -16,6 +16,12 @@ export type UseVoiceInputResult = {
     stopRecording: () => Promise<void>;
     cancelRecording: () => Promise<void>;
     durationMs: number;
+    /** Whether the mic is already permitted, WITHOUT prompting for it.
+     *  startRecording() calls requestPermissionsAsync(), which raises the OS
+     *  dialog — fine when a person tapped the mic, wrong when something starts
+     *  recording on its own (hands-free auto-start). Callers that open the mic
+     *  without a tap must gate on this first. */
+    hasPermission: () => Promise<boolean>;
 };
 
 const DEFAULT_MAX_DURATION_MS = 60_000;
@@ -43,6 +49,15 @@ export type VoiceInputOptions = {
     // since a user composing a longer message by voice may intentionally
     // pause mid-thought and shouldn't get cut off.
     autoStopOnSilence?: boolean;
+    // Called when the recording produced no usable transcript. Return true to
+    // say "handled" and suppress the "Couldn't transcribe" alert.
+    //
+    // Hands-free needs this: a blocking alert ends the conversation until
+    // someone taps the mic again, which is the one thing hands-free is meant to
+    // avoid. It can instead reopen the mic and let the person simply speak
+    // again. Everyone else keeps the alert — outside hands-free there is no
+    // loop to resume, so silence with no explanation would just look broken.
+    onNoSpeech?: () => boolean;
 };
 
 // Lightweight amplitude-based silence detection (not a real VAD model) via
@@ -124,6 +139,11 @@ export function useVoiceInput(
     const autoStopOnSilenceRef = useRef(opts?.autoStopOnSilence ?? false);
     const optsAutoStopOnSilence = opts?.autoStopOnSilence;
     useEffect(() => { autoStopOnSilenceRef.current = optsAutoStopOnSilence ?? false; }, [optsAutoStopOnSilence]);
+    // No dep array — stopRecording holds this callback for the whole life of a
+    // recording, so it must always be the latest one, not the one that existed
+    // when recording began.
+    const onNoSpeechRef = useRef(opts?.onNoSpeech);
+    useEffect(() => { onNoSpeechRef.current = opts?.onNoSpeech; });
     const [state, setState] = useState<VoiceInputState>("idle");
     const [durationMs, setDurationMs] = useState(0);
     const recordingRef = useRef<Audio.Recording | null>(null);
@@ -202,7 +222,7 @@ export function useVoiceInput(
 
             if (transcript.trim()) {
                 onTranscript(transcript.trim());
-            } else if (transcriptionAttempted) {
+            } else if (transcriptionAttempted && !onNoSpeechRef.current?.()) {
                 // M-4: only show this alert when transcription was actually attempted.
                 // When cloudTranscription=false the recording is intentionally discarded
                 // without any complaint — the user knows cloud STT is off.
@@ -411,5 +431,14 @@ export function useVoiceInput(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    return { state, startRecording, stopRecording, cancelRecording, durationMs };
+    const hasPermission = useCallback(async () => {
+        try {
+            const { granted } = await Audio.getPermissionsAsync();
+            return !!granted;
+        } catch {
+            return false;
+        }
+    }, []);
+
+    return { state, startRecording, stopRecording, cancelRecording, durationMs, hasPermission };
 }

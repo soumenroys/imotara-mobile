@@ -1591,6 +1591,10 @@ export default function ChatScreen() {
   const latestInputRef = useRef("");
   const [inputHeight, setInputHeight] = useState(40);
   const [isTyping, setIsTyping] = useState(false);
+  // Mirror for the [] -deps callbacks below (startHandsfreeIfIdle), which must
+  // read the live value rather than the one captured when they were created.
+  const isTypingRef = useRef(false);
+  useEffect(() => { isTypingRef.current = isTyping; }, [isTyping]);
   const [typingDots, setTypingDots] = useState(1);
   // Streaming reply state — tracks the in-progress streaming message
   const streamingMsgIdRef = React.useRef<string | null>(null);
@@ -1752,6 +1756,9 @@ export default function ChatScreen() {
       const val = v === "1";
       setHandsfree(val);
       handsfreeRef.current = val;
+      // Read the setting first, then open the mic — the ref has to be true
+      // before startHandsfreeIfIdle checks it.
+      if (val) void startHandsfreeIfIdleRef.current();
     }).catch(() => {});
     AsyncStorage.getItem("imotara.voice.confirmTranscription.v1")
       .then((v) => setVoiceConfirm(v === "1")).catch(() => {});
@@ -1759,6 +1766,22 @@ export default function ChatScreen() {
       .then((v) => setVoiceAutoSend(v === "1")).catch(() => {});
     AsyncStorage.getItem("imotara.chat.relationshipBackdrop.v1")
       .then((v) => setRelationshipBackdrop(v === "1")).catch(() => {});
+
+    // Close the mic when leaving Chat.
+    //
+    // Found on a simulator, 2026-09-07: hands-free kept recording after
+    // navigating to Settings, then transcribed and SENT a message from a
+    // screen the person had already left. The leak predates auto-start —
+    // reopenMicIfHandsfree fires from speakMessage's onDone, which can land
+    // after a navigation — but auto-start made it happen every time.
+    //
+    // Recording is for the screen you are looking at. Cancel rather than stop,
+    // so the audio is discarded instead of transcribed and sent.
+    return () => {
+      if (voiceStateRef.current === "recording") {
+        void voiceInputRef.current.cancelRecording();
+      }
+    };
   }, []));
 
   // Voice input
@@ -1773,6 +1796,12 @@ export default function ChatScreen() {
   const voiceLangRef = React.useRef("en");
   const [voiceLang, setVoiceLang] = useState("en");
 
+  // Forward refs. The focus effect and handleNoSpeech are declared above the
+  // callbacks they need, and both use [] deps, so they reach them through
+  // these rather than closing over a stale copy.
+  const startHandsfreeIfIdleRef = useRef<() => void>(() => {});
+  const reopenMicIfHandsfreeRef = useRef<() => void>(() => {});
+
   // Stable ref so the onTranscript callback can always call the latest handleSend.
   // Without this, the auto-stop timer (set in startRecording's setInterval) holds the
   // handleSend closure from the moment recording started — stale isTyping state —
@@ -1783,6 +1812,7 @@ export default function ChatScreen() {
   // Stable callback ([] deps) so stopRecording's useCallback doesn't re-create on
   // every timer tick (setDurationMs fires every 500 ms → re-render).
   const onTranscript = useCallback((text: string) => {
+      emptyTurnsRef.current = 0; // a turn produced words — start the count over
       if (handsfreeRef.current) {
         setTimeout(() => handleSendRef.current(text), 80);
         return;
@@ -1819,6 +1849,27 @@ export default function ChatScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentional [] — all mutable values accessed via refs
 
+  // Hands-free turns that produced no words. Without this the hook raises a
+  // blocking "Couldn't transcribe" alert, which ends the conversation until
+  // someone taps the mic — the exact dead end hands-free exists to avoid.
+  //
+  // Reopening instead is only safe with a cap: a muted or broken mic would
+  // otherwise record silence forever, and a loop nobody asked for is worse
+  // than an alert. Three strikes, then stop and say so. Reset on any success.
+  const emptyTurnsRef = useRef(0);
+  const MAX_EMPTY_HANDSFREE_TURNS = 3;
+  const handleNoSpeech = useCallback(() => {
+    if (!handsfreeRef.current) return false; // not hands-free — keep the alert
+    emptyTurnsRef.current += 1;
+    if (emptyTurnsRef.current >= MAX_EMPTY_HANDSFREE_TURNS) {
+      emptyTurnsRef.current = 0;
+      toastRef.current?.show("Didn't catch that. Tap the mic when you're ready.", "info");
+      return true; // handled — suppress the alert, but do not reopen
+    }
+    setTimeout(() => reopenMicIfHandsfreeRef.current(), 400);
+    return true;
+  }, []); // intentional [] — mutable values via refs
+
   const voiceInput = useVoiceInput(
     onTranscript,
     process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL,
@@ -1828,6 +1879,7 @@ export default function ChatScreen() {
       // Only hands-free auto-ends a turn on silence — manual recording keeps
       // tap-to-stop-only behavior (see useVoiceInput.ts's doc comment).
       autoStopOnSilence: handsfree,
+      onNoSpeech: handleNoSpeech,
     },
   );
 
@@ -1871,6 +1923,34 @@ export default function ChatScreen() {
     if (voiceStateRef.current !== "idle") return;
     void voiceInputRef.current.startRecording();
   }, []); // intentional [] — all mutable values via refs, same pattern as handleMicPress
+
+  // Opens the mic when nobody tapped anything — on entering Chat with hands-free
+  // on, and on returning from the background. Until now hands-free still needed
+  // one manual tap to begin, which made the shipped copy ("Automatically start
+  // voice input", settingsCatalog.ts) untrue and left exactly the friction the
+  // feedback complained about.
+  //
+  // Opening a microphone unprompted deserves care, so this refuses in five cases:
+  const startHandsfreeIfIdle = useCallback(async () => {
+    if (!handsfreeRef.current) return;          // not opted in
+    if (!mountedRef.current) return;
+    if (voiceStateRef.current !== "idle") return; // already recording/transcribing
+    if (isTypingRef.current || isSendingRef.current) return; // a reply is on its way
+    if (latestInputRef.current.trim()) return;    // a half-typed message is waiting
+    // Never raise the OS permission dialog from something the user did not tap.
+    // startRecording() would call requestPermissionsAsync(); asking for the mic
+    // the instant someone opens a chat screen is startling and easy to deny by
+    // reflex. If it has not been granted yet, wait for a deliberate mic tap.
+    if (!(await voiceInputRef.current.hasPermission())) return;
+    if (!mountedRef.current) return;               // may have unmounted while awaiting
+    if (voiceStateRef.current !== "idle") return;  // or started some other way
+    void voiceInputRef.current.startRecording();
+  }, []); // intentional [] — all mutable values via refs, same pattern as handleMicPress
+
+  useEffect(() => {
+    startHandsfreeIfIdleRef.current = startHandsfreeIfIdle;
+    reopenMicIfHandsfreeRef.current = reopenMicIfHandsfree;
+  }, [startHandsfreeIfIdle, reopenMicIfHandsfree]);
 
   // Message reactions — messageId → emoji (persisted to AsyncStorage)
   const REACTIONS_KEY = "imotara.reactions.v1";
@@ -2600,6 +2680,11 @@ export default function ChatScreen() {
       userScrolledUpRef.current = false;
       setShowScrollButton(false);
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 100);
+      // onBackground cancels any recording in progress, because the OS reclaims
+      // the audio session. Nothing used to restart it, so a hands-free
+      // conversation was silently over the moment you checked a notification.
+      // Delayed so the audio session is actually back before we ask for it.
+      setTimeout(() => { void startHandsfreeIfIdleRef.current(); }, 600);
     },
   });
 
@@ -3865,6 +3950,10 @@ export default function ChatScreen() {
               () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
               mapUserEmotionForTTS(finalEmotion),
             );
+          } else if (handsfreeRef.current) {
+            // No speech to wait for (empty reply text), so onDone will never
+            // fire — reopen the mic here or the conversation stops dead.
+            reopenMicIfHandsfree();
           }
         } catch (error) {
           // Undo abort — discard silently, no local fallback
@@ -3972,6 +4061,10 @@ export default function ChatScreen() {
               () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
               mapUserEmotionForTTS(userEmotion),
             );
+          } else if (handsfreeRef.current) {
+            // No speech to wait for (empty reply text), so onDone will never
+            // fire — reopen the mic here or the conversation stops dead.
+            reopenMicIfHandsfree();
           }
         } finally {
           // Always release send-lock regardless of mount state
@@ -4451,6 +4544,32 @@ export default function ChatScreen() {
 
   const isPad = Platform.OS === "ios" && Platform.isPad;
 
+  // What the hands-free indicator says. Mirrors what the loop is actually
+  // doing, so "why is nothing happening" always has an answer on screen.
+  const handsfreeStatus =
+    voiceInput.state === "recording" ? "listening"
+    : voiceInput.state === "transcribing" ? "transcribing"
+    : speakingMessageId ? "speaking"
+    : isTyping ? "thinking"
+    : "ready";
+
+  // Turning hands-free off from the chat screen. Writes the same key Settings
+  // writes, so the two never disagree, and stops anything already in flight —
+  // someone tapping "stop" wants the microphone closed now, not at the end of
+  // the current turn.
+  const handleHandsfreeStop = useCallback(() => {
+    handsfreeRef.current = false;
+    setHandsfree(false);
+    void AsyncStorage.setItem("imotara:handsfree.v1", "0").catch(() => {});
+    stopSpeaking();
+    setSpeakingMessageId(null);
+    setPreparingSpeechId(null);
+    if (voiceStateRef.current === "recording") {
+      void voiceInputRef.current.cancelRecording();
+    }
+    toastRef.current?.show("Hands-free turned off", "info");
+  }, []); // intentional [] — mutable values via refs
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -4471,6 +4590,35 @@ export default function ChatScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }} {...edgeSwipeResponder.panHandlers}>
       {/* iPad: constrain content to a centered column so the UI doesn't span the full iPad width */}
       <View style={isPad ? { flex: 1, maxWidth: 700, width: "100%", alignSelf: "center" } : { flex: 1 }}>
+      {/* Hands-free indicator.
+          Hands-free could open the microphone, listen, send, speak and reopen
+          the microphone without anything on screen ever saying so — the state
+          existed only in a switch buried in Settings. That is not acceptable
+          for a feature that records audio on its own, and it is also why
+          people did not know the mode existed at all.
+
+          Doubles as the off switch: one tap ends the session, which is the
+          fastest possible exit for someone who wants the mic shut now. */}
+      {handsfree ? (
+        <TouchableOpacity
+          onPress={handleHandsfreeStop}
+          accessibilityRole="button"
+          accessibilityLabel={`Hands-free conversation is on. ${handsfreeStatus}. Tap to turn off.`}
+          style={{
+            flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+            paddingVertical: 7, paddingHorizontal: 16,
+            backgroundColor: colors.primaryTint,
+            borderBottomWidth: 1, borderBottomColor: colors.primaryBorder,
+          }}
+        >
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary }} />
+          <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textPrimary }}>
+            {`Hands-free · ${handsfreeStatus}`}
+          </Text>
+          <Text style={{ fontSize: 11, color: colors.textSecondary }}>Tap to stop</Text>
+        </TouchableOpacity>
+      ) : null}
+
       {/* Offline / unsynced indicator */}
       {!isOnline ? (
         <View style={{ backgroundColor: "rgba(202,138,4,0.92)", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
