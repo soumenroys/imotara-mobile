@@ -89,6 +89,19 @@ const TRANSLIT_NATIVE_SCRIPT_RANGES: Record<string, RegExp> = {
  * resolved language is one of the 7 known-affected ones and the text has no
  * native-script characters at all. Fails open on any error — returns the
  * original text unchanged, exactly today's behavior, never worse.
+ *
+ * It is also on the critical path for the FIRST sound: speakMessage awaits it
+ * before chunking, so until it returns nothing has even been requested from
+ * /api/tts. That route runs a gpt-4.1-mini call and is deployed with
+ * maxDuration = 30, and this call used to have no timeout of its own — the
+ * per-chunk 20s ceiling is armed later, inside armedFetch. So a slow model
+ * call meant thirty seconds of silence and then a chunk fetch on top, which
+ * is the shape of the reported "TTS takes 30-40 seconds, sometimes never
+ * plays at all" (intern feedback item A).
+ *
+ * Hence TRANSLITERATE_TIMEOUT_MS. Timing out costs only pronunciation: the
+ * catch returns the romanized text, which is what every caller got before
+ * this function existed. Waiting costs the person the entire reply.
  */
 async function transliterateIfNeeded(
     text: string,
@@ -100,11 +113,25 @@ async function transliterateIfNeeded(
     const scriptRe = TRANSLIT_NATIVE_SCRIPT_RANGES[lang];
     if (scriptRe?.test(text)) return text; // already native script
 
+    // Measured against production 2026-09-08: 1.6-2.3s warm on a good
+    // connection. Set well above that so a normal call still succeeds on
+    // mobile data, but far below the route's own 30s ceiling — past this
+    // point the pronunciation is not worth the silence.
+    const TRANSLITERATE_TIMEOUT_MS = 7_000;
+
+    // Its own controller, chained to the caller's signal. Aborting the shared
+    // `controller` here would also kill the chunk fetches that come next.
+    const own = new AbortController();
+    const onOuterAbort = () => own.abort();
+    if (signal.aborted) return text;
+    signal.addEventListener("abort", onOuterAbort);
+    const timer = setTimeout(() => own.abort(), TRANSLITERATE_TIMEOUT_MS);
+
     try {
         const headers: Record<string, string> = { "Content-Type": "application/json" };
         if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
         const res = await fetch(`${apiBase()}/api/tts/transliterate`, {
-            method: "POST", headers, body: JSON.stringify({ text, lang }), signal,
+            method: "POST", headers, body: JSON.stringify({ text, lang }), signal: own.signal,
         });
         if (!res.ok) return text;
         const data = await res.json();
@@ -112,6 +139,9 @@ async function transliterateIfNeeded(
         return text;
     } catch {
         return text;
+    } finally {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", onOuterAbort);
     }
 }
 
@@ -560,13 +590,21 @@ export async function speakMessage(
             .finally(() => clearTimeout(t));
     };
 
+    // Stage timings. "TTS takes 30-40 seconds" (intern feedback item A) was
+    // reported without any way to tell WHICH stage was slow, and the answer
+    // needs a real device — the emulator's network and audio stack are not a
+    // fair proxy. These logs make that session a reading exercise rather than
+    // an exploratory one: filter logcat for [mobileTTS].
+    const tSpeakStart = Date.now();
     let cleanText = stripMarkdown(text);
     // Romanized-Indic-input TTS pronunciation fix — see
     // transliterateIfNeeded's doc comment above. Runs once here, before
     // chunking, not per chunk.
+    const tTranslitStart = Date.now();
     cleanText = await transliterateIfNeeded(cleanText, lang, accessToken, controller.signal);
+    const translitMs = Date.now() - tTranslitStart;
     const chunks = splitIntoSpeechChunks(cleanText);
-    console.log(`[mobileTTS] speakMessage start lang=${lang} textLen=${text.length} chunks=${chunks.length}`);
+    console.log(`[mobileTTS] speakMessage start lang=${lang} textLen=${text.length} chunks=${chunks.length} transliterate=${translitMs}ms`);
     // How many chunks fully finished playing before any failure — the
     // native-fallback call below must only speak what's LEFT, not the whole
     // message again. Only incremented after playChunkAndWait resolves, so a
@@ -610,6 +648,11 @@ export async function speakMessage(
             // clobbers the file the previous chunk might still be playing.
             const file = new File(Paths.cache, `imotara_tts_${i % 2}.mp3`);
             file.write(new Uint8Array(buf));
+            if (i === 0) {
+                // The number the complaint is actually about: how long the
+                // person waited between the reply landing and hearing anything.
+                console.log(`[mobileTTS] TIME TO FIRST SOUND ${Date.now() - tSpeakStart}ms (transliterate=${translitMs}ms)`);
+            }
             await playChunkAndWait(file, rate, i === 0 ? onStart : undefined);
 
             if (myGen !== _generation) return;
