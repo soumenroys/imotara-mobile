@@ -1652,6 +1652,32 @@ export default function ChatScreen() {
 
   // P4 — Unsent Letter mode
   const [unsentLetterVisible, setUnsentLetterVisible] = useState(false);
+
+  // Anything covering the conversation. A modal does not blur the screen in
+  // React Navigation, so without this the hands-free mic keeps listening behind
+  // a full sheet — and BreathingModal PLAYS AUDIO, which an open mic would
+  // record, transcribe and send as if the person had said it.
+  //
+  // Only suspends the hands-free loop. A recording somebody started by tapping
+  // the mic is left alone: silently discarding words they deliberately spoke
+  // would be worse than the problem being fixed.
+  const chatObscured = showThreadPanel || showHeaderMenu || breathingVisible || unsentLetterVisible;
+  const chatObscuredRef = useRef(false);
+  useEffect(() => {
+    const wasObscured = chatObscuredRef.current;
+    chatObscuredRef.current = chatObscured;
+    if (!handsfreeRef.current) return;
+    if (chatObscured && !wasObscured) {
+      if (voiceStateRef.current === "recording") {
+        void voiceInputRef.current.cancelRecording();
+      } else if (voiceStateRef.current === "transcribing") {
+        voiceInputRef.current.abandonTurn();
+      }
+    } else if (!chatObscured && wasObscured) {
+      // Uncovered again — pick the conversation back up.
+      void startHandsfreeIfIdleRef.current();
+    }
+  }, [chatObscured]);
   const [unsentLetterSetup, setUnsentLetterSetup] = useState<UnsentLetterSetup | null>(null);
 
   // NF-2 — Grief & Loss dedicated space
@@ -1751,7 +1777,12 @@ export default function ChatScreen() {
   // Hands-free mode
   const [handsfree, setHandsfree] = useState(false);
   const handsfreeRef = React.useRef(false);
+  // Whether this screen is the one on screen. The mic must never open, or stay
+  // open, for a screen nobody is looking at — and "mounted" is not the same
+  // thing: a screen you navigated away from is still mounted.
+  const isFocusedRef = React.useRef(false);
   useFocusEffect(React.useCallback(() => {
+    isFocusedRef.current = true;
     AsyncStorage.getItem("imotara:handsfree.v1").then((v) => {
       const val = v === "1";
       setHandsfree(val);
@@ -1778,8 +1809,15 @@ export default function ChatScreen() {
     // Recording is for the screen you are looking at. Cancel rather than stop,
     // so the audio is discarded instead of transcribed and sent.
     return () => {
+      isFocusedRef.current = false;
+      // Cancel a recording still running, AND abandon one that already reached
+      // the transcription upload — otherwise it lands after the navigation and
+      // sends a message from a screen the person has left. Watched that happen
+      // on a simulator, 2026-09-07.
       if (voiceStateRef.current === "recording") {
         void voiceInputRef.current.cancelRecording();
+      } else {
+        voiceInputRef.current.abandonTurn();
       }
     };
   }, []));
@@ -1920,6 +1958,11 @@ export default function ChatScreen() {
   const reopenMicIfHandsfree = useCallback(() => {
     if (!handsfreeRef.current) return;
     if (!mountedRef.current) return;
+    // Mounted is not enough. This fires from speakMessage's onDone, which can
+    // land seconds later — by then the person may have navigated away, and
+    // reopening would put a live mic on a screen they are not looking at.
+    if (!isFocusedRef.current) return;
+    if (chatObscuredRef.current) return; // a sheet or the breathing exercise is over the chat
     if (voiceStateRef.current !== "idle") return;
     void voiceInputRef.current.startRecording();
   }, []); // intentional [] — all mutable values via refs, same pattern as handleMicPress
@@ -1934,6 +1977,8 @@ export default function ChatScreen() {
   const startHandsfreeIfIdle = useCallback(async () => {
     if (!handsfreeRef.current) return;          // not opted in
     if (!mountedRef.current) return;
+    if (!isFocusedRef.current) return;           // not the screen being looked at
+    if (chatObscuredRef.current) return;         // covered by a sheet or modal
     if (voiceStateRef.current !== "idle") return; // already recording/transcribing
     if (isTypingRef.current || isSendingRef.current) return; // a reply is on its way
     if (latestInputRef.current.trim()) return;    // a half-typed message is waiting
@@ -1942,8 +1987,11 @@ export default function ChatScreen() {
     // the instant someone opens a chat screen is startling and easy to deny by
     // reflex. If it has not been granted yet, wait for a deliberate mic tap.
     if (!(await voiceInputRef.current.hasPermission())) return;
-    if (!mountedRef.current) return;               // may have unmounted while awaiting
-    if (voiceStateRef.current !== "idle") return;  // or started some other way
+    // Re-check everything that could have changed while awaiting.
+    if (!mountedRef.current) return;
+    if (!isFocusedRef.current) return;
+    if (chatObscuredRef.current) return;
+    if (voiceStateRef.current !== "idle") return;
     void voiceInputRef.current.startRecording();
   }, []); // intentional [] — all mutable values via refs, same pattern as handleMicPress
 
@@ -2646,6 +2694,11 @@ export default function ChatScreen() {
       // leaving expo-av's native recorder stopped while JS state shows "recording".
       if (voiceStateRef.current === "recording") {
         void voiceInput.cancelRecording();
+      } else if (voiceStateRef.current === "transcribing") {
+        // Recording had already finished and the upload was in flight. Cancelling
+        // has nothing left to cancel, so the transcript used to land while the app
+        // was in the background and send itself. Drop it instead.
+        voiceInput.abandonTurn();
       }
       // If the app goes background mid "typing", clear timers and unlock
       if (isTyping || isSendingRef.current) {

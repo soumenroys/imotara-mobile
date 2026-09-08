@@ -16,6 +16,20 @@ export type UseVoiceInputResult = {
     stopRecording: () => Promise<void>;
     cancelRecording: () => Promise<void>;
     durationMs: number;
+    /** Throw away whatever this recording turn produces.
+     *
+     *  Stopping a recording is not enough to stop it being SENT. By the time
+     *  the transcription upload is in flight the recording is already over, and
+     *  cancelRecording has nothing left to cancel — the upload lands, onTranscript
+     *  fires, and in hands-free that means a message goes out from wherever the
+     *  person now is. Call this whenever the turn stops being wanted: leaving the
+     *  screen, backgrounding, unmounting.
+     *
+     *  It discards the RESULT; it does not abort the request. expo-file-system's
+     *  uploadAsync has no cancellation in this version (createUploadTask is
+     *  legacy-only), so the transcription still completes and still costs. What
+     *  it guarantees is that nothing is inserted or sent. */
+    abandonTurn: () => void;
     /** Whether the mic is already permitted, WITHOUT prompting for it.
      *  startRecording() calls requestPermissionsAsync(), which raises the OS
      *  dialog — fine when a person tapped the mic, wrong when something starts
@@ -160,6 +174,10 @@ export function useVoiceInput(
     // (which can be open for several seconds). isStartingRef is set synchronously
     // before the first await, closing that window.
     const isStartingRef = useRef(false);
+    // Turn counter, same idea as mobileTTS's _generation. stopRecording captures
+    // the value at the top; if it has moved by the time the upload resolves, the
+    // turn was abandoned and the transcript is dropped on the floor.
+    const turnRef = useRef(0);
 
     const clearTimer = () => {
         if (timerRef.current) {
@@ -200,6 +218,7 @@ export function useVoiceInput(
 
             let transcript = "";
             const transcriptionAttempted = !!(apiBaseUrl && cloudTranscription);
+            const myTurn = turnRef.current;
 
             if (transcriptionAttempted) {
                 try {
@@ -209,6 +228,9 @@ export function useVoiceInput(
                     transcript = await transcribeAudio(uri, apiBaseUrl!, langRef.current, "audio/m4a", accessTokenRef.current);
                 } catch (err: any) {
                     console.warn("[useVoiceInput] Transcription failed:", err);
+                    // Same abandonment check as below — without it this alert
+                    // pops on whatever screen the person moved to.
+                    if (turnRef.current !== myTurn) return;
                     if (err?.message === "quota_exceeded") {
                         Alert.alert(
                             "Voice unavailable",
@@ -219,6 +241,11 @@ export function useVoiceInput(
                     }
                 }
             }
+
+            // Abandoned while the upload was in flight — the person left the
+            // screen, backgrounded the app, or the screen unmounted. Say nothing
+            // and send nothing.
+            if (turnRef.current !== myTurn) return;
 
             if (transcript.trim()) {
                 onTranscript(transcript.trim());
@@ -382,6 +409,7 @@ export function useVoiceInput(
     }, [maxDurationMs, quality]); // stopRecording accessed via stopRecordingRef — no dep needed
 
     const cancelRecording = useCallback(async (): Promise<void> => {
+        turnRef.current += 1; // whatever this turn produces is no longer wanted
         clearTimer();
         const recording = recordingRef.current;
         recordingRef.current = null;
@@ -412,6 +440,9 @@ export function useVoiceInput(
     // Cleanup on unmount — release audio session if recording was in progress
     useEffect(() => {
         return () => {
+            // An upload can still be in flight here. Without this, it resolves
+            // against an unmounted screen and calls onTranscript anyway.
+            turnRef.current += 1;
             clearTimer();
             const recording = recordingRef.current;
             if (recording) {
@@ -431,6 +462,8 @@ export function useVoiceInput(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const abandonTurn = useCallback(() => { turnRef.current += 1; }, []);
+
     const hasPermission = useCallback(async () => {
         try {
             const { granted } = await Audio.getPermissionsAsync();
@@ -440,5 +473,5 @@ export function useVoiceInput(
         }
     }, []);
 
-    return { state, startRecording, stopRecording, cancelRecording, durationMs, hasPermission };
+    return { state, startRecording, stopRecording, cancelRecording, durationMs, hasPermission, abandonTurn };
 }
