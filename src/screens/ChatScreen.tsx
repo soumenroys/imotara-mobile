@@ -1155,8 +1155,15 @@ function MessageBubble({
         </Text>
       ) : null}
 
+      {/* textPrimary at 0.7, not textSecondary. Muted text on a translucent
+          bubble was failing WCAG AA badly: measured 2.68:1 in dark and 3.08:1
+          in light at the worst bubble surface, because textSecondary already
+          carries alpha 0.9 and the opacity here multiplied it again. Same
+          treatment on the continuity note below. 0.7 measures 4.95:1 dark and
+          5.24:1 light across every bubble tint AND every relationship
+          backdrop; 0.65 lands on 4.50 in dark, which is too close to call. */}
       {showTimestamps && (
-        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4, opacity: 0.85 }}>
+        <Text style={{ fontSize: 11, color: colors.textPrimary, marginTop: 4, opacity: 0.7 }}>
           {new Date(message.timestamp).toLocaleTimeString()}
         </Text>
       )}
@@ -1199,7 +1206,7 @@ function MessageBubble({
       )}
 
       {!isUser && showContinuityNote && (
-        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 6, opacity: 0.9 }}>
+        <Text style={{ fontSize: 11, color: colors.textPrimary, marginTop: 6, opacity: 0.7 }}>
           This conversation is now part of your Emotion History.
         </Text>
       )}
