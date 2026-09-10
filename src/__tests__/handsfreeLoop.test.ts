@@ -54,7 +54,13 @@ describe("opening the mic without a tap is guarded", () => {
     });
 
     it("is reached from entering the chat screen and from returning to the app", () => {
-        expect(chat).toMatch(/if \(val\) void startHandsfreeIfIdleRef\.current\(\);/);
+        // Entering the screen: the focus effect loads the settings, and the
+        // loader starts the loop if hands-free is on. The ref must be set
+        // first — startHandsfreeIfIdle reads the ref, not the state.
+        const loader = chat.slice(chat.indexOf("const loadChatSettings = useCallback"));
+        expect(loader).toMatch(/handsfreeRef\.current = handsfreeOn;[\s\S]{0,300}if \(handsfreeOn\) void startHandsfreeIfIdleRef\.current\(\);/);
+        const focus = chat.slice(chat.indexOf("useFocusEffect(React.useCallback(() => {"));
+        expect(focus.slice(0, 1500)).toMatch(/^\s*void loadChatSettings\(\);/m); // uncommented: a commented-out call still "contains" the text
         const fg = chat.slice(chat.indexOf("onForeground: () => {"));
         expect(fg.slice(0, 2000)).toMatch(/startHandsfreeIfIdleRef\.current\(\)/);
     });

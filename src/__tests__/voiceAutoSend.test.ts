@@ -95,10 +95,20 @@ describe("persistence", () => {
 
     it("defaults to off, so an upgrade does not start sending on its own", () => {
         expect(src).toContain("const [voiceAutoSend, setVoiceAutoSend] = useState(false);");
-        expect(src).toMatch(/setVoiceAutoSend\(vAutoSend === "1"\)/);
+        // Only an explicit "1" turns it on; anything else, including never
+        // having been set, leaves it off.
+        expect(src).toMatch(/setVoiceAutoSend\(get\("imotara\.voice\.autoSend\.v1"\) === "1"\)/);
     });
 
     it("re-reads the setting on focus so a toggle applies without a remount", () => {
-        expect(src).toMatch(/AsyncStorage\.getItem\("imotara\.voice\.autoSend\.v1"\)\s*\.then\(\(v\) => setVoiceAutoSend\(v === "1"\)\)/);
+        // This used to be its own AsyncStorage read in the focus effect. It is
+        // now one entry in loadChatSettings, which the focus effect calls —
+        // see chatSettingsRefresh.test.ts for why the separate reads were
+        // consolidated. The guarantee asserted here is unchanged: come back to
+        // the chat, and the current value is in force.
+        const loader = src.slice(src.indexOf("const loadChatSettings = useCallback"));
+        expect(loader.slice(0, 4000)).toContain('"imotara.voice.autoSend.v1"');
+        const focus = src.slice(src.indexOf("useFocusEffect(React.useCallback(() => {"));
+        expect(focus.slice(0, 1500)).toMatch(/^\s*void loadChatSettings\(\);/m); // uncommented: a commented-out call still "contains" the text
     });
 });

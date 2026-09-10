@@ -1732,54 +1732,128 @@ export default function ChatScreen() {
   const [voiceConfirm, setVoiceConfirm] = useState(false);
   const [voiceAutoSend, setVoiceAutoSend] = useState(false);
   const [relationshipBackdrop, setRelationshipBackdrop] = useState(false);
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const [dur, qual, cloud, timeout, poll, intensity, reactSet, typSpeed, guard, crisis, ttsR, ttsP, vConfirm, vAutoSend, relBackdrop] = await Promise.all([
-          AsyncStorage.getItem("imotara.voice.maxDuration.v1"),
-          AsyncStorage.getItem("imotara.voice.quality.v1"),
-          AsyncStorage.getItem("imotara.voice.cloudTranscription.v1"),
-          AsyncStorage.getItem("imotara.api.timeout.v1"),
-          AsyncStorage.getItem("imotara.status.pollInterval.v1"),
-          AsyncStorage.getItem("imotara.haptic.intensity.v1"),
-          AsyncStorage.getItem("imotara.reactions.set.v1"),
-          AsyncStorage.getItem("imotara.typing.speed.v1"),
-          AsyncStorage.getItem("imotara.content.guard.v1"),
-          AsyncStorage.getItem("imotara.crisis.threshold.v1"),
-          AsyncStorage.getItem("imotara.tts.rate.v1"),
-          AsyncStorage.getItem("imotara.tts.pitch.v1"),
-          AsyncStorage.getItem("imotara.voice.confirmTranscription.v1"),
-          AsyncStorage.getItem("imotara.voice.autoSend.v1"),
-          AsyncStorage.getItem("imotara.chat.relationshipBackdrop.v1"),
-        ]);
-        const durSecs = parseInt(dur ?? "60", 10);
-        if (isFinite(durSecs) && durSecs > 0) setVoiceMaxDurationMs(durSecs * 1000);
-        if (qual === "low" || qual === "high") setVoiceQuality(qual);
-        setVoiceCloudTranscription(cloud !== "0");
-        const timeoutSecs = parseInt(timeout ?? "20", 10);
-        if (isFinite(timeoutSecs) && timeoutSecs > 0) setApiTimeoutMs(timeoutSecs * 1000);
-        const pollSecs = parseInt(poll ?? "15", 10);
-        if (isFinite(pollSecs) && pollSecs > 0) setStatusPollMs(pollSecs * 1000);
-        setHapticIntensity(intensity);
-        if (reactSet === "minimal" || reactSet === "default" || reactSet === "extended") setChatReactionsSet(reactSet as "default" | "minimal" | "extended");
-        if (typSpeed === "slow" || typSpeed === "normal" || typSpeed === "fast") setChatTypingSpeed(typSpeed as "slow" | "normal" | "fast");
-        if (guard === "strict" || guard === "standard" || guard === "relaxed") setContentGuardSensitivity(guard as "strict" | "standard" | "relaxed");
-        if (crisis === "sensitive" || crisis === "standard" || crisis === "conservative") setCrisisThresholdSetting(crisis as "sensitive" | "standard" | "conservative");
-        const r = parseFloat(ttsR ?? "0.95");
-        const p = parseFloat(ttsP ?? "1.0");
-        if (isFinite(r)) setTtsRate(r);
-        if (isFinite(p)) setTtsPitch(p);
-        setVoiceConfirm(vConfirm === "1");
-        setVoiceAutoSend(vAutoSend === "1");
-        setRelationshipBackdrop(relBackdrop === "1");
-        const hf = await AsyncStorage.getItem("imotara:handsfree.v1");
-        setHandsfree(hf === "1");
-        handsfreeRef.current = hf === "1";
-      } catch { /* non-fatal */ }
-    };
-    void load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+  // ONE list of the settings this screen obeys, re-read every time the screen
+  // is looked at.
+  //
+  // This used to be FOUR separate mount-only effects — voice/chat settings,
+  // three feature flags, the timestamp toggle, and nine capsule-visibility
+  // flags — with a second, much shorter list re-read on focus. Everything not
+  // on that short list silently did nothing when changed in Settings until the
+  // screen happened to remount: changing typing speed, re-enabling a capsule
+  // you had dismissed, turning timestamps off. It bit twice before anyone
+  // noticed the shape of it, the second time as a correct-looking guard for
+  // "Online transcription" that never fired on device, because the new value
+  // never reached the screen.
+  //
+  // Two hand-maintained lists drift. One list cannot. Keep it that way: a
+  // setting read anywhere else in this file is the same bug again, and
+  // chatSettingsRefresh.test.ts fails if one appears.
+  //
+  // Cheap enough to run on every focus: ONE multiGet (a single native round
+  // trip, not 29), and React bails out of re-rendering when a primitive
+  // setState is handed the value it already had — so the steady state, where
+  // nothing changed while the person was away, costs one storage read and no
+  // renders at all.
+  const loadChatSettings = useCallback(async () => {
+    try {
+      const pairs = await AsyncStorage.multiGet([
+        "imotara.voice.maxDuration.v1",
+        "imotara.voice.quality.v1",
+        "imotara.voice.cloudTranscription.v1",
+        "imotara.api.timeout.v1",
+        "imotara.status.pollInterval.v1",
+        "imotara.haptic.intensity.v1",
+        "imotara.reactions.set.v1",
+        "imotara.typing.speed.v1",
+        "imotara.content.guard.v1",
+        "imotara.crisis.threshold.v1",
+        "imotara.tts.rate.v1",
+        "imotara.tts.pitch.v1",
+        "imotara.voice.confirmTranscription.v1",
+        "imotara.voice.autoSend.v1",
+        "imotara.chat.relationshipBackdrop.v1",
+        "imotara:handsfree.v1",
+        "imotara.sentiment.chips.enabled.v1",
+        "imotara.weekly.recap.enabled.v1",
+        "imotara.undo.enabled.v1",
+        "imotara.chat.showTimestamps.v1",
+        DAILY_CHECKIN_ENABLED_KEY,
+        COLLECTIVE_PULSE_ENABLED_KEY,
+        TONE_REFLECTION_ENABLED_KEY,
+        RETURN_GREETING_ENABLED_KEY,
+        MOOD_GLIMPSE_ENABLED_KEY,
+        MILESTONE_ENABLED_KEY,
+        UNSENT_HINT_ENABLED_KEY,
+        TRIAL_BANNER_ENABLED_KEY,
+        SESSION_GREETING_KEY,
+        GROW_NUDGE_KEY,
+      ]);
+      const stored: Record<string, string | null> = {};
+      for (const [k, val] of pairs) stored[k] = val;
+      const get = (k: string): string | null => stored[k] ?? null;
+
+      const durSecs = parseInt(get("imotara.voice.maxDuration.v1") ?? "60", 10);
+      if (isFinite(durSecs) && durSecs > 0) setVoiceMaxDurationMs(durSecs * 1000);
+      const qual = get("imotara.voice.quality.v1");
+      if (qual === "low" || qual === "high") setVoiceQuality(qual);
+      setVoiceCloudTranscription(get("imotara.voice.cloudTranscription.v1") !== "0");
+      const timeoutSecs = parseInt(get("imotara.api.timeout.v1") ?? "20", 10);
+      if (isFinite(timeoutSecs) && timeoutSecs > 0) setApiTimeoutMs(timeoutSecs * 1000);
+      const pollSecs = parseInt(get("imotara.status.pollInterval.v1") ?? "15", 10);
+      if (isFinite(pollSecs) && pollSecs > 0) setStatusPollMs(pollSecs * 1000);
+      setHapticIntensity(get("imotara.haptic.intensity.v1"));
+      const reactSet = get("imotara.reactions.set.v1");
+      if (reactSet === "minimal" || reactSet === "default" || reactSet === "extended") setChatReactionsSet(reactSet);
+      const typSpeed = get("imotara.typing.speed.v1");
+      if (typSpeed === "slow" || typSpeed === "normal" || typSpeed === "fast") setChatTypingSpeed(typSpeed);
+      const guard = get("imotara.content.guard.v1");
+      if (guard === "strict" || guard === "standard" || guard === "relaxed") setContentGuardSensitivity(guard);
+      const crisis = get("imotara.crisis.threshold.v1");
+      if (crisis === "sensitive" || crisis === "standard" || crisis === "conservative") setCrisisThresholdSetting(crisis);
+      const r = parseFloat(get("imotara.tts.rate.v1") ?? "0.95");
+      const pitch = parseFloat(get("imotara.tts.pitch.v1") ?? "1.0");
+      if (isFinite(r)) setTtsRate(r);
+      if (isFinite(pitch)) setTtsPitch(pitch);
+      setVoiceConfirm(get("imotara.voice.confirmTranscription.v1") === "1");
+      setVoiceAutoSend(get("imotara.voice.autoSend.v1") === "1");
+      setRelationshipBackdrop(get("imotara.chat.relationshipBackdrop.v1") === "1");
+
+      // Feature flags. Note the defaults differ: chips and recap are ON unless
+      // switched off, undo is OFF unless switched on. Preserved exactly as the
+      // three effects these replaced had them.
+      setSentimentChipsEnabled(get("imotara.sentiment.chips.enabled.v1") !== "0");
+      setWeeklyRecapSettingEnabled(get("imotara.weekly.recap.enabled.v1") !== "0");
+      setUndoSettingEnabled(get("imotara.undo.enabled.v1") === "1");
+      const ts = get("imotara.chat.showTimestamps.v1");
+      setShowMsgTimestamps(ts === null ? true : ts === "1");
+
+      // Capsule visibility — written "0" by "Dismiss forever", turned back on
+      // from Settings. Re-reading here is what makes turning one back on take
+      // effect without restarting the app.
+      setDailyCheckinEnabled(get(DAILY_CHECKIN_ENABLED_KEY) !== "0");
+      setCollectivePulseEnabled(get(COLLECTIVE_PULSE_ENABLED_KEY) !== "0");
+      setToneReflectionEnabled(get(TONE_REFLECTION_ENABLED_KEY) !== "0");
+      setReturnGreetingEnabled(get(RETURN_GREETING_ENABLED_KEY) !== "0");
+      setMoodGlimpseEnabled(get(MOOD_GLIMPSE_ENABLED_KEY) !== "0");
+      setMilestoneEnabled(get(MILESTONE_ENABLED_KEY) !== "0");
+      setUnsentHintEnabled(get(UNSENT_HINT_ENABLED_KEY) !== "0");
+      setTrialBannerEnabled(get(TRIAL_BANNER_ENABLED_KEY) !== "0");
+      setSessionGreetingEnabled(get(SESSION_GREETING_KEY) !== "0");
+      // Read symmetrically. The effect this replaced only ever set it TRUE
+      // ("if (v === "1")"), so switching the Settings toggle back off could
+      // never bring the nudge back.
+      setGrowNudgeDismissed(get(GROW_NUDGE_KEY) === "1");
+
+      const handsfreeOn = get("imotara:handsfree.v1") === "1";
+      setHandsfree(handsfreeOn);
+      handsfreeRef.current = handsfreeOn;
+      // Safe to call unconditionally: startHandsfreeIfIdle refuses when this
+      // screen is not the one being looked at.
+      if (handsfreeOn) void startHandsfreeIfIdleRef.current();
+    } catch { /* non-fatal — the defaults already in state stand */ }
+  }, []); // intentional [] — setters are stable, refs carry the rest
+
 
   // Hands-free mode
   const [handsfree, setHandsfree] = useState(false);
@@ -1790,26 +1864,11 @@ export default function ChatScreen() {
   const isFocusedRef = React.useRef(false);
   useFocusEffect(React.useCallback(() => {
     isFocusedRef.current = true;
-    AsyncStorage.getItem("imotara:handsfree.v1").then((v) => {
-      const val = v === "1";
-      setHandsfree(val);
-      handsfreeRef.current = val;
-      // Read the setting first, then open the mic — the ref has to be true
-      // before startHandsfreeIfIdle checks it.
-      if (val) void startHandsfreeIfIdleRef.current();
-    }).catch(() => {});
-    AsyncStorage.getItem("imotara.voice.confirmTranscription.v1")
-      .then((v) => setVoiceConfirm(v === "1")).catch(() => {});
-    AsyncStorage.getItem("imotara.voice.autoSend.v1")
-      .then((v) => setVoiceAutoSend(v === "1")).catch(() => {});
-    AsyncStorage.getItem("imotara.chat.relationshipBackdrop.v1")
-      .then((v) => setRelationshipBackdrop(v === "1")).catch(() => {});
-    // Without this the microphone kept recording after someone switched
-    // "Online transcription" off in Settings, because this screen only read
-    // that key on mount. useVoiceInput now refuses to open the mic when it is
-    // off, but it can only refuse if the current value has reached it.
-    AsyncStorage.getItem("imotara.voice.cloudTranscription.v1")
-      .then((v) => setVoiceCloudTranscription(v !== "0")).catch(() => {});
+    // Every chat setting, from the one list — see loadChatSettings above.
+    // Anything read only on mount silently ignores a change made in Settings
+    // until this screen happens to remount, which is how the mic once kept
+    // recording after "Online transcription" was switched off.
+    void loadChatSettings();
 
     // Close the mic when leaving Chat.
     //
@@ -2058,9 +2117,7 @@ export default function ChatScreen() {
   // Grow nudge — shown when user has ≥3 messages and hasn't permanently dismissed
   const GROW_NUDGE_KEY = "imotara.grow.nudge.perm.v1";
   const [growNudgeDismissed, setGrowNudgeDismissed] = useState(false);
-  useEffect(() => {
-    AsyncStorage.getItem(GROW_NUDGE_KEY).then((v) => { if (v === "1") setGrowNudgeDismissed(true); }).catch(() => {});
-  }, []);
+  // (loaded by loadChatSettings, with every other setting.)
   function handleGrowNudgeDismiss() {
     setGrowNudgeDismissed(true);
     AsyncStorage.setItem(GROW_NUDGE_KEY, "1").catch(() => {});
@@ -2072,17 +2129,7 @@ export default function ChatScreen() {
   const [weeklyRecapSettingEnabled, setWeeklyRecapSettingEnabled] = useState(true);
   const [undoSettingEnabled, setUndoSettingEnabled] = useState(true);
   const [moodGlimpseDismissedSession, setMoodGlimpseDismissedSession] = useState(false);
-  useEffect(() => {
-    void Promise.all([
-      AsyncStorage.getItem("imotara.sentiment.chips.enabled.v1"),
-      AsyncStorage.getItem("imotara.weekly.recap.enabled.v1"),
-      AsyncStorage.getItem("imotara.undo.enabled.v1"),
-    ]).then(([v1, v2, v3]) => {
-      setSentimentChipsEnabled(v1 !== "0");
-      setWeeklyRecapSettingEnabled(v2 !== "0");
-      setUndoSettingEnabled(v3 === "1");
-    }).catch(() => {});
-  }, []);
+  // (loaded by loadChatSettings, with every other setting.)
 
   // Permanent capsule visibility flags — written "0" by "Dismiss forever", re-enabled from Settings
   const DAILY_CHECKIN_ENABLED_KEY = "imotara.daily.checkin.show.v1";
@@ -2104,29 +2151,7 @@ export default function ChatScreen() {
   const SESSION_GREETING_KEY = "imotara.session.greeting.show.v1";
   const [sessionGreetingEnabled, setSessionGreetingEnabled] = useState(true);
   const [sessionGreeting, setSessionGreeting] = useState<string | null>(null);
-  useEffect(() => {
-    void Promise.all([
-      AsyncStorage.getItem(DAILY_CHECKIN_ENABLED_KEY),
-      AsyncStorage.getItem(COLLECTIVE_PULSE_ENABLED_KEY),
-      AsyncStorage.getItem(TONE_REFLECTION_ENABLED_KEY),
-      AsyncStorage.getItem(RETURN_GREETING_ENABLED_KEY),
-      AsyncStorage.getItem(MOOD_GLIMPSE_ENABLED_KEY),
-      AsyncStorage.getItem(MILESTONE_ENABLED_KEY),
-      AsyncStorage.getItem(UNSENT_HINT_ENABLED_KEY),
-      AsyncStorage.getItem(TRIAL_BANNER_ENABLED_KEY),
-      AsyncStorage.getItem(SESSION_GREETING_KEY),
-    ]).then(([v1, v2, v3, v4, v5, v6, v7, v8, v9]) => {
-      setDailyCheckinEnabled(v1 !== "0");
-      setCollectivePulseEnabled(v2 !== "0");
-      setToneReflectionEnabled(v3 !== "0");
-      setReturnGreetingEnabled(v4 !== "0");
-      setMoodGlimpseEnabled(v5 !== "0");
-      setMilestoneEnabled(v6 !== "0");
-      setUnsentHintEnabled(v7 !== "0");
-      setTrialBannerEnabled(v8 !== "0");
-      setSessionGreetingEnabled(v9 !== "0");
-    }).catch(() => {});
-  }, []);
+  // (loaded by loadChatSettings, with every other setting.)
 
   // NF-5: Anonymous Collective Pulse
   const [collectivePulse, setCollectivePulse] = useState<{ heavyPercent: number } | null>(null);
@@ -2465,11 +2490,7 @@ export default function ChatScreen() {
 
   // C-3: Show timestamps — default ON; user can hide via Settings
   const [showMsgTimestamps, setShowMsgTimestamps] = useState(true);
-  useEffect(() => {
-    AsyncStorage.getItem("imotara.chat.showTimestamps.v1")
-      .then((v) => setShowMsgTimestamps(v === null ? true : v === "1"))
-      .catch(() => {});
-  }, []);
+  // (loaded by loadChatSettings, with every other setting.)
 
   // Weekly mood recap — compute from history once it's loaded
   useEffect(() => {
