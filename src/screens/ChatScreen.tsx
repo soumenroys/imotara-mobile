@@ -1797,6 +1797,12 @@ export default function ChatScreen() {
       .then((v) => setVoiceAutoSend(v === "1")).catch(() => {});
     AsyncStorage.getItem("imotara.chat.relationshipBackdrop.v1")
       .then((v) => setRelationshipBackdrop(v === "1")).catch(() => {});
+    // Without this the microphone kept recording after someone switched
+    // "Online transcription" off in Settings, because this screen only read
+    // that key on mount. useVoiceInput now refuses to open the mic when it is
+    // off, but it can only refuse if the current value has reached it.
+    AsyncStorage.getItem("imotara.voice.cloudTranscription.v1")
+      .then((v) => setVoiceCloudTranscription(v !== "0")).catch(() => {});
 
     // Close the mic when leaving Chat.
     //

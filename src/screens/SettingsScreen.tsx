@@ -2562,7 +2562,7 @@ function SettingsScreenContent() {
                         })}
                     </View>
 
-                    <SettingRow label="Online transcription" description="Send recording to server to convert to text">
+                    <SettingRow label="Online transcription" description="Required for voice input — your recording is sent to the server to become text. Turning this off disables the microphone; there is no on-device alternative">
                         <Switch value={voiceCloudTranscription} onValueChange={handleVoiceCloudToggle} />
                     </SettingRow>
 

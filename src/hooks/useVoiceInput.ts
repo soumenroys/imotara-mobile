@@ -144,6 +144,10 @@ export function useVoiceInput(
     const maxDurationMs = opts?.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
     const quality = opts?.quality ?? "high";
     const cloudTranscription = opts?.cloudTranscription ?? true;
+    // startRecording has [] deps, so it needs the live value rather than the
+    // one captured when it was created.
+    const cloudTranscriptionRef = useRef(cloudTranscription);
+    useEffect(() => { cloudTranscriptionRef.current = cloudTranscription; }, [cloudTranscription]);
     const langRef = useRef(opts?.lang ?? "en");
     const optsLang = opts?.lang;
     useEffect(() => { langRef.current = optsLang ?? "en"; }, [optsLang]);
@@ -251,8 +255,11 @@ export function useVoiceInput(
                 onTranscript(transcript.trim());
             } else if (transcriptionAttempted && !onNoSpeechRef.current?.()) {
                 // M-4: only show this alert when transcription was actually attempted.
-                // When cloudTranscription=false the recording is intentionally discarded
-                // without any complaint — the user knows cloud STT is off.
+                // The cloudTranscription=false case never reaches here any more —
+                // startRecording refuses before the microphone opens, rather than
+                // recording and discarding. The old comment here claimed "the user
+                // knows cloud STT is off", which was an assumption, not something
+                // the app had ever told them.
                 Alert.alert(
                     "Couldn't transcribe",
                     "We couldn't convert your voice to text. Please try again, or type your message instead.",
@@ -280,6 +287,24 @@ export function useVoiceInput(
     const startRecording = useCallback(async (): Promise<boolean> => {
         if (Platform.OS === "web") {
             Alert.alert("Voice input", "Voice input is not supported in the web browser.");
+            return false;
+        }
+        // With "Online transcription" off there is nothing that can turn a
+        // recording into text — the app has no on-device speech recognition
+        // (expo-speech is text-to-SPEECH; nothing in package.json does the
+        // reverse). Recording anyway and discarding the audio afterwards is
+        // what used to happen, and it was worse than useless: the microphone
+        // ran, captured someone's voice, and the app said nothing at all.
+        //
+        // The toggle is worth keeping — it is a real consent control over
+        // whether a recording leaves the device — but it has to be honest that
+        // switching it off turns voice input off with it.
+        if (!cloudTranscriptionRef.current) {
+            Alert.alert(
+                "Online transcription is off",
+                "Voice input needs it: Imotara has no on-device speech recognition, so there is nothing to turn your recording into text.\n\nTurn it back on in Settings → Experience → Voice input, or type your message instead.",
+                [{ text: "OK" }],
+            );
             return false;
         }
         // BUG-11A / BUG-12B: guard against concurrent invocations.
