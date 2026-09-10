@@ -36,6 +36,15 @@
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "425826097896-980pi64uoif2o4jflm68chlf39lsdbre.apps.googleusercontent.com",
         "EXPO_PUBLIC_RAZORPAY_KEY_ID": "rzp_live_SycvRGUjme4Ky2"
       }
+    },
+    "internal": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
     }
   },
   "submit": {
