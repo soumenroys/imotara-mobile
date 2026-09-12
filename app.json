@@ -119,6 +119,7 @@
       "expo-iap",
       "./plugins/withAndroidR8Mapping",
       "./plugins/withAndroidImeInsets",
+      "./plugins/withIosSimulatorArch",
       "@react-native-community/datetimepicker",
       [
         "expo-build-properties",
