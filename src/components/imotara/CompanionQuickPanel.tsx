@@ -3,6 +3,7 @@ import React, { useRef, useState, useEffect } from "react";
 import {
   Animated, Easing, Modal, View, Text, TextInput, TouchableOpacity,
   ScrollView, Switch, PanResponder, Dimensions, StyleSheet, Image,
+  KeyboardAvoidingView, Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -201,6 +202,19 @@ export function CompanionQuickPanel({ visible, onClose, toneContext, setToneCont
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      {/* A React Native Modal is its OWN window, so the ime() inset padding applied to the
+          Activity content view (plugins/withAndroidImeInsets.js) never reaches
+          it. Without this, the panel stays full height and its lower fields sit
+          behind the keyboard — measured on an emulator 2026-09-12: focusing
+          "Companion name" left it at y=2699 with the keyboard top at y=1984,
+          so the person could not see what they were typing. The ScrollView
+          does not save it, because its viewport also extends behind the
+          keyboard. No double-subtraction risk here for the same reason: the
+          root inset fix does not apply to this window. */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
       <View style={styles.root}>
         <Animated.View
           style={[styles.panel, {
@@ -455,6 +469,7 @@ export function CompanionQuickPanel({ visible, onClose, toneContext, setToneCont
         {/* Backdrop */}
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

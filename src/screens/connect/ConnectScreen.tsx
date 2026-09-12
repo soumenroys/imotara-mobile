@@ -3189,6 +3189,15 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
 
             {/* Review modal */}
             <Modal visible={showReview} transparent animationType="fade" onRequestClose={() => setShowReview(false)}>
+                {/* Own window, so the Activity-level ime() inset padding
+                    (plugins/withAndroidImeInsets.js) does not reach it. This is a
+                    flex-end bottom sheet with a comment field, so without this the
+                    field sits behind the keyboard. Same pattern as the scheduling
+                    modal above and UnsentLetterModal, both verified working. */}
+                <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    behavior={Platform.OS === "ios" ? "padding" : "height"}
+                >
                 <View style={s.modalBackdrop}>
                     <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
                         <Text style={[s.cardName, { fontSize: 18, marginBottom: 16 }]}>How was the session?</Text>
@@ -3216,6 +3225,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                         </TouchableOpacity>
                     </View>
                 </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             {/* Mid-session per-consultant minute recharge — extends session time */}

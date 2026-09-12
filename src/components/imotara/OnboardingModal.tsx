@@ -130,7 +130,18 @@ export function OnboardingModal({ visible, onComplete }: Props) {
       onRequestClose={() => {/* onboarding is required — back button does nothing */}}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        // Android needs "height" here, NOT undefined.
+        //
+        // A React Native Modal renders in its OWN window, so the ime() inset padding
+        // applied to the Activity content view (plugins/withAndroidImeInsets.js)
+        // never reaches it — this KeyboardAvoidingView is the only thing that
+        // can lift the content, and there is no double-subtraction risk.
+        //
+        // Measured on an emulator 2026-09-12 with `undefined`: with the name
+        // field focused, "Continue" (y=2650) and "Skip setup" (y=2841) both sat
+        // below the keyboard top (y=1984) — unreachable on the very first
+        // screen a new user sees.
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1, backgroundColor: colors.background }}
       >
         <View style={[styles.container, { paddingTop: Math.max(insets.top + 20, 60), paddingBottom: Math.max(insets.bottom + 16, 20) }]}>
