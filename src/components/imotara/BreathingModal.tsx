@@ -156,7 +156,11 @@ type MusicTrack = "none" | "bowl" | "rain" | "ocean";
 
 const MUSIC_OPTIONS: { id: MusicTrack; label: string; icon: React.ComponentProps<typeof Ionicons>["name"] }[] = [
   { id: "none",  label: "Silent",     icon: "volume-mute-outline" },
-  { id: "bowl",  label: "Bowl",       icon: "radio-button-on-outline" },
+  // Label only. The id stays "bowl" on purpose: on web the id IS the asset URL
+  // (`/sounds/${track}.mp3`), so renaming it would mean renaming files on both
+  // platforms for no user-visible gain. Nothing persists the selection —
+  // BreathingModal holds it in useState — so there is no stored value to migrate.
+  { id: "bowl",  label: "Bell",       icon: "radio-button-on-outline" },
   { id: "rain",  label: "Rain",       icon: "rainy-outline" },
   { id: "ocean", label: "Ocean",      icon: "water-outline" },
 ];
