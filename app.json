@@ -3,7 +3,7 @@
     "name": "Imotara",
     "slug": "imotara-mobile",
     "version": "1.3.4",
-    "description": "Imotara is a private, emotion-aware AI companion that helps you understand your feelings, track your mood, and grow emotionally \u2014 without ads, paywalls, or data tracking. Supports 22 languages including Bengali, Hindi, Tamil, Telugu, and more. Designed for mental wellness, mindfulness, and building healthier relationships with technology.",
+    "description": "Imotara is a private, emotion-aware AI companion that helps you understand your feelings, track your mood, and grow emotionally — without ads, paywalls, or data tracking. Supports 22 languages including Bengali, Hindi, Tamil, Telugu, and more. Designed for mental wellness, mindfulness, and building healthier relationships with technology.",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -85,7 +85,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "softwareKeyboardLayoutMode": "pan",
+      "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO",

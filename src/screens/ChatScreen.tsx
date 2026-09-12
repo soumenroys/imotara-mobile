@@ -4654,25 +4654,30 @@ export default function ChatScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
-      // ANDROID: OFF, deliberately.
+      // Keyboard handling on Android, measured on a Galaxy A27 2026-09-12.
+      // Three configurations were tried on the device; only one is correct.
       //
-      // app.json sets softwareKeyboardLayoutMode "pan", so the manifest carries
-      // windowSoftInputMode="adjustPan" and Android ALREADY slides the window
-      // up to keep the focused input above the keyboard. Running
-      // KeyboardAvoidingView as well shrank the content by the keyboard height
-      // on top of that pan — the same space subtracted twice.
+      //  pan + this enabled  (what shipped) — BOTH broken. adjustPan slides the
+      //      whole window up AND this shrinks the content by the keyboard
+      //      height: the same space subtracted twice. Composer bottom y=617,
+      //      tab bar top y=1388, so 771px of dead space — 32.9% of the screen
+      //      — and the conversation slid up under the status bar, taking the
+      //      header with it.
+      //  pan + this disabled — gap fixed, header still under the status bar,
+      //      because the pan is what pushes it there.
+      //  resize + this enabled — correct, and what runs now. No pan, so the
+      //      header stays put; this lifts the composer clear of the keyboard.
       //
-      // Measured on a Galaxy A27, 2026-09-12: composer bottom y=617, tab bar
-      // top y=1388, so 771px of dead space — 32.9% of the screen — and the
-      // conversation scrolled up UNDER the status bar, taking the header with
-      // it. Both symptoms are the double compensation.
+      // The catch worth knowing: under Expo's edge-to-edge builds
+      // adjustResize does NOT actually resize the window, so with this
+      // disabled nothing lifted the composer and it sat behind the keyboard.
+      // "resize" here really means "stop panning" — the lifting is this
+      // component's job.
       //
-      // The long-standing comment here claimed the Android tab bar "fully
-      // hides while the keyboard is open". It does not; it had simply never
-      // been set to (see tabBarHideOnKeyboard in RootNavigator).
-      //
-      // iOS still needs this: "padding" behaviour, and no adjustPan equivalent.
-      enabled={Platform.OS === "android" ? false : !(Platform.OS === "ios" && Platform.isPad)}
+      // The old comment claimed the tab bar "fully hides while the keyboard is
+      // open". It did not; tabBarHideOnKeyboard had simply never been set
+      // (see RootNavigator).
+      enabled={!(Platform.OS === "ios" && Platform.isPad)}
     >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }} {...edgeSwipeResponder.panHandlers}>
       {/* iPad: constrain content to a centered column so the UI doesn't span the full iPad width */}
