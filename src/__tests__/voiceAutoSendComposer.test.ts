@@ -105,7 +105,11 @@ describe("the settings this flow depends on are still wired", () => {
 
     it("auto-read is what speaks the reply, and is independent of hands-free", () => {
         expect(SRC).toMatch(/imotara\.tts\.autoRead\.v1/);
-        expect(SRC).toMatch(/handsfreeRef\.current \|\| autoReadEnabled\d? === "1"/);
+        // The two switches are a plain OR. This used to read autoReadEnabled1
+        // / autoReadEnabled2 — the streaming and non-streaming copies of the
+        // same trigger. They were collapsed into speakReplyIfEnabled; the
+        // condition itself is unchanged. See handsfreeAutoReadMatrix.test.ts.
+        expect(SRC).toMatch(/handsfreeRef\.current \|\| autoRead === "1"/);
     });
 
     it("silence-stop remains hands-free ONLY", () => {

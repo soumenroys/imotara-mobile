@@ -100,7 +100,7 @@ import { getCrisisCopy } from "../lib/safety/crisisCopy";
 import { CRISIS_CARD_COLORS } from "../lib/safety/crisisCardColors";
 import { detectCountryCode } from "../lib/safety/detectCountry";
 import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adultContentGuard";
-import { speakMessage, stopSpeaking } from "../lib/tts/mobileTTS";
+import { speakMessage, stopSpeaking, currentSpeakingId } from "../lib/tts/mobileTTS";
 import { isEnabled as isFeatureEnabled } from "../licensing/featureGates";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -2080,6 +2080,13 @@ export default function ChatScreen() {
     if (voiceStateRef.current !== "idle") return; // already recording/transcribing
     if (isTypingRef.current || isSendingRef.current) return; // a reply is on its way
     if (latestInputRef.current.trim()) return;    // a half-typed message is waiting
+    // A reply is still being read aloud. handleMicPress stops TTS before it
+    // records, for a reason worth repeating: on Android the speaker bleeds
+    // into the microphone. This path fires on focus and on returning from the
+    // background, with nobody having tapped anything, so it must not open a
+    // mic into the app's own voice — and it must not cut the reply off either.
+    // Waiting is right: onDone reopens the mic the moment speech ends.
+    if (currentSpeakingId()) return;
     // Never raise the OS permission dialog from something the user did not tap.
     // startRecording() would call requestPermissionsAsync(); asking for the mic
     // the instant someone opens a chat screen is startling and easy to deny by
@@ -2090,6 +2097,9 @@ export default function ChatScreen() {
     if (!isFocusedRef.current) return;
     if (chatObscuredRef.current) return;
     if (voiceStateRef.current !== "idle") return;
+    // Re-checked after the await like everything else here: speech can start
+    // while the permission promise is in flight.
+    if (currentSpeakingId()) return;
     void voiceInputRef.current.startRecording();
   }, []); // intentional [] — all mutable values via refs, same pattern as handleMicPress
 
@@ -2351,6 +2361,72 @@ export default function ChatScreen() {
     orgRole,
     orgBillingType,
   } = useSettings();
+
+  // Speaks a reply when either switch asks for it, and hands the mic back
+  // afterwards in hands-free.
+  //
+  // This lived TWICE — once on the streaming path, once on the non-streaming
+  // one — as near-identical sixteen-line blocks, each re-reading the setting
+  // and re-wiring the onDone callback. Two copies of one state transition is
+  // how the hands-free/auto-read combinations drifted apart; the only thing
+  // that actually differed between them was which emotion was passed, so that
+  // is the parameter.
+  //
+  // Deliberately a plain function, NOT a useCallback. Both call sites sit
+  // inside handleSend, which is itself rebuilt every render, so this closes
+  // over exactly the values those two blocks closed over — toneContext,
+  // ttsRate, ttsPitch, guestAccessToken and licenseTier as of the render that
+  // sent the message. useCallback([]) would freeze the first render's values
+  // and silently change the voice, the speed and the tier check; the ref
+  // pattern used by reopenMicIfHandsfree is right for a callback that outlives
+  // the render, and wrong here.
+  //
+  // Hands-free is read from its ref because it is toggled in this screen's own
+  // header mid-conversation; auto-read is read from storage because it is
+  // toggled on another screen entirely, so no state here would be current.
+  // BOTH CALL SITES AWAIT THIS — do not change them to void.
+  //
+  // The awaited part is only the AsyncStorage read; speakMessage itself is not
+  // awaited and returns straight away, so awaiting costs a few milliseconds and
+  // buys an exact match with the two blocks this replaced:
+  //
+  //   - the non-streaming site sits in a try whose finally clears isSendingRef
+  //     and isTyping. Firing and forgetting would clear the send lock BEFORE
+  //     the reply starts being spoken, opening a window in which
+  //     startHandsfreeIfIdle sees an idle screen with no speech in progress and
+  //     opens the mic into the reply that is about to begin — the exact class
+  //     of bug this work exists to close.
+  //   - the streaming site sits inside a try/catch that turns a throw into an
+  //     error toast plus a local fallback reply. void would turn the same throw
+  //     into an unhandled rejection instead. Whether that catch is the right
+  //     home for a TTS failure is a separate question; this refactor is not the
+  //     place to change it silently.
+  const speakReplyIfEnabled = async (
+    botMessage: { id: string; text?: string },
+    emotion: string | undefined,
+  ) => {
+    const autoRead = await AsyncStorage.getItem("imotara.tts.autoRead.v1").catch(() => "0");
+    if ((handsfreeRef.current || autoRead === "1") && botMessage.text) {
+      const g = toneContext?.companion?.enabled
+        ? toneContext?.companion?.gender
+        : (toneContext?.user?.gender as string | undefined);
+      const l = concreteLang(toneContext?.user?.preferredLang);
+      setPreparingSpeechId(botMessage.id);
+      speakMessage(
+        botMessage.id, botMessage.text, g, l,
+        () => { setSpeakingMessageId(null); reopenMicIfHandsfree(); },
+        ttsRate, ttsPitch, guestAccessToken,
+        () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
+        isFeatureEnabled("TTS_ADVANCED", licenseTier),
+        () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
+        mapUserEmotionForTTS(emotion),
+      );
+    } else if (handsfreeRef.current) {
+      // No speech to wait for (empty reply text), so onDone will never fire —
+      // reopen the mic here or the conversation stops dead.
+      reopenMicIfHandsfree();
+    }
+  };
 
 
   // Keep panel-enabled refs in sync with settings (refs are read inside the PanResponder closure)
@@ -3393,6 +3469,21 @@ export default function ChatScreen() {
 
     // ✅ 80/20: block double taps / overlapping send cycles
     if (isTyping || isSendingRef.current) return;
+
+    // The person has moved on, so stop reading the previous reply aloud.
+    //
+    // Every other way of moving on already did this — tapping the mic, tapping
+    // the speaker button, leaving the screen — but sending did not, so with
+    // auto-read on the old reply kept talking over the new turn. That is the
+    // "message read is not stopping" report.
+    //
+    // Deliberately placed AFTER the early returns: a message over the
+    // character limit, or a double tap, must not silence a reply someone is
+    // still listening to.
+    stopSpeaking();
+    setSpeakingMessageId(null);
+    setPreparingSpeechId(null);
+
     isSendingRef.current = true;
     pauseAutoSync();
     haptic.tap();
@@ -4041,25 +4132,7 @@ export default function ChatScreen() {
             setMessages((prev) => [...prev, ...extraMessages, botMessage]);
           }
           smoothScrollToBottom(scrollViewRef);
-          const autoReadEnabled1 = await AsyncStorage.getItem("imotara.tts.autoRead.v1").catch(() => "0");
-          if ((handsfreeRef.current || autoReadEnabled1 === "1") && botMessage.text) {
-            const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
-            const l = concreteLang(toneContext?.user?.preferredLang);
-            setPreparingSpeechId(botMessage.id);
-            speakMessage(
-              botMessage.id, botMessage.text, g, l,
-              () => { setSpeakingMessageId(null); reopenMicIfHandsfree(); },
-              ttsRate, ttsPitch, guestAccessToken,
-              () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
-              isFeatureEnabled("TTS_ADVANCED", licenseTier),
-              () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
-              mapUserEmotionForTTS(finalEmotion),
-            );
-          } else if (handsfreeRef.current) {
-            // No speech to wait for (empty reply text), so onDone will never
-            // fire — reopen the mic here or the conversation stops dead.
-            reopenMicIfHandsfree();
-          }
+          await speakReplyIfEnabled(botMessage, finalEmotion);
         } catch (error) {
           // Undo abort — discard silently, no local fallback
           if (undoAbortCtrl.signal.aborted) return;
@@ -4152,25 +4225,7 @@ export default function ChatScreen() {
           haptic.receive();
           setMessages((prev) => [...prev, botMessage]);
           smoothScrollToBottom(scrollViewRef);
-          const autoReadEnabled2 = await AsyncStorage.getItem("imotara.tts.autoRead.v1").catch(() => "0");
-          if ((handsfreeRef.current || autoReadEnabled2 === "1") && botMessage.text) {
-            const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
-            const l = concreteLang(toneContext?.user?.preferredLang);
-            setPreparingSpeechId(botMessage.id);
-            speakMessage(
-              botMessage.id, botMessage.text, g, l,
-              () => { setSpeakingMessageId(null); reopenMicIfHandsfree(); },
-              ttsRate, ttsPitch, guestAccessToken,
-              () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
-              isFeatureEnabled("TTS_ADVANCED", licenseTier),
-              () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
-              mapUserEmotionForTTS(userEmotion),
-            );
-          } else if (handsfreeRef.current) {
-            // No speech to wait for (empty reply text), so onDone will never
-            // fire — reopen the mic here or the conversation stops dead.
-            reopenMicIfHandsfree();
-          }
+          await speakReplyIfEnabled(botMessage, userEmotion);
         } finally {
           // Always release send-lock regardless of mount state
           isSendingRef.current = false;

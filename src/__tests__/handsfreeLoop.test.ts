@@ -74,9 +74,16 @@ describe("the loop does not die silently", () => {
 
     it("an empty reply reopens the mic, because onDone will never fire", () => {
         // speakMessage's onDone is what normally reopens. No text, no speech,
-        // no onDone — both send paths need the explicit else.
+        // no onDone — so the send path needs the explicit else.
+        //
+        // This used to expect TWO of these, one per send path. Both paths now
+        // go through the single speakReplyIfEnabled helper, so there is one —
+        // which is the point of the refactor, not a loss of coverage. The
+        // second half of this assertion is what keeps it honest: both paths
+        // must still reach the helper.
         const matches = chat.match(/\} else if \(handsfreeRef\.current\) \{\s*\n\s*\/\/ No speech to wait for/g);
-        expect(matches).toHaveLength(2);
+        expect(matches).toHaveLength(1);
+        expect(chat.match(/await speakReplyIfEnabled\(/g)).toHaveLength(2);
     });
 
     it("counts consecutive empty turns and gives up rather than looping forever", () => {
