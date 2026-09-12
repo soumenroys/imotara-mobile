@@ -924,6 +924,11 @@ function stripReflectionPromptFromMessage(
 }
 
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
+
+// How long after "New messages ↓" the list keeps re-pinning itself to the
+// bottom as the content grows. See scrollToBottom for why a window exists at
+// all, and why it is bounded rather than open-ended.
+const PIN_TO_BOTTOM_MS = 1200;
 const SESSION_GAP_MS = 45 * 60 * 1000;
 
 function smoothScrollToBottom(ref: React.RefObject<FlatList | null>) {
@@ -2748,6 +2753,9 @@ export default function ChatScreen() {
   // "New messages" button only shows when this is true — never on initial load
   // or programmatic scrolls.
   const userScrolledUpRef = useRef(false);
+  // Deadline (epoch ms) until which list growth re-pins to the bottom. 0 means
+  // no intent — see scrollToBottom and handleListContentSizeChange.
+  const pinToBottomUntilRef = useRef(0);
   const toastRef = useRef<ToastHandle>(null);
 
   // ✅ RN-safe typing (fixes TS issues in many RN setups)
@@ -3276,13 +3284,37 @@ export default function ChatScreen() {
     }, 800);
   };
 
+  // Tapping "New messages ↓" must land on the new message.
+  //
+  // This used to scroll to the bottom and then, after a FIXED 350ms, jump to
+  // the bottom a second time. The worry behind that second jump was right —
+  // the content can still be growing — but a fixed delay is the wrong
+  // instrument for it: 350ms is a guess about how long growth lasts, and the
+  // things that grow after the tap do not respect it. A long reply's bubble
+  // reflows, the companion-insight and open-loop cards mount, the emotion
+  // strip lays out. Growth that lands at 360ms left the list short of the
+  // bottom with no further attempt, which is the owner's "doesn't always go
+  // to last message" (2026-09-13) — always, because when growth happened to
+  // finish early the old code was fine.
+  //
+  // So stop guessing and let the LIST say when it grew: onContentSizeChange
+  // fires on every real change, and each one re-pins while this intent stands.
   const scrollToBottom = () => {
     userScrolledUpRef.current = false;
     setShowScrollButton(false);
     scrollViewRef.current?.scrollToEnd({ animated: true });
-    // Second call (non-animated) after animation settles ensures we land at the
-    // true bottom even when content size changed during the first scroll.
-    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 350);
+    pinToBottomUntilRef.current = Date.now() + PIN_TO_BOTTOM_MS;
+  };
+
+  // Re-pin to the bottom when the list grows, but ONLY while the tap's intent
+  // is live. Ungated, this would yank the list down on every content change,
+  // including while someone is reading back through history — far worse than
+  // the bug it fixes. Bounded for the same reason: a window that never closed
+  // would take scrolling away from the person the moment any later message
+  // arrived.
+  const handleListContentSizeChange = () => {
+    if (Date.now() > pinToBottomUntilRef.current) return;
+    scrollViewRef.current?.scrollToEnd({ animated: false });
   };
 
   const closeActionSheet = () => {
@@ -5139,8 +5171,14 @@ export default function ChatScreen() {
             justifyContent: messages.length <= 2 ? "flex-end" : "flex-end",
           }}
           onScroll={handleScroll}
+          onContentSizeChange={handleListContentSizeChange}
           scrollEventThrottle={50}
-          onScrollBeginDrag={() => { userScrolledUpRef.current = true; }}
+          onScrollBeginDrag={() => {
+            userScrolledUpRef.current = true;
+            // A drag is the person taking the list back. The pin must never
+            // fight a finger that is already on the screen.
+            pinToBottomUntilRef.current = 0;
+          }}
           onScrollEndDrag={() => {
             if (!DEBUG_UI_ENABLED) return;
             if (pullOffset < -60) handleRefresh();
