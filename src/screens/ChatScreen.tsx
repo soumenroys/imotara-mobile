@@ -33,7 +33,7 @@ import { useSettings } from "../state/SettingsContext";
 import { useColors, useTheme } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
 import { chatBackdrop } from "../theme/chatBackdrop";
-import { callImotaraAI, streamChatReply } from "../api/aiClient";
+import { concreteLang, callImotaraAI, streamChatReply } from "../api/aiClient";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
 import { useVoiceInput } from "../hooks/useVoiceInput";
@@ -2505,7 +2505,7 @@ export default function ChatScreen() {
     for (const r of thisWeek as any[]) freq[r.emotion] = (freq[r.emotion] ?? 0) + 1;
     const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
     if (!top) return;
-    const lang = toneContext?.user?.preferredLang ?? "en";
+    const lang = concreteLang(toneContext?.user?.preferredLang);
     const recapText = getWeeklyRecapText(top[0], top[1], lang);
     setWeeklyRecap(recapText);
     savePendingInsight("weeklyRecap", recapText).catch(() => {});
@@ -2537,7 +2537,7 @@ export default function ChatScreen() {
   // uses the correct language. Both must be updated: ref for instant access in callbacks,
   // state to trigger a re-render so useVoiceInput receives the updated opts.lang.
   React.useEffect(() => {
-    const lang = toneContext?.user?.preferredLang ?? "en";
+    const lang = concreteLang(toneContext?.user?.preferredLang);
     voiceLangRef.current = lang;
     setVoiceLang(lang);
   }, [toneContext?.user?.preferredLang]);
@@ -3464,7 +3464,7 @@ export default function ChatScreen() {
           // ── Adult content safety gate ─────────────────────────
           // "relaxed" skips the check to reduce false positives on mature-but-safe topics
           if (contentGuardSensitivity !== "relaxed" && detectAdultContent(trimmed)) {
-            const lang = toneContext?.user?.preferredLang ?? "en";
+            const lang = concreteLang(toneContext?.user?.preferredLang);
             const userAge = toneContext?.user?.ageRange ?? undefined;
             const safetyTs = Date.now();
             const safetyMsg: ChatMessage = {
@@ -3585,7 +3585,7 @@ export default function ChatScreen() {
               if (rel === "mentor") return "mentor";
               return "calm_companion";
             })(),
-            lang: toneContext?.user?.preferredLang || "en",
+            lang: concreteLang(toneContext?.user?.preferredLang),
             ...(toneContext?.user?.gender && toneContext.user.gender !== "prefer_not" ? { userGender: toneContext.user.gender } : {}),
             ...(toneContext?.companion?.gender && toneContext.companion.gender !== "prefer_not" ? { companionGender: toneContext.companion.gender } : {}),
             ...(toneContext?.companion?.name?.trim() ? { companionName: toneContext.companion.name.trim() } : {}),
@@ -4018,7 +4018,7 @@ export default function ChatScreen() {
           const autoReadEnabled1 = await AsyncStorage.getItem("imotara.tts.autoRead.v1").catch(() => "0");
           if ((handsfreeRef.current || autoReadEnabled1 === "1") && botMessage.text) {
             const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
-            const l = toneContext?.user?.preferredLang ?? "en";
+            const l = concreteLang(toneContext?.user?.preferredLang);
             setPreparingSpeechId(botMessage.id);
             speakMessage(
               botMessage.id, botMessage.text, g, l,
@@ -4129,7 +4129,7 @@ export default function ChatScreen() {
           const autoReadEnabled2 = await AsyncStorage.getItem("imotara.tts.autoRead.v1").catch(() => "0");
           if ((handsfreeRef.current || autoReadEnabled2 === "1") && botMessage.text) {
             const g = toneContext?.companion?.enabled ? toneContext?.companion?.gender : toneContext?.user?.gender as string | undefined;
-            const l = toneContext?.user?.preferredLang ?? "en";
+            const l = concreteLang(toneContext?.user?.preferredLang);
             setPreparingSpeechId(botMessage.id);
             speakMessage(
               botMessage.id, botMessage.text, g, l,
@@ -4455,7 +4455,7 @@ export default function ChatScreen() {
               const gender = toneContext?.companion?.enabled
                 ? toneContext?.companion?.gender
                 : toneContext?.user?.gender as string | undefined;
-              const lang = toneContext?.user?.preferredLang ?? "en";
+              const lang = concreteLang(toneContext?.user?.preferredLang);
               const isCurrentlySpeaking = speakingMessageId === id || preparingSpeechId === id;
               if (isCurrentlySpeaking) {
                 stopSpeaking();
@@ -5012,7 +5012,7 @@ export default function ChatScreen() {
                 const gender = toneContext?.companion?.enabled
                   ? toneContext?.companion?.gender
                   : toneContext?.user?.gender as string | undefined;
-                const lang = toneContext?.user?.preferredLang ?? "en";
+                const lang = concreteLang(toneContext?.user?.preferredLang);
                 setPreparingSpeechId(id);
                 speakMessage(
                   id, text, gender, lang,
@@ -5030,7 +5030,7 @@ export default function ChatScreen() {
               showSyncBadge={showSyncBadge}
               reactionsSet={chatReactionsSet}
               crisisThreshold={crisisThresholdSetting}
-              lang={toneContext?.user?.preferredLang ?? "en"}
+              lang={concreteLang(toneContext?.user?.preferredLang)}
               isDarkTheme={isDark}
             />
           );}}
@@ -5758,7 +5758,7 @@ export default function ChatScreen() {
       {sentimentChipsEnabled && !sentimentChipsDismissedSession && messages.length > 0 && input.trim() === "" && (
         <View style={{ flexDirection: "row", paddingHorizontal: 12, paddingBottom: 6, alignItems: "flex-start" }}>
           <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            {(SENTIMENT_SEEDS_BY_LANG[toneContext?.user?.preferredLang ?? "en"] ?? SENTIMENT_SEEDS_BY_LANG.en).map((seed) => (
+            {(SENTIMENT_SEEDS_BY_LANG[concreteLang(toneContext?.user?.preferredLang)] ?? SENTIMENT_SEEDS_BY_LANG.en).map((seed) => (
               <TouchableOpacity
                 key={seed}
                 onPress={() => handleInputChange(seed)}

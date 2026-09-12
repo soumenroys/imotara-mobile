@@ -3,6 +3,7 @@
 // Shows: streak, weekly emotion frequency bars, dominant emotion per day, summary.
 
 import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import { concreteLang } from "../api/aiClient";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, ActivityIndicator, InteractionManager } from "react-native";
 import { haptic } from "../lib/haptics";
@@ -2218,7 +2219,7 @@ function TrendsScreenContent() {
       <LettersFromImotara
         colors={colors}
         companionGender={toneContext?.companion?.gender}
-        lang={toneContext?.user?.preferredLang ?? "en"}
+        lang={concreteLang(toneContext?.user?.preferredLang)}
       />
 
       {/* Future Letters */}

@@ -10,6 +10,7 @@ import { useColors, useTheme } from "../../theme/ThemeContext";
 import { speakPreview, stopSpeaking } from "../../lib/tts/mobileTTS";
 import { AVATAR_IMAGES, resolveAvatarImage } from "../../assets/avatarImages";
 import type { ToneContextPayload } from "../../api/aiClient";
+import { concreteLang } from "../../api/aiClient";
 
 const PANEL_WIDTH = Math.min(Dimensions.get("window").width * 0.90, 420);
 
@@ -270,7 +271,7 @@ export function CompanionQuickPanel({ visible, onClose, toneContext, setToneCont
               <TouchableOpacity
                 onPress={() => {
                   if (voicePreviewId === "u") { stopSpeaking(); setVoicePreviewId(null); }
-                  else { setVoicePreviewId("u"); speakPreview(toneContext?.user?.gender, toneContext?.user?.preferredLang ?? "en", toneContext?.user?.name?.trim(), () => setVoicePreviewId(null), accessToken); }
+                  else { setVoicePreviewId("u"); speakPreview(toneContext?.user?.gender, concreteLang(toneContext?.user?.preferredLang), toneContext?.user?.name?.trim(), () => setVoicePreviewId(null), accessToken); }
                 }}
                 style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}
               >
@@ -281,7 +282,7 @@ export function CompanionQuickPanel({ visible, onClose, toneContext, setToneCont
               <View style={styles.pills}>
                 {([["en","English"],["hi","Hindi"],["bn","Bengali"],["ta","Tamil"],["te","Telugu"],["mr","Marathi"],["gu","Gujarati"],["kn","Kannada"],["ml","Malayalam"],["pa","Punjabi"],["or","Odia"],["ur","Urdu"],["ar","Arabic"],["zh","Chinese"],["fr","French"],["de","German"],["he","Hebrew"],["id","Indonesian"],["ja","Japanese"],["pt","Portuguese"],["ru","Russian"],["es","Spanish"]] as const).map(([id, label]) => (
                   <Pill key={id} label={label}
-                    active={(toneContext?.user?.preferredLang || "en") === id}
+                    active={(concreteLang(toneContext?.user?.preferredLang)) === id}
                     onPress={() => setUser({ preferredLang: id as any })}
                   />
                 ))}
@@ -367,7 +368,7 @@ export function CompanionQuickPanel({ visible, onClose, toneContext, setToneCont
               <TouchableOpacity
                 onPress={() => {
                   if (voicePreviewId === "c") { stopSpeaking(); setVoicePreviewId(null); }
-                  else { setVoicePreviewId("c"); speakPreview(toneContext?.companion?.gender, toneContext?.user?.preferredLang ?? "en", toneContext?.companion?.name?.trim(), () => setVoicePreviewId(null), accessToken); }
+                  else { setVoicePreviewId("c"); speakPreview(toneContext?.companion?.gender, concreteLang(toneContext?.user?.preferredLang), toneContext?.companion?.name?.trim(), () => setVoicePreviewId(null), accessToken); }
                 }}
                 disabled={!enabled}
                 style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4, opacity: enabled ? 1 : 0.4 }}

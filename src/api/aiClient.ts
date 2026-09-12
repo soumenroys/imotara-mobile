@@ -96,6 +96,16 @@ export type SupportedLang =
   | "en" | "hi" | "mr" | "bn" | "ta" | "te" | "gu" | "pa" | "kn" | "ml" | "or"
   | "ur" | "zh" | "es" | "ar" | "fr" | "pt" | "ru" | "id" | "he" | "de" | "ja";
 
+/**
+ * What may be STORED as the user's language setting: any real language, or
+ * "auto" meaning "work it out from what I write".
+ *
+ * Deliberately a wider type than SupportedLang, so "auto" can never be passed
+ * somewhere that needs an actual language — statedPreference() is the only
+ * way across, and it returns undefined for "auto".
+ */
+export type PreferredLangSetting = SupportedLang | typeof AUTO_LANG;
+
 export type ResponseStyle = "comfort" | "reflect" | "motivate" | "advise";
 
 export type ToneContextPayload = {
@@ -110,7 +120,7 @@ export type ToneContextPayload = {
     relationship?: ToneRelationship;
 
     // ✅ parity with web: preferred language + response style
-    preferredLang?: SupportedLang;
+    preferredLang?: PreferredLangSetting;
     responseStyle?: ResponseStyle;
     avatarAge?: number;
   };
@@ -287,6 +297,36 @@ export function detectLangFromRomanHints(message: string): string {
   // Require at least 2 hits to avoid single-word English false positives triggering
   // a non-English language (e.g. one coincidental Gujarati/Hindi word match in an English message).
   return best && best[1] >= 2 ? best[0] : "en";
+}
+
+/** The value meaning "work it out from what I write" rather than a chosen language. */
+export const AUTO_LANG = "auto";
+
+/**
+ * Returns the profile language only when the user actually stated one.
+ *
+ * `undefined`, `""` and `"auto"` all mean "not stated" and must fall through
+ * to detection. Anything else — including an explicit "en" — is a real choice
+ * and outranks detection, so someone who deliberately wants English replies
+ * while writing Bengali still gets them.
+ */
+export function statedPreference(value: string | undefined | null): string | undefined {
+    const v = (value ?? "").trim().toLowerCase();
+    if (!v || v === AUTO_LANG) return undefined;
+    return v;
+}
+
+/**
+ * A CONCRETE language for things that cannot accept "auto" — picking a TTS
+ * voice, a BCP-47 locale, a canned string table, an RTL check.
+ *
+ * "auto" is meaningful only when resolving what language to REPLY in, where
+ * detection fills the gap. Everywhere else it would be a bogus language code,
+ * so it resolves to "en" — exactly what these call sites got from the old
+ * `?? "en"` default, leaving their behaviour unchanged.
+ */
+export function concreteLang(value: string | undefined | null): string {
+    return statedPreference(value) ?? "en";
 }
 
 /** Detects explicit language-switch intent in a message.
@@ -543,15 +583,26 @@ export async function callImotaraAI(
     // which caused short robotic replies like "I'm here with you." for all questions.
     const chatReplyUrl = `${IMOTARA_API_BASE_URL}/api/chat-reply`;
     try {
-      // Resolve language: explicit switch request > profile preference > script/Roman detection > "en"
-      // Profile preference wins over script detection so that a user who changed their setting
-      // to English gets English replies even when they type in Bengali/Hindi script.
+      // Resolve language:
+      //   explicit switch request > profile preference > detection > "en"
+      //
+      // A REAL preference still outranks detection: someone who deliberately
+      // set Bengali gets Bengali even when they write a line of English. What
+      // must NOT outrank detection is the DEFAULT, and that is the bug this
+      // guards against — preferredLang defaulted to "en" and was persisted for
+      // everybody, so for any user who never opened the picker the profile
+      // said "en", detection never ran, and writing in Bengali got an English
+      // reply. Verified on a device 2026-09-11.
+      //
+      // "auto" (and a missing value) mean "no preference stated" and fall
+      // through to detection. See isStatedPreference.
       const _explicitLang = detectExplicitLangRequest(message);
       const _scriptLang = detectLangFromScript(message);
       const _detectedLang = _scriptLang !== "en" ? _scriptLang : detectLangFromRomanHints(message);
-      const _profileLang =
-        opts?.preferredLanguage ||
-        (toneContext?.user?.preferredLang as string | undefined);
+      const _profileLang = statedPreference(
+        opts?.preferredLanguage ??
+        (toneContext?.user?.preferredLang as string | undefined),
+      );
       const chatReplyLang =
         _explicitLang || _profileLang || (_detectedLang !== "en" ? _detectedLang : "en");
 

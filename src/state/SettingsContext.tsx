@@ -153,6 +153,9 @@ const SettingsContext = createContext<SettingsContextValue | undefined>(
 );
 
 const STORAGE_KEY = "imotara_settings_v1";
+// Marks the one-time "en" -> "auto" language migration as done. See the note
+// where it runs, in the toneContext hydrate below.
+const LANG_AUTO_MIGRATED_KEY = "imotara.lang.autoMigrated.v1";
 const ORG_CONTEXT_KEY = "imotara_org_context_v1";
 
 // Keep this tiny + safe (no dependency on other files)
@@ -194,7 +197,7 @@ function isValidTier(v: unknown): v is LicenseTier {
 
 function normalizeToneContext(value: ToneContextPayload): ToneContextPayload {
     const base: ToneContextPayload = {
-        user: { name: "", preferredLang: "en" },
+        user: { name: "", preferredLang: "auto" },
         companion: {
             enabled: false,
             name: "Imotara",
@@ -263,7 +266,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     // ✅ New: tone context guidance (tone only; safe defaults)
     const [toneContext, _setToneContext] = useState<ToneContextPayload>({
-        user: { name: "", preferredLang: "en" },
+        user: { name: "", preferredLang: "auto" },
         companion: {
             enabled: false,
             name: "Imotara",
@@ -410,12 +413,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const hydrate = async () => {
             try {
                 // ✅ hydrate settings + compute license gate in parallel
-                const [raw, rawTier, rawExpiresAt, rawOrg] = await Promise.all([
+                const [raw, rawTier, rawExpiresAt, rawOrg, rawLangMigrated] = await Promise.all([
                     AsyncStorage.getItem(STORAGE_KEY),
                     AsyncStorage.getItem(LICENSE_TIER_KEY),
                     AsyncStorage.getItem(LICENSE_EXPIRES_AT_KEY),
                     AsyncStorage.getItem(ORG_CONTEXT_KEY),
+                    AsyncStorage.getItem(LANG_AUTO_MIGRATED_KEY),
                 ]);
+                const langMigrated = rawLangMigrated === "1";
 
                 // ── Phase 5: restore org context from cache ───────────────────
                 if (alive && rawOrg) {
@@ -501,6 +506,37 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                                             ...(v.companion || {}),
                                         },
                                     };
+
+                                    // ONE-TIME: a stored "en" becomes "auto".
+                                    //
+                                    // preferredLang defaulted to "en" and this
+                                    // payload is persisted on every settings
+                                    // change, so every existing user has
+                                    // "en" written whether they chose it or
+                                    // not — and a stored "en" cannot be told
+                                    // apart from a chosen one. Since the
+                                    // picker already showed English selected,
+                                    // choosing it was a no-op, so a stored
+                                    // "en" is almost always "never chose".
+                                    // Left as-is, those users keep getting
+                                    // English replies to Bengali and Hindi
+                                    // (device-verified 2026-09-11).
+                                    //
+                                    // The trade: someone who switched to
+                                    // another language and deliberately back
+                                    // to English now gets Auto. They can
+                                    // re-pick English, and unlike before that
+                                    // choice is now meaningful and sticks.
+                                    // Runs once, guarded by LANG_AUTO_MIGRATED_KEY.
+                                    if (!langMigrated && merged.user?.preferredLang === "en") {
+                                        merged.user = { ...merged.user, preferredLang: "auto" };
+                                    }
+                                    if (!langMigrated) {
+                                        // Set regardless of whether anything changed, so a
+                                        // user who had already chosen a non-English language
+                                        // is never re-examined on a later launch.
+                                        AsyncStorage.setItem(LANG_AUTO_MIGRATED_KEY, "1").catch(() => {});
+                                    }
 
                                     // ✅ Normalize companion name when enabled (prevents empty name from old storage)
                                     if (

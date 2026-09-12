@@ -1,5 +1,6 @@
 // src/screens/SettingsScreen.tsx
 import React, { useCallback, useRef } from "react";
+import { concreteLang } from "../api/aiClient";
 import { Toast, type ToastHandle } from "../components/ui/Toast";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import Constants from "expo-constants";
@@ -3152,11 +3153,18 @@ function SettingsScreenContent() {
 
                     {/* Preferred language */}
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>
-                        Preferred language
+                        Reply language
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6, opacity: 0.8 }}>
+                        Auto replies in whatever language you write in. Pick one to always get that language.
                     </Text>
                     <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 14 }}>
                         {(
                             [
+                                // "auto" is the default. Anything else is a stated
+                                // preference and overrides what the message looks like
+                                // — see statedPreference() in aiClient.ts.
+                                { id: "auto", label: "Auto" },
                                 { id: "en", label: "English" },
                                 { id: "bn", label: "Bengali" },
                                 { id: "gu", label: "Gujarati" },
@@ -3181,7 +3189,7 @@ function SettingsScreenContent() {
                                 { id: "es", label: "Spanish" },
                             ] as const
                         ).map((opt) => {
-                            const currentLang = toneContext?.user?.preferredLang ?? "en";
+                            const currentLang = toneContext?.user?.preferredLang ?? "auto";
                             const active = currentLang === opt.id;
                             return (
                                 <TouchableOpacity
@@ -3550,7 +3558,7 @@ function SettingsScreenContent() {
                                 setVoicePreviewId(null);
                             } else {
                                 const gender = toneContext?.companion?.gender;
-                                const lang = toneContext?.user?.preferredLang ?? "en";
+                                const lang = concreteLang(toneContext?.user?.preferredLang);
                                 const name = toneContext?.companion?.name?.trim();
                                 setVoicePreviewId(id);
                                 speakPreview(gender, lang, name, () => setVoicePreviewId(null), accessToken ?? undefined);
