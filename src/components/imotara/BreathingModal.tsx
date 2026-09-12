@@ -16,6 +16,7 @@ import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { musicSource } from "./musicSources";
 import { useColors } from "../../theme/ThemeContext";
 
 // ── Lotus mandala header ─────────────────────────────────────────────────────
@@ -165,11 +166,9 @@ const MUSIC_OPTIONS: { id: MusicTrack; label: string; icon: React.ComponentProps
   { id: "ocean", label: "Ocean",      icon: "water-outline" },
 ];
 
-const MUSIC_SOURCES: Record<Exclude<MusicTrack, "none">, any> = {
-  bowl:  require("../../../assets/sounds/bowl.mp3"),
-  rain:  require("../../../assets/sounds/rain.mp3"),
-  ocean: require("../../../assets/sounds/ocean.mp3"),
-};
+// Ambience sources live in musicSources.ts / musicSources.android.ts —
+// Metro picks the platform file, which is what keeps Android from bundling
+// the mp3s a second time. See those files for why Android differs.
 
 type Props = {
   visible: boolean;
@@ -222,7 +221,7 @@ export function BreathingModal({ visible, onClose }: Props) {
         staysActiveInBackground: false,
       });
       const { sound } = await Audio.Sound.createAsync(
-        MUSIC_SOURCES[track],
+        musicSource(track),
         { isLooping: true, volume: 0.35, shouldPlay: true },
       );
       soundRef.current = sound;

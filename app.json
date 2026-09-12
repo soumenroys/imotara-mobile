@@ -120,6 +120,7 @@
       "./plugins/withAndroidR8Mapping",
       "./plugins/withAndroidImeInsets",
       "./plugins/withIosSimulatorArch",
+      "./plugins/withAndroidRawSounds",
       "@react-native-community/datetimepicker",
       [
         "expo-build-properties",
