@@ -929,6 +929,52 @@ const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
 // bottom as the content grows. See scrollToBottom for why a window exists at
 // all, and why it is bounded rather than open-ended.
 const PIN_TO_BOTTOM_MS = 1200;
+
+/**
+ * The reaction vocabulary — shared by the inline row and the action sheet.
+ *
+ * This list used to be declared INSIDE MessageBubble's render, where the
+ * action sheet could not see it. So the sheet grew its own hardcoded row of
+ * six emoji, and the two surfaces began writing different value types into the
+ * same reactions Map and the same storage key:
+ *
+ *     inline picker  ->  addReaction(id, "heart")   an Ionicons name
+ *     action sheet   ->  addReaction(id, "\u{1F44D}")       an emoji character
+ *
+ * The inline row resolves the active reaction by matching Ionicons names, so
+ * it could never match an emoji; the raw-value badge is user-messages-only and
+ * the inline row is bot-messages-only. Reacting to a bot message from the
+ * sheet therefore showed NOTHING, anywhere. One list, one value type, both
+ * surfaces.
+ *
+ * `label` is what a screen reader says — without it every option announces as
+ * an unnamed "button" (UX-14).
+ */
+type ReactionOption = {
+    icon: React.ComponentProps<typeof Ionicons>["name"];
+    color: string;
+    label: string;
+};
+
+/**
+ * Honours the "Reaction set" setting (minimal / default / extended), which the
+ * sheet's hardcoded six silently ignored.
+ */
+function reactionOptionsFor(set: string | undefined, colors: ColorPalette): ReactionOption[] {
+    const all: ReactionOption[] = [
+        { icon: "heart",         color: "#ef4444",            label: "Love" },
+        { icon: "sad-outline",   color: colors.info,          label: "Sad" },
+        { icon: "happy-outline", color: colors.warning,       label: "Happy" },
+        { icon: "thumbs-up",     color: colors.successAlt,    label: "Agree" },
+        { icon: "hand-left",     color: colors.accent,        label: "Hold on" },
+        { icon: "flame",         color: colors.orange,        label: "Strong feeling" },
+        { icon: "star",          color: colors.warningStrong, label: "Important" },
+        { icon: "leaf",          color: colors.success,       label: "Calm" },
+    ];
+    if (set === "minimal") return all.slice(0, 3);
+    if (set === "extended") return all;
+    return all.slice(0, 6);
+}
 const SESSION_GAP_MS = 45 * 60 * 1000;
 
 function smoothScrollToBottom(ref: React.RefObject<FlatList | null>) {
@@ -985,8 +1031,9 @@ type MessageBubbleProps = {
   onCopy: (text: string) => void;
   onSpeak: (id: string, text: string) => void;
   onStopSpeak: () => void;
-  onBookmark: (id: string) => void;
-  onReact: (id: string, emoji: string) => void;
+  /** Opens the shared "Message actions" sheet — the 3-dot button and the
+   *  bookmark/reaction indicators all lead here, as does a long-press. */
+  onOpenActions: (msg: ChatMessage) => void;
   /** The person's chosen language, so the crisis card speaks it too. */
   lang?: string;
   /** The crisis card picks its palette from this — it is unreadable in the wrong one. */
@@ -1020,11 +1067,9 @@ function MessageBubble({
   onCopy,
   onSpeak,
   onStopSpeak,
-  onBookmark,
-  onReact,
+  onOpenActions,
 }: MessageBubbleProps) {
   const { width: screenWidth } = useWindowDimensions();
-  const [reactionPickerOpen, setReactionPickerOpen] = React.useState(false);
   const isUser = message.from === "user";
   const isSearchMatch = searchMatchIds.has(message.id);
   const isActiveMatch = searchActiveMatchId === message.id;
@@ -1268,26 +1313,8 @@ function MessageBubble({
         const isPreparingSpeech = preparingSpeechId === message.id;
         const isBookmarked = bookmarks.has(message.id);
 
-        // Original Ionicons reaction set — reverted to match preferred UI
-        // `label` is what a screen reader says. Without it each of these
-        // announces only as "button", so the whole reaction row is eight
-        // identical, meaningless controls (UX-14).
-        const ALL_REACTION_OPTIONS: { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string; label: string }[] = [
-          { icon: "heart",        color: "#ef4444",              label: "Love" },
-          { icon: "sad-outline",  color: colors.info,            label: "Sad" },
-          { icon: "happy-outline",color: colors.warning,         label: "Happy" },
-          { icon: "thumbs-up",    color: colors.successAlt,      label: "Agree" },
-          { icon: "hand-left",    color: colors.accent,          label: "Hold on" },
-          { icon: "flame",        color: colors.orange,          label: "Strong feeling" },
-          { icon: "star",         color: colors.warningStrong,   label: "Important" },
-          { icon: "leaf",         color: colors.success,         label: "Calm" },
-        ];
-        const REACTION_OPTIONS = reactionsSet === "minimal"
-          ? ALL_REACTION_OPTIONS.slice(0, 3)
-          : reactionsSet === "extended"
-          ? ALL_REACTION_OPTIONS
-          : ALL_REACTION_OPTIONS.slice(0, 6);
-        const activeOption = REACTION_OPTIONS.find((r) => r.icon === activeReaction);
+        const activeOption = reactionOptionsFor(reactionsSet, colors)
+          .find((r) => r.icon === activeReaction);
         return (
           <View style={{ marginLeft: 4, marginBottom: 6, gap: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 0, flexWrap: "wrap" }}>
@@ -1319,18 +1346,44 @@ function MessageBubble({
                 </View>
               )}
 
-              {/* Reaction toggle */}
-              <TouchableOpacity
-                onPress={() => setReactionPickerOpen((v) => !v)}
-                style={ACTION_HIT}
-                accessibilityLabel="React to message"
-              >
-                <Ionicons
-                  name={activeOption ? activeOption.icon : "happy-outline"}
-                  size={18}
-                  color={activeOption ? activeOption.color : (reactionPickerOpen ? colors.textPrimary : colors.textSecondary)}
-                />
-              </TouchableOpacity>
+              {/* Intern item 6 (Yash): "too many icons per message; move the
+                  rare ones into a 3-dot menu".
+
+                  This row carried four controls — react, copy, read-aloud,
+                  bookmark — on EVERY reply, while a full "Message actions"
+                  sheet already existed behind a long-press that nothing on
+                  screen advertised. So the rare actions are not gone, they
+                  moved to where the rest of them already were, and the row
+                  now shows the two people use constantly plus a door.
+
+                  STATE still shows. Moving a control into a menu must not
+                  hide the fact that something IS bookmarked or reacted to, so
+                  those render as indicators when they apply and are absent
+                  otherwise — a message with neither shows three controls. */}
+
+              {isBookmarked && (
+                <TouchableOpacity
+                  onPress={() => onOpenActions(message)}
+                  style={ACTION_HIT}
+                  accessibilityLabel="Bookmarked. Open message actions"
+                >
+                  {/* colors.warningStrong, not the raw #fbbf24 the old inline
+                      control used: that hex only passed semanticColors because
+                      it sat inside a ternary the regex cannot see, and amber on
+                      a light surface is genuinely under 3:1. */}
+                  <Ionicons name="star" size={18} color={colors.warningStrong} />
+                </TouchableOpacity>
+              )}
+
+              {activeOption && (
+                <TouchableOpacity
+                  onPress={() => onOpenActions(message)}
+                  style={ACTION_HIT}
+                  accessibilityLabel={`Reacted with ${activeOption.label}. Open message actions`}
+                >
+                  <Ionicons name={activeOption.icon} size={18} color={activeOption.color} />
+                </TouchableOpacity>
+              )}
 
               {/* Copy */}
               <TouchableOpacity onPress={() => onCopy(message.text)} style={ACTION_HIT} accessibilityLabel="Copy message">
@@ -1354,38 +1407,17 @@ function MessageBubble({
                 )}
               </TouchableOpacity>
 
-              {/* Bookmark */}
-              <TouchableOpacity onPress={() => onBookmark(message.id)} style={ACTION_HIT} accessibilityLabel={isBookmarked ? "Remove bookmark" : "Bookmark message"}>
-                <Ionicons
-                  name={isBookmarked ? "star" : "star-outline"}
-                  size={18}
-                  color={isBookmarked ? "#fbbf24" : colors.textSecondary}
-                />
+              {/* Everything else — the same sheet long-press has always
+                  opened, so there is nothing new to learn and long-press
+                  keeps working for anyone who already knows it. */}
+              <TouchableOpacity
+                onPress={() => onOpenActions(message)}
+                style={ACTION_HIT}
+                accessibilityLabel="More actions for this message"
+              >
+                <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
-
-            {/* Expandable reaction picker */}
-            {reactionPickerOpen && (
-              <View style={{ flexDirection: "row", gap: 12, paddingVertical: 4, paddingLeft: 2 }}>
-                {REACTION_OPTIONS.map((opt) => (
-                  <TouchableOpacity
-                    key={opt.icon}
-                    onPress={() => { onReact(message.id, opt.icon); setReactionPickerOpen(false); }}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: activeReaction === opt.icon }}
-                    accessibilityLabel={`React with ${opt.label}`}
-                  >
-                    <Ionicons
-                      name={opt.icon}
-                      size={22}
-                      color={opt.color}
-                      style={{ opacity: activeReaction === opt.icon ? 1 : 0.55 }}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
           </View>
         );
       })()}
@@ -4539,14 +4571,24 @@ export default function ChatScreen() {
             </Text>
           </View>
 
-          {/* Emoji reactions */}
+          {/* Reactions.
+              These used to be six hardcoded emoji, which (a) ignored the
+              "Reaction set" setting the inline row has always honoured, and
+              (b) stored an emoji CHARACTER where the inline row stores an
+              Ionicons NAME — into the same Map and the same storage key. The
+              inline row matches on Ionicons names, so a reaction made here
+              could never be found, and reacting to a bot message from this
+              sheet showed nothing anywhere. One vocabulary now. */}
           <View style={{ flexDirection: "row", justifyContent: "space-around", paddingVertical: 10, marginBottom: 4 }}>
-            {["👍", "💙", "🙏", "✨", "🤔", "❤️"].map((emoji) => {
-              const isActive = reactions.get(actionMessage.id) === emoji;
+            {reactionOptionsFor(chatReactionsSet, colors).map((opt) => {
+              const isActive = reactions.get(actionMessage.id) === opt.icon;
               return (
                 <TouchableOpacity
-                  key={emoji}
-                  onPress={() => addReaction(actionMessage.id, emoji)}
+                  key={opt.icon}
+                  onPress={() => addReaction(actionMessage.id, opt.icon)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                  accessibilityLabel={`React with ${opt.label}`}
                   style={{
                     padding: 8,
                     borderRadius: 999,
@@ -4555,7 +4597,12 @@ export default function ChatScreen() {
                     borderColor: colors.primary,
                   }}
                 >
-                  <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                  <Ionicons
+                    name={opt.icon}
+                    size={22}
+                    color={opt.color}
+                    style={{ opacity: isActive ? 1 : 0.55 }}
+                  />
                 </TouchableOpacity>
               );
             })}
@@ -5149,8 +5196,7 @@ export default function ChatScreen() {
                 );
               }}
               onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); setPreparingSpeechId(null); }}
-              onBookmark={handleToggleBookmark}
-              onReact={addReaction}
+              onOpenActions={setActionMessage}
               showTimestamps={showMsgTimestamps}
               showSyncBadge={showSyncBadge}
               reactionsSet={chatReactionsSet}
