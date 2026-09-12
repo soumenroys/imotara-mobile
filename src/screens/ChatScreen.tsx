@@ -2777,21 +2777,13 @@ export default function ChatScreen() {
 
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  // Android-only: RN's KeyboardAvoidingView wires both keyboardDidShow AND
-  // keyboardDidHide to the same internal handler instead of resetting height
-  // to 0 on hide (an upstream RN bug), which left a stale gap the size of
-  // keyboardVerticalOffset after every dismiss. Tracking height ourselves via
-  // the correct show/hide events sidesteps that broken internal state.
-  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
 
   useEffect(() => {
     const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", (e) => {
       setKeyboardVisible(true);
-      if (Platform.OS === "android") setAndroidKeyboardHeight(e?.endCoordinates?.height ?? 0);
     });
     const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => {
       setKeyboardVisible(false);
-      if (Platform.OS === "android") setAndroidKeyboardHeight(0);
     });
     return () => { show.remove(); hide.remove(); };
   }, []);
@@ -4661,18 +4653,26 @@ export default function ChatScreen() {
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      // Android: no offset — the tab bar fully hides while the keyboard is
-      // open (it doesn't sit alongside it), so compensating for its height
-      // here only left a gap between the input bar and the keyboard.
       keyboardVerticalOffset={0}
-      // Android: gate on our own reliably-tracked keyboard height rather than
-      // leaving this always-enabled. RN's KeyboardAvoidingView wires both
-      // keyboardDidShow/Hide to the same internal handler on Android (an
-      // upstream bug) and never resets its internal height offset back to 0
-      // on dismiss, leaving a stale gap. Disabling it once we know the
-      // keyboard is actually closed forces its height math back to the full
-      // frame, sidestepping the stuck internal state.
-      enabled={Platform.OS === "android" ? androidKeyboardHeight > 0 : !(Platform.OS === "ios" && Platform.isPad)}
+      // ANDROID: OFF, deliberately.
+      //
+      // app.json sets softwareKeyboardLayoutMode "pan", so the manifest carries
+      // windowSoftInputMode="adjustPan" and Android ALREADY slides the window
+      // up to keep the focused input above the keyboard. Running
+      // KeyboardAvoidingView as well shrank the content by the keyboard height
+      // on top of that pan — the same space subtracted twice.
+      //
+      // Measured on a Galaxy A27, 2026-09-12: composer bottom y=617, tab bar
+      // top y=1388, so 771px of dead space — 32.9% of the screen — and the
+      // conversation scrolled up UNDER the status bar, taking the header with
+      // it. Both symptoms are the double compensation.
+      //
+      // The long-standing comment here claimed the Android tab bar "fully
+      // hides while the keyboard is open". It does not; it had simply never
+      // been set to (see tabBarHideOnKeyboard in RootNavigator).
+      //
+      // iOS still needs this: "padding" behaviour, and no adjustPan equivalent.
+      enabled={Platform.OS === "android" ? false : !(Platform.OS === "ios" && Platform.isPad)}
     >
     <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }} {...edgeSwipeResponder.panHandlers}>
       {/* iPad: constrain content to a centered column so the UI doesn't span the full iPad width */}

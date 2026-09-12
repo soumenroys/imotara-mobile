@@ -150,6 +150,40 @@ function hasRecentEmotionalSignal(recentContext?: LocalRecentContext): boolean {
     });
 }
 
+const BENGALI_SCRIPT = /[\u0980-\u09ff]/g;
+const DEVANAGARI_SCRIPT = /[\u0900-\u097f]/g;
+
+/**
+ * Is this text meaningfully written in the given script — as opposed to merely
+ * containing a character of it?
+ *
+ * The check here used to be a bare `/[\u0980-\u09ff]/.test(prev)`, so ONE
+ * Bengali character anywhere in ONE earlier message switched the whole
+ * conversation to Bengali. Caught on a real phone 2026-09-12: a single stray
+ * "শ" at the end of an otherwise English message made the offline engine answer
+ * plain English in Bengali. A pasted name, an emoji-adjacent glyph or a
+ * keyboard slip all do the same thing.
+ *
+ * Two conditions, so neither a stray glyph nor one borrowed word can flip it:
+ *  - at least 3 characters of that script (any real sentence clears this), and
+ *  - they are at least a third of the letters (so an English sentence carrying
+ *    one Bengali name stays English).
+ *
+ * Deliberately parallel to the >= 2-hit rule the romanized detectors already
+ * use in aiClient.ts — one coincidental match should never decide a language.
+ */
+function hasSubstantialScript(text: string, script: RegExp): boolean {
+    const inScript = (text.match(script) ?? []).length;
+    if (inScript < 3) return false;
+    const latin = (text.match(/[A-Za-z]/g) ?? []).length;
+    // A third, not a fifth. "my name is শাশ্বতী and I work in Kolkata" is 7
+    // Bengali characters in 32 — it clears a fifth and must not count, because
+    // a name proves nothing about the language someone is writing in. The web
+    // prompt carries the same rule in words: "Never infer the user's language
+    // from their name or username — use only the message content."
+    return inScript * 3 >= inScript + latin;
+}
+
 function detectLanguage(text: string, recentContext?: LocalRecentContext): LocalLanguage {
     const raw = text || "";
     const t = raw.toLowerCase();
@@ -213,8 +247,8 @@ function detectLanguage(text: string, recentContext?: LocalRecentContext): Local
         const prev = (recentTexts[i] || "").trim();
         if (!prev) continue;
         const prevLower = prev.toLowerCase();
-        if (/[\u0980-\u09ff]/.test(prev) || ROMAN_BN_LANG_HINT_REGEX.test(prevLower)) return "bn";
-        if (/[\u0900-\u097f]/.test(prev) || ROMAN_HI_LANG_HINT_REGEX.test(prevLower)) return "hi";
+        if (hasSubstantialScript(prev, BENGALI_SCRIPT) || ROMAN_BN_LANG_HINT_REGEX.test(prevLower)) return "bn";
+        if (hasSubstantialScript(prev, DEVANAGARI_SCRIPT) || ROMAN_HI_LANG_HINT_REGEX.test(prevLower)) return "hi";
         if (ROMAN_TA_LANG_HINT_REGEX.test(prevLower)) return "ta";
         if (ROMAN_TE_LANG_HINT_REGEX.test(prevLower)) return "te";
     }

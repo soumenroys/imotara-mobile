@@ -219,6 +219,13 @@ export default function RootNavigator() {
                         headerTitleStyle: {
                             fontWeight: "600",
                         },
+                        // The tab bar does NOT hide itself when the keyboard
+                        // opens — the default is false, and ChatScreen's code
+                        // assumed the opposite ("the tab bar fully hides while
+                        // the keyboard is open"). Measured on a Galaxy A27
+                        // 2026-09-12: it sat above the keyboard, eating room
+                        // and helping open a 771px dead gap on the chat screen.
+                        tabBarHideOnKeyboard: true,
                         tabBarStyle: {
                             backgroundColor: colors.surfaceSoft,
                             borderTopColor: colors.border,
