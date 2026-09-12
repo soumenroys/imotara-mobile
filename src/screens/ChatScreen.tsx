@@ -1927,19 +1927,45 @@ export default function ChatScreen() {
         setTimeout(() => handleSendRef.current(text), 80);
         return;
       }
-      const insertText = () => {
+      // Returns what the composer now holds, so a caller that also sends can
+      // send exactly that — draft included — rather than just the new words.
+      const insertText = (): string => {
         const newText = latestInputRef.current
           ? `${latestInputRef.current} ${text}`
           : text;
         latestInputRef.current = newText;
         setInput(newText);
+        return newText;
       };
-      // Auto-send skips the composer entirely. When "ask before using" is also
-      // on, the confirmation still comes first — "Use" then sends instead of
-      // inserting, so the user never loses the chance to discard a bad take.
+      // Auto-send puts the words in the composer FIRST, then sends them.
+      //
+      // It used to call handleSend directly and never touch the composer. That
+      // looked equivalent and was not, because handleSend has early returns
+      // that fire BEFORE it clears the input — a message over the character
+      // limit, and, far more commonly, `isTyping || isSendingRef.current`
+      // while the previous reply is still arriving. On that path the
+      // transcription went nowhere at all: not sent, and not in the box
+      // either. The person spoke and the app silently dropped it.
+      //
+      // Writing it to the composer first means the normal case is unchanged
+      // (handleSend clears the input as it sends) while the busy case leaves
+      // the words visible and re-sendable instead of losing them. It also
+      // matches what the owner asked for on 2026-09-13: speech becomes text
+      // in the box, and that text is submitted automatically.
+      //
+      // ⚠️ NOT applied to the hands-free path above. There, text left in the
+      // composer is not harmless: startHandsfreeIfIdle refuses to reopen the
+      // mic while `latestInputRef.current` is non-empty ("a half-typed message
+      // is waiting"), so a failed send would stall the loop permanently.
+      // Hands-free keeps its fire-and-forget send.
       const deliver = () => {
         if (voiceAutoSendRef.current) {
-          setTimeout(() => handleSendRef.current(text), 80);
+          // Send what the composer HOLDS, not just the new words. insertText
+          // appends to an existing draft, and handleSend clears the composer
+          // as it sends — so sending `text` alone would discard whatever the
+          // person had already typed, without ever showing that it was lost.
+          const toSend = insertText();
+          setTimeout(() => handleSendRef.current(toSend), 80);
         } else {
           insertText();
         }
