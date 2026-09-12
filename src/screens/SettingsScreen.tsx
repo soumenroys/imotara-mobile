@@ -2039,7 +2039,10 @@ function SettingsScreenContent() {
     return (
         <KeyboardAvoidingView
             style={{ flex: 1, backgroundColor: colors.background }}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            // Android gets no behavior on purpose: the window already shrinks
+            // by the real ime() inset (plugins/withAndroidImeInsets.js).
+            // Applying "height" here too would subtract the keyboard twice.
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
             keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
         >
             <ScrollView

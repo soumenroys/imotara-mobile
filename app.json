@@ -118,6 +118,7 @@
       "expo-apple-authentication",
       "expo-iap",
       "./plugins/withAndroidR8Mapping",
+      "./plugins/withAndroidImeInsets",
       "@react-native-community/datetimepicker",
       [
         "expo-build-properties",

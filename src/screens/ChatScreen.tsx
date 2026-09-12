@@ -4652,10 +4652,15 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      // Android deliberately gets NO behavior — the window itself now shrinks.
+      // See plugins/withAndroidImeInsets.js: the Activity's content view is
+      // padded by the real ime() inset on every inset dispatch. If this
+      // component also applied "height" the keyboard would be subtracted
+      // twice, which is exactly the 771px bug described below.
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={0}
-      // Keyboard handling on Android, measured on a Galaxy A27 2026-09-12.
-      // Three configurations were tried on the device; only one is correct.
+      // History, measured on a Galaxy A27 2026-09-12. Three configurations
+      // were tried on the device:
       //
       //  pan + this enabled  (what shipped) — BOTH broken. adjustPan slides the
       //      whole window up AND this shrinks the content by the keyboard
@@ -4665,14 +4670,21 @@ export default function ChatScreen() {
       //      header with it.
       //  pan + this disabled — gap fixed, header still under the status bar,
       //      because the pan is what pushes it there.
-      //  resize + this enabled — correct, and what runs now. No pan, so the
-      //      header stays put; this lifts the composer clear of the keyboard.
+      //  resize + this enabled — fixed the common case, and shipped. But it
+      //      still relied on RN's keyboard events, which on Android fire ONLY
+      //      when ime() visibility toggles and report a DERIVED height
+      //      (imeInsets.bottom - barInsets.bottom) against a position taken
+      //      from a different frame. An IME that resizes while visible left
+      //      the composer stranded — measured 237px of it behind the keyboard
+      //      with no input visible — and the derived height is why the dead
+      //      gap differed per handset.
+      //
+      // Now the OS inset drives the layout directly, so there is nothing
+      // per-device left to get wrong.
       //
       // The catch worth knowing: under Expo's edge-to-edge builds
-      // adjustResize does NOT actually resize the window, so with this
-      // disabled nothing lifted the composer and it sat behind the keyboard.
-      // "resize" here really means "stop panning" — the lifting is this
-      // component's job.
+      // adjustResize does NOT resize the window by itself — that is what the
+      // config plugin restores.
       //
       // The old comment claimed the tab bar "fully hides while the keyboard is
       // open". It did not; tabBarHideOnKeyboard had simply never been set
