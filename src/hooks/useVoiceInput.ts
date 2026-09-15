@@ -13,7 +13,11 @@ export type VoiceInputState = "idle" | "recording" | "transcribing";
 export type UseVoiceInputResult = {
     state: VoiceInputState;
     startRecording: () => Promise<boolean>;
-    stopRecording: () => Promise<void>;
+    /** `userInitiated: true` means a PERSON tapped stop. Hands-free uses it to
+     *  tell "the turn ended by itself, reopen the mic" apart from "they asked
+     *  it to stop" — see onNoSpeech. Defaults to false, so every automatic
+     *  caller (silence detector, duration cap) keeps today's behaviour. */
+    stopRecording: (opts?: { userInitiated?: boolean }) => Promise<void>;
     cancelRecording: () => Promise<void>;
     durationMs: number;
     /** Throw away whatever this recording turn produces.
@@ -71,7 +75,10 @@ export type VoiceInputOptions = {
     // avoid. It can instead reopen the mic and let the person simply speak
     // again. Everyone else keeps the alert — outside hands-free there is no
     // loop to resume, so silence with no explanation would just look broken.
-    onNoSpeech?: () => boolean;
+    // `info.userInitiated` is true when a person tapped stop. Reopening the
+    // mic in that case is the bug the owner hit: "once i press the stop
+    // recording button, it is again resuming recording".
+    onNoSpeech?: (info: { userInitiated: boolean }) => boolean;
 };
 
 // Lightweight amplitude-based silence detection (not a real VAD model) via
@@ -83,6 +90,29 @@ export type VoiceInputOptions = {
 const SILENCE_DB_THRESHOLD = -35;
 const SILENCE_STOP_MS = 1500;
 const MIN_SPEECH_MS_BEFORE_AUTOSTOP = 600;
+// How long a hands-free turn waits for the person to START speaking before it
+// gives up. The silence-stop above can only end a turn it has already heard
+// speech in, so before this existed a turn where nothing was ever heard — a
+// microphone that opened but captured nothing, the fault the owner reported —
+// ran to the full 60s cap and then paid Whisper to transcribe the silence.
+// Ten seconds is comfortably longer than a person pausing to gather a thought
+// after a reply finishes, and six times shorter than the cap it replaces.
+// Hands-free only: manual recording is still tap-to-stop, deliberately.
+const NO_SPEECH_GIVE_UP_MS = 10_000;
+// "Was there ANY audio at all this turn", which is a different and much lower
+// bar than SILENCE_DB_THRESHOLD's "is this person speaking right now".
+//
+// The two must not share a number. -35 dBFS is deliberately conservative for
+// ENDING a turn — it errs towards staying open through a soft passage so
+// nobody is cut off mid-sentence. Reusing it to decide whether to give up and
+// bin the audio inverts that caution: a softly-spoken person, a phone held at
+// arm's length or a low-gain mic can sit below -35 while speaking perfectly
+// audibly, and we would have discarded their words unheard at 10 seconds.
+// Conversational speech lands around -20 to -35 dBFS and even soft speech
+// stays above -45; room tone in a quiet room sits near -55 or below. -50
+// separates "someone is there" from "nothing reached this microphone" with
+// room to spare on the side that matters.
+const AUDIBLE_DB_FLOOR = -50;
 
 /**
  * Upload an audio file to /api/voice/transcribe.
@@ -169,6 +199,10 @@ export function useVoiceInput(
     // Silence-detection state (only touched when autoStopOnSilence is on) —
     // reset at the start of each recording in startRecording.
     const hasSpokenRef = useRef(false);
+    // Survives into stopRecording, unlike hasSpokenRef which the autostop logic
+    // owns. null means "we were not listening for speech at all" (manual
+    // recording does not meter), and must NOT be read as "heard nothing".
+    const heardSpeechThisTurnRef = useRef<boolean | null>(null);
     const firstSpeechAtRef = useRef(0);
     const silenceStartRef = useRef<number | null>(null);
     const startTsRef = useRef<number>(0);
@@ -192,9 +226,10 @@ export function useVoiceInput(
 
     // Ref so the setInterval auto-stop callback always calls the latest
     // stopRecording even if cloudTranscription changes mid-session.
-    const stopRecordingRef = useRef<() => Promise<void>>(async () => {});
+    const stopRecordingRef = useRef<(opts?: { userInitiated?: boolean }) => Promise<void>>(async () => {});
 
-    const stopRecording = useCallback(async (): Promise<void> => {
+    const stopRecording = useCallback(async (opts?: { userInitiated?: boolean }): Promise<void> => {
+        const userInitiated = opts?.userInitiated === true;
         clearTimer();
         const recording = recordingRef.current;
         if (!recording) { setState("idle"); return; }
@@ -221,10 +256,20 @@ export function useVoiceInput(
             if (!uri) throw new Error("No recording URI");
 
             let transcript = "";
+            // null = we were not metering (manual recording), so we know
+            // nothing about whether anyone spoke and must upload as before.
+            // false = we metered the whole turn and never once crossed the
+            // speech threshold, so there is nothing in this file to transcribe.
+            const heardNothing = heardSpeechThisTurnRef.current === false;
             const transcriptionAttempted = !!(apiBaseUrl && cloudTranscription);
             const myTurn = turnRef.current;
 
-            if (transcriptionAttempted) {
+            // Skipping the upload does NOT skip reporting the empty turn below:
+            // transcriptionAttempted stays true, so hands-free still learns the
+            // turn produced nothing and can reopen. Only the pointless upload
+            // goes — transcribing a minute of silence cost real money and could
+            // only ever come back as a Whisper hallucination.
+            if (transcriptionAttempted && !heardNothing) {
                 try {
                     // All presets produce MPEG_4/AAC/.m4a on both platforms.
                     // (Android LOW_QUALITY is overridden at record time to avoid
@@ -253,7 +298,7 @@ export function useVoiceInput(
 
             if (transcript.trim()) {
                 onTranscript(transcript.trim());
-            } else if (transcriptionAttempted && !onNoSpeechRef.current?.()) {
+            } else if (transcriptionAttempted && !onNoSpeechRef.current?.({ userInitiated })) {
                 // M-4: only show this alert when transcription was actually attempted.
                 // The cloudTranscription=false case never reaches here any more —
                 // startRecording refuses before the microphone opens, rather than
@@ -368,6 +413,7 @@ export function useVoiceInput(
             setDurationMs(0);
             setState("recording");
 
+            heardSpeechThisTurnRef.current = autoStopOnSilenceRef.current ? false : null;
             if (autoStopOnSilenceRef.current) {
                 hasSpokenRef.current = false;
                 firstSpeechAtRef.current = 0;
@@ -376,6 +422,11 @@ export function useVoiceInput(
                 recording.setOnRecordingStatusUpdate((status) => {
                     if (!status.isRecording || typeof status.metering !== "number") return;
                     const now = Date.now();
+                    // Anything at all above the noise floor means the mic is
+                    // working and someone may be talking — enough to keep the
+                    // turn alive and to make the audio worth transcribing,
+                    // even when it never gets loud enough to arm silence-stop.
+                    if (status.metering > AUDIBLE_DB_FLOOR) heardSpeechThisTurnRef.current = true;
                     const isLoud = status.metering > SILENCE_DB_THRESHOLD;
                     if (isLoud) {
                         if (!hasSpokenRef.current) {
@@ -398,7 +449,15 @@ export function useVoiceInput(
             timerRef.current = setInterval(() => {
                 const elapsed = Date.now() - startTsRef.current;
                 setDurationMs(elapsed);
-                if (elapsed >= maxDurationMs) {
+                // Hands-free gives up early when it has heard nothing at all;
+                // everyone else keeps the full manual cap.
+                // Gated on "nothing audible", NOT on hasSpokenRef: someone
+                // speaking below the silence-stop threshold is still speaking,
+                // and must keep the full cap rather than be cut off at 10s.
+                const giveUp = autoStopOnSilenceRef.current
+                    && heardSpeechThisTurnRef.current === false
+                    && elapsed >= NO_SPEECH_GIVE_UP_MS;
+                if (giveUp || elapsed >= maxDurationMs) {
                     void stopRecordingRef.current();
                 }
             }, 500);
@@ -406,6 +465,34 @@ export function useVoiceInput(
             return true;
         } catch (err) {
             console.warn("[useVoiceInput] startRecording error:", err);
+
+            // Undo anything that DID succeed before the throw.
+            //
+            // Found on a real iPhone 2026-09-16: an alert reading "Could not
+            // start recording" appeared while the composer showed "Recording…
+            // 6s" in red and the iOS orange microphone dot was lit — the device
+            // syslog confirmed the mic was genuinely live. The cause was here:
+            // createAsync resolves, recordingRef is set, setState("recording")
+            // runs and the timer starts — and then ANY of the calls after that
+            // (setProgressUpdateInterval, setOnRecordingStatusUpdate,
+            // setInterval) can throw and land in this catch, which used to undo
+            // none of it. The old comment below claimed the state was "kept
+            // idle", which was only ever true when the throw beat
+            // setState("recording").
+            //
+            // Order matters: unload the recorder FIRST, then restore the audio
+            // mode. Setting allowsRecordingIOS:false while a recording is still
+            // running is itself suspected of producing the original Android
+            // report — a red indicator over a microphone that captures nothing.
+            clearTimer();
+            const partial = recordingRef.current;
+            recordingRef.current = null;
+            if (partial) {
+                try { await partial.stopAndUnloadAsync(); } catch { /* already gone */ }
+            }
+            setState("idle");
+            setDurationMs(0);
+
             // M-2: setAudioModeAsync may have succeeded before createAsync threw,
             // leaving Android in DoNotMix mode. Restore it unconditionally.
             Audio.setAudioModeAsync({
@@ -424,7 +511,7 @@ export function useVoiceInput(
                     ],
                 );
             } else {
-                // Keep state as "idle" so the button remains tappable after the error.
+                // State was reset to idle above, so the button stays tappable.
                 Alert.alert("Voice input error", "Could not start recording. Please try again.");
             }
             return false;

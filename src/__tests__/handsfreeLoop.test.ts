@@ -68,7 +68,10 @@ describe("opening the mic without a tap is guarded", () => {
 
 describe("the loop does not die silently", () => {
     it("a wordless turn reopens the mic instead of raising a blocking alert", () => {
-        expect(hook).toMatch(/transcriptionAttempted && !onNoSpeechRef\.current\?\.\(\)/);
+        // The call now carries WHY the turn ended — see
+        // handsfreeRecordingLifecycle.test.ts, defect 2. The shape this pins is
+        // unchanged: an empty turn still consults the handler before alerting.
+        expect(hook).toMatch(/transcriptionAttempted && !onNoSpeechRef\.current\?\.\(\{ userInitiated \}\)/);
         expect(chat).toMatch(/onNoSpeech: handleNoSpeech/);
     });
 
@@ -175,11 +178,11 @@ describe("nothing changes when the switch is off", () => {
     it("the hook still alerts by default when no handler is supplied", () => {
         // onNoSpeech is optional; absent it, `!undefined?.()` is true and the
         // original alert path runs exactly as before.
-        expect(hook).toMatch(/onNoSpeech\?: \(\) => boolean;/);
-        const call = "transcriptionAttempted && !onNoSpeechRef.current?.()";
+        expect(hook).toMatch(/onNoSpeech\?: \(info: \{ userInitiated: boolean \}\) => boolean;/);
+        const call = "transcriptionAttempted && !onNoSpeechRef.current?.({ userInitiated })";
         expect(hook).toContain(call);
-        expect(undefined as unknown as (() => boolean) | undefined).toBeUndefined();
-        const suppressed = (h?: () => boolean) => !!(h?.());
+        type H = (info: { userInitiated: boolean }) => boolean;
+        const suppressed = (h?: H) => !!(h?.({ userInitiated: false }));
         expect(suppressed(undefined)).toBe(false);      // no handler → alert shows
         expect(suppressed(() => false)).toBe(false);    // declined → alert shows
         expect(suppressed(() => true)).toBe(true);      // handled → alert suppressed

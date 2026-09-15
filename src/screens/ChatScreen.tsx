@@ -2031,8 +2031,17 @@ export default function ChatScreen() {
   // than an alert. Three strikes, then stop and say so. Reset on any success.
   const emptyTurnsRef = useRef(0);
   const MAX_EMPTY_HANDSFREE_TURNS = 3;
-  const handleNoSpeech = useCallback(() => {
+  const handleNoSpeech = useCallback((info: { userInitiated: boolean }) => {
     if (!handsfreeRef.current) return false; // not hands-free — keep the alert
+    // Reported on a real iPhone 2026-09-16: "once i press the stop recording
+    // button, it is again resuming recording". A deliberate stop used to be
+    // indistinguishable from a turn that merely ran out of speech, so this
+    // reopened the mic 400ms later and the button could never win. Stopping is
+    // the one instruction hands-free must obey — the next tap starts it again.
+    if (info.userInitiated) {
+      emptyTurnsRef.current = 0; // the next turn they ask for starts fresh
+      return true; // handled — no alert, and emphatically no reopen
+    }
     emptyTurnsRef.current += 1;
     if (emptyTurnsRef.current >= MAX_EMPTY_HANDSFREE_TURNS) {
       emptyTurnsRef.current = 0;
@@ -2080,7 +2089,7 @@ export default function ChatScreen() {
       setSpeakingMessageId(null);
       await voiceInputRef.current.startRecording();
     } else if (voiceStateRef.current === "recording") {
-      await voiceInputRef.current.stopRecording();
+      await voiceInputRef.current.stopRecording({ userInitiated: true });
     }
   }, []); // intentional [] — state via voiceStateRef; functions via voiceInputRef
 
