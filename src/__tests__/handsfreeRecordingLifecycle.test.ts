@@ -205,9 +205,23 @@ describe("defect 2: tapping stop must actually stop", () => {
 const willUpload = (heardSpeech: boolean | null, canTranscribe = true) =>
     canTranscribe && !(heardSpeech === false);
 
-/** The 500ms tick's stop decision. `heardAudible` is null when not metering. */
-const tickStops = (handsfree: boolean, heardAudible: boolean | null, elapsed: number) =>
-    (handsfree && heardAudible === false && elapsed >= 10_000) || elapsed >= 60_000;
+/**
+ * The 500ms tick's stop decision, as the hook now makes it.
+ * `heardAudible` is null when not metering at all (manual recording).
+ * `heardSpeech` means the level reached the silence-stop threshold.
+ */
+const tickStops = (
+    handsfree: boolean,
+    heardAudible: boolean | null,
+    elapsed: number,
+    heardSpeech = false,
+) => {
+    let deadline = 60_000;
+    if (handsfree && !heardSpeech) {
+        deadline = heardAudible === false ? 10_000 : 20_000;
+    }
+    return elapsed >= deadline || elapsed >= 60_000;
+};
 
 /** The status callback's two INDEPENDENT thresholds, given a metering value. */
 const classify = (db: number) => ({
@@ -235,11 +249,32 @@ describe("defect 3: a microphone that hears nothing must give up quickly", () =>
         expect(tickStops(true, false, 10_000)).toBe(true);
     });
 
-    it("a hands-free turn that DID hear something keeps the full cap", () => {
+    it("a hands-free turn that heard real SPEECH keeps the full cap", () => {
         // Silence-stop ends these turns; the give-up must not cut short
-        // someone who is still mid-sentence at 11s.
-        expect(tickStops(true, true, 11_000)).toBe(false);
-        expect(tickStops(true, true, 60_000)).toBe(true);
+        // someone who is still mid-sentence at 11s, or at 55s.
+        expect(tickStops(true, true, 11_000, true)).toBe(false);
+        expect(tickStops(true, true, 55_000, true)).toBe(false);
+        expect(tickStops(true, true, 60_000, true)).toBe(true);
+    });
+
+    it("noise that is audible but never speech-loud cannot run for a minute", () => {
+        // ⚠️ MEASURED, Android emulator 2026-09-16, four hands-free turns:
+        // one ended at 10.34s and two ran 60.5s. A steady level between the two
+        // thresholds is "audible" (so the 10s give-up stands down) but never
+        // reaches the speech bar (so silence-stop never arms) — a band in which
+        // NOTHING could end the turn. This is that band.
+        expect(tickStops(true, true, 19_500, false)).toBe(false);
+        expect(tickStops(true, true, 20_000, false)).toBe(true);
+    });
+
+    it("the silent case is still the FASTEST to give up", () => {
+        // A dead mic should not have to wait out the noise deadline.
+        const silentEndsAt = [...Array(60).keys()].find((s) => tickStops(true, false, s * 1000));
+        const noisyEndsAt = [...Array(60).keys()].find((s) => tickStops(true, true, s * 1000, false));
+        const speakingEndsAt = [...Array(61).keys()].find((s) => tickStops(true, true, s * 1000, true));
+        expect(silentEndsAt).toBe(10);
+        expect(noisyEndsAt).toBe(20);
+        expect(speakingEndsAt).toBe(60);
     });
 
     it("manual recording never gives up early, however quiet", () => {
@@ -270,13 +305,15 @@ describe("defect 3: a microphone that hears nothing must give up quickly", () =>
         expect(HOOK_CODE).toMatch(/SILENCE_DB_THRESHOLD = -35/);
         expect(HOOK_CODE).toMatch(/AUDIBLE_DB_FLOOR = -50/);
         // The give-up must consult the LOW bar, not the silence-stop one.
-        expect(HOOK_CODE).toMatch(
-            /autoStopOnSilenceRef\.current\s*&& heardSpeechThisTurnRef\.current === false\s*&& elapsed >= NO_SPEECH_GIVE_UP_MS/);
+        expect(HOOK_CODE).toMatch(/if \(autoStopOnSilenceRef\.current && !hasSpokenRef\.current\) \{/);
         expect(HOOK_CODE).toMatch(/status\.metering > AUDIBLE_DB_FLOOR\) heardSpeechThisTurnRef\.current = true/);
     });
 
     it("the hook's real constants match the numbers asserted above", () => {
         expect(HOOK_CODE).toMatch(/NO_SPEECH_GIVE_UP_MS = 10_000/);
+        expect(HOOK_CODE).toMatch(/NO_CLEAR_SPEECH_GIVE_UP_MS = 20_000/);
+        expect(HOOK_CODE).toMatch(
+            /deadline = heardSpeechThisTurnRef\.current === false\s*\? NO_SPEECH_GIVE_UP_MS[\s\S]{0,80}: NO_CLEAR_SPEECH_GIVE_UP_MS/);
         expect(HOOK_CODE).toMatch(/heardSpeechThisTurnRef\.current = autoStopOnSilenceRef\.current \? false : null/);
         expect(HOOK_CODE).toMatch(/const heardNothing = heardSpeechThisTurnRef\.current === false/);
     });

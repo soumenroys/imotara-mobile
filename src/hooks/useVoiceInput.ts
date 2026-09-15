@@ -99,6 +99,18 @@ const MIN_SPEECH_MS_BEFORE_AUTOSTOP = 600;
 // after a reply finishes, and six times shorter than the cap it replaces.
 // Hands-free only: manual recording is still tap-to-stop, deliberately.
 const NO_SPEECH_GIVE_UP_MS = 10_000;
+// The same give-up, for a turn where the microphone IS picking something up but
+// it never gets loud enough to arm silence-stop. Measured on the Android
+// emulator 2026-09-16: four hands-free turns, one ended at 10.34s and two ran
+// 60.5s, because a steady level in the -50..-35 band satisfies AUDIBLE_DB_FLOOR
+// (so the give-up below stood down) but never reaches SILENCE_DB_THRESHOLD (so
+// silence-stop never armed). Between the two thresholds sat a band where
+// NOTHING could end the turn and hands-free fell back to the full manual cap —
+// the very "a mic that captures nothing useful cannot end its own turn" fault
+// this was meant to close. Longer than the silent case because this one may be
+// a real person who is simply softly spoken, and they should not be cut off at
+// ten seconds; far shorter than the 60s they used to wait.
+const NO_CLEAR_SPEECH_GIVE_UP_MS = 20_000;
 // "Was there ANY audio at all this turn", which is a different and much lower
 // bar than SILENCE_DB_THRESHOLD's "is this person speaking right now".
 //
@@ -451,13 +463,17 @@ export function useVoiceInput(
                 setDurationMs(elapsed);
                 // Hands-free gives up early when it has heard nothing at all;
                 // everyone else keeps the full manual cap.
-                // Gated on "nothing audible", NOT on hasSpokenRef: someone
-                // speaking below the silence-stop threshold is still speaking,
-                // and must keep the full cap rather than be cut off at 10s.
-                const giveUp = autoStopOnSilenceRef.current
-                    && heardSpeechThisTurnRef.current === false
-                    && elapsed >= NO_SPEECH_GIVE_UP_MS;
-                if (giveUp || elapsed >= maxDurationMs) {
+                // One deadline per physical situation, hands-free only. Once
+                // speech has actually been heard the turn belongs to
+                // silence-stop and keeps the full manual cap, so that a pause
+                // mid-sentence never cuts anybody off.
+                let deadline = maxDurationMs;
+                if (autoStopOnSilenceRef.current && !hasSpokenRef.current) {
+                    deadline = heardSpeechThisTurnRef.current === false
+                        ? NO_SPEECH_GIVE_UP_MS          // nothing reached the mic at all
+                        : NO_CLEAR_SPEECH_GIVE_UP_MS;   // noise, or someone very quiet
+                }
+                if (elapsed >= deadline || elapsed >= maxDurationMs) {
                     void stopRecordingRef.current();
                 }
             }, 500);
