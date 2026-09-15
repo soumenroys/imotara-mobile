@@ -60,3 +60,6 @@ imotara-play-*.json
 .env
 bugreport-*.zip
 .vercel
+
+# Scratch output from AI tooling — never repo content.
+Claude outputs/
