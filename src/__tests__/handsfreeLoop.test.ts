@@ -53,7 +53,7 @@ describe("opening the mic without a tap is guarded", () => {
         expect(afterAwait).toMatch(/voiceStateRef\.current !== "idle"/);
     });
 
-    it("is reached from entering the chat screen and from returning to the app", () => {
+    it("is reached from entering the chat screen", () => {
         // Entering the screen: the focus effect loads the settings, and the
         // loader starts the loop if hands-free is on. The ref must be set
         // first — startHandsfreeIfIdle reads the ref, not the state.
@@ -61,8 +61,23 @@ describe("opening the mic without a tap is guarded", () => {
         expect(loader).toMatch(/handsfreeRef\.current = handsfreeOn;[\s\S]{0,300}if \(handsfreeOn\) void startHandsfreeIfIdleRef\.current\(\);/);
         const focus = chat.slice(chat.indexOf("useFocusEffect(React.useCallback(() => {"));
         expect(focus.slice(0, 1500)).toMatch(/^\s*void loadChatSettings\(\);/m); // uncommented: a commented-out call still "contains" the text
+    });
+
+    it("but NOT from merely returning to the app", () => {
+        // ⚠️ REVERSED DELIBERATELY 2026-09-16, by the owner's decision, after
+        // watching it happen on their iPhone: they switched apps for a moment,
+        // came back, and the mic opened by itself, recorded the room, and
+        // posted invented words into their real chat history.
+        //
+        // This assertion used to require the opposite. The INTENT behind the
+        // old behaviour — a hands-free conversation should not be silently
+        // over just because you checked a notification — is kept: hands-free
+        // stays on and the banner says "paused". Only opening the microphone
+        // to achieve it is gone. Full reasoning in
+        // handsfreeRecordingLifecycle.test.ts.
         const fg = chat.slice(chat.indexOf("onForeground: () => {"));
-        expect(fg.slice(0, 2000)).toMatch(/startHandsfreeIfIdleRef\.current\(\)/);
+        expect(fg.slice(0, 2000)).not.toMatch(/startHandsfreeIfIdleRef\.current\(\)/);
+        expect(fg.slice(0, 2000)).toMatch(/setHandsfreeNeedsTap\(true\)/);
     });
 });
 
@@ -136,7 +151,10 @@ describe("hands-free is visible and stoppable", () => {
 
     it("it is announced to screen readers as a control, with its state", () => {
         expect(chat).toMatch(/accessibilityRole="button"/);
-        expect(chat).toMatch(/accessibilityLabel=\{`Hands-free conversation is on\. \$\{handsfreeStatus\}\. Tap to turn off\.`\}/);
+        // Now conditional: a PAUSED banner has to tell a screen-reader user
+        // what to DO, not merely that hands-free is on. Both arms asserted.
+        expect(chat).toMatch(/Hands-free conversation is on but paused\. Tap the microphone button to speak/);
+        expect(chat).toMatch(/`Hands-free conversation is on\. \$\{handsfreeStatus\}\. Tap to turn off\.`/);
     });
 
     it("stopping writes the same key Settings writes, so they cannot disagree", () => {

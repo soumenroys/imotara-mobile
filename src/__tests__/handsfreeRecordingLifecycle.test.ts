@@ -361,3 +361,50 @@ describe("noise rejection is wired in, and only to hands-free", () => {
         expect(HOOK_CODE).toMatch(/meteringSamplesRef\.current\.push\(status\.metering\)/);
     });
 });
+
+// ── Coming back to the app must not open the microphone ────────────────────
+
+describe("returning to the app does not grab the microphone", () => {
+    const chat = CHAT_CODE;
+
+    it("the foreground handler no longer auto-starts a recording", () => {
+        // ⚠️ Watched on the owner's iPhone, 2026-09-16: they switched apps for
+        // a moment to send a message, came back, and 600ms later the mic
+        // opened by itself, recorded the room, and posted invented words into
+        // their real chat history. Returning to the app is not a statement
+        // that you want to talk.
+        const i = chat.indexOf("userScrolledUpRef.current = false;");
+        const foreground = chat.slice(i, i + 1400);
+        expect(foreground).not.toMatch(/startHandsfreeIfIdleRef\.current\(\)/);
+        expect(foreground).toMatch(/setHandsfreeNeedsTap\(true\)/);
+    });
+
+    it("but the conversation stays alive and SAYS it is paused", () => {
+        // The original intent of the auto-start was that a hands-free
+        // conversation should not be silently over after a notification. That
+        // intent is kept; only the means changes. Calling it "ready" while
+        // nothing listens would be the lie this fix exists to remove.
+        expect(chat).toMatch(/: handsfreeNeedsTap \? "paused"/);
+        expect(chat).toMatch(/const \[handsfreeNeedsTap, setHandsfreeNeedsTap\] = useState\(false\)/);
+    });
+
+    it("the pause clears as soon as anything starts recording", () => {
+        // However it started — the mic button, or the post-reply reopen.
+        expect(chat).toMatch(
+            /if \(voiceInput\.state === "recording"\) setHandsfreeNeedsTap\(false\)/);
+    });
+
+    it("turning hands-free off does not leave a stale paused banner", () => {
+        const i = chat.indexOf("const handleHandsfreeStop");
+        expect(chat.slice(i, i + 400)).toMatch(/setHandsfreeNeedsTap\(false\)/);
+    });
+
+    it("the reply-to-you reopen is UNTOUCHED — that is the loop itself", () => {
+        // Reopening after Imotara finishes speaking follows something the
+        // person actually said, so it is not a surprise. Removing it would
+        // quietly delete hands-free rather than fix it.
+        expect(chat).toMatch(/reopenMicIfHandsfree\(\);/);
+        const i = chat.indexOf("const reopenMicIfHandsfree");
+        expect(chat.slice(i, i + 700)).toMatch(/startRecording|handsfreeRef\.current/);
+    });
+});

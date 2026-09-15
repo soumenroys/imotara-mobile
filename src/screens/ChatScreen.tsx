@@ -2029,6 +2029,10 @@ export default function ChatScreen() {
   // Reopening instead is only safe with a cap: a muted or broken mic would
   // otherwise record silence forever, and a loop nobody asked for is worse
   // than an alert. Three strikes, then stop and say so. Reset on any success.
+  // True when hands-free is on but deliberately NOT listening, because the
+  // person just came back to the app. Drives the "paused" banner; cleared the
+  // moment a recording actually starts.
+  const [handsfreeNeedsTap, setHandsfreeNeedsTap] = useState(false);
   const emptyTurnsRef = useRef(0);
   const MAX_EMPTY_HANDSFREE_TURNS = 3;
   const handleNoSpeech = useCallback((info: { userInitiated: boolean }) => {
@@ -2069,6 +2073,11 @@ export default function ChatScreen() {
   // must not re-create on every render (onBackground, handleMicPress).
   const voiceStateRef = useRef(voiceInput.state);
   useEffect(() => { voiceStateRef.current = voiceInput.state; });
+  // Any recording starting means the pause is over, however it started —
+  // the mic button, the post-reply reopen, or coming back to the Chat tab.
+  useEffect(() => {
+    if (voiceInput.state === "recording") setHandsfreeNeedsTap(false);
+  }, [voiceInput.state]);
 
   // voiceInputRef keeps the latest startRecording/stopRecording functions so
   // handleMicPress (deps:[]) always calls the version created after AsyncStorage
@@ -2918,11 +2927,24 @@ export default function ChatScreen() {
       userScrolledUpRef.current = false;
       setShowScrollButton(false);
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 100);
-      // onBackground cancels any recording in progress, because the OS reclaims
-      // the audio session. Nothing used to restart it, so a hands-free
-      // conversation was silently over the moment you checked a notification.
-      // Delayed so the audio session is actually back before we ask for it.
-      setTimeout(() => { void startHandsfreeIfIdleRef.current(); }, 600);
+      // Coming back to the app does NOT reopen the microphone.
+      //
+      // It used to. onBackground cancels any recording (the OS reclaims the
+      // audio session), and this restarted one 600ms after you returned, so
+      // that a hands-free conversation was not silently over the moment you
+      // checked a notification. That intent is right; opening the microphone
+      // to achieve it is not.
+      //
+      // Watched it happen on the owner's iPhone, 2026-09-16: they switched
+      // apps for a moment, came back, and the mic opened by itself, recorded
+      // the room, and posted invented words into their real chat history.
+      // Returning to the app is not a statement that you want to talk — you
+      // may be showing someone the screen, or re-reading a reply.
+      //
+      // So the conversation stays alive and says so, and one tap on the mic
+      // resumes it. Reopening after Imotara finishes SPEAKING is untouched:
+      // that is the hands-free loop itself, and it follows something you said.
+      if (handsfreeRef.current) setHandsfreeNeedsTap(true);
     },
   });
 
@@ -4799,6 +4821,10 @@ export default function ChatScreen() {
     : voiceInput.state === "transcribing" ? "transcribing"
     : speakingMessageId ? "speaking"
     : isTyping ? "thinking"
+    // "ready" would be a lie here: nothing is listening and nothing will
+    // start until the person taps. Saying so is the whole point of not
+    // opening the microphone behind their back.
+    : handsfreeNeedsTap ? "paused"
     : "ready";
 
   // Turning hands-free off from the chat screen. Writes the same key Settings
@@ -4808,6 +4834,7 @@ export default function ChatScreen() {
   const handleHandsfreeStop = useCallback(() => {
     handsfreeRef.current = false;
     setHandsfree(false);
+    setHandsfreeNeedsTap(false);
     void AsyncStorage.setItem("imotara:handsfree.v1", "0").catch(() => {});
     stopSpeaking();
     setSpeakingMessageId(null);
@@ -4876,7 +4903,11 @@ export default function ChatScreen() {
         <TouchableOpacity
           onPress={handleHandsfreeStop}
           accessibilityRole="button"
-          accessibilityLabel={`Hands-free conversation is on. ${handsfreeStatus}. Tap to turn off.`}
+          accessibilityLabel={
+            handsfreeNeedsTap
+              ? "Hands-free conversation is on but paused. Tap the microphone button to speak, or tap here to turn hands-free off."
+              : `Hands-free conversation is on. ${handsfreeStatus}. Tap to turn off.`
+          }
           style={{
             flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
             paddingVertical: 7, paddingHorizontal: 16,
