@@ -1,0 +1,37 @@
+diff --git a/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java b/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
+index 964af5d..0a6c50b 100644
+--- a/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
++++ b/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
+@@ -708,7 +708,31 @@ public class AVManager implements LifecycleEventListener, AudioManager.OnAudioFo
+     }
+ 
+     mAudioRecorder = new MediaRecorder();
+-    mAudioRecorder.setAudioSource(MediaRecorder.AudioSource.DEFAULT);
++    // PATCHED FOR IMOTARA (patches/expo-av+16.0.8.patch) — do not lose on upgrade.
++    //
++    // Upstream hardcodes AudioSource.DEFAULT, which is the RAW microphone: no
++    // noise suppression, no echo cancellation, none of the device's voice
++    // tuning. RecordingOptions exposes no way to change it.
++    //
++    // The owner reported 2026-09-16 that hands-free "records lots of noises
++    // with wrong interpretation as a human language", and their Galaxy A27's
++    // own audio log shows exactly why — every other voice app on the device
++    // asks for the tuned path and Imotara did not:
++    //
++    //     src:VOICE_COMMUNICATION ... pack:com.whatsapp
++    //     src:VOICE_COMMUNICATION ... pack:us.zoom.videomeetings
++    //     src:MIC                 ... pack:com.imotara.imotara
++    //
++    // VOICE_RECOGNITION is the source Android's own speech recogniser uses:
++    // device noise suppression, tuned for speech-to-text, and deliberately no
++    // automatic gain control (which would pump room noise up between words).
++    // It has existed since API 7, but a manufacturer can still refuse it, so
++    // fall back rather than leave the app unable to record at all.
++    try {
++      mAudioRecorder.setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION);
++    } catch (final Exception e) {
++      mAudioRecorder.setAudioSource(MediaRecorder.AudioSource.DEFAULT);
++    }
+ 
+     mAudioRecorder.setOutputFormat(androidOptions.getInt(RECORDING_OPTION_OUTPUT_FORMAT_KEY));
+     mAudioRecorder.setAudioEncoder(androidOptions.getInt(RECORDING_OPTION_AUDIO_ENCODER_KEY));
