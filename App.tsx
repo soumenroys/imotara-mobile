@@ -1,6 +1,7 @@
 // App.tsx
 import React, { useEffect } from "react";
 import { startConnectivityWatch } from "./src/lib/network/online";
+import { sweepAudioCaches } from "./src/lib/audioCacheSweeper";
 import { StatusBar } from "expo-status-bar";
 import { Platform, View, Text, TouchableOpacity, Linking } from "react-native";
 import RootNavigator from "./src/navigation/RootNavigator";
@@ -134,6 +135,15 @@ export default function App() {
   // connectivity state stays "unknown" forever, every fetch behaves exactly
   // as it did before, and the offline short-circuit never fires (UX-10).
   useEffect(() => startConnectivityWatch(), []);
+
+  // Clear out voice recordings and exports that nothing else will. The
+  // recording hook deletes its own file on every exit path it controls; what
+  // it cannot cover is the app being KILLED mid-turn, which leaves the .m4a
+  // on disk with nobody left to come back for it. Startup is the one moment
+  // we know no turn is in flight. Age-gated well beyond any in-use window,
+  // never throws, and deliberately not awaited — storage housekeeping must
+  // not delay the first screen.
+  useEffect(() => { void sweepAudioCaches(); }, []);
 
   return (
     <ErrorBoundary>

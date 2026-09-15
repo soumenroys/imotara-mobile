@@ -109,6 +109,15 @@ describe("defect 1: the wiring", () => {
         expect(body()).toMatch(/stopAndUnloadAsync/);
     });
 
+    it("the catch takes the half-written recording FILE with it", () => {
+        // stopAndUnloadAsync releases the recorder but leaves the .m4a on
+        // disk. Without this, every failed start left a voice recording in the
+        // cache forever — found while auditing storage cleanup, 2026-09-16.
+        const b = body();
+        expect(b).toMatch(/partial\.getURI\(\)/);
+        expect(b).toMatch(/FileSystem\.deleteAsync\(partialUri, \{ idempotent: true \}\)/);
+    });
+
     it("the catch clears the duration timer", () => {
         expect(body()).toMatch(/clearTimer\(\)/);
     });
@@ -324,5 +333,31 @@ describe("defect 3: a microphone that hears nothing must give up quickly", () =>
         // intentionally pause mid-thought and shouldn't get cut off."
         expect(HOOK_CODE).toMatch(/DEFAULT_MAX_DURATION_MS = 60_000/);
         expect(CHAT_CODE).toMatch(/autoStopOnSilence: handsfree/);
+    });
+});
+
+// ── The voice-activity gate, where it meets the hook ───────────────────────
+
+describe("noise rejection is wired in, and only to hands-free", () => {
+    it("the upload is gated on the turn looking like speech", () => {
+        // Owner, 2026-09-16: "lots of noises are getting recorded with wrong
+        // interpretation as a human language".
+        expect(HOOK_CODE).toMatch(/import \{ looksLikeSpeech, MAX_METERING_SAMPLES \} from "\.\.\/lib\/voiceActivity"/);
+        expect(HOOK_CODE).toMatch(/if \(transcriptionAttempted && !heardNothing && !steadyNoise\) \{/);
+    });
+
+    it("it can NEVER gate a manual recording", () => {
+        // ⚠️ Mutation-tested. A manual recording is something a person
+        // deliberately started; silently binning it because it sounded steady
+        // would be the worst failure this gate could produce. The
+        // autoStopOnSilenceRef guard is what makes that impossible.
+        expect(HOOK_CODE).toMatch(
+            /const steadyNoise = autoStopOnSilenceRef\.current\s*&& !looksLikeSpeech\(meteringSamplesRef\.current\)/);
+    });
+
+    it("metering is collected per turn, reset per turn, and bounded", () => {
+        expect(HOOK_CODE).toMatch(/meteringSamplesRef\.current = \[\];/);
+        expect(HOOK_CODE).toMatch(/meteringSamplesRef\.current\.length < MAX_METERING_SAMPLES/);
+        expect(HOOK_CODE).toMatch(/meteringSamplesRef\.current\.push\(status\.metering\)/);
     });
 });

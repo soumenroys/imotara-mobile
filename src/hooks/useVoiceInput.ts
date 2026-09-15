@@ -7,6 +7,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Alert, Linking, Platform } from "react-native";
 import { Audio, InterruptionModeAndroid } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
+import { looksLikeSpeech, MAX_METERING_SAMPLES } from "../lib/voiceActivity";
 
 export type VoiceInputState = "idle" | "recording" | "transcribing";
 
@@ -215,6 +216,10 @@ export function useVoiceInput(
     // owns. null means "we were not listening for speech at all" (manual
     // recording does not meter), and must NOT be read as "heard nothing".
     const heardSpeechThisTurnRef = useRef<boolean | null>(null);
+    // Every metering reading of the current turn, for the voice-activity gate.
+    // Loudness alone cannot tell a person from a fan; the SHAPE of the level
+    // over time can. See src/lib/voiceActivity.ts.
+    const meteringSamplesRef = useRef<number[]>([]);
     const firstSpeechAtRef = useRef(0);
     const silenceStartRef = useRef<number | null>(null);
     const startTsRef = useRef<number>(0);
@@ -273,6 +278,13 @@ export function useVoiceInput(
             // false = we metered the whole turn and never once crossed the
             // speech threshold, so there is nothing in this file to transcribe.
             const heardNothing = heardSpeechThisTurnRef.current === false;
+            // A room making noise, rather than a person talking. Only ever
+            // applied to hands-free, which is the mode that opens the mic on
+            // its own and so is the only one that records rooms; a manual
+            // recording is something a person deliberately started and is
+            // never gated. Fails open on every uncertain case.
+            const steadyNoise = autoStopOnSilenceRef.current
+                && !looksLikeSpeech(meteringSamplesRef.current);
             const transcriptionAttempted = !!(apiBaseUrl && cloudTranscription);
             const myTurn = turnRef.current;
 
@@ -281,7 +293,7 @@ export function useVoiceInput(
             // turn produced nothing and can reopen. Only the pointless upload
             // goes — transcribing a minute of silence cost real money and could
             // only ever come back as a Whisper hallucination.
-            if (transcriptionAttempted && !heardNothing) {
+            if (transcriptionAttempted && !heardNothing && !steadyNoise) {
                 try {
                     // All presets produce MPEG_4/AAC/.m4a on both platforms.
                     // (Android LOW_QUALITY is overridden at record time to avoid
@@ -426,6 +438,7 @@ export function useVoiceInput(
             setState("recording");
 
             heardSpeechThisTurnRef.current = autoStopOnSilenceRef.current ? false : null;
+            meteringSamplesRef.current = [];
             if (autoStopOnSilenceRef.current) {
                 hasSpokenRef.current = false;
                 firstSpeechAtRef.current = 0;
@@ -439,6 +452,9 @@ export function useVoiceInput(
                     // turn alive and to make the audio worth transcribing,
                     // even when it never gets loud enough to arm silence-stop.
                     if (status.metering > AUDIBLE_DB_FLOOR) heardSpeechThisTurnRef.current = true;
+                    if (meteringSamplesRef.current.length < MAX_METERING_SAMPLES) {
+                        meteringSamplesRef.current.push(status.metering);
+                    }
                     const isLoud = status.metering > SILENCE_DB_THRESHOLD;
                     if (isLoud) {
                         if (!hasSpokenRef.current) {
@@ -505,6 +521,13 @@ export function useVoiceInput(
             recordingRef.current = null;
             if (partial) {
                 try { await partial.stopAndUnloadAsync(); } catch { /* already gone */ }
+                // ...and take its file with it. stopAndUnloadAsync releases the
+                // recorder but leaves the .m4a on disk, so without this every
+                // failed start would leave a voice recording in the cache
+                // forever. getURI() is safe after an unload error — it returns
+                // the cached path string and makes no native call.
+                const partialUri = partial.getURI();
+                if (partialUri) FileSystem.deleteAsync(partialUri, { idempotent: true }).catch(() => {});
             }
             setState("idle");
             setDurationMs(0);
