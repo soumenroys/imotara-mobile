@@ -44,6 +44,7 @@ import SettingsSearch from "../components/imotara/SettingsSearch";
 import { useTheme, ACCENT_COLORS, type Accent, type FontSize } from "../theme/ThemeContext";
 import {
     scheduleCheckInReminder,
+    scheduleCheckInReminderWithReason,
     cancelCheckInReminder,
     cancelInactivityReminder,
     setCompanionNameForReminders,
@@ -570,11 +571,11 @@ function SettingsScreenContent() {
         setReminderLoading(true);
         try {
             if (value) {
-                const ok = await scheduleCheckInReminder(reminderHour, reminderMinute, notifSound, notifBadge);
+                const result = await scheduleCheckInReminderWithReason(reminderHour, reminderMinute, notifSound, notifBadge);
                 if (!mountedRef.current) return;
-                if (ok) {
+                if (result.ok) {
                     setReminderEnabled(true);
-                } else {
+                } else if (result.reason === "permission") {
                     Alert.alert(
                         "Permission needed",
                         "Please allow notifications in your device settings to enable daily reminders.",
@@ -582,6 +583,21 @@ function SettingsScreenContent() {
                             { text: "Not now", style: "cancel" },
                             { text: "Open Settings", onPress: () => Linking.openSettings() },
                         ]
+                    );
+                } else if (result.reason === "unavailable") {
+                    Alert.alert(
+                        "Reminders aren't available",
+                        "This version of the app can't schedule notifications on your device."
+                    );
+                } else {
+                    // ⚠️ This is the branch that used to say "Permission needed"
+                    // and offer Open Settings. Permission is granted here — the
+                    // scheduling itself failed. Sending anyone to device
+                    // settings for it wastes their time (it wasted an hour of
+                    // the owner's). See ReminderFailureReason.
+                    Alert.alert(
+                        "Couldn't set the reminder",
+                        "Something went wrong while scheduling it. Please try again — and if it keeps happening, updating the app should fix it."
                     );
                 }
             } else {

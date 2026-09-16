@@ -104,17 +104,35 @@ export async function requestNotificationPermission(): Promise<boolean> {
     }
 }
 
-export async function scheduleCheckInReminder(
+/**
+ * Why a scheduling attempt failed — the three cases a person can act on very
+ * differently:
+ *
+ *   unavailable — no notifications module in this build, or web. Nothing the
+ *                 person can do; sending them to device settings is a wild goose chase.
+ *   permission  — the OS refused or they declined. Device settings DO fix this.
+ *   failed      — module present, permission granted, and it still threw.
+ *
+ * The distinction is not theoretical. On 2026-09-16 a fault deep inside
+ * expo-notifications (R8 had stripped its Serializable hooks — see app.json's
+ * extraProguardRules) surfaced to the owner as "Permission needed" and sent an
+ * investigation at device settings for an hour, while POST_NOTIFICATIONS had
+ * been granted the whole time.
+ */
+export type ReminderFailureReason = "unavailable" | "permission" | "failed";
+export type ReminderScheduleResult = { ok: true } | { ok: false; reason: ReminderFailureReason };
+
+export async function scheduleCheckInReminderWithReason(
     hour = DEFAULT_HOUR,
     minute = DEFAULT_MINUTE,
     sound = false,
     badge = false,
-): Promise<boolean> {
+): Promise<ReminderScheduleResult> {
     const Notifications = getNotifications();
-    if (!Notifications) return false;
+    if (!Notifications || Platform.OS === "web") return { ok: false, reason: "unavailable" };
 
     const granted = await requestNotificationPermission();
-    if (!granted) return false;
+    if (!granted) return { ok: false, reason: "permission" };
 
     await cancelCheckInReminder();
 
@@ -148,10 +166,31 @@ export async function scheduleCheckInReminder(
         await AsyncStorage.setItem(CHECKIN_HOUR_KEY, String(hour));
         await AsyncStorage.setItem(CHECKIN_MINUTE_KEY, String(minute));
         await saveNotifPrefs({ sound, badge });
-        return true;
-    } catch {
-        return false;
+        return { ok: true };
+    } catch (e) {
+        // Never swallow this silently again. A bare `catch {}` here is what
+        // left the R8 NotSerializableException invisible to JS: the only trace
+        // was a native logcat line nobody was looking at yet.
+        console.warn("[checkInReminder] could not schedule the daily reminder:", e);
+        return { ok: false, reason: "failed" };
     }
+}
+
+/**
+ * Boolean form, for the callers that only re-arm an already-enabled reminder
+ * and have nothing to tell the user.
+ *
+ * ⚠️ Keep the boolean. Four call sites do `.catch(() => {})` on this and one
+ * did `if (ok)`; returning the result object here instead would read as
+ * TRUTHY at that site — reporting success for every single failure.
+ */
+export async function scheduleCheckInReminder(
+    hour = DEFAULT_HOUR,
+    minute = DEFAULT_MINUTE,
+    sound = false,
+    badge = false,
+): Promise<boolean> {
+    return (await scheduleCheckInReminderWithReason(hour, minute, sound, badge)).ok;
 }
 
 /** Truncates text to a word boundary, appending "…" if cut. */

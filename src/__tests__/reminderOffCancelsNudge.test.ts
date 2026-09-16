@@ -33,9 +33,14 @@ const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*
 const MOD = strip(fs.readFileSync(path.join(__dirname, "..", "notifications", "checkInReminder.ts"), "utf8"));
 const SETTINGS = strip(fs.readFileSync(path.join(__dirname, "..", "screens", "SettingsScreen.tsx"), "utf8"));
 
-/** Source of one exported function: from its `export` to the next top-level `export`. */
+/**
+ * Source of one exported function: from its `export` to the next top-level
+ * `export`. The `(` matters — "scheduleCheckInReminder" is a PREFIX of
+ * "scheduleCheckInReminderWithReason", and a plain indexOf would silently
+ * hand back the wrong function's body.
+ */
 function fnBody(src: string, name: string): string {
-    const i = src.indexOf(`export async function ${name}`);
+    const i = src.indexOf(`export async function ${name}(`);
     expect(i).toBeGreaterThan(-1);
     const j = src.indexOf("\nexport ", i + 1);
     return src.slice(i, j === -1 ? undefined : j);
@@ -56,11 +61,11 @@ describe("switching the reminder off cancels the pending nudge", () => {
     });
 
     it("⚠️ the daily cancel does NOT drop the nudge — it runs before every re-arm", () => {
-        // cancelCheckInReminder() is called inside scheduleCheckInReminder(),
-        // i.e. before every re-schedule: a time change, a rename. Folding the
+        // cancelCheckInReminder() is called inside the scheduling path, i.e.
+        // before every re-schedule: a time change, a rename. Folding the
         // nudge-cancel in there would lose a pending nudge on each of those
         // until the person's next message. Keep the two separate.
-        expect(fnBody(MOD, "scheduleCheckInReminder")).toMatch(/await cancelCheckInReminder\(\);/);
+        expect(fnBody(MOD, "scheduleCheckInReminderWithReason")).toMatch(/await cancelCheckInReminder\(\);/);
         expect(fnBody(MOD, "cancelCheckInReminder")).not.toMatch(/INACTIVITY/);
     });
 });
