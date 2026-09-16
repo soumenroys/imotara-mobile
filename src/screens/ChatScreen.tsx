@@ -475,7 +475,7 @@ function getMoodTintForHint(hint: string | undefined, colors: ColorPalette): str
   return colors.emotionNeutral;
 }
 
-function getLocalMoodHint(text: string): string {
+function getLocalMoodHint(text: string, companionName = "Imotara"): string {
   const raw = String(text ?? "");
   const lower = raw.toLowerCase();
 
@@ -536,7 +536,7 @@ function getLocalMoodHint(text: string): string {
     return "You sound a bit stuck or unsure. It's okay to take time to untangle things.";
   }
   if (isSadText(raw)) {
-    return "You seem a bit low. It's okay to feel this way — Imotara is here with you.";
+    return `You seem a bit low. It's okay to feel this way — ${companionName} is here with you.`;
   }
   if (
     isStressText(raw) ||
@@ -559,7 +559,7 @@ function getLocalMoodHint(text: string): string {
 
   // ✅ If no word match, fall back to emoji signals (NEW)
   if (emojiSignals.sad) {
-    return "You seem a bit low. It's okay to feel this way — Imotara is here with you.";
+    return `You seem a bit low. It's okay to feel this way — ${companionName} is here with you.`;
   }
   if (emojiSignals.anxious) {
     return "It sounds like something is making you feel tense or worried.";
@@ -579,7 +579,7 @@ function getLocalMoodHint(text: string): string {
 
 // ✅ Additive: same logic, but returns a stable primary label + hint.
 // Does NOT replace getLocalMoodHint(); existing callers remain untouched.
-function getLocalMoodHintWithPrimary(text: string): {
+function getLocalMoodHintWithPrimary(text: string, companionName = "Imotara"): {
   primary?: string;
   hint: string;
 } {
@@ -621,7 +621,7 @@ function getLocalMoodHintWithPrimary(text: string): {
   if (isSadText(raw)) {
     return {
       primary: "sadness",
-      hint: "You seem a bit low. It's okay to feel this way — Imotara is here with you.",
+      hint: `You seem a bit low. It's okay to feel this way — ${companionName} is here with you.`,
     };
   }
 
@@ -2060,6 +2060,9 @@ export default function ChatScreen() {
     return true;
   }, []); // intentional [] — mutable values via refs
 
+  // toneContext is declared further down, so useVoiceInput cannot read the
+  // companion's name from it directly; this state is filled once it exists.
+  const [voiceCompanionName, setVoiceCompanionName] = useState<string | undefined>(undefined);
   const voiceInput = useVoiceInput(
     onTranscript,
     process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL,
@@ -2070,6 +2073,7 @@ export default function ChatScreen() {
       // tap-to-stop-only behavior (see useVoiceInput.ts's doc comment).
       autoStopOnSilence: handsfree,
       onNoSpeech: handleNoSpeech,
+      companionName: voiceCompanionName,
     },
   );
 
@@ -2621,6 +2625,9 @@ export default function ChatScreen() {
   }, [activeThreadId, activeHistory.length, sessionGreetingEnabled]);
 
   const effectiveCompanionName = toneContext?.companion?.name?.trim() || "Imotara";
+  useEffect(() => {
+    setVoiceCompanionName(toneContext?.companion?.name?.trim() || undefined);
+  }, [toneContext?.companion?.name]);
 
   // UX-2 — companion avatar for chat bubbles
   const companionAvatarSource = resolveAvatarImage(
@@ -3605,7 +3612,7 @@ export default function ChatScreen() {
 
     // ✅ Phase 3.1 — persist user moodHint + emotion for history moodSummary
     const wantsInsights = emotionInsightsEnabled;
-    const userMood = wantsInsights ? getLocalMoodHintWithPrimary(trimmed) : null;
+    const userMood = wantsInsights ? getLocalMoodHintWithPrimary(trimmed, effectiveCompanionName) : null;
     const userMoodHint = userMood?.hint;
     const userEmotion = userMood?.primary ?? undefined;
 
@@ -4808,8 +4815,8 @@ export default function ChatScreen() {
   const latestMoodHint = useMemo(() => {
     if (!latestUserMessage) return null;
     if (!emotionInsightsEnabled) return null;
-    return getLocalMoodHint(latestUserMessage.text);
-  }, [emotionInsightsEnabled, latestUserMessage]);
+    return getLocalMoodHint(latestUserMessage.text, effectiveCompanionName);
+  }, [emotionInsightsEnabled, latestUserMessage, effectiveCompanionName]);
 
   const typingStatusText = useMemo(() => {
     if (!isTyping) return "";
@@ -4946,7 +4953,7 @@ export default function ChatScreen() {
           <Text style={{ fontSize: 12, color: "#fff", fontWeight: "600" }}>
             {hasUnsynced
               ? `📡 Offline — ${history.filter((h: any) => !h.isSynced).length} message${history.filter((h: any) => !h.isSynced).length !== 1 ? "s" : ""} queued`
-              : "You're offline — Imotara will reply using on-device mode"}
+              : `You're offline — ${effectiveCompanionName} will reply using on-device mode`}
           </Text>
         </View>
       ) : null}
@@ -5326,7 +5333,7 @@ export default function ChatScreen() {
                   : "Welcome to Imotara."}
               </Text>
               <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 20 }}>
-                Start by sharing how you feel — Imotara listens without judgment.
+                Start by sharing how you feel — {effectiveCompanionName} listens without judgment.
               </Text>
 
               {/* Conversation starters */}
@@ -5864,7 +5871,7 @@ export default function ChatScreen() {
         }}>
           <Ionicons name="pencil-outline" size={13} color={isDark ? "#a78bfa" : "#6d28d9"} />
           <Text style={{ flex: 1, fontSize: 12, color: isDark ? "#a78bfa" : "#4c1d95" }}>
-            Writing to <Text style={{ fontWeight: "700" }}>{unsentLetterSetup.recipientName}</Text> — Imotara will respond in their voice.
+            Writing to <Text style={{ fontWeight: "700" }}>{unsentLetterSetup.recipientName}</Text> — {effectiveCompanionName} will respond in their voice.
           </Text>
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for Unsent Letter mode" onPress={() => showCapsuleMenu("Unsent Letter mode", () => setUnsentLetterSetup(null), () => setUnsentLetterSetup(null))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(167,139,250,0.6)" : "rgba(109,40,217,0.5)"} />
@@ -5882,7 +5889,7 @@ export default function ChatScreen() {
         }}>
           <Ionicons name="heart-outline" size={13} color={isDark ? "#fda4af" : "#be123c"} />
           <Text style={{ flex: 1, fontSize: 12, color: isDark ? "#fda4af" : "#9f1239" }}>
-            Grief &amp; Loss space — Imotara will hold this with you, without rushing.
+            Grief &amp; Loss space — {effectiveCompanionName} will hold this with you, without rushing.
           </Text>
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for Grief and Loss mode" onPress={() => showCapsuleMenu("Grief & Loss mode", () => setGriefMode(false), () => setGriefMode(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(253,164,175,0.6)" : "rgba(159,18,57,0.5)"} />
@@ -5909,7 +5916,7 @@ export default function ChatScreen() {
                 {daysLeft === 1 ? "Last day of your free trial" : `${daysLeft} days left in your free trial`}
               </Text>
               <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>
-                After your trial, Imotara keeps working with on-device replies.
+                After your trial, {effectiveCompanionName} keeps working with on-device replies.
               </Text>
               <TouchableOpacity
                 onPress={() => setShowUpgradeSheet(true)}
@@ -6059,7 +6066,7 @@ export default function ChatScreen() {
         onContentSizeChange={handleContentSizeChange}
         onSend={() => handleSend()}
         onMicPress={handleMicPress}
-        firstTimeTip={showFirstTimeTip ? "Just talk — Imotara listens without judgment." : null}
+        firstTimeTip={showFirstTimeTip ? `Just talk — ${effectiveCompanionName} listens without judgment.` : null}
       />
       {renderActionSheet()}
 

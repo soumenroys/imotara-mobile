@@ -58,6 +58,10 @@ export type VoiceInputOptions = {
     quality?: "high" | "low";
     cloudTranscription?: boolean;
     lang?: string;
+    /** The companion's chosen name, if any. Whisper is given it as a spelling
+     *  hint (see /api/voice/transcribe); without it the hint is the default
+     *  "Imotara", which actively mis-hears a renamed companion's own name. */
+    companionName?: string;
     /** Real accessToken if signed in, else the anonymous identity's token —
      *  /api/voice/transcribe requires some identity (no longer open/unauthenticated). */
     accessToken?: string;
@@ -142,6 +146,7 @@ async function transcribeAudio(
     lang: string,
     mimeType: string,
     accessToken?: string,
+    companionName?: string,
 ): Promise<string> {
     const endpoint = `${apiBaseUrl}/api/voice/transcribe`;
 
@@ -153,7 +158,7 @@ async function transcribeAudio(
         uploadType: FileSystem.FileSystemUploadType.MULTIPART,
         fieldName: "file",
         mimeType,
-        parameters: { lang },
+        parameters: { lang, ...(companionName ? { companionName } : {}) },
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     });
 
@@ -192,6 +197,8 @@ export function useVoiceInput(
     const cloudTranscriptionRef = useRef(cloudTranscription);
     useEffect(() => { cloudTranscriptionRef.current = cloudTranscription; }, [cloudTranscription]);
     const langRef = useRef(opts?.lang ?? "en");
+    const companionNameRef = useRef(opts?.companionName);
+    useEffect(() => { companionNameRef.current = opts?.companionName; }, [opts?.companionName]);
     const optsLang = opts?.lang;
     useEffect(() => { langRef.current = optsLang ?? "en"; }, [optsLang]);
     const accessTokenRef = useRef(opts?.accessToken);
@@ -298,7 +305,7 @@ export function useVoiceInput(
                     // All presets produce MPEG_4/AAC/.m4a on both platforms.
                     // (Android LOW_QUALITY is overridden at record time to avoid
                     // THREE_GPP/3gp which Whisper v1 does not accept.)
-                    transcript = await transcribeAudio(uri, apiBaseUrl!, langRef.current, "audio/m4a", accessTokenRef.current);
+                    transcript = await transcribeAudio(uri, apiBaseUrl!, langRef.current, "audio/m4a", accessTokenRef.current, companionNameRef.current);
                 } catch (err: any) {
                     console.warn("[useVoiceInput] Transcription failed:", err);
                     // Same abandonment check as below — without it this alert
