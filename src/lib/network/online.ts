@@ -42,8 +42,9 @@ function classify(state: { isConnected: boolean | null; isInternetReachable: boo
  * app actually needs answered.
  */
 let started = false;
+let unsubscribe: (() => void) | null = null;
 
-/** How often to re-probe while things are working. Settings can change it. */
+/** How often to re-probe while things are working. The settings screen owns it. */
 let longTimeoutMs = 60 * 1000;
 
 function applyConfig() {
@@ -57,30 +58,44 @@ function applyConfig() {
   });
 }
 
-/**
- * Honour the "Connectivity check interval" setting, which promises the person
- * "lower = faster detection, higher = less battery use". That is exactly what
- * NetInfo's long timeout controls, so the setting now drives the ONE probe
- * this app makes rather than a second poller of its own.
- */
-export function setConnectivityCheckInterval(ms: number): void {
-  if (!isFinite(ms) || ms <= 0 || ms === longTimeoutMs) return;
-  longTimeoutMs = ms;
-  if (started) applyConfig();
-}
-
-export function startConnectivityWatch(): () => void {
-  if (started) return () => {};
-  started = true;
-
-  applyConfig();
-
-  return NetInfo.addEventListener((state) => {
+function attach() {
+  unsubscribe = NetInfo.addEventListener((state) => {
     const next = classify(state);
     if (next === current) return;
     current = next;
     for (const l of listeners) { try { l(next); } catch { /* a listener must not stop the others */ } }
   });
+}
+
+/**
+ * Honour the "Connectivity check interval" setting, which promises the person
+ * "lower = faster detection, higher = less battery use". That is exactly what
+ * NetInfo's long timeout controls, so the setting drives the ONE probe this
+ * app makes rather than a second poller of its own.
+ *
+ * ⚠️ The listener is dropped and re-attached around the reconfigure, and that
+ * is not ceremony. Found on the real A27, 2026-09-16: calling
+ * NetInfo.configure() while a listener is attached silently orphans the
+ * subscription — the app sat 75 seconds with the network genuinely down
+ * (ping failing, "Active default network: none") and never noticed, because
+ * ChatScreen applied this setting moments after the watch started.
+ */
+export function setConnectivityCheckInterval(ms: number): void {
+  if (!isFinite(ms) || ms <= 0 || ms === longTimeoutMs) return;
+  longTimeoutMs = ms;
+  if (!started) return;
+  unsubscribe?.();
+  unsubscribe = null;
+  applyConfig();
+  attach();
+}
+
+export function startConnectivityWatch(): () => void {
+  if (started) return () => {};
+  started = true;
+  applyConfig();
+  attach();
+  return () => { unsubscribe?.(); unsubscribe = null; started = false; };
 }
 
 export function getConnectivity(): Connectivity {

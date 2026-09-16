@@ -1837,9 +1837,11 @@ export default function ChatScreen() {
       const timeoutSecs = parseInt(get("imotara.api.timeout.v1") ?? "20", 10);
       if (isFinite(timeoutSecs) && timeoutSecs > 0) setApiTimeoutMs(timeoutSecs * 1000);
       const pollSecs = parseInt(get("imotara.status.pollInterval.v1") ?? "15", 10);
-      // "Connectivity check interval" now drives the single NetInfo probe
-      // rather than a poller of its own, so the setting's promise — "lower =
-      // faster detection, higher = less battery use" — is still literally true.
+      // "Connectivity check interval" drives the single NetInfo probe rather
+      // than a poller of its own, so the setting's promise — "lower = faster
+      // detection, higher = less battery use" — stays literally true. Safe to
+      // call on every focus: it no-ops when the value has not changed, and it
+      // re-attaches the listener around the reconfigure.
       if (isFinite(pollSecs) && pollSecs > 0) setConnectivityCheckInterval(pollSecs * 1000);
       setHapticIntensity(get("imotara.haptic.intensity.v1"));
       const reactSet = get("imotara.reactions.set.v1");

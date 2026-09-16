@@ -97,10 +97,14 @@ describe("the user's setting still means what it says", () => {
         expect(CHAT).toMatch(/setConnectivityCheckInterval\(pollSecs \* 1000\)/);
     });
 
-    it("a re-configure actually reaches NetInfo", () => {
-        // Storing the number without re-applying it would be the same bug in
-        // a new place: a setting that looks wired and changes nothing.
-        expect(ONLINE).toMatch(/longTimeoutMs = ms;\s*if \(started\) applyConfig\(\);/);
+    it("⚠️ re-configuring DETACHES and RE-ATTACHES the listener", () => {
+        // Verified on the real A27, 2026-09-16: calling NetInfo.configure()
+        // while a listener is attached silently orphans the subscription. The
+        // app sat 75s with the network genuinely down — ping failing, "Active
+        // default network: none" — and never noticed, because ChatScreen
+        // applied this setting moments after the watch started.
+        expect(ONLINE).toMatch(
+            /unsubscribe\?\.\(\);\s*unsubscribe = null;\s*applyConfig\(\);\s*attach\(\);/);
     });
 
     it("ignores nonsense values rather than disabling the probe", () => {
