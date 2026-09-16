@@ -27,6 +27,7 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "undo_send",         emoji: "↩️", title: "Undo send",                tip: "A 5-second window after sending lets you undo and edit your message before it's processed.", category: "chat" },
   { id: "copy",              emoji: "📋", title: "Copy a message",           tip: "Tap the copy icon under any reply to save it to your clipboard.", category: "chat" },
   { id: "star",              emoji: "⭐", title: "Bookmark messages",        tip: "Bookmark a reply from its ⋯ menu — find everything you starred in the History tab.", category: "chat" },
+  { id: "longpress_blank",   emoji: "👆", title: "Hold the empty space",     tip: "Long-press any blank part of the chat to open the ⋯ menu — breathing, unsent letter, clear chat — without reaching the top bar.", category: "chat" },
   { id: "reactions",         emoji: "😊", title: "React to messages",        tip: "Tap ⋯ under any reply to react — love, sad, happy, agree, and more.", category: "chat" },
   { id: "share_msg",         emoji: "📤", title: "Share a reply",            tip: "Tap the copy/share icon under a reply to send it to another app or person.", category: "chat" },
   { id: "new_session",       emoji: "🔖", title: "Session dividers",         tip: "A 'New session' marker shows each time you returned after a break — a timeline of your check-ins.", category: "chat" },
@@ -94,6 +95,8 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "voice_quality",     emoji: "🎚️", title: "Mic recording quality",    tip: "Set mic quality in Settings if voice input isn't picking up your words clearly.", category: "voice" },
   { id: "hands_free",        emoji: "🤲", title: "Hands-free mode",          tip: "Enable Hands-free in Settings to auto-listen and auto-speak — no screen touching needed.", category: "voice" },
   { id: "hands_free_how",    emoji: "🔁", title: "How hands-free works",     tip: "In Hands-free mode, after each reply Imotara automatically starts listening for your next message.", category: "voice" },
+  { id: "handsfree_noise",   emoji: "🔇", title: "Noise stays out",         tip: "In hands-free, Imotara checks it actually heard speech before sending — a quiet or noisy room simply waits for you instead of inventing words.", category: "voice" },
+  { id: "handsfree_stop",    emoji: "✋", title: "Stop means stop",         tip: "Tap the mic to end a hands-free turn and Imotara won't reopen it. Leaving the app pauses hands-free rather than taking the mic back.", category: "voice" },
   { id: "online_transcribe", emoji: "☁️", title: "Online transcription",     tip: "Online transcription uses a more accurate model — useful in noisy environments.", category: "voice" },
   { id: "voice_letter",      emoji: "▶️", title: "Listen to letters",        tip: "In Trends, tap the speaker on any companion letter to hear it read aloud in full.", category: "voice" },
   { id: "voice_perm",        emoji: "🔐", title: "Microphone permission",    tip: "Imotara only activates the mic when you tap the mic button — never listening in the background.", category: "voice" },
@@ -157,7 +160,7 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "narrative_re",      emoji: "📝", title: "Narrative re-authoring",   tip: "Imotara helps you see that the story you tell about yourself isn't the only version.", category: "growth" },
 
   // ── Companion ─────────────────────────────────────────────────────────────
-  { id: "companion_name",    emoji: "💬", title: "Name your companion",      tip: "Give your companion a personal name in Settings → Your companion — make it feel like yours.", category: "companion" },
+  { id: "companion_name",    emoji: "💬", title: "Name your companion",      tip: "Name your companion in Settings → Your companion. The name is used everywhere it speaks — even your daily reminder greets you with it.", category: "companion" },
   { id: "companion_tone",    emoji: "🌸", title: "Relationship style",       tip: "Choose how your companion relates to you — close friend, calm presence, coach, or mentor.", category: "companion" },
   { id: "companion_tone_how",emoji: "🎭", title: "How tone changes replies", tip: "A 'close friend' tone is real and direct; 'mentor' uses wisdom; 'coach' is action-focused.", category: "companion" },
   { id: "companion_gender",  emoji: "🦋", title: "Companion gender",         tip: "Set your companion's gender tone in Settings so its language feels natural to you.", category: "companion" },
@@ -228,7 +231,7 @@ export const FEATURE_TIPS: FeatureTip[] = [
   // ── Settings — Companion & language ───────────────────────────────────────
   { id: "22_languages",      emoji: "🌐", title: "22 supported languages",   tip: "Imotara supports 22 languages — Hindi, Bengali, Tamil, Telugu, Arabic, Chinese, Japanese, and more.", category: "settings" },
   { id: "lang_list",         emoji: "🗺️", title: "Full language list",       tip: "Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Punjabi, Kannada, Malayalam, Odia, Urdu, Arabic, Chinese, Japanese, Spanish, French, German, Portuguese, Russian, Indonesian, Hebrew, English.", category: "settings" },
-  { id: "reminder",          emoji: "🔔", title: "Daily reminder",           tip: "Set a gentle daily check-in reminder in Settings to make Imotara part of your routine.", category: "settings" },
+  { id: "reminder",          emoji: "🔔", title: "Daily reminder",           tip: "Set a gentle daily check-in in Settings — it arrives in your companion's name, within a few minutes of the time you pick.", category: "settings" },
   { id: "search_settings",   emoji: "🔍", title: "Settings search",          tip: "Type what you're looking for in the Settings search bar — finds any setting in any language.", category: "settings" },
 
   // ── Plans & Upgrade ────────────────────────────────────────────────────────
