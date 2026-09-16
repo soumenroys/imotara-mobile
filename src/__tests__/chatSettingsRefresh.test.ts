@@ -185,7 +185,12 @@ const SETTER_FOR: Record<string, string> = {
     "imotara.voice.quality.v1": "setVoiceQuality",
     "imotara.voice.cloudTranscription.v1": "setVoiceCloudTranscription",
     "imotara.api.timeout.v1": "setApiTimeoutMs",
-    "imotara.status.pollInterval.v1": "setStatusPollMs",
+    // Was setStatusPollMs, a second connectivity poller of its own. That
+    // poller asked connectivitycheck.gstatic.com and never checked the
+    // response status, so it is gone — the setting now drives the single
+    // NetInfo probe in lib/network/online.ts. The setting's promise to the
+    // user ("lower = faster detection, higher = less battery") is unchanged.
+    "imotara.status.pollInterval.v1": "setConnectivityCheckInterval",
     "imotara.haptic.intensity.v1": "setHapticIntensity",
     "imotara.reactions.set.v1": "setChatReactionsSet",
     "imotara.typing.speed.v1": "setChatTypingSpeed",

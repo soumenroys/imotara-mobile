@@ -53,7 +53,7 @@ import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
 // NEW: lifecycle hook (additive)
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { getConversationDepth } from "../lib/imotara/companionLetter";
-import { useOnlineStatus } from "../hooks/useOnlineStatus";
+import { useIsOnline, setConnectivityCheckInterval } from "../lib/network/online";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
@@ -1759,7 +1759,6 @@ export default function ChatScreen() {
   const [voiceQuality, setVoiceQuality] = useState<"high" | "low">("high");
   const [voiceCloudTranscription, setVoiceCloudTranscription] = useState(true);
   const [apiTimeoutMs, setApiTimeoutMs] = useState(20_000);
-  const [statusPollMs, setStatusPollMs] = useState(15_000);
   const [chatReactionsSet, setChatReactionsSet] = useState<"default" | "minimal" | "extended">("default");
   const [chatTypingSpeed, setChatTypingSpeed] = useState<"slow" | "normal" | "fast">("normal");
   const [contentGuardSensitivity, setContentGuardSensitivity] = useState<"strict" | "standard" | "relaxed">("standard");
@@ -1838,7 +1837,10 @@ export default function ChatScreen() {
       const timeoutSecs = parseInt(get("imotara.api.timeout.v1") ?? "20", 10);
       if (isFinite(timeoutSecs) && timeoutSecs > 0) setApiTimeoutMs(timeoutSecs * 1000);
       const pollSecs = parseInt(get("imotara.status.pollInterval.v1") ?? "15", 10);
-      if (isFinite(pollSecs) && pollSecs > 0) setStatusPollMs(pollSecs * 1000);
+      // "Connectivity check interval" now drives the single NetInfo probe
+      // rather than a poller of its own, so the setting's promise — "lower =
+      // faster detection, higher = less battery use" — is still literally true.
+      if (isFinite(pollSecs) && pollSecs > 0) setConnectivityCheckInterval(pollSecs * 1000);
       setHapticIntensity(get("imotara.haptic.intensity.v1"));
       const reactSet = get("imotara.reactions.set.v1");
       if (reactSet === "minimal" || reactSet === "default" || reactSet === "extended") setChatReactionsSet(reactSet);
@@ -2878,7 +2880,20 @@ export default function ChatScreen() {
     void reason;
   };
 
-  const isOnline = useOnlineStatus(statusPollMs);
+  // ONE source of truth for connectivity — the NetInfo watch in
+  // lib/network/online.ts, which probes Imotara's OWN health endpoint and
+  // requires a 200.
+  //
+  // This used to be a second, independent poller (useOnlineStatus) that asked
+  // connectivitycheck.gstatic.com and NEVER CHECKED THE RESPONSE STATUS, so a
+  // captive portal's login page counted as "online" — the exact fault
+  // online.ts was written to catch. Worse, the two disagreed about different
+  // hosts: the careful one guarded fetches while the sloppy one decided
+  // whether to try the cloud at all. Suspected cause of the 2026-09-16
+  // emulator report where the app fell back to on-device replies while
+  // imotara.com/api/health answered 200 the whole time — nobody had tested
+  // the third host the app was actually asking.
+  const isOnline = useIsOnline();
 
   // NEW: app lifecycle handling (prevents stuck typing on background/foreground)
   useAppLifecycle({
