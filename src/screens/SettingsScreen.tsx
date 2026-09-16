@@ -45,6 +45,7 @@ import { useTheme, ACCENT_COLORS, type Accent, type FontSize } from "../theme/Th
 import {
     scheduleCheckInReminder,
     cancelCheckInReminder,
+    setCompanionNameForReminders,
     isCheckInReminderEnabled,
     getSavedReminderTime,
     getSavedNotifPrefs,
@@ -3277,12 +3278,15 @@ function SettingsScreenContent() {
                     <TextInput
                         value={companionNameDraft}
                         onChangeText={setCompanionNameDraft}
-                        onBlur={() =>
+                        onBlur={() => {
                             setToneContext({
                                 ...(toneContext || {}),
                                 companion: { ...(toneContext?.companion || {}), name: companionNameDraft },
-                            })
-                        }
+                            });
+                            // The daily check-in has the name baked into an
+                            // already-scheduled notification; re-issue it.
+                            void setCompanionNameForReminders(companionNameDraft);
+                        }}
                         placeholder="e.g. Imotara"
                         placeholderTextColor={colors.textSecondary}
                         editable={!!toneContext?.companion?.enabled}

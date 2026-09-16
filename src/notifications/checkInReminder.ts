@@ -14,6 +14,26 @@ const INACTIVITY_NOTIF_ID_KEY = "imotara.checkin.inactivity.id";
 const CHECKIN_SOUND_KEY = "imotara.checkin.sound";
 const CHECKIN_BADGE_KEY = "imotara.checkin.badge";
 const INACTIVITY_HOURS_KEY = "imotara.checkin.inactivity.hours";
+// The companion's chosen name, kept here so a notification scheduled for
+// tomorrow morning says what the app says today.
+const COMPANION_NAME_KEY = "imotara.checkin.companionName";
+
+/**
+ * Speak as the companion. Every notification string in this file was written
+ * with the default name in it — 67 lines across ~20 languages — and the
+ * on-device reply engine already proves that substituting the name onto
+ * finished text is the durable way to do this (localReplyEngine.ts does the
+ * same replaceAll at the very end). The default name leaves the text untouched.
+ */
+export function withCompanionName(text: string, name?: string | null): string {
+    const n = (name ?? "").trim();
+    if (!n || n === "Imotara") return text;
+    return text.replaceAll("Imotara", n);
+}
+
+async function getSavedCompanionName(): Promise<string | null> {
+    try { return await AsyncStorage.getItem(COMPANION_NAME_KEY); } catch { return null; }
+}
 
 export const DEFAULT_HOUR = 20;
 export const DEFAULT_MINUTE = 0;
@@ -109,9 +129,10 @@ export async function scheduleCheckInReminder(
             }),
         });
 
+        const companionName = await getSavedCompanionName();
         const id = await Notifications.scheduleNotificationAsync({
             content: {
-                title: "Imotara is here for you 💙",
+                title: withCompanionName("Imotara is here for you 💙", companionName),
                 body: "How are you feeling today? A moment of reflection can make a big difference.",
                 data: { type: "checkin" },
             },
@@ -461,20 +482,21 @@ const NUDGE: Record<string, NudgeLang> = {
     },
 };
 
-function getNudgeStrings(lang?: string): NudgeLang {
+export function getNudgeStrings(lang?: string): NudgeLang {
     if (!lang) return NUDGE.en;
     const base = lang.split(/[-_]/)[0].toLowerCase();
     return NUDGE[base] ?? NUDGE.en;
 }
 
 /** Builds a localised, warm notification body for the inactivity nudge. */
-function buildInactivityPayload(lastContext?: string, lang?: string): { title: string; body: string } {
+export function buildInactivityPayload(lastContext?: string, lang?: string, companionName?: string | null): { title: string; body: string } {
     const L = getNudgeStrings(lang);
+    const say = (t: string) => withCompanionName(t, companionName);
     if (!lastContext) {
-        return { title: L.gt, body: pick(L.gb) };
+        return { title: say(L.gt), body: say(pick(L.gb)) };
     }
     const snippet = truncateToWord(lastContext.replace(/[.!?,;:]+$/, "").trim(), 50);
-    return { title: L.pt, body: pick(L.pb(snippet)) };
+    return { title: say(L.pt), body: say(pick(L.pb(snippet))) };
 }
 
 /**
@@ -506,7 +528,7 @@ export async function scheduleInactivityReminder(lastActivityTs: number, lastCon
     if (silentFor >= thresholdMs) return; // already overdue — skip, daily reminder covers it
 
     const fireInMs = thresholdMs - silentFor;
-    const { title, body } = buildInactivityPayload(lastContext, lang);
+    const { title, body } = buildInactivityPayload(lastContext, lang, await getSavedCompanionName());
     try {
         const id = await Notifications.scheduleNotificationAsync({
             content: {
@@ -522,6 +544,28 @@ export async function scheduleInactivityReminder(lastActivityTs: number, lastCon
         });
         await AsyncStorage.setItem(INACTIVITY_NOTIF_ID_KEY, id);
     } catch { /* silent — non-critical */ }
+}
+
+/**
+ * Called when the companion is renamed in Settings.
+ *
+ * The daily reminder is scheduled with a REPEATING trigger and its title is
+ * baked in at schedule time, so without this a person who renames their
+ * companion keeps being greeted by the old name every morning until they
+ * happen to toggle the reminder. Saves the name, then — only if the reminder is
+ * on — reschedules it with the saved time and preferences so nothing else
+ * about it changes.
+ */
+export async function setCompanionNameForReminders(name: string | null | undefined): Promise<void> {
+    const n = (name ?? "").trim();
+    try {
+        if (n) await AsyncStorage.setItem(COMPANION_NAME_KEY, n);
+        else await AsyncStorage.removeItem(COMPANION_NAME_KEY);
+    } catch { /* non-critical */ }
+    if (!(await isCheckInReminderEnabled())) return;
+    const { hour, minute } = await getSavedReminderTime();
+    const { sound, badge } = await getSavedNotifPrefs();
+    await scheduleCheckInReminder(hour, minute, sound, badge).catch(() => {});
 }
 
 export async function cancelCheckInReminder(): Promise<void> {
