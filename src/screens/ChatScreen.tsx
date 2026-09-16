@@ -5188,6 +5188,30 @@ export default function ChatScreen() {
           </Animated.View>
         )}
 
+        {/* Long-press the empty space around the messages to open the ⋯ menu.
+            Requested by the owner 2026-09-16.
+
+            This deliberately does NOT change what a long press on a message
+            does. A bubble already handles its own long press (it opens the
+            message action sheet), and in React Native a child that claims a
+            touch stops it reaching the parent — so this fires only where
+            nothing else wanted the gesture: the margins beside the bubbles and
+            the empty area below them.
+
+            Scrolling is unaffected for the same reason: once a finger moves,
+            the ScrollView takes the responder and the press is cancelled
+            before the long-press delay elapses. */}
+        <Pressable
+          onLongPress={() => { haptic.tap(); setShowHeaderMenu(true); }}
+          delayLongPress={400}
+          android_disableSound
+          style={{ flex: 1 }}
+          // The ⋯ button in the header is the discoverable path; this is a
+          // shortcut, so it must not be announced as a control of its own or
+          // it would sit in the accessibility tree ahead of every message.
+          accessible={false}
+          importantForAccessibility="no"
+        >
         <FlatList
           ref={scrollViewRef}
           data={displayMessages}
@@ -5792,6 +5816,7 @@ export default function ChatScreen() {
             );
           })()}
         />
+        </Pressable>
 
       </View>
 
