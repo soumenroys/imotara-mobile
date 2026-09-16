@@ -18,7 +18,7 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
     title: "Companion name",
     section: "Your companion",
     sectionKey: "companion",
-    description: "Change the name of your AI companion",
+    description: "Change what your companion is called",
     keywords: ["companion name", "rename", "call her", "call him", "name my companion", "change name", "companion called", "साथी का नाम", "সঙ্গীর নাম"],
   },
   {
@@ -282,7 +282,7 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
     title: "Token credits",
     section: "Your plan",
     sectionKey: "support",
-    description: "Buy additional AI reply tokens for on-demand access",
+    description: "Buy extra reply tokens for when you need them",
     keywords: ["tokens", "credits", "buy tokens", "token pack", "top up", "टोकन", "টোকেন"],
   },
   {

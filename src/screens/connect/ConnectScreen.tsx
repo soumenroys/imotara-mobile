@@ -320,7 +320,7 @@ export default function ConnectScreen() {
                 </Text>
                 <Text style={[s.cardBio, { textAlign: "center", lineHeight: 22 }]}>
                     Imotara Connect is available for users 18 and older.{"\n\n"}
-                    Please explore the rest of the Imotara app for AI wellness support.
+                    Please explore the rest of the Imotara app for gentle, everyday support.
                 </Text>
             </View>
         );
