@@ -155,11 +155,32 @@ export function ChatInputBar({
             alignItems: "center",
             justifyContent: "center",
           }}
+          // ⚠️ All three of these must cover "transcribing", not just the
+          // recording/idle pair. The button is already disabled and already
+          // shows a spinner in that state, so a SIGHTED user can see it is
+          // busy — but a screen-reader user was being told "Start voice input,
+          // tap to record your message" about a control that does nothing, and
+          // given no busy or disabled state at all. Raised by the owner
+          // 2026-09-16 as "the mic button does nothing while transcribing".
           accessibilityLabel={
-            voiceState === "recording" ? "Stop recording" : "Start voice input"
+            voiceState === "transcribing"
+              ? "Transcribing your recording"
+              : voiceState === "recording"
+              ? "Stop recording"
+              : "Start voice input"
           }
           accessibilityRole="button"
-          accessibilityHint={voiceState === "recording" ? "Tap to stop and transcribe" : "Tap to record your message"}
+          accessibilityHint={
+            voiceState === "transcribing"
+              ? "Please wait — your recording is being turned into text"
+              : voiceState === "recording"
+              ? "Tap to stop and transcribe"
+              : "Tap to record your message"
+          }
+          accessibilityState={{
+            disabled: voiceState === "transcribing",
+            busy: voiceState === "transcribing",
+          }}
         >
           {voiceState === "transcribing" ? (
             <ActivityIndicator size="small" color={colors.textSecondary} />

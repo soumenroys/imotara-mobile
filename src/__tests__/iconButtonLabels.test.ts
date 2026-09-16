@@ -82,3 +82,44 @@ describe("icon-only buttons announce something", () => {
     expect(found).toHaveLength(1);
   });
 });
+
+// ── The mic button's third state ───────────────────────────────────────────
+
+describe("the mic button announces ALL THREE of its states", () => {
+    const bar = fs.readFileSync(
+        path.join(__dirname, "..", "components", "chat", "ChatInputBar.tsx"), "utf8");
+
+    it("says it is transcribing, rather than offering to start recording", () => {
+        // Raised by the owner 2026-09-16. The button is already disabled and
+        // already shows a spinner while transcribing, so a SIGHTED user can
+        // see it is busy. A screen-reader user was told "Start voice input,
+        // tap to record your message" about a control that does nothing.
+        expect(bar).toMatch(/voiceState === "transcribing"\s*\?\s*"Transcribing your recording"/);
+    });
+
+    it("the hint says wait, not tap", () => {
+        expect(bar).toMatch(/"Please wait — your recording is being turned into text"/);
+    });
+
+    it("exposes disabled AND busy, so assistive tech can say why", () => {
+        // Without accessibilityState there is no programmatic signal at all —
+        // the label alone leaves a screen reader announcing it as an ordinary
+        // enabled button.
+        expect(bar).toMatch(
+            /accessibilityState=\{\{\s*disabled: voiceState === "transcribing",\s*busy: voiceState === "transcribing",\s*\}\}/);
+    });
+
+    it("the other two states are untouched", () => {
+        // This was a labelling fix, not a behaviour change.
+        expect(bar).toMatch(/"Stop recording"/);
+        expect(bar).toMatch(/"Start voice input"/);
+        expect(bar).toMatch(/"Tap to stop and transcribe"/);
+        expect(bar).toMatch(/"Tap to record your message"/);
+    });
+
+    it("the button really is inert while transcribing", () => {
+        // The label must not start claiming 'busy' while the control is in
+        // fact still tappable — that would be the same lie in reverse.
+        expect(bar).toMatch(/disabled=\{voiceState === "transcribing"\}/);
+    });
+});
