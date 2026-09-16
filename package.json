@@ -10,7 +10,8 @@
     "test": "jest",
     "typecheck": "tsc --noEmit",
     "check:version": "node scripts/check-version-sync.js",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "check:r8": "node scripts/check-r8-serializable.js"
   },
   "jest": {
     "preset": "jest-expo",
