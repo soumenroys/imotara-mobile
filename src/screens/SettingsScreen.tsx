@@ -45,6 +45,7 @@ import { useTheme, ACCENT_COLORS, type Accent, type FontSize } from "../theme/Th
 import {
     scheduleCheckInReminder,
     cancelCheckInReminder,
+    cancelInactivityReminder,
     setCompanionNameForReminders,
     isCheckInReminderEnabled,
     getSavedReminderTime,
@@ -585,6 +586,9 @@ function SettingsScreenContent() {
                 }
             } else {
                 await cancelCheckInReminder();
+                // Off means off — a "we miss you" nudge armed during an earlier
+                // chat must not fire two days after reminders were disabled.
+                await cancelInactivityReminder();
                 if (mountedRef.current) setReminderEnabled(false);
             }
         } catch {

@@ -578,6 +578,23 @@ export async function cancelCheckInReminder(): Promise<void> {
     await AsyncStorage.removeItem(CHECKIN_ENABLED_KEY);
 }
 
+/**
+ * Cancels a pending inactivity ("we miss you") nudge, if one is scheduled.
+ *
+ * Deliberately NOT folded into cancelCheckInReminder(): that also runs before
+ * every re-arm of the daily reminder (a time change, a rename), and dropping
+ * the nudge on each of those would lose it until the person's next message.
+ * Only "reminders off" should take the nudge with it — found on a real device,
+ * where a nudge stayed armed for 48h after the reminder had been switched off.
+ */
+export async function cancelInactivityReminder(): Promise<void> {
+    const Notifications = getNotifications();
+    const id = await AsyncStorage.getItem(INACTIVITY_NOTIF_ID_KEY);
+    if (!id) return;
+    if (Notifications) await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+    await AsyncStorage.removeItem(INACTIVITY_NOTIF_ID_KEY);
+}
+
 export async function isCheckInReminderEnabled(): Promise<boolean> {
     const val = await AsyncStorage.getItem(CHECKIN_ENABLED_KEY);
     return val === "1";
