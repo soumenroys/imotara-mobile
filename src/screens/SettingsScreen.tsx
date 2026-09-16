@@ -425,6 +425,14 @@ function SettingsScreenContent() {
     } = useSettings();
 
     const { themePref, setThemePref, isDark, colors, accent, setAccent, fontSize, setFontSize } = useTheme();
+
+    // The name to use wherever THE COMPANION is the subject of a sentence on this
+    // screen. Same derivation as ChatScreen's, deliberately — one companion, one
+    // name, whichever screen you are on.
+    // ⚠️ Not for brand strings. "Support Imotara", "How to use Imotara" and
+    // "Imotara Mobile" are the PRODUCT and must never be renamed.
+    const effectiveCompanionName = toneContext?.companion?.name?.trim() || "Imotara";
+
     const toastRef = useRef<ToastHandle>(null);
     const notify = (message: string, kind: "error" | "info" | "success" = "error") =>
         toastRef.current?.show(message, kind);
@@ -714,7 +722,7 @@ function SettingsScreenContent() {
     const handleClearMemories = () => {
         Alert.alert(
             "Clear companion memory?",
-            "Imotara will forget what it has learned about you. This cannot be undone.",
+            `${effectiveCompanionName} will forget what it has learned about you. This cannot be undone.`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -2608,7 +2616,7 @@ function SettingsScreenContent() {
                         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                             <View style={{ flex: 1, marginRight: 12 }}>
                                 <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textPrimary }}>Hands-free conversation</Text>
-                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Speak → Imotara types, replies, and reads aloud automatically</Text>
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Speak → {effectiveCompanionName} types, replies, and reads aloud automatically</Text>
                             </View>
                             <Switch value={handsfree} onValueChange={handleHandsfreeToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
                         </View>
@@ -3287,8 +3295,8 @@ function SettingsScreenContent() {
                     </View>
 
                     <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}>
-                        Optional. This only guides wording and warmth. Imotara will not pretend to be a
-                        real person.
+                        Optional. This only guides wording and warmth. {effectiveCompanionName} will not
+                        pretend to be a real person.
                     </Text>
 
                     {/* Companion name */}

@@ -18,6 +18,7 @@ import path from "path";
 const read = (p: string) => fs.readFileSync(path.join(__dirname, "..", p), "utf8");
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
 const CHAT = strip(read("screens/ChatScreen.tsx"));
+const SETTINGS = strip(read("screens/SettingsScreen.tsx"));
 const VOICE = strip(read("hooks/useVoiceInput.ts"));
 
 describe("companion-voice strings follow the chosen name", () => {
@@ -73,5 +74,38 @@ describe("Whisper is hinted with the companion's name, not the product's", () =>
         // (used before declaration). The bridge state is what makes it work.
         expect(CHAT).toMatch(/companionName: voiceCompanionName,/);
         expect(CHAT).toMatch(/setVoiceCompanionName\(toneContext\?\.companion\?\.name\?\.trim\(\) \|\| undefined\)/);
+    });
+});
+
+describe("Settings speaks the companion's name too (2026-09-16)", () => {
+    // Stage 1 scoped itself to chat, which left Settings saying "Imotara will
+    // forget what it has learned about you" one line below the field where the
+    // person had just typed "Maya" — the most jarring possible place for the
+    // inconsistency, because it is exactly where they renamed it.
+    it("derives the name once, the same way ChatScreen does", () => {
+        expect(SETTINGS).toMatch(
+            /const effectiveCompanionName = toneContext\?\.companion\?\.name\?\.trim\(\) \|\| "Imotara";/,
+        );
+    });
+
+    it.each([
+        ["clear-memory confirmation", /\$\{effectiveCompanionName\} will forget what it has learned about you/],
+        ["hands-free description",    /Speak → \{effectiveCompanionName\} types, replies, and reads aloud/],
+        ["tone-context disclaimer",   /\{effectiveCompanionName\} will not\s*\n?\s*pretend to be a real person/],
+    ])("%s uses the chosen name", (_label, re) => {
+        expect(SETTINGS).toMatch(re);
+    });
+
+    it("⚠️ leaves the BRAND strings on the same screen alone", () => {
+        // These name the product, not the companion. Renaming them would be a
+        // straightforward bug — "Support Maya 🇮🇳" is not a thing.
+        for (const brand of [
+            "Support Imotara",
+            "How to use Imotara",
+            "Imotara Mobile.",
+            "Join Imotara Movement",
+        ]) {
+            expect(SETTINGS).toContain(brand);
+        }
     });
 });
