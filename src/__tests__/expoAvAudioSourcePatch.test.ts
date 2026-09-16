@@ -25,7 +25,24 @@ const pkg = JSON.parse(read("package.json"));
 
 const AV_MANAGER = "node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java";
 
-describe("the patch is wired up so it survives a fresh install", () => {
+describe("the patch actually REACHES the build", () => {
+    it("expo-av is opted out of prebuilt Expo modules", () => {
+        // 🔴 THE BUG THIS TEST EXISTS FOR, found on the A27 2026-09-16.
+        //
+        // Expo SDK 54 ships Android modules as PREBUILT MAVEN ARTIFACTS.
+        // `expo.modules.av-16.0.8` is downloaded and used as-is; the Java under
+        // node_modules/expo-av/android/src is NEVER COMPILED. So patch-package
+        // faithfully patched a file with no effect whatsoever, the build was
+        // green, every other assertion in this file passed — and the shipped
+        // app still recorded through the raw mic. Decompiling the artifact's
+        // AVManager.class showed `iconst_0` (AudioSource.DEFAULT) unchanged.
+        //
+        // `buildFromSource` is the documented opt-out: "A list of package names
+        // to opt out of prebuilt Expo modules (Android-only)". Without this
+        // entry the patch below is decoration.
+        expect(pkg.expo?.autolinking?.buildFromSource).toContain("expo-av");
+    });
+
     it("package.json runs patch-package on postinstall", () => {
         // Without this the patch exists on disk and is never applied — and EAS
         // builds from a clean node_modules, so the SHIPPED app would be

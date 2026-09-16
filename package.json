@@ -84,6 +84,11 @@
           "react-native-razorpay"
         ]
       }
+    },
+    "autolinking": {
+      "buildFromSource": [
+        "expo-av"
+      ]
     }
   },
   "private": true
