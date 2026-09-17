@@ -51,6 +51,41 @@ export function prettyTier(tier: unknown): string {
 }
 
 /**
+ * 🔗 THE ONLY PLACE THE TWO VOCABULARIES MEET.
+ *
+ * The web calls the paid tier `pro`; this app has always called it `PREMIUM`,
+ * and that string is what sits in AsyncStorage on every installed device. So
+ * the names cannot simply be unified — renaming would need a storage migration
+ * on every phone, and a migration that goes wrong silently drops someone to
+ * FREE.
+ *
+ * 🔴 WHY THIS EXISTS. The translation was hand-written in SIX places:
+ * SettingsContext's if-chain, and five more in UpgradeSheet — some operating on
+ * web spellings that arrive from `/api/license/status`, some on mobile spellings
+ * read back from AsyncStorage, with only a comment to tell you which. That is
+ * how `pro` and `PREMIUM` end up compared to each other and quietly not
+ * matching.
+ *
+ * Accepts either spelling, so a caller does not have to know which side of the
+ * wire its value came from. Unknown input reads FREE — never a paid tier.
+ */
+const WEB_TO_MOBILE: Record<string, LicenseTier> = {
+    free:       "FREE",
+    plus:       "PLUS",
+    pro:        "PREMIUM",
+    premium:    "PREMIUM",   // already mobile-spelled
+    family:     "FAMILY",
+    edu:        "EDU",
+    education:  "EDU",
+    enterprise: "ENTERPRISE",
+};
+
+export function fromWebTier(tier: unknown): LicenseTier {
+    const raw = String(tier ?? "").trim().toLowerCase();
+    return WEB_TO_MOBILE[raw] ?? "FREE";
+}
+
+/**
  * All features that may be gated by license.
  * Add new gated capabilities ONLY here.
  */

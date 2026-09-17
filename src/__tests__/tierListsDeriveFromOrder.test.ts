@@ -16,7 +16,7 @@
  */
 import fs from "fs";
 import path from "path";
-import { TIER_ORDER, isLicenseTier, type LicenseTier } from "../licensing/featureGates";
+import { TIER_ORDER, isLicenseTier, fromWebTier, type LicenseTier } from "../licensing/featureGates";
 
 const SRC = path.join(__dirname, "..");
 const CANONICAL = path.join(SRC, "licensing", "featureGates.ts");
@@ -69,13 +69,53 @@ describe("TIER_ORDER is the only mobile tier list", () => {
             expect(isLicenseTier(bad)).toBe(false);
     });
 
-    it("the web↔mobile bridge still maps every web tier to a real mobile tier", () => {
-        // SettingsContext.tsx:~330 is the ONLY translation point between the
-        // two vocabularies. If it ever maps to a tier this list does not have,
-        // the user silently drops to FREE.
-        const bridge = fs.readFileSync(path.join(SRC, "state", "SettingsContext.tsx"), "utf8");
-        const mapped = Array.from(bridge.matchAll(/\?\s*"([A-Z]+)"\s*:/g)).map((m) => m[1]);
-        expect(mapped.length).toBeGreaterThan(0);
-        for (const t of mapped) expect(TIER_ORDER).toContain(t as LicenseTier);
+    it("🔗 every web tier maps to a real mobile tier", () => {
+        // The web repo's TIER_ORDER, pinned. If a tier is added there and not
+        // handled here, users on it silently drop to FREE on mobile — and a
+        // mobile fix needs a store release, so it would stick.
+        const WEB_TIERS = ["free", "plus", "pro", "family", "edu", "enterprise"];
+        // jest has no per-assert message arg, so name the pair in the value.
+        const mapped = WEB_TIERS.map((w) => `${w}->${fromWebTier(w)}`);
+        expect(mapped).toEqual([
+            "free->FREE", "plus->PLUS", "pro->PREMIUM",
+            "family->FAMILY", "edu->EDU", "enterprise->ENTERPRISE",
+        ]);
+        // The rename that started all this: web "pro" IS mobile "PREMIUM".
+        expect(fromWebTier("pro")).toBe("PREMIUM");
+        expect(fromWebTier("plus")).toBe("PLUS");
+    });
+
+    it("🔗 the bridge accepts either spelling, and never invents a paid tier", () => {
+        // Callers read tiers from two sources — the API (lowercase) and
+        // AsyncStorage (uppercase) — and should not have to know which.
+        expect(fromWebTier("PREMIUM")).toBe("PREMIUM");
+        expect(fromWebTier("premium")).toBe("PREMIUM");
+        expect(fromWebTier("  Pro  ")).toBe("PREMIUM");
+        expect(fromWebTier("education")).toBe("EDU");
+        // Anything unrecognised must fall to FREE. Never upward.
+        for (const bad of ["", "gold", "PRO_PLUS", null, undefined, 7, {}])
+            expect(fromWebTier(bad)).toBe("FREE");
+    });
+
+    it("🔴 no file hand-rolls the pro↔PREMIUM translation any more", () => {
+        // It was written out six times: SettingsContext's if-chain plus five in
+        // UpgradeSheet, some on API spellings and some on AsyncStorage
+        // spellings, distinguishable only by a comment.
+        const offenders = files.filter((f) => {
+            const src = fs.readFileSync(f, "utf8").replace(/^[ \t]*\/\/.*$/gm, "");
+            return /["']pro["']\s*\?\s*["']PREMIUM["']/.test(src)
+                || /===\s*["']PREMIUM["']\s*\?\s*["']Pro["']/.test(src);
+        });
+        expect(offenders.map((f) => path.relative(SRC, f))).toEqual([]);
+    });
+
+    it("🔴 no file hardcodes a tier's display label", () => {
+        // Stage C renames the paid tier to "Imotara Plus". TIER_LABELS must be
+        // the only edit — these were `{isPro ? "Pro" : "Plus"}` and friends.
+        const offenders = files.filter((f) => {
+            const src = fs.readFileSync(f, "utf8").replace(/^[ \t]*\/\/.*$/gm, "");
+            return /\?\s*["']Pro["']\s*:\s*["']Plus["']/.test(src);
+        });
+        expect(offenders.map((f) => path.relative(SRC, f))).toEqual([]);
     });
 });

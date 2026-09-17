@@ -10,7 +10,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
 // ✅ Licensing gate (read-only awareness for settings layer)
-import { isLicenseTier, type LicenseTier } from "../licensing/featureGates";
+import { fromWebTier, isLicenseTier, type LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
 import type { ToneContextPayload } from "../api/aiClient";
 import { supabase } from "../lib/supabase/client";
@@ -318,13 +318,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             const lic = statusData?.license;
             if (!lic) return;
 
-            const t = String(lic.tier || "free").toLowerCase();
-            const mobileTier: LicenseTier =
-                t === "pro" ? "PREMIUM" :
-                t === "plus" ? "PLUS" :
-                t === "family" ? "FAMILY" :
-                t === "edu" ? "EDU" :
-                t === "enterprise" ? "ENTERPRISE" : "FREE";
+            // The web↔mobile vocabulary bridge. One function, one place —
+            // this used to be a hand-written chain, one of six copies.
+            const mobileTier: LicenseTier = fromWebTier(lic.tier);
             const expiresAt: string | null = lic.expiresAt ?? null;
 
             // Fake licRow for org context lookup below

@@ -41,6 +41,7 @@ import {
     type ProductId,
 } from "../../payments/upgradePlans";
 import type { PurchaseIOS } from "expo-iap"; // type-only, no runtime cost
+import { fromWebTier, prettyTier } from "../../licensing/featureGates";
 
 type Props = {
     visible: boolean;
@@ -402,7 +403,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                 }
 
                 try { await onPurchaseComplete(); } catch { /* best-effort */ }
-                const tierName = isTokenPack ? "credits" : (productId.includes("pro") ? "Pro" : "Plus");
+                const tierName = isTokenPack
+                    ? "credits"
+                    : prettyTier(fromWebTier(PLAN_DEFS.find((p) => p.id === productId)?.tier));
                 setPurchaseSuccess({ tierName, isTokenPack });
             } catch (err) {
                 if (DEBUG_UI_ENABLED) console.log("[IAP] onPurchaseSuccess catch:", String(err));
@@ -749,10 +752,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                         <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>
                             Current plan:{" "}
                             <Text style={{ fontWeight: "600", color: colors.textPrimary }}>
-                                {freshTier
-                                    ? (String(freshTier).toUpperCase() === "PREMIUM" ? "Pro"
-                                        : freshTier.charAt(0).toUpperCase() + freshTier.slice(1).toLowerCase())
-                                    : "Free"}
+                                {/* was a third inline copy of prettyTier, with its own
+                                    title-casing fallback that rendered EDU as "Edu" */}
+                                {prettyTier(freshTier)}
                             </Text>
                         </Text>
                     </View>
@@ -830,10 +832,11 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                     ? iosPrice(sku, plan.priceInr)
                                     : `₹${plan.priceInr}`;
 
-                                // Mobile stores "pro" as "PREMIUM" — normalise before comparing.
+                                // fromWebTier is the one vocabulary bridge — this used to
+                                // hand-roll `plan.tier === "pro" ? "PREMIUM" : ...`.
                                 // Use freshTier (read from AsyncStorage on open) to avoid stale
                                 // React state from HistoryContext when the session tier has changed.
-                                const planKey = plan.tier === "pro" ? "PREMIUM" : plan.tier.toUpperCase();
+                                const planKey = fromWebTier(plan.tier);
                                 const isCurrent = freshTier && planKey === String(freshTier).toUpperCase();
                                 return (
                                     <View key={plan.id} style={{
@@ -860,7 +863,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                             </View>
                                         )}
                                         <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, marginBottom: 4 }}>
-                                            {isPro ? "Pro" : "Plus"}
+                                            {prettyTier(fromWebTier(plan.tier))}
                                         </Text>
                                         <Text style={{ fontSize: 22, fontWeight: "800", color: colors.primary, marginBottom: 2 }}>
                                             {displayPrice}
@@ -1011,7 +1014,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                     ],
                                 },
                                 {
-                                    tier: "Plus",
+                                    tier: prettyTier("PLUS"),
                                     color: colors.primary,
                                     badge: "rgba(14,165,233,0.15)",
                                     items: [
@@ -1036,7 +1039,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                     ],
                                 },
                                 {
-                                    tier: "Pro",
+                                    tier: prettyTier("PREMIUM"),
                                     color: colors.indigo,
                                     badge: "rgba(99,102,241,0.15)",
                                     items: [
@@ -1144,7 +1147,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                                     const data = await res.json();
                                                     const tier = String(data?.license?.tier ?? data?.tier ?? "free").toLowerCase();
                                                     if (tier === "plus" || tier === "pro") {
-                                                        Alert.alert("Plan restored", `Your ${tier === "pro" ? "Pro" : "Plus"} plan has been restored.`);
+                                                        Alert.alert("Plan restored", `Your ${prettyTier(fromWebTier(tier))} plan has been restored.`);
                                                         try { await onPurchaseComplete(); } catch { }
                                                     } else {
                                                         Alert.alert("No active plan found", "No active Plus or Pro subscription was found for this account.");
@@ -1172,7 +1175,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                             const data = await res.json();
                                             const tier = String(data?.license?.tier ?? data?.tier ?? "free").toLowerCase();
                                             if (tier === "plus" || tier === "pro") {
-                                                Alert.alert("Plan restored", `Your ${tier === "pro" ? "Pro" : "Plus"} plan has been restored.`);
+                                                Alert.alert("Plan restored", `Your ${prettyTier(fromWebTier(tier))} plan has been restored.`);
                                                 try { await onPurchaseComplete(); } catch { }
                                             } else {
                                                 Alert.alert("No active plan found", "No active Plus or Pro subscription was found for this account.");
