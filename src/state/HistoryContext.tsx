@@ -38,7 +38,7 @@ import { useAuth } from "../auth/AuthContext";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
 // ✅ Licensing gates (foundation)
-import type { LicenseTier } from "../licensing/featureGates";
+import { isLicenseTier, type LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
 
 export type HistoryItem = {
@@ -207,16 +207,9 @@ const LAUNCH_CLOUD_SYNC_FREE_FOR_ALL =
     process.env.EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL !== "false";
 
 // ✅ Validation helper (keeps stored values safe)
-function isValidTier(v: unknown): v is LicenseTier {
-    return (
-        v === "FREE" ||
-        v === "PLUS" ||
-        v === "PREMIUM" ||
-        v === "FAMILY" ||
-        v === "EDU" ||
-        v === "ENTERPRISE"
-    );
-}
+// Delegates to the one list in featureGates.ts — this used to be a hand-written
+// copy of the tier union, one of five across the app.
+const isValidTier = isLicenseTier;
 
 const HistoryContext = createContext<HistoryContextValue | undefined>(
     undefined

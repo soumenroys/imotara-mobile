@@ -10,7 +10,7 @@ import { useColors, useTheme } from "../../theme/ThemeContext";
 import IOSTipJar from "./IOSTipJar";
 import UpgradeSheet from "./UpgradeSheet";
 import { DONATION_PRESETS } from "../../payments/donations";
-import type { LicenseTier } from "../../licensing/featureGates";
+import { isLicenseTier, prettyTier, type LicenseTier } from "../../licensing/featureGates";
 import { orgBillingTypeMeta } from "../../lib/imotara/orgBilling";
 
 type DonationItem = { id: string; label: string; amount: number };
@@ -25,16 +25,6 @@ function getApiBaseUrl(): string {
     process.env.EXPO_PUBLIC_BACKEND_URL ||
     "";
   return v.endsWith("/") ? v.slice(0, -1) : v;
-}
-
-function prettyTier(tier: LicenseTier | string | undefined | null): string {
-  const t = String(tier ?? "FREE").toUpperCase();
-  if (t === "FREE") return "Free";
-  if (t === "PREMIUM") return "Premium";
-  if (t === "FAMILY") return "Family";
-  if (t === "EDU") return "Education";
-  if (t === "ENTERPRISE") return "Enterprise";
-  return t.charAt(0) + t.slice(1).toLowerCase();
 }
 
 type Props = {
@@ -318,8 +308,7 @@ export function PlanSupportQuickPanel({
               await refreshLicense().catch(() => {});
               try {
                 const raw = await AsyncStorage.getItem("imotara_license_tier_v1");
-                const VALID = ["FREE", "PLUS", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"];
-                if (raw && VALID.includes(raw)) setLicenseTier(raw as LicenseTier);
+                if (isLicenseTier(raw)) setLicenseTier(raw);
               } catch { /* fail-open */ }
             }}
           />

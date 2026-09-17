@@ -1,6 +1,54 @@
 // src/licensing/featureGates.ts
 
-export type LicenseTier = "FREE" | "PLUS" | "PREMIUM" | "FAMILY" | "EDU" | "ENTERPRISE";
+/**
+ * The canonical mobile tier list — single source of truth, ordered least →
+ * most privileged.
+ *
+ * 🔴 WHY THIS EXISTS. Until 2026-09-17 five separate copies of this list were
+ * hand-written across HistoryContext, SettingsContext, SettingsScreen,
+ * ChatScreen and PlanSupportQuickPanel. All five happened to agree — but the
+ * web repo had the same pattern and four of its seven copies had silently lost
+ * "family", which made Family licences unissuable. Five copies is the same bug
+ * waiting to happen, and on mobile a fix needs a store release to reach users.
+ *
+ * ⚠️ These are the MOBILE spellings. Web uses lowercase ("pro" where this says
+ * "PREMIUM"); SettingsContext.tsx is the only place the two vocabularies meet.
+ */
+export const TIER_ORDER = ["FREE", "PLUS", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"] as const;
+
+export type LicenseTier = (typeof TIER_ORDER)[number];
+
+/** Narrowing guard for untrusted input (AsyncStorage reads, server payloads). */
+export function isLicenseTier(value: unknown): value is LicenseTier {
+    return typeof value === "string" && (TIER_ORDER as readonly string[]).includes(value);
+}
+
+/**
+ * The one place a tier is turned into words for a user.
+ *
+ * 🔴 WHY THIS EXISTS. Two `prettyTier` functions existed — SettingsScreen and
+ * PlanSupportQuickPanel — and they disagreed: the SAME tier read "Pro" on the
+ * Settings screen and "Premium" in the plan panel. The quick panel also had no
+ * case for PLUS at all and only rendered it correctly by accident, via a
+ * title-casing fallback.
+ *
+ * ⚠️ Stage C renames the public paid tier to "Imotara Plus". When that lands,
+ * this map is the only edit — which is the point of it existing.
+ */
+export const TIER_LABELS: Record<LicenseTier, string> = {
+    FREE:       "Free",
+    PLUS:       "Plus",
+    PREMIUM:    "Pro",
+    FAMILY:     "Family",
+    EDU:        "Education",
+    ENTERPRISE: "Enterprise",
+};
+
+/** Display label for a tier. Unknown or missing values read "Free". */
+export function prettyTier(tier: unknown): string {
+    const t = String(tier ?? "FREE").toUpperCase();
+    return isLicenseTier(t) ? TIER_LABELS[t] : "Free";
+}
 
 /**
  * All features that may be gated by license.

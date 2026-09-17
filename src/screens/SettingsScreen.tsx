@@ -74,7 +74,7 @@ import { speakMessage, speakPreview, stopSpeaking } from "../lib/tts/mobileTTS";
 
 
 // ✅ Licensing types (foundation only)
-import type { LicenseTier } from "../licensing/featureGates";
+import { isLicenseTier, prettyTier, type LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
 
 // ✅ Donation presets + formatting (re-used)
@@ -88,19 +88,6 @@ import { orgBillingTypeMeta } from "../lib/imotara/orgBilling";
  */
 type DonationUIItem = { id: string; label: string; amount: number };
 const DONATION_UI_PRESETS = DONATION_PRESETS as readonly DonationUIItem[];
-
-function prettyTier(tier: LicenseTier | string | undefined | null): string {
-    const t = String(tier ?? "FREE").toUpperCase();
-    switch (t) {
-        case "FREE":    return "Free";
-        case "PLUS":    return "Plus";
-        case "PREMIUM": return "Pro";
-        case "FAMILY":  return "Family";
-        case "EDU":     return "Education";
-        case "ENTERPRISE": return "Enterprise";
-        default:        return "Free";
-    }
-}
 
 function getApiBaseUrl(): string {
     // Try a few common Expo env names (safe fallbacks).
@@ -5363,9 +5350,8 @@ function SettingsScreenContent() {
                         // HistoryContext's licenseTier state — read it back and sync so the
                         // tier label in Settings refreshes immediately without an app restart.
                         const raw = await AsyncStorage.getItem("imotara_license_tier_v1").catch(() => null);
-                        const VALID: LicenseTier[] = ["FREE", "PLUS", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"];
-                        if (raw && VALID.includes(raw as LicenseTier) && setLicenseTier) {
-                            setLicenseTier(raw as LicenseTier);
+                        if (isLicenseTier(raw) && setLicenseTier) {
+                            setLicenseTier(raw);
                         }
                     }}
                 />

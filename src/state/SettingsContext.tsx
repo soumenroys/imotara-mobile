@@ -10,7 +10,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
 // ✅ Licensing gate (read-only awareness for settings layer)
-import type { LicenseTier } from "../licensing/featureGates";
+import { isLicenseTier, type LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
 import type { ToneContextPayload } from "../api/aiClient";
 import { supabase } from "../lib/supabase/client";
@@ -184,16 +184,9 @@ function makeLocalScopeId(): string {
 const LICENSE_TIER_KEY = "imotara_license_tier_v1";
 const LICENSE_EXPIRES_AT_KEY = "imotara_license_expires_at_v1";
 
-function isValidTier(v: unknown): v is LicenseTier {
-    return (
-        v === "FREE" ||
-        v === "PLUS" ||
-        v === "PREMIUM" ||
-        v === "FAMILY" ||
-        v === "EDU" ||
-        v === "ENTERPRISE"
-    );
-}
+// Delegates to the one list in featureGates.ts — this used to be a hand-written
+// copy of the tier union, one of five across the app.
+const isValidTier = isLicenseTier;
 
 function normalizeToneContext(value: ToneContextPayload): ToneContextPayload {
     const base: ToneContextPayload = {
