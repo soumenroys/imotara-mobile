@@ -59,13 +59,16 @@ describe("TIER_ORDER is the only mobile tier list", () => {
     });
 
     it("carries every tier, in the mobile spelling", () => {
-        expect([...TIER_ORDER]).toEqual(["FREE", "PLUS", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"]);
+        // PREMIUM removed 2026-09-17 — PLUS is canonical, matching the name
+        // users see. PREMIUM survives as an alias, which is not optional: it is
+        // in AsyncStorage on every device installed before that date.
+        expect([...TIER_ORDER]).toEqual(["FREE", "PLUS", "FAMILY", "EDU", "ENTERPRISE"]);
     });
 
     it("isLicenseTier accepts every real tier and rejects the rest", () => {
         for (const t of TIER_ORDER) expect(isLicenseTier(t)).toBe(true);
         // "pro" is the WEB spelling of PREMIUM — it must not validate here.
-        for (const bad of ["pro", "free", "PRO", "", null, undefined, 3, {}])
+        for (const bad of ["pro", "free", "PRO", "PREMIUM", "", null, undefined, 3, {}])
             expect(isLicenseTier(bad)).toBe(false);
     });
 
@@ -77,20 +80,20 @@ describe("TIER_ORDER is the only mobile tier list", () => {
         // jest has no per-assert message arg, so name the pair in the value.
         const mapped = WEB_TIERS.map((w) => `${w}->${fromWebTier(w)}`);
         expect(mapped).toEqual([
-            "free->FREE", "plus->PLUS", "pro->PREMIUM",
+            "free->FREE", "plus->PLUS", "pro->PLUS",
             "family->FAMILY", "edu->EDU", "enterprise->ENTERPRISE",
         ]);
         // The rename that started all this: web "pro" IS mobile "PREMIUM".
-        expect(fromWebTier("pro")).toBe("PREMIUM");
+        expect(fromWebTier("pro")).toBe("PLUS");
         expect(fromWebTier("plus")).toBe("PLUS");
     });
 
     it("🔗 the bridge accepts either spelling, and never invents a paid tier", () => {
         // Callers read tiers from two sources — the API (lowercase) and
         // AsyncStorage (uppercase) — and should not have to know which.
-        expect(fromWebTier("PREMIUM")).toBe("PREMIUM");
-        expect(fromWebTier("premium")).toBe("PREMIUM");
-        expect(fromWebTier("  Pro  ")).toBe("PREMIUM");
+        expect(fromWebTier("PREMIUM")).toBe("PLUS");
+        expect(fromWebTier("premium")).toBe("PLUS");
+        expect(fromWebTier("  Pro  ")).toBe("PLUS");
         expect(fromWebTier("education")).toBe("EDU");
         // Anything unrecognised must fall to FREE. Never upward.
         for (const bad of ["", "gold", "PRO_PLUS", null, undefined, 7, {}])

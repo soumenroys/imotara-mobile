@@ -101,7 +101,7 @@ import { CRISIS_CARD_COLORS } from "../lib/safety/crisisCardColors";
 import { detectCountryCode } from "../lib/safety/detectCountry";
 import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adultContentGuard";
 import { speakMessage, stopSpeaking, currentSpeakingId } from "../lib/tts/mobileTTS";
-import { isEnabled as isFeatureEnabled, isLicenseTier } from "../licensing/featureGates";
+import { isEnabled as isFeatureEnabled, normaliseTier } from "../licensing/featureGates";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Message-action touch target.
@@ -6361,7 +6361,7 @@ export default function ChatScreen() {
             await refreshLicense().catch(() => {});
             try {
               const raw = await AsyncStorage.getItem("imotara_license_tier_v1");
-              if (isLicenseTier(raw) && setLicenseTier) setLicenseTier(raw);
+              if (raw && setLicenseTier) setLicenseTier(normaliseTier(raw));
             } catch { /* fail-open */ }
           }}
         />

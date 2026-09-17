@@ -38,7 +38,7 @@ import { useAuth } from "../auth/AuthContext";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
 // ✅ Licensing gates (foundation)
-import { isLicenseTier, type LicenseTier } from "../licensing/featureGates";
+import { normaliseTier, type LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
 
 export type HistoryItem = {
@@ -209,7 +209,7 @@ const LAUNCH_CLOUD_SYNC_FREE_FOR_ALL =
 // ✅ Validation helper (keeps stored values safe)
 // Delegates to the one list in featureGates.ts — this used to be a hand-written
 // copy of the tier union, one of five across the app.
-const isValidTier = isLicenseTier;
+// (isValidTier removed — normaliseTier is what stored values need.)
 
 const HistoryContext = createContext<HistoryContextValue | undefined>(
     undefined
@@ -621,9 +621,10 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 }
 
                 // 2) License tier
-                // Only set if it matches this app's LicenseTier union
-                if (rawTier && isValidTier(rawTier)) {
-                    _setLicenseTier(rawTier);
+                // 🔴 normaliseTier, NOT a validity check — "PREMIUM" is stored on
+                // every device installed before the rename and must map to PLUS.
+                if (rawTier) {
+                    _setLicenseTier(normaliseTier(rawTier));
                 }
 
                 // 3) Threads — hydrate or create default

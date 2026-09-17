@@ -10,7 +10,7 @@ import { useColors, useTheme } from "../../theme/ThemeContext";
 import IOSTipJar from "./IOSTipJar";
 import UpgradeSheet from "./UpgradeSheet";
 import { DONATION_PRESETS } from "../../payments/donations";
-import { isLicenseTier, prettyTier, type LicenseTier } from "../../licensing/featureGates";
+import { normaliseTier, prettyTier, type LicenseTier } from "../../licensing/featureGates";
 import { orgBillingTypeMeta } from "../../lib/imotara/orgBilling";
 
 type DonationItem = { id: string; label: string; amount: number };
@@ -308,7 +308,7 @@ export function PlanSupportQuickPanel({
               await refreshLicense().catch(() => {});
               try {
                 const raw = await AsyncStorage.getItem("imotara_license_tier_v1");
-                if (isLicenseTier(raw)) setLicenseTier(raw);
+                if (raw) setLicenseTier(normaliseTier(raw));
               } catch { /* fail-open */ }
             }}
           />

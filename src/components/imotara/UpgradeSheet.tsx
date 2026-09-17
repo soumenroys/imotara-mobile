@@ -41,7 +41,7 @@ import {
     type ProductId,
 } from "../../payments/upgradePlans";
 import type { PurchaseIOS } from "expo-iap"; // type-only, no runtime cost
-import { fromWebTier, prettyTier } from "../../licensing/featureGates";
+import { fromWebTier, normaliseTier, prettyTier } from "../../licensing/featureGates";
 
 type Props = {
     visible: boolean;
@@ -249,7 +249,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
             // in HistoryContext when SettingsContext has already written a newer tier.
             try {
                 const stored = await AsyncStorage.getItem("imotara_license_tier_v1");
-                setFreshTier(stored ?? currentTier ?? null);
+                // normalise so a legacy "PREMIUM" renders as Plus, not as itself.
+                setFreshTier(stored ? normaliseTier(stored) : (currentTier ?? null));
             } catch {
                 setFreshTier(currentTier ?? null);
             }

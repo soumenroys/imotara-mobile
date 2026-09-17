@@ -11,12 +11,45 @@
  * "family", which made Family licences unissuable. Five copies is the same bug
  * waiting to happen, and on mobile a fix needs a store release to reach users.
  *
- * ⚠️ These are the MOBILE spellings. Web uses lowercase ("pro" where this says
- * "PREMIUM"); SettingsContext.tsx is the only place the two vocabularies meet.
+ * ⚠️ These are the MOBILE spellings. Web uses lowercase.
+ *
+ * 🔗 "PREMIUM" IS NOT HERE ANY MORE. Plus and Pro merged (L10) and PLUS is the
+ * canonical id, matching the name users see. PREMIUM — and web's `pro` — are
+ * LEGACY ALIASES handled by normaliseTier().
+ *
+ * 🔴 THIS IS THE DANGEROUS ONE. "PREMIUM" is written into AsyncStorage on every
+ * installed device. Anything that reads a stored tier MUST go through
+ * normaliseTier, never isLicenseTier — a bare validity check now returns false
+ * for "PREMIUM" and would drop every existing paid user to FREE, needing a
+ * store release to undo.
  */
-export const TIER_ORDER = ["FREE", "PLUS", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"] as const;
+export const TIER_ORDER = ["FREE", "PLUS", "FAMILY", "EDU", "ENTERPRISE"] as const;
 
 export type LicenseTier = (typeof TIER_ORDER)[number];
+
+/**
+ * 🔗 THE ONE NORMALISER. Accepts every spelling either side of the wire has ever
+ * used — mobile's "PREMIUM", web's "pro"/"plus", any casing — and returns the
+ * canonical mobile id. Unknown input reads FREE, never upward into a paid tier.
+ *
+ * Use this, not isLicenseTier, wherever a tier arrives from AsyncStorage or from
+ * the server. isLicenseTier answers "is this canonical?"; this answers "what did
+ * they mean?", and for stored values that is the question.
+ */
+const TIER_ALIASES: Record<string, LicenseTier> = {
+    free:       "FREE",
+    plus:       "PLUS",
+    pro:        "PLUS",   // web's id before the rename
+    premium:    "PLUS",   // 🔴 this app's id before the rename — ON DEVICES
+    family:     "FAMILY",
+    edu:        "EDU",
+    education:  "EDU",
+    enterprise: "ENTERPRISE",
+};
+
+export function normaliseTier(tier: unknown): LicenseTier {
+    return TIER_ALIASES[String(tier ?? "").trim().toLowerCase()] ?? "FREE";
+}
 
 /** Narrowing guard for untrusted input (AsyncStorage reads, server payloads). */
 export function isLicenseTier(value: unknown): value is LicenseTier {
@@ -38,12 +71,9 @@ export function isLicenseTier(value: unknown): value is LicenseTier {
 export const TIER_LABELS: Record<LicenseTier, string> = {
     FREE:       "Free",
     // 🔗 PLUS and PREMIUM both read "Plus" — they ARE the same plan since L10.
-    // A grandfathered subscriber on the legacy PLUS id and someone who bought
-    // today on PREMIUM are on Imotara Plus; showing one of them "Pro" would be
-    // describing a plan that no longer exists. In-app the brand prefix is
-    // redundant, so the label is "Plus"; prose and marketing say "Imotara Plus".
+    // The one paid consumer tier. In-app the brand prefix is redundant, so the
+    // label is "Plus"; prose and marketing say "Imotara Plus".
     PLUS:       "Plus",
-    PREMIUM:    "Plus",
     FAMILY:     "Family",
     EDU:        "Education",
     ENTERPRISE: "Enterprise",
@@ -51,8 +81,7 @@ export const TIER_LABELS: Record<LicenseTier, string> = {
 
 /** Display label for a tier. Unknown or missing values read "Free". */
 export function prettyTier(tier: unknown): string {
-    const t = String(tier ?? "FREE").toUpperCase();
-    return isLicenseTier(t) ? TIER_LABELS[t] : "Free";
+    return TIER_LABELS[normaliseTier(tier)];
 }
 
 /**
@@ -74,21 +103,8 @@ export function prettyTier(tier: unknown): string {
  * Accepts either spelling, so a caller does not have to know which side of the
  * wire its value came from. Unknown input reads FREE — never a paid tier.
  */
-const WEB_TO_MOBILE: Record<string, LicenseTier> = {
-    free:       "FREE",
-    plus:       "PLUS",
-    pro:        "PREMIUM",
-    premium:    "PREMIUM",   // already mobile-spelled
-    family:     "FAMILY",
-    edu:        "EDU",
-    education:  "EDU",
-    enterprise: "ENTERPRISE",
-};
-
-export function fromWebTier(tier: unknown): LicenseTier {
-    const raw = String(tier ?? "").trim().toLowerCase();
-    return WEB_TO_MOBILE[raw] ?? "FREE";
-}
+/** Kept as a name for the web→mobile direction; it is the same normaliser. */
+export const fromWebTier = normaliseTier;
 
 /**
  * All features that may be gated by license.
@@ -160,10 +176,9 @@ const ALL: Record<LicenseTier, Set<FeatureKey>> = {
         "CLOUD_SYNC",
         // Server enforces 20 replies/day quota. History capped at 7 days.
     ]),
-    // Legacy id for grandfathered subscribers — same features, older price.
+    // The one paid consumer tier. Sold as "Imotara Plus". Subscribers on the
+    // retired plus_* SKUs are on this same tier at their old price.
     PLUS: new Set<FeatureKey>(MERGED_PAID_FEATURES),
-    // The merged tier. Sold as "Imotara Plus".
-    PREMIUM: new Set<FeatureKey>(MERGED_PAID_FEATURES),
     FAMILY: new Set<FeatureKey>([
         "CLOUD_SYNC",
         "HISTORY_UNLIMITED",
@@ -216,7 +231,7 @@ const ALL: Record<LicenseTier, Set<FeatureKey>> = {
 // still shows the truth) — only feature *checks* are bypassed. Flip to false
 // once tiers are actually sold and enforcement should start for real.
 export const SOFT_LAUNCH_BYPASS_ALL_GATES = true;
-const SOFT_LAUNCH_EFFECTIVE_TIER: LicenseTier = "PREMIUM";
+const SOFT_LAUNCH_EFFECTIVE_TIER: LicenseTier = "PLUS";
 
 // Institutional entitlements that must NOT be affected by the soft-launch
 // bypass (see the comment above): they are granted by Family/EDU/Enterprise
@@ -254,9 +269,11 @@ export function historyDaysForTier(tier: LicenseTier): number {
  */
 export function gate(
     feature: FeatureKey,
-    tier: LicenseTier | undefined | null
+    tier: LicenseTier | string | undefined | null
 ): FeatureGateResult {
-    const realTier: LicenseTier = tier ?? "FREE";
+    // 🔴 normaliseTier, not `?? "FREE"`. A stored "PREMIUM" would otherwise
+    // index ALL[] as undefined and grant nothing to a paying subscriber.
+    const realTier: LicenseTier = normaliseTier(tier);
     const t: LicenseTier =
         SOFT_LAUNCH_BYPASS_ALL_GATES && !INSTITUTIONAL_FEATURES.has(feature)
             ? SOFT_LAUNCH_EFFECTIVE_TIER
@@ -289,14 +306,17 @@ export function gate(
  */
 export function isEnabled(
     feature: FeatureKey,
-    tier: LicenseTier | undefined | null
+    // `string` on purpose, like gate(): callers pass values read from
+    // AsyncStorage or the server, which may still be a legacy spelling.
+    tier: LicenseTier | string | undefined | null
 ): boolean {
     return gate(feature, tier).enabled;
 }
 
 export function getParam<T = unknown>(
     feature: FeatureKey,
-    tier: LicenseTier | undefined | null,
+    // `string` like gate()/isEnabled — callers pass stored values.
+    tier: LicenseTier | string | undefined | null,
     key: string
 ): T | undefined {
     const g = gate(feature, tier);

@@ -10,7 +10,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
 // ✅ Licensing gate (read-only awareness for settings layer)
-import { fromWebTier, isLicenseTier, type LicenseTier } from "../licensing/featureGates";
+import { fromWebTier, normaliseTier, type LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
 import type { ToneContextPayload } from "../api/aiClient";
 import { supabase } from "../lib/supabase/client";
@@ -186,7 +186,7 @@ const LICENSE_EXPIRES_AT_KEY = "imotara_license_expires_at_v1";
 
 // Delegates to the one list in featureGates.ts — this used to be a hand-written
 // copy of the tier union, one of five across the app.
-const isValidTier = isLicenseTier;
+// (isValidTier removed — normaliseTier is what stored values need.)
 
 function normalizeToneContext(value: ToneContextPayload): ToneContextPayload {
     const base: ToneContextPayload = {
@@ -291,7 +291,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const refreshCloudSyncAllowed = async () => {
         try {
             const rawTier = await AsyncStorage.getItem(LICENSE_TIER_KEY);
-            const tier: LicenseTier = isValidTier(rawTier) ? rawTier : "FREE";
+            // 🔴 normaliseTier, NOT isValidTier — devices store "PREMIUM".
+            const tier: LicenseTier = normaliseTier(rawTier);
             const g = gate("CLOUD_SYNC", tier);
             setCloudSyncAllowed(g.enabled);
         } catch (e) {
@@ -586,7 +587,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 }
 
                 // 2) License tier — read from AsyncStorage first (fast path)
-                const localTier: LicenseTier = isValidTier(rawTier) ? rawTier : "FREE";
+                //
+                // 🔴 normaliseTier, NOT isValidTier. Every device installed before
+                // 2026-09-17 has "PREMIUM" in this key; isLicenseTier now returns
+                // false for it, so a validity check would silently drop every
+                // existing paid user to FREE — and only a store release could undo it.
+                const localTier: LicenseTier = normaliseTier(rawTier);
+                // Heal the cache in place so the legacy value stops circulating.
+                if (rawTier && rawTier !== localTier) {
+                    AsyncStorage.setItem(LICENSE_TIER_KEY, localTier).catch(() => {});
+                }
                 if (alive) {
                     setCloudSyncAllowed(gate("CLOUD_SYNC", localTier).enabled);
                     setLicenseExpiresAt(rawExpiresAt ?? null);

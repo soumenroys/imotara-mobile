@@ -74,7 +74,7 @@ import { speakMessage, speakPreview, stopSpeaking } from "../lib/tts/mobileTTS";
 
 
 // ✅ Licensing types (foundation only)
-import { isLicenseTier, prettyTier, type LicenseTier } from "../licensing/featureGates";
+import { normaliseTier, prettyTier, type LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
 
 // ✅ Donation presets + formatting (re-used)
@@ -2184,7 +2184,7 @@ function SettingsScreenContent() {
                                 await refreshLicense();
                                 try {
                                     const stored = await AsyncStorage.getItem("imotara_license_tier_v1");
-                                    if (stored && setLicenseTier) setLicenseTier(stored as any);
+                                    if (stored && setLicenseTier) setLicenseTier(normaliseTier(stored));
                                 } catch {}
                                 Alert.alert("Plan checked", String(licenseTier ?? "FREE").toUpperCase() !== "FREE" ? "Your plan has been restored!" : "No active plan found for this account.");
                             }}
@@ -5350,8 +5350,9 @@ function SettingsScreenContent() {
                         // HistoryContext's licenseTier state — read it back and sync so the
                         // tier label in Settings refreshes immediately without an app restart.
                         const raw = await AsyncStorage.getItem("imotara_license_tier_v1").catch(() => null);
-                        if (isLicenseTier(raw) && setLicenseTier) {
-                            setLicenseTier(raw);
+                        // normaliseTier: a device may still hold "PREMIUM".
+                        if (raw && setLicenseTier) {
+                            setLicenseTier(normaliseTier(raw));
                         }
                     }}
                 />

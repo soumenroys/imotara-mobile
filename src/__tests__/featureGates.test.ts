@@ -17,7 +17,10 @@ import {
     type FeatureKey,
 } from "../licensing/featureGates";
 
-const TIERS: LicenseTier[] = ["FREE", "PLUS", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"];
+// "PREMIUM" is deliberately still here. It is no longer a canonical tier, but
+// it IS what sits in AsyncStorage on devices installed before the rename, so
+// every gate must keep behaving correctly when handed it.
+const TIERS: string[] = ["FREE", "PLUS", "PREMIUM", "FAMILY", "EDU", "ENTERPRISE"];
 
 describe("institutional gates always follow the REAL tier (soft-launch-proof)", () => {
     test("MULTI_PROFILE: only FAMILY and ENTERPRISE", () => {
