@@ -819,6 +819,13 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                 const sku = `com.imotara.imotara.${plan.id}`;
                                 const isBusy = purchasing === sku || purchasing === plan.id;
                                 const isPro = plan.tier === "pro";
+                                // 🔴 iOS shows the STORE's price; Android shows OURS.
+                                // On Android this is `plan.priceInr` from PLAN_DEFS —
+                                // Play Console is never asked. So repricing in Play
+                                // without shipping a matching PLAN_DEFS quotes one
+                                // figure and charges another. pricingCatalog.test.ts
+                                // pins the two together; making Android read the store
+                                // like iOS is deferred until after the payments work.
                                 const displayPrice = Platform.OS === "ios"
                                     ? iosPrice(sku, plan.priceInr)
                                     : `₹${plan.priceInr}`;
