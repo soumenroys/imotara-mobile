@@ -14,7 +14,10 @@
  * and "PLUS" is written into AsyncStorage on devices. They get the merged
  * tier's features at their old price.
  */
-import { featuresForTier, historyDaysForTier, type FeatureKey } from "../licensing/featureGates";
+import {
+    featuresForTier, historyDaysForTier, isLicenseTier, fromWebTier,
+    TIER_ORDER, type FeatureKey,
+} from "../licensing/featureGates";
 
 const MERGED = [
     "CLOUD_SYNC", "HISTORY_UNLIMITED", "TRENDS_INSIGHTS", "EXPORT_DATA",
@@ -60,5 +63,18 @@ describe("the PLUS/PREMIUM merge", () => {
         // HISTORY_DAYS_LIMIT is a parameterized gate, never a member of a set.
         const onFree = ALL_KEYS.filter((k) => featuresForTier("FREE").has(k));
         expect(onFree).toEqual(["CLOUD_SYNC"]);
+    });
+
+    it("🔴 L11 — PLUS must NOT be deleted, merged though it is", () => {
+        // The temptation after a merge is to delete the redundant tier. On
+        // mobile it is the worst possible one to delete:
+        //   · "PLUS" is written into AsyncStorage on installed devices
+        //   · isLicenseTier() would reject it, so those devices fall to FREE
+        //   · the fix would need a store release, and users who never update
+        //     would stay broken permanently
+        expect([...TIER_ORDER]).toContain("PLUS");
+        expect(featuresForTier("PLUS").has("HISTORY_UNLIMITED")).toBe(true);
+        expect(isLicenseTier("PLUS")).toBe(true);
+        expect(fromWebTier("plus")).toBe("PLUS");
     });
 });
