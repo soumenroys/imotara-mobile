@@ -118,34 +118,47 @@ export type FeatureGateResult =
 // History days per tier — only needed for tiers without HISTORY_UNLIMITED.
 const HISTORY_DAYS: Partial<Record<LicenseTier, number>> = {
     FREE: 7,
-    PLUS: 90,
+    // PLUS: 90 removed in L10 — PLUS now carries HISTORY_UNLIMITED, and the
+    // caller checks that first, so a 90 here would be dead and misleading.
 };
+
+/**
+ * 🔗 THE MERGED PAID CONSUMER TIER (L10).
+ *
+ * PLUS and PREMIUM are one tier now. Publicly it is **"Imotara Plus"**;
+ * internally the web id stays `pro` (this app's `PREMIUM`) and the SKUs stay
+ * `pro_*`, so existing licence rows and the grandfather backfill stay valid.
+ *
+ * PLUS survives only as the LEGACY id — the one remaining ₹99 subscriber and
+ * anyone grandfathered onto it. Same features, older price. That is what
+ * "merged" means.
+ *
+ * ⚠️ Both read from this one array rather than listing their own keys — two
+ * lists that happen to agree is the drift that made Family licences unissuable
+ * on web. tierMergeIsComplete.test.ts pins the equality, and pins it against
+ * the web repo's copy too.
+ */
+const MERGED_PAID_FEATURES: readonly FeatureKey[] = [
+    "CLOUD_SYNC",
+    "HISTORY_UNLIMITED",
+    "TRENDS_INSIGHTS",
+    "EXPORT_DATA",
+    "TTS_ADVANCED",
+    "SEARCH_MODE",
+    "REPLY_CADENCE",
+    "COMPANION_LETTER", // Monthly AI-written letter
+    "GROWTH_ARC",       // Long-term emotional growth arc narrative
+];
 
 const ALL: Record<LicenseTier, Set<FeatureKey>> = {
     FREE: new Set<FeatureKey>([
         "CLOUD_SYNC",
         // Server enforces 20 replies/day quota. History capped at 7 days.
     ]),
-    PLUS: new Set<FeatureKey>([
-        "CLOUD_SYNC",
-        "EXPORT_DATA",
-        "TTS_ADVANCED",  // Azure Neural TTS, voice selection, rate/pitch control
-        "SEARCH_MODE",   // Exact / semantic history search toggle
-        "REPLY_CADENCE", // Arc & companion-letter cadence pickers
-        // 90-day history; HISTORY_UNLIMITED intentionally absent.
-        // TRENDS_INSIGHTS / COMPANION_LETTER / GROWTH_ARC available on PREMIUM and above.
-    ]),
-    PREMIUM: new Set<FeatureKey>([
-        "CLOUD_SYNC",
-        "HISTORY_UNLIMITED",
-        "TRENDS_INSIGHTS",
-        "EXPORT_DATA",
-        "TTS_ADVANCED",
-        "SEARCH_MODE",
-        "REPLY_CADENCE",
-        "COMPANION_LETTER", // Monthly AI-written letter
-        "GROWTH_ARC",       // Long-term emotional growth arc narrative
-    ]),
+    // Legacy id for grandfathered subscribers — same features, older price.
+    PLUS: new Set<FeatureKey>(MERGED_PAID_FEATURES),
+    // The merged tier. Sold as "Imotara Plus".
+    PREMIUM: new Set<FeatureKey>(MERGED_PAID_FEATURES),
     FAMILY: new Set<FeatureKey>([
         "CLOUD_SYNC",
         "HISTORY_UNLIMITED",
@@ -210,6 +223,25 @@ export const INSTITUTIONAL_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKe
     "CHILD_SAFE_MODE",
     "ADMIN_DASHBOARD",
 ]);
+
+/**
+ * What a tier actually grants, WITHOUT the soft-launch bypass.
+ *
+ * 🔴 `gate()` bypasses to PREMIUM while SOFT_LAUNCH_BYPASS_ALL_GATES is true,
+ * which makes every tier look identical. That is correct for the app and
+ * useless for checking the tier table — a test written against gate() would
+ * pass no matter how badly the sets were wrong. This is the honest read.
+ *
+ * Read-only: returns the live Set, so callers must not mutate it.
+ */
+export function featuresForTier(tier: LicenseTier): ReadonlySet<FeatureKey> {
+    return ALL[tier];
+}
+
+/** History-day cap for a tier, bypass-free. Infinity when unlimited. */
+export function historyDaysForTier(tier: LicenseTier): number {
+    return ALL[tier].has("HISTORY_UNLIMITED") ? Infinity : (HISTORY_DAYS[tier] ?? 7);
+}
 
 /**
  * Central feature gate resolver.
