@@ -274,7 +274,7 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
     title: "Upgrade plan",
     section: "Your plan",
     sectionKey: "support",
-    description: "Upgrade to Plus or Pro for unlimited replies, cloud sync, and advanced features",
+    description: "Upgrade to Imotara Plus for unlimited replies, cloud sync, and advanced features",
     keywords: ["upgrade", "plus", "pro", "subscription", "premium", "unlimited", "plan", "buy", "अपग्रेड", "আপগ্রেড"],
   },
   {

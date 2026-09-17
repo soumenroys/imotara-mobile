@@ -734,7 +734,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     handleRestoreRef.current = handleRestore;
 
     // ── Render ─────────────────────────────────────────────────────────────────
-    const plansForPeriod = PLAN_DEFS.filter((p) => p.period === period);
+    // Retired SKUs (plus_*) stay in PLAN_DEFS so restores still resolve them,
+    // but must never be offered as a new purchase.
+    const plansForPeriod = PLAN_DEFS.filter((p) => p.period === period && !p.retired);
     const iosLoading = Platform.OS === "ios" && !connected;
 
     return (
@@ -1014,37 +1016,24 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                     ],
                                 },
                                 {
-                                    tier: prettyTier("PLUS"),
-                                    color: colors.primary,
-                                    badge: "rgba(14,165,233,0.15)",
+                                    // One paid plan since L10 — the two columns
+                                    // that used to split these were Plus and Pro.
+                                    tier: prettyTier("PREMIUM"),
+                                    color: colors.indigo,
+                                    badge: "rgba(99,102,241,0.15)",
                                     items: [
                                         "Unlimited cloud replies",
-                                        "90-day history backup",
+                                        "Unlimited history backup",
                                         "Cross-device access",
                                         "Companion mode / personas",
                                         "Response length control",
                                         "All companion tones",
                                         "History search across dates",
+                                        "Semantic history search",
                                         "Data export (JSON, CSV, PDF)",
                                         "Advanced TTS — voice, speed & pitch",
                                         "Azure Neural TTS",
                                         "Language-matched TTS voices",
-                                        "Semantic history search",
-                                        "Reply cadence controls",
-                                        "Session duration stats",
-                                        "Custom notification schedule",
-                                        "Session token management",
-                                        "Email & priority support",
-                                        "Connect session history — 90 days",
-                                    ],
-                                },
-                                {
-                                    tier: prettyTier("PREMIUM"),
-                                    color: colors.indigo,
-                                    badge: "rgba(99,102,241,0.15)",
-                                    items: [
-                                        "Everything in Plus",
-                                        "Unlimited history",
                                         "Emotion trends & mood graphs",
                                         "Conversation insights",
                                         "Weekly emotional summary",
@@ -1054,6 +1043,11 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                         "Listen to letters (TTS)",
                                         "React & reply to letters",
                                         "Long-term growth arc narrative",
+                                        "Reply cadence controls",
+                                        "Session duration stats",
+                                        "Custom notification schedule",
+                                        "Session token management",
+                                        "Email & priority support",
                                         "Unlimited Connect session history",
                                     ],
                                 },
@@ -1062,7 +1056,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                     color: colors.accentSoft,
                                     badge: "rgba(139,92,246,0.15)",
                                     items: [
-                                        "Everything in Pro",
+                                        "Everything in Imotara Plus",
                                         "Multi-profile management",
                                         "Child-safe mode",
                                         "Admin dashboard & analytics",
@@ -1150,7 +1144,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                                         Alert.alert("Plan restored", `Your ${prettyTier(fromWebTier(tier))} plan has been restored.`);
                                                         try { await onPurchaseComplete(); } catch { }
                                                     } else {
-                                                        Alert.alert("No active plan found", "No active Plus or Pro subscription was found for this account.");
+                                                        Alert.alert("No active plan found", "No active Imotara Plus subscription was found for this account.");
                                                     }
                                                 }
                                             } catch {
@@ -1178,7 +1172,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                                 Alert.alert("Plan restored", `Your ${prettyTier(fromWebTier(tier))} plan has been restored.`);
                                                 try { await onPurchaseComplete(); } catch { }
                                             } else {
-                                                Alert.alert("No active plan found", "No active Plus or Pro subscription was found for this account.");
+                                                Alert.alert("No active plan found", "No active Imotara Plus subscription was found for this account.");
                                             }
                                         }
                                     } catch {

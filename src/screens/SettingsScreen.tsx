@@ -440,7 +440,7 @@ function SettingsScreenContent() {
     // ✅ TS-safe reason: only exists when enabled === false
     const cloudGateReason = !cloudGate.enabled ? cloudGate.reason : undefined;
 
-    // ── Feature gates (Plus / Pro tier controls) ──────────────────────────────
+    // ── Feature gates (Imotara Plus tier controls) ────────────────────────────
     const ttsAdvancedGate     = gate("TTS_ADVANCED",      licenseTier);
     const searchModeGate      = gate("SEARCH_MODE",       licenseTier);
     const replyCadenceGate    = gate("REPLY_CADENCE",     licenseTier);
@@ -3740,7 +3740,7 @@ function SettingsScreenContent() {
                     )}
                 </AppSurface>
 
-                {/* G-1: Emotional arc cadence — gated: Pro+ (GROWTH_ARC) */}
+                {/* G-1: Emotional arc cadence — gated: Imotara Plus (GROWTH_ARC) */}
                 {growthArcGate.enabled ? (
                 <AppSurface style={{ marginBottom: 16 }}>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -3748,7 +3748,7 @@ function SettingsScreenContent() {
                             Emotional arc cadence
                         </Text>
                         {!growthArcGate.enabled && (
-                            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Pro+</Text>
+                            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Plus</Text>
                         )}
                     </View>
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
@@ -3781,12 +3781,12 @@ function SettingsScreenContent() {
                             <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Emotional arc cadence</Text>
                             <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{!growthArcGate.enabled ? growthArcGate.reason : ""}</Text>
                         </View>
-                        <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Pro+</Text>
+                        <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Plus</Text>
                     </View>
                 </AppSurface>
                 )}
 
-                {/* G-2: Companion letter cadence — gated: Pro+ (COMPANION_LETTER) */}
+                {/* G-2: Companion letter cadence — gated: Imotara Plus (COMPANION_LETTER) */}
                 {companionLetterGate.enabled ? (
                 <AppSurface style={{ marginBottom: 16 }}>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -3794,7 +3794,7 @@ function SettingsScreenContent() {
                             Companion letter cadence
                         </Text>
                         {!companionLetterGate.enabled && (
-                            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Pro+</Text>
+                            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Plus</Text>
                         )}
                     </View>
                     <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
@@ -3827,7 +3827,7 @@ function SettingsScreenContent() {
                             <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Companion letter cadence</Text>
                             <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{!companionLetterGate.enabled ? companionLetterGate.reason : ""}</Text>
                         </View>
-                        <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Pro+</Text>
+                        <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600" }}>Plus</Text>
                     </View>
                 </AppSurface>
                 )}

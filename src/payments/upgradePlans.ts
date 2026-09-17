@@ -62,6 +62,17 @@ export const ANDROID_SUBSCRIPTION_SET = new Set<string>(ANDROID_SUBSCRIPTION_SKU
 
 export type PlanDef = {
     id: PlanId;
+    /**
+     * 🔴 Retired for NEW purchases (L10/L12). The tiers merged into one paid
+     * plan sold as "Imotara Plus" on the pro_* SKUs; plus_* stays here, and
+     * stays in the store SKU lists, because existing subscribers still bill on
+     * it and a restore must still recognise it. It is filtered out of the
+     * upgrade sheet so nobody can start a new subscription on it.
+     *
+     * ⚠️ Do NOT delete a SKU with an active subscriber — deactivate it for new
+     * purchases in the consoles instead.
+     */
+    retired?: boolean;
     tier: PlanTier;
     period: PlanPeriod;
     priceInr: number;
@@ -73,24 +84,24 @@ export type PlanDef = {
 
 export const PLAN_DEFS: PlanDef[] = [
     {
-        id: "plus_monthly", tier: "plus", period: "monthly",
+        id: "plus_monthly", tier: "plus", period: "monthly", retired: true,
         priceInr: 99, paise: 9_900,
         features: ["Unlimited replies", "Cross-device access", "90-day history", "All companion tones", "Export conversations"],
     },
     {
-        id: "plus_annual", tier: "plus", period: "annual",
+        id: "plus_annual", tier: "plus", period: "annual", retired: true,
         priceInr: 699, paise: 69_900, monthlyPriceInr: 58, savingsPct: 41,
         features: ["Unlimited replies", "Cross-device access", "90-day history", "All companion tones", "Export conversations"],
     },
     {
         id: "pro_monthly", tier: "pro", period: "monthly",
         priceInr: 149, paise: 14_900,
-        features: ["Everything in Plus", "Priority responses", "Mood trends & insights", "Export conversations"],
+        features: ["Unlimited replies", "Unlimited history", "Cross-device access", "All companion tones", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
     },
     {
         id: "pro_annual", tier: "pro", period: "annual",
         priceInr: 1_299, paise: 129_900, monthlyPriceInr: 108, savingsPct: 27,
-        features: ["Everything in Plus", "Priority responses", "Mood trends & insights", "Export conversations"],
+        features: ["Unlimited replies", "Unlimited history", "Cross-device access", "All companion tones", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
     },
 ];
 

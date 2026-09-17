@@ -37,8 +37,13 @@ export function isLicenseTier(value: unknown): value is LicenseTier {
  */
 export const TIER_LABELS: Record<LicenseTier, string> = {
     FREE:       "Free",
+    // 🔗 PLUS and PREMIUM both read "Plus" — they ARE the same plan since L10.
+    // A grandfathered subscriber on the legacy PLUS id and someone who bought
+    // today on PREMIUM are on Imotara Plus; showing one of them "Pro" would be
+    // describing a plan that no longer exists. In-app the brand prefix is
+    // redundant, so the label is "Plus"; prose and marketing say "Imotara Plus".
     PLUS:       "Plus",
-    PREMIUM:    "Pro",
+    PREMIUM:    "Plus",
     FAMILY:     "Family",
     EDU:        "Education",
     ENTERPRISE: "Enterprise",
@@ -102,7 +107,7 @@ export type FeatureKey =
     | "TTS_ADVANCED"       // TTS voice selection, rate/pitch control, Azure Neural
     | "SEARCH_MODE"        // Exact / semantic search mode toggle in history
     | "REPLY_CADENCE"      // Arc & companion-letter cadence controls
-    // Pro+ features
+    // Imotara Plus features
     | "COMPANION_LETTER"   // Monthly AI-written letter from the companion
     | "GROWTH_ARC";        // Long-term emotional growth arc narrative
 
@@ -307,13 +312,13 @@ function reasonFor(feature: FeatureKey, tier: LicenseTier): string {
     // For now, tier is unused in messages, but left in signature for future nuance.
     switch (feature) {
         case "CLOUD_SYNC":
-            return "Cloud sync is available with Plus and above.";
+            return "Cloud sync is available with Imotara Plus.";
         case "HISTORY_UNLIMITED":
-            return "Unlimited history is available with Pro.";
+            return "Unlimited history is available with Imotara Plus.";
         case "TRENDS_INSIGHTS":
-            return "Insights are available with Pro.";
+            return "Insights are available with Imotara Plus.";
         case "EXPORT_DATA":
-            return "Export is available with Plus and above.";
+            return "Export is available with Imotara Plus.";
         case "MULTI_PROFILE":
             return "Multiple profiles are available with Family plan.";
         case "CHILD_SAFE_MODE":
@@ -323,15 +328,15 @@ function reasonFor(feature: FeatureKey, tier: LicenseTier): string {
         case "HISTORY_DAYS_LIMIT":
             return "History retention limit applies on Free plan.";
         case "TTS_ADVANCED":
-            return "Advanced TTS voice selection and speed/pitch control are available on Plus and above.";
+            return "Advanced TTS voice selection and speed/pitch control are available with Imotara Plus.";
         case "SEARCH_MODE":
-            return "Exact/semantic search mode is available on Plus and above.";
+            return "Exact/semantic search mode is available with Imotara Plus.";
         case "REPLY_CADENCE":
-            return "Cadence controls for arc and companion letter are available on Plus and above.";
+            return "Cadence controls for arc and companion letter are available with Imotara Plus.";
         case "COMPANION_LETTER":
-            return "Monthly companion letters are available on Pro and above.";
+            return "Monthly companion letters are available with Imotara Plus.";
         case "GROWTH_ARC":
-            return "Emotional growth arc narrative is available on Pro and above.";
+            return "Emotional growth arc narrative is available with Imotara Plus.";
         default:
             return "This feature is not available on your current plan.";
     }

@@ -237,8 +237,7 @@ export const FEATURE_TIPS: FeatureTip[] = [
   // ── Plans & Upgrade ────────────────────────────────────────────────────────
   { id: "free_plan",         emoji: "🆓", title: "Free plan — what's included",tip: "Free plan: 20 enhanced replies/day, 7-day backup, unlimited on-device replies, full privacy controls.", category: "settings" },
   { id: "free_ondevice",     emoji: "♾️", title: "Unlimited on-device — free",tip: "On-device replies are free and unlimited on every plan — the free plan is genuinely useful.", category: "settings" },
-  { id: "plus_plan",         emoji: "✨", title: "Plus plan",                tip: "Plus: unlimited enhanced replies, 90-day history backup, advanced TTS controls, all companion tones.", category: "settings" },
-  { id: "pro_plan",          emoji: "🌟", title: "Pro plan",                 tip: "Pro: unlimited replies, full history, companion letters, all growth tools, priority access.", category: "settings" },
+  { id: "pro_plan",          emoji: "🌟", title: "Imotara Plus",             tip: "One paid plan with everything in it: unlimited replies, unlimited history, advanced voice, insights, companion letters and the growth arc.", category: "settings" },
   { id: "token_credits",     emoji: "🪙", title: "Token credits",            tip: "Buy extra enhanced reply credits anytime — useful for busy days when the daily limit runs out.", category: "settings" },
   { id: "token_sizes",       emoji: "📦", title: "Token pack sizes",         tip: "Token packs come in 100, 250, 600, and 1800 credits — choose the size that fits your use.", category: "settings" },
   { id: "sub_renews",        emoji: "🔄", title: "Subscription auto-renews", tip: "Subscriptions renew automatically — cancel anytime from Settings → Your plan on iOS/Android.", category: "settings" },
@@ -254,7 +253,7 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "web_desktop",       emoji: "🖥️", title: "Desktop experience",       tip: "On web, Imotara's full layout appears side-by-side — chat, history, trends, and settings.", category: "settings" },
   { id: "web_mobile_parity", emoji: "📱", title: "Mobile & web in sync",     tip: "Sign in on both mobile and web — your history and settings stay consistent everywhere.", category: "settings" },
   { id: "web_tutorial",      emoji: "📖", title: "Full tutorial on web",     tip: "Visit imotara.com/tutorial for a complete step-by-step guide to every feature.", category: "settings" },
-  { id: "web_upgrade",       emoji: "🌐", title: "Compare plans on web",     tip: "Visit imotara.com/upgrade to see a full feature comparison across Free, Plus, Pro, and Enterprise.", category: "settings" },
+  { id: "web_upgrade",       emoji: "🌐", title: "Compare plans on web",     tip: "Visit imotara.com/upgrade to see a full feature comparison across Free, Imotara Plus, and Enterprise.", category: "settings" },
 
   // ── Account & advanced ──────────────────────────────────────────────────────
   { id: "link_key",          emoji: "🔗", title: "Chat link key",            tip: "Set a custom link key in Settings → Advanced to sync history across devices without full sign-in.", category: "settings" },
