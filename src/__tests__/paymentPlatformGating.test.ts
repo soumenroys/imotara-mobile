@@ -45,8 +45,25 @@ describe("the fixture is real", () => {
 describe("native Razorpay checkout has exactly the call sites we vetted", () => {
     it("no new Razorpay call site has appeared", () => {
         // Adding one is not forbidden — but it must be a conscious decision about
-        // Apple's rules, so update this list in the same commit and say why.
-        expect(razorpayCallSites()).toEqual([CONNECT, UPGRADE].sort());
+        // Apple's and Google's rules, so update this list in the same commit and
+        // say why.
+        //
+        // 2026-09-18: UpgradeSheet LEFT this list. It held a doAndroidPurchase()
+        // that opened Razorpay checkout for subscriptions and token packs — i.e.
+        // digital content sold outside Play Billing, which Play policy forbids.
+        // Nothing called it, so deleting it changed no behaviour; it was removed
+        // because unreachable code that violates a store policy is still a loaded
+        // gun. Connect session minutes are now the ONLY native Razorpay call site.
+        expect(razorpayCallSites()).toEqual([CONNECT]);
+    });
+
+    it("the upgrade sheet never opens Razorpay checkout", () => {
+        // Stated separately from the list above so the failure message names the
+        // actual rule when someone re-adds it: digital content goes through the
+        // store, on BOTH platforms. There is no "if Play Billing is unavailable"
+        // escape hatch — that was exactly the shape of the code deleted here.
+        expect(read(UPGRADE)).not.toMatch(/RazorpayCheckout\.open\s*\(/);
+        expect(read(UPGRADE)).not.toMatch(/function\s+doAndroidPurchase\b/);
     });
 });
 

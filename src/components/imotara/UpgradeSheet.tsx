@@ -2,7 +2,15 @@
 // Native upgrade modal.
 //   iOS     → Apple IAP via expo-iap (StoreKit 2). Requires App Store Connect products.
 //   Android → Google Play Billing via expo-iap. Requires Play Console products.
-//             Falls back to Razorpay if Google Play Billing unavailable (not recommended for new installs).
+//
+// 🔴 THERE IS NO RAZORPAY PATH HERE, AND THERE MUST NOT BE ONE. Play policy
+// requires Play Billing for digital content sold in a Play-distributed app, and
+// Apple requires IAP for the same. A `doAndroidPurchase()` that opened Razorpay
+// checkout used to live in this file — unreachable, nothing ever called it —
+// and it was deleted on 2026-09-18 rather than left as a loaded gun.
+// Connect SESSION MINUTES are the one exception and they live in
+// ConnectScreen.tsx, covered by App Store rule 3.1.3(d). See
+// `paymentPlatformGating.test.ts`, which fails the build if a call site returns.
 
 import React, { useEffect, useRef, useState } from "react";
 import { DEBUG_UI_ENABLED } from "../../config/debug";
@@ -50,7 +58,7 @@ type Props = {
     currentTier?: string | null;
 };
 
-// ── Android: full Razorpay purchase flow ──────────────────────────────────────
+// ── Shared fetch helper ───────────────────────────────────────────────────────
 
 // Wraps a fetch with a manual AbortController timeout.
 // AbortSignal.timeout() is not available on Hermes (Android/iOS JS engine).
@@ -58,84 +66,6 @@ function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Pr
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-}
-
-async function doAndroidPurchase(
-    productId: ProductId,
-    accessToken: string,
-    userEmail: string | undefined,
-): Promise<{ ok: boolean; error?: string }> {
-    const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-    };
-
-    let orderRes: Response;
-    try {
-        orderRes = await fetchWithTimeout(
-            buildApiUrl("/api/license/order-intent"),
-            { method: "POST", headers, body: JSON.stringify({ productId }) },
-            20_000,
-        );
-    } catch {
-        return { ok: false, error: "Network error creating order. Check your connection." };
-    }
-    const orderData = await orderRes.json();
-    if (!orderData.ok || !orderData.razorpay) {
-        return { ok: false, error: orderData.error ?? "Could not create order" };
-    }
-
-    const { orderId, keyId, amount, currency } = orderData.razorpay;
-
-    // Dynamic require keeps the iOS bundle clean (no Razorpay native module there)
-    const RazorpayCheckout = require("react-native-razorpay").default;
-    let paymentData: any;
-    try {
-        paymentData = await RazorpayCheckout.open({
-            key: keyId,
-            order_id: orderId,
-            amount: String(amount),
-            currency: currency ?? "INR",
-            name: "Imotara",
-            description: productId,
-            image: "https://imotaraapp.vercel.app/icon-192.png",
-            prefill: { email: userEmail ?? "", contact: "" },
-            theme: { color: "#6366f1" },
-        });
-    } catch (err: any) {
-        if (err?.code === 0 || String(err?.description ?? "").toLowerCase().includes("cancel")) {
-            return { ok: false, error: "cancelled" };
-        }
-        return { ok: false, error: String(err?.message ?? err) };
-    }
-
-    const paymentId = paymentData?.razorpay_payment_id;
-    if (!paymentId) return { ok: false, error: "Payment ID missing" };
-
-    // verify-payment polls Razorpay internally (handles UPI mandate "authorized" → "captured" delay)
-    let verifyRes: Response;
-    try {
-        verifyRes = await fetchWithTimeout(
-            buildApiUrl("/api/license/verify-payment"),
-            { method: "POST", headers, body: JSON.stringify({ paymentId, productId }) },
-            45_000, // 45s to cover Razorpay's internal polling (5 × 2s + buffer)
-        );
-    } catch {
-        // Network error after payment — poll license status as fallback
-        const polled = await pollLicenseStatus(headers, productId);
-        if (polled) return { ok: true };
-        return { ok: false, error: "Payment received but activation is pending. Tap 'Restore previous purchases' to activate." };
-    }
-
-    const verifyData = await verifyRes.json();
-    if (verifyData.ok) return { ok: true };
-
-    // verify-payment returned non-ok — the Razorpay webhook may still grant the license.
-    // Poll the license status for up to 20s before giving up.
-    const polled = await pollLicenseStatus(headers, productId);
-    if (polled) return { ok: true };
-
-    return { ok: false, error: verifyData.error ?? "Verification failed" };
 }
 
 // ── Android: Google Play Billing via expo-iap ─────────────────────────────────
