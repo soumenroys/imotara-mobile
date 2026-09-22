@@ -69,6 +69,7 @@ import AppSeparator from "../components/ui/AppSeparator";
 import AppSurface from "../components/ui/AppSurface";
 import AppButton from "../components/ui/AppButton";
 import { DEBUG_UI_ENABLED } from "../config/debug";
+import { BUSINESS, formattedAddress } from "../config/businessIdentity";
 import { HowItWorksModal } from "../components/imotara/HowItWorksModal";
 import { speakMessage, speakPreview, stopSpeaking } from "../lib/tts/mobileTTS";
 
@@ -5258,6 +5259,12 @@ function SettingsScreenContent() {
                         const rows = [
                             { label: "Version", value: `v${version}` },
                             { label: "Build", value: `${build}` },
+                            // 🔴 The operating entity, visible IN THE APP — not decoration.
+                            // BillDesk rejected the Google Play PA-CB application on
+                            // 2026-09-21 for "Mobile Application(s) has a missing/incomplete
+                            // legal name of the applicant company". The store listing was
+                            // fixed too, but a reviewer may open the app instead.
+                            { label: "Operated by", value: BUSINESS.legalName },
                         ];
                         return (
                             <>
@@ -5290,6 +5297,18 @@ function SettingsScreenContent() {
                                         </Text>
                                     </View>
                                 ))}
+                                <Text
+                                    style={{
+                                        fontSize: 11,
+                                        lineHeight: 16,
+                                        color: colors.textSecondary,
+                                        marginTop: 10,
+                                    }}
+                                >
+                                    {formattedAddress()}
+                                    {"\n"}
+                                    {BUSINESS.email}
+                                </Text>
                             </>
                         );
                     })()}
