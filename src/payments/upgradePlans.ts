@@ -83,23 +83,37 @@ export type PlanDef = {
 };
 
 export const PLAN_DEFS: PlanDef[] = [
+    // ✅ THE PLANS ON SALE. Shown as "Imotara Plus".
+    //
+    // 🔄 FLIPPED 2026-09-25. `plus_*` used to be the RETIRED pair at ₹99/₹699
+    // while `pro_*` was live. The pairs were swapped because **nobody had ever
+    // purchased `pro_monthly` or `pro_annual`** — zero rows in
+    // `payment_licenses`, verified 2026-09-18. An id nobody has bought costs
+    // nothing to abandon, and `plus_*` is the id that matches the label.
+    //
+    // 🔑 Play sells exactly these two, bare (`plus_monthly`, `plus_annual`).
+    // Apple sells the same suffixes bundle-prefixed. Web's PRODUCT_CATALOG
+    // agrees. `pricingCatalog.test.ts` in both repos pins the amounts.
     {
-        id: "plus_monthly", tier: "plus", period: "monthly", retired: true,
-        priceInr: 99, paise: 9_900,
-        features: ["Unlimited replies", "Cross-device access", "90-day history", "All companion tones", "Export conversations"],
-    },
-    {
-        id: "plus_annual", tier: "plus", period: "annual", retired: true,
-        priceInr: 699, paise: 69_900, monthlyPriceInr: 58, savingsPct: 41,
-        features: ["Unlimited replies", "Cross-device access", "90-day history", "All companion tones", "Export conversations"],
-    },
-    {
-        id: "pro_monthly", tier: "pro", period: "monthly",
+        id: "plus_monthly", tier: "plus", period: "monthly",
         priceInr: 149, paise: 14_900,
         features: ["Unlimited replies", "Unlimited history", "Cross-device access", "All companion tones", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
     },
     {
-        id: "pro_annual", tier: "pro", period: "annual",
+        id: "plus_annual", tier: "plus", period: "annual",
+        priceInr: 1_299, paise: 129_900, monthlyPriceInr: 108, savingsPct: 27,
+        features: ["Unlimited replies", "Unlimited history", "Cross-device access", "All companion tones", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
+    },
+    // 🔴 RETIRED for new purchases — filtered out of the upgrade sheet, kept so
+    // a restore still recognises them. Same tier, same price; simply not offered.
+    // ⛔ Do NOT delete a SKU from the consoles — deactivate it instead.
+    {
+        id: "pro_monthly", tier: "plus", period: "monthly", retired: true,
+        priceInr: 149, paise: 14_900,
+        features: ["Unlimited replies", "Unlimited history", "Cross-device access", "All companion tones", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
+    },
+    {
+        id: "pro_annual", tier: "plus", period: "annual", retired: true,
         priceInr: 1_299, paise: 129_900, monthlyPriceInr: 108, savingsPct: 27,
         features: ["Unlimited replies", "Unlimited history", "Cross-device access", "All companion tones", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
     },
