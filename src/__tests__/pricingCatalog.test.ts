@@ -65,10 +65,10 @@ describe("the PRICE SHOWN comes from the store, not from PLAN_DEFS", () => {
         expect(sheet).not.toMatch(/`₹\$\{(plan|pack)\.priceInr\}`/);
     });
 
-    it("both price call sites go through storePrice()", () => {
+    it("both price call sites go through the store reader", () => {
         const calls = sheet.match(/const displayPrice = [^;]+;/g) ?? [];
         expect(calls.length).toBeGreaterThanOrEqual(2);
-        for (const c of calls) expect(c).toContain("storePrice(");
+        for (const c of calls) expect(c).toMatch(/pricing(For\(|\.regular)/);
     });
 
     it("there is no platform branch left in the price display", () => {
@@ -79,14 +79,20 @@ describe("the PRICE SHOWN comes from the store, not from PLAN_DEFS", () => {
         }
     });
 
-    it("storePrice reads Play's subscription offer phases, not just displayPrice", () => {
-        // Play puts a SUBSCRIPTION's price inside the offer's pricing phases
-        // rather than at the top level. Reading only `displayPrice` would fall
-        // through to the rupee default on Android subscriptions — the same bug
-        // wearing a different hat.
-        expect(sheet).toMatch(/subscriptionOfferDetails/);
-        expect(sheet).toMatch(/pricingPhaseList/);
-        expect(sheet).toMatch(/formattedPrice/);
+    it("the reading itself lives in a module that can be tested with real shapes", () => {
+        // It used to be inline in this 1,000-line component, which is why the
+        // only available assertions were greps like the ones above. The actual
+        // behaviour — including the pricing-phase trap — is pinned properly in
+        // storePricing.test.ts against fixtures shaped like Play and StoreKit.
+        expect(sheet).toMatch(/from "\.\.\/\.\.\/payments\/storePricing"/);
+    });
+
+    it("🔴 the annual card never shows a rupee breakdown under a non-rupee price", () => {
+        // The headline comes from the store; `monthlyPriceInr` does not. Left
+        // unguarded, a US reader saw "$59.99" with "₹108/mo billed annually"
+        // under it — two prices, one card.
+        const line = /monthlyPriceInr[\s\S]{0,200}?billed annually/.exec(sheet)?.[0] ?? "";
+        expect(line).toContain("startsWith(\"₹\")");
     });
 });
 

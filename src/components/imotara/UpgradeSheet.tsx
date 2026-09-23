@@ -3,7 +3,7 @@
 //   iOS     → Apple IAP via expo-iap (StoreKit 2). Requires App Store Connect products.
 //   Android → Google Play Billing via expo-iap. Requires Play Console products.
 //
-// 💰 PRICES COME FROM THE STORE on both platforms (see storePrice). Android used
+// 💰 PRICES COME FROM THE STORE on both platforms (see payments/storePricing.ts). Android used
 // to render a hardcoded rupee string from PLAN_DEFS, which meant a reprice in a
 // console needed an app release to match. It no longer does.
 //
@@ -31,6 +31,7 @@ import {
     Linking,
 } from "react-native";
 import type { Purchase, Product, ProductSubscription } from "expo-iap";
+import { readStorePricing, introNote } from "../../payments/storePricing";
 let _iapMod: typeof import("expo-iap") | null = null;
 try { _iapMod = require("expo-iap"); } catch { /* not available in dev builds */ }
 const useIAP: typeof import("expo-iap")["useIAP"] = _iapMod?.useIAP ?? (() => ({ connected: false, products: [], subscriptions: [], availablePurchases: [], currentPurchase: undefined, currentPurchaseError: undefined, finishTransaction: async () => {}, getProducts: async () => {}, getSubscriptions: async () => {}, requestPurchase: async () => {}, requestSubscription: async () => {} } as any));
@@ -409,30 +410,12 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         products.find((p) => p.id === sku) ?? subscriptions.find((s) => s.id === sku);
 
     /**
-     * The price to SHOW, read from the store that will actually charge the user.
-     *
-     * 🔴 WHY. This used to be `Platform.OS === "ios" ? iosPrice(...) : ₹${priceInr}`
-     * — Android rendered a HARDCODED RUPEE STRING from PLAN_DEFS and never asked
-     * Play. An Android user in the US saw "₹149" while Play charged them the US
-     * price. That was invisible only because Play had no products at all until
-     * 2026-09-25; the moment they go live it would be a wrong price on every
-     * non-Indian device, and every future reprice would need an app release.
-     *
-     * ⚠️ Play does not always put the price at the top level. For SUBSCRIPTIONS
-     * it lives inside the offer's pricing phases, so both shapes are read.
-     *
-     * The rupee fallback survives as a last resort for when the store returns
-     * nothing at all (offline, Play Billing unavailable). It is correct for
-     * India and wrong elsewhere — but a user with no store connection cannot
-     * buy anyway, so it is a cosmetic default, not a quoted price.
+     * 💰 Prices come from the STORE on both platforms — see
+     * `src/payments/storePricing.ts` for why, and for the pricing-phase trap
+     * that made "Free" render as the plan's price.
      */
-    const storePrice = (sku: string, fallbackInr: number): string => {
-        const p = storeProduct(sku) as any;
-        if (!p) return `₹${fallbackInr}`;
-        if (p.displayPrice) return p.displayPrice;
-        const phase = p?.subscriptionOfferDetails?.[0]?.pricingPhases?.pricingPhaseList?.[0];
-        return phase?.formattedPrice ?? `₹${fallbackInr}`;
-    };
+    const pricingFor = (sku: string, fallbackInr: number) =>
+        readStorePricing(storeProduct(sku), fallbackInr);
 
     // ── Sign-in prompt (shown when purchase attempted while logged out) ───────
     // On Android, WebBrowser.openAuthSessionAsync returns type:'dismiss' when the
@@ -783,9 +766,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                 const sku = `com.imotara.imotara.${plan.id}`;
                                 const isBusy = purchasing === sku || purchasing === plan.id;
                                 const isPro = plan.tier === "pro";
-                                // 🔴 iOS shows the STORE's price; Android shows OURS.
-                                // ✅ Both platforms now read the store. See storePrice().
-                                const displayPrice = storePrice(sku, plan.priceInr);
+                                const pricing = pricingFor(sku, plan.priceInr);
+                                const displayPrice = pricing.regular;
+                                const offerNote = introNote(pricing);
 
                                 // fromWebTier is the one vocabulary bridge — this used to
                                 // hand-roll `plan.tier === "pro" ? "PREMIUM" : ...`.
@@ -824,10 +807,26 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                             {displayPrice}
                                         </Text>
                                         <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 12 }}>
-                                            {period === "annual" && plan.monthlyPriceInr
-                                                ? `₹${plan.monthlyPriceInr}/mo billed annually`
-                                                : "per month"}
+                                            {period !== "annual"
+                                                ? "per month"
+                                                // 🔴 The per-month breakdown is a RUPEE figure from
+                                                // PLAN_DEFS. Showing "₹108/mo" under "$59.99" tells a
+                                                // US reader two different prices, so it is only shown
+                                                // when the store priced this in rupees too.
+                                                : plan.monthlyPriceInr && displayPrice.startsWith("₹")
+                                                    ? `₹${plan.monthlyPriceInr}/mo billed annually`
+                                                    : "billed annually"}
                                         </Text>
+                                        {offerNote ? (
+                                            // The regular price stays the headline figure above; this
+                                            // is the offer, never a substitute for the price.
+                                            <Text style={{
+                                                fontSize: 11, fontWeight: "700", color: "#6366f1",
+                                                marginTop: -8, marginBottom: 12,
+                                            }}>
+                                                {offerNote}
+                                            </Text>
+                                        ) : null}
                                         {plan.features.map((f) => (
                                             <Text key={f} style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>
                                                 {"✓ "}{f}
@@ -867,7 +866,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                             {TOKEN_PACK_DEFS.map((pack) => {
                                 const sku = `com.imotara.imotara.${pack.id}`;
                                 const isBusy = purchasing === sku || purchasing === pack.id;
-                                const displayPrice = storePrice(sku, pack.priceInr);
+                                const displayPrice = pricingFor(sku, pack.priceInr).regular;
                                 return (
                                     <TouchableOpacity
                                         key={pack.id}
