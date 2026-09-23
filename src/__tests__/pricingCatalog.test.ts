@@ -39,6 +39,57 @@ const AGREED_PAISE: Record<string, number> = {
     tokens_1800:   49_900,
 };
 
+describe("the PRICE SHOWN comes from the store, not from PLAN_DEFS", () => {
+    // 🔴 WHY THIS EXISTS. UpgradeSheet used to render, for Android only:
+    //     Platform.OS === "ios" ? iosPrice(sku, plan.priceInr) : `₹${plan.priceInr}`
+    // — a hardcoded rupee string that never asked Play. An Android user in the
+    // US saw "₹149" while Play charged the US price. It went unnoticed for
+    // months because Play had NO PRODUCTS AT ALL until 2026-09-25, so nothing
+    // could be bought and nobody compared. The moment products go live it is a
+    // wrong price on every non-Indian device.
+    //
+    // It also meant every reprice needed an app release to match the console.
+    // That coupling is what these assertions remove.
+
+    const sheet = fs.readFileSync(
+        path.join(__dirname, "..", "components", "imotara", "UpgradeSheet.tsx"), "utf8",
+    );
+
+    it("the fixture is real", () => {
+        expect(sheet.length).toBeGreaterThan(1000);
+    });
+
+    it("neither the plan cards nor the token packs interpolate a rupee price", () => {
+        // The exact shape of the old bug. A template literal starting with ₹ and
+        // filled from PLAN_DEFS/TOKEN_PACK_DEFS is a price we invented.
+        expect(sheet).not.toMatch(/`₹\$\{(plan|pack)\.priceInr\}`/);
+    });
+
+    it("both price call sites go through storePrice()", () => {
+        const calls = sheet.match(/const displayPrice = [^;]+;/g) ?? [];
+        expect(calls.length).toBeGreaterThanOrEqual(2);
+        for (const c of calls) expect(c).toContain("storePrice(");
+    });
+
+    it("there is no platform branch left in the price display", () => {
+        // iOS and Android read the same way now. A reintroduced Platform.OS
+        // ternary around displayPrice is the regression.
+        for (const c of sheet.match(/const displayPrice = [^;]+;/g) ?? []) {
+            expect(c).not.toContain("Platform.OS");
+        }
+    });
+
+    it("storePrice reads Play's subscription offer phases, not just displayPrice", () => {
+        // Play puts a SUBSCRIPTION's price inside the offer's pricing phases
+        // rather than at the top level. Reading only `displayPrice` would fall
+        // through to the rupee default on Android subscriptions — the same bug
+        // wearing a different hat.
+        expect(sheet).toMatch(/subscriptionOfferDetails/);
+        expect(sheet).toMatch(/pricingPhaseList/);
+        expect(sheet).toMatch(/formattedPrice/);
+    });
+});
+
 describe("which pair is ON SALE", () => {
     // 🔴 WHY THIS EXISTS. The live and retired pairs were SWAPPED on 2026-09-25:
     // `plus_*` became the pair on sale, `pro_*` retired. Before that, nothing in

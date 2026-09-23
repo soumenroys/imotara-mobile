@@ -3,6 +3,10 @@
 //   iOS     → Apple IAP via expo-iap (StoreKit 2). Requires App Store Connect products.
 //   Android → Google Play Billing via expo-iap. Requires Play Console products.
 //
+// 💰 PRICES COME FROM THE STORE on both platforms (see storePrice). Android used
+// to render a hardcoded rupee string from PLAN_DEFS, which meant a reprice in a
+// console needed an app release to match. It no longer does.
+//
 // 🔴 THERE IS NO RAZORPAY PATH HERE, AND THERE MUST NOT BE ONE. Play policy
 // requires Play Billing for digital content sold in a Play-distributed app, and
 // Apple requires IAP for the same. A `doAndroidPurchase()` that opened Razorpay
@@ -400,10 +404,35 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     }, [connected, visible]);
 
     // expo-iap v3: in-app products → products[], auto-renewable → subscriptions[]
-    const iosProduct = (sku: string): Product | ProductSubscription | undefined =>
+    // Both platforms populate these — the effect above fetches for Android too.
+    const storeProduct = (sku: string): Product | ProductSubscription | undefined =>
         products.find((p) => p.id === sku) ?? subscriptions.find((s) => s.id === sku);
-    const iosPrice = (sku: string, fallback: number): string =>
-        (iosProduct(sku) as any)?.displayPrice ?? `₹${fallback}`;
+
+    /**
+     * The price to SHOW, read from the store that will actually charge the user.
+     *
+     * 🔴 WHY. This used to be `Platform.OS === "ios" ? iosPrice(...) : ₹${priceInr}`
+     * — Android rendered a HARDCODED RUPEE STRING from PLAN_DEFS and never asked
+     * Play. An Android user in the US saw "₹149" while Play charged them the US
+     * price. That was invisible only because Play had no products at all until
+     * 2026-09-25; the moment they go live it would be a wrong price on every
+     * non-Indian device, and every future reprice would need an app release.
+     *
+     * ⚠️ Play does not always put the price at the top level. For SUBSCRIPTIONS
+     * it lives inside the offer's pricing phases, so both shapes are read.
+     *
+     * The rupee fallback survives as a last resort for when the store returns
+     * nothing at all (offline, Play Billing unavailable). It is correct for
+     * India and wrong elsewhere — but a user with no store connection cannot
+     * buy anyway, so it is a cosmetic default, not a quoted price.
+     */
+    const storePrice = (sku: string, fallbackInr: number): string => {
+        const p = storeProduct(sku) as any;
+        if (!p) return `₹${fallbackInr}`;
+        if (p.displayPrice) return p.displayPrice;
+        const phase = p?.subscriptionOfferDetails?.[0]?.pricingPhases?.pricingPhaseList?.[0];
+        return phase?.formattedPrice ?? `₹${fallbackInr}`;
+    };
 
     // ── Sign-in prompt (shown when purchase attempted while logged out) ───────
     // On Android, WebBrowser.openAuthSessionAsync returns type:'dismiss' when the
@@ -755,15 +784,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                 const isBusy = purchasing === sku || purchasing === plan.id;
                                 const isPro = plan.tier === "pro";
                                 // 🔴 iOS shows the STORE's price; Android shows OURS.
-                                // On Android this is `plan.priceInr` from PLAN_DEFS —
-                                // Play Console is never asked. So repricing in Play
-                                // without shipping a matching PLAN_DEFS quotes one
-                                // figure and charges another. pricingCatalog.test.ts
-                                // pins the two together; making Android read the store
-                                // like iOS is deferred until after the payments work.
-                                const displayPrice = Platform.OS === "ios"
-                                    ? iosPrice(sku, plan.priceInr)
-                                    : `₹${plan.priceInr}`;
+                                // ✅ Both platforms now read the store. See storePrice().
+                                const displayPrice = storePrice(sku, plan.priceInr);
 
                                 // fromWebTier is the one vocabulary bridge — this used to
                                 // hand-roll `plan.tier === "pro" ? "PREMIUM" : ...`.
@@ -845,9 +867,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                             {TOKEN_PACK_DEFS.map((pack) => {
                                 const sku = `com.imotara.imotara.${pack.id}`;
                                 const isBusy = purchasing === sku || purchasing === pack.id;
-                                const displayPrice = Platform.OS === "ios"
-                                    ? iosPrice(sku, pack.priceInr)
-                                    : `₹${pack.priceInr}`;
+                                const displayPrice = storePrice(sku, pack.priceInr);
                                 return (
                                     <TouchableOpacity
                                         key={pack.id}
