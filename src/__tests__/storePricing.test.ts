@@ -142,3 +142,75 @@ describe("the offer line", () => {
         }
     });
 });
+
+/**
+ * 🔴 THE KEY THE STORE IS ASKED BY.
+ *
+ * Apple knows the product as `com.imotara.imotara.plus_monthly`; **Play knows it
+ * as `plus_monthly`**. Product ids are immutable in both consoles, so this split
+ * is permanent.
+ *
+ * The upgrade sheet built the PREFIXED form unconditionally and used it to look
+ * the product up in the store's response. On Android that key matches nothing
+ * Play returned, so the lookup fell through to the hardcoded `₹` price from
+ * PLAN_DEFS — the exact bug that reading the store was meant to fix.
+ *
+ * It failed SILENTLY, because the fallback is a plausible-looking price. A US
+ * Android user would have seen "₹149" while Play charged $6.99. Every existing
+ * test passed: they checked that the call went through the store reader, not
+ * that it asked for a key the store would recognise.
+ *
+ * Purchase was never affected — `handlePlanPress` already passed the bare id to
+ * `handleAndroidPurchase`. Display only.
+ */
+describe("the SKU the store is asked by", () => {
+    const sheet = require("fs").readFileSync(
+        require("path").join(__dirname, "..", "components", "imotara", "UpgradeSheet.tsx"), "utf8",
+    );
+
+    it("🔴 no price lookup hardcodes the iOS bundle prefix", () => {
+        // A literal `com.imotara.imotara.${...}` anywhere near a pricing call is
+        // the bug. Comments are stripped — they explain the prefix on purpose.
+        const src = sheet.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+        const lookups = src.match(/pricingFor\([^)]*\)/g) ?? [];
+        expect(lookups.length).toBeGreaterThanOrEqual(2);
+        for (const l of lookups) expect(l).not.toMatch(/com\.imotara\.imotara/);
+    });
+
+    it("🔴 both price lookups go through the platform-aware helper", () => {
+        const src = sheet.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+        const skuDecls = src.match(/const sku = [^;]+;/g) ?? [];
+        // The two RENDER sites must use storeSkuFor. The two PURCHASE sites may
+        // keep the prefixed literal: they hand it to handleIosPurchase only, and
+        // pass the bare id to handleAndroidPurchase separately.
+        expect(skuDecls.filter((d: string) => d.includes("storeSkuFor")).length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("storeSkuFor returns the BARE id on Android", () => {
+        jest.resetModules();
+        jest.doMock("react-native", () => ({ Platform: { OS: "android" } }));
+        const { storeSkuFor } = require("../payments/upgradePlans");
+        expect(storeSkuFor("plus_monthly")).toBe("plus_monthly");
+        expect(storeSkuFor("tokens_250")).toBe("tokens_250");
+        jest.dontMock("react-native");
+    });
+
+    it("storeSkuFor returns the BUNDLE-PREFIXED id on iOS", () => {
+        jest.resetModules();
+        jest.doMock("react-native", () => ({ Platform: { OS: "ios" } }));
+        const { storeSkuFor } = require("../payments/upgradePlans");
+        expect(storeSkuFor("plus_monthly")).toBe("com.imotara.imotara.plus_monthly");
+        jest.dontMock("react-native");
+    });
+
+    it("🔑 the two platforms must NOT agree — that is the whole point", () => {
+        jest.resetModules();
+        jest.doMock("react-native", () => ({ Platform: { OS: "android" } }));
+        const android = require("../payments/upgradePlans").storeSkuFor("plus_annual");
+        jest.resetModules();
+        jest.doMock("react-native", () => ({ Platform: { OS: "ios" } }));
+        const ios = require("../payments/upgradePlans").storeSkuFor("plus_annual");
+        jest.dontMock("react-native");
+        expect(android).not.toBe(ios);
+    });
+});

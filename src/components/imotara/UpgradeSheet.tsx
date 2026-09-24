@@ -32,6 +32,7 @@ import {
 } from "react-native";
 import type { Purchase, Product, ProductSubscription } from "expo-iap";
 import { readStorePricing, introNote } from "../../payments/storePricing";
+import { storeSkuFor } from "../../payments/upgradePlans";
 let _iapMod: typeof import("expo-iap") | null = null;
 try { _iapMod = require("expo-iap"); } catch { /* not available in dev builds */ }
 const useIAP: typeof import("expo-iap")["useIAP"] = _iapMod?.useIAP ?? (() => ({ connected: false, products: [], subscriptions: [], availablePurchases: [], currentPurchase: undefined, currentPurchaseError: undefined, finishTransaction: async () => {}, getProducts: async () => {}, getSubscriptions: async () => {}, requestPurchase: async () => {}, requestSubscription: async () => {} } as any));
@@ -763,7 +764,10 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                         {/* Plan cards */}
                         <View style={{ flexDirection: "row", gap: 12, marginBottom: 28 }}>
                             {plansForPeriod.map((plan) => {
-                                const sku = `com.imotara.imotara.${plan.id}`;
+                                // 🔴 Per-platform: Apple wants the bundle prefix, Play the bare
+                                // id. The prefixed form was used for BOTH, so Android's price
+                                // lookup never matched and fell back to the hardcoded ₹.
+                                const sku = storeSkuFor(plan.id);
                                 const isBusy = purchasing === sku || purchasing === plan.id;
                                 const isPro = plan.tier === "pro";
                                 const pricing = pricingFor(sku, plan.priceInr);
@@ -864,7 +868,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                         </Text>
                         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 28 }}>
                             {TOKEN_PACK_DEFS.map((pack) => {
-                                const sku = `com.imotara.imotara.${pack.id}`;
+                                const sku = storeSkuFor(pack.id);
                                 const isBusy = purchasing === sku || purchasing === pack.id;
                                 const displayPrice = pricingFor(sku, pack.priceInr).regular;
                                 return (

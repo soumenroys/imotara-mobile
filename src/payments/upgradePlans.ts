@@ -17,6 +17,8 @@
 //   Subscriptions: plus_monthly, plus_annual, pro_monthly, pro_annual
 //   In-app products: tokens_100, tokens_250, tokens_600, tokens_1800
 
+import { Platform } from "react-native";
+
 export type PlanPeriod  = "monthly" | "annual";
 export type PlanTier    = "plus" | "pro";
 export type PlanId      = "plus_monthly" | "plus_annual" | "pro_monthly" | "pro_annual";
@@ -43,6 +45,27 @@ const VALID_IDS: readonly string[] = [
     "plus_monthly", "plus_annual", "pro_monthly", "pro_annual",
     "tokens_100", "tokens_250", "tokens_600", "tokens_1800",
 ];
+
+/**
+ * The id THIS PLATFORM'S STORE knows a product by.
+ *
+ * 🔴 Apple uses the bundle-prefixed form (`com.imotara.imotara.plus_monthly`);
+ * **Play uses the bare id** (`plus_monthly`). Product ids are immutable in both
+ * consoles, so this difference is permanent.
+ *
+ * ⚠️ WHY THIS EXISTS. The upgrade sheet built the prefixed form unconditionally
+ * and used it to look the product up in the store's response. On Android that
+ * key never matches anything Play returned, so the lookup silently fell through
+ * to the hardcoded `₹` price from PLAN_DEFS — the exact bug that reading the
+ * store was meant to fix, wearing a different hat. It failed SILENTLY because
+ * the fallback is a plausible-looking price.
+ *
+ * Purchase was never affected: `handlePlanPress` already passes the bare id to
+ * `handleAndroidPurchase`. Only the DISPLAY lookup was wrong.
+ */
+export function storeSkuFor(productId: ProductId | string): string {
+    return Platform.OS === "ios" ? `${IOS_BUNDLE}.${productId}` : String(productId);
+}
 
 export function iosSkuToProductId(sku: string): ProductId | null {
     const id = sku.replace(`${IOS_BUNDLE}.`, "");
