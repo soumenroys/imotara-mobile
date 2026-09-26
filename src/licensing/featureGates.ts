@@ -230,7 +230,7 @@ const ALL: Record<LicenseTier, Set<FeatureKey>> = {
 // user's real tier is untouched elsewhere (e.g. Settings' "Current plan"
 // still shows the truth) — only feature *checks* are bypassed. Flip to false
 // once tiers are actually sold and enforcement should start for real.
-export const SOFT_LAUNCH_BYPASS_ALL_GATES = true;
+export const SOFT_LAUNCH_BYPASS_ALL_GATES = false;
 const SOFT_LAUNCH_EFFECTIVE_TIER: LicenseTier = "PLUS";
 
 // Institutional entitlements that must NOT be affected by the soft-launch

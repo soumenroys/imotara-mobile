@@ -102,20 +102,38 @@ describe("consumer gates", () => {
             expect(getParam<number>("HISTORY_DAYS_LIMIT", "FREE", "days")).toBe(7);
         });
 
-        test("PLUS: Plus features but not Pro narrative features, 90-day history", () => {
+        // 🔴 REWRITTEN 2026-09-26, when the bypass was flipped OFF for 1.4.3.
+        //
+        // This branch had NEVER RUN. `SOFT_LAUNCH_BYPASS_ALL_GATES` has been
+        // true since it was written, so Jest always took the soft-launch path
+        // above and these assertions were dead code. They still described the
+        // PRE-MERGE model — PLUS without the narrative features and capped at
+        // 90 days — months after L10 merged Pro into Plus.
+        //
+        // 🔑 THE LESSON: a test behind a flag that is never flipped is not a
+        // test. It is a comment that compiles. Flipping the flag is the only
+        // thing that ever exercised it, and it failed immediately.
+        test("PLUS: the ONE merged paid tier — full consumer set, unlimited history", () => {
             expect(isEnabled("TTS_ADVANCED", "PLUS")).toBe(true);
             expect(isEnabled("SEARCH_MODE", "PLUS")).toBe(true);
             expect(isEnabled("EXPORT_DATA", "PLUS")).toBe(true);
-            expect(isEnabled("COMPANION_LETTER", "PLUS")).toBe(false);
-            expect(isEnabled("GROWTH_ARC", "PLUS")).toBe(false);
-            expect(isEnabled("TRENDS_INSIGHTS", "PLUS")).toBe(false);
-            expect(getParam<number>("HISTORY_DAYS_LIMIT", "PLUS", "days")).toBe(90);
+            // Merged in by L10 — these used to be Pro-only.
+            expect(isEnabled("COMPANION_LETTER", "PLUS")).toBe(true);
+            expect(isEnabled("GROWTH_ARC", "PLUS")).toBe(true);
+            expect(isEnabled("TRENDS_INSIGHTS", "PLUS")).toBe(true);
+            expect(getParam<number>("HISTORY_DAYS_LIMIT", "PLUS", "days")).toBe(Infinity);
         });
 
-        test("PREMIUM: full consumer set, unlimited history", () => {
-            expect(isEnabled("COMPANION_LETTER", "PREMIUM")).toBe(true);
-            expect(isEnabled("GROWTH_ARC", "PREMIUM")).toBe(true);
-            expect(getParam<number>("HISTORY_DAYS_LIMIT", "PREMIUM", "days")).toBe(Infinity);
+        test("PREMIUM is an ALIAS of PLUS, not a tier above it", () => {
+            // Devices installed before 2026-09-17 have "PREMIUM" in
+            // AsyncStorage. normaliseTier maps it to PLUS; the two must be
+            // indistinguishable or those users get a different product.
+            for (const f of ["COMPANION_LETTER", "GROWTH_ARC", "TRENDS_INSIGHTS",
+                             "EXPORT_DATA", "TTS_ADVANCED", "SEARCH_MODE"] as FeatureKey[]) {
+                expect(isEnabled(f, "PREMIUM")).toBe(isEnabled(f, "PLUS"));
+            }
+            expect(getParam<number>("HISTORY_DAYS_LIMIT", "PREMIUM", "days"))
+                .toBe(getParam<number>("HISTORY_DAYS_LIMIT", "PLUS", "days"));
         });
 
         test("FAMILY: no data export (shared-device privacy boundary)", () => {
