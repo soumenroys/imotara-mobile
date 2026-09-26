@@ -6,6 +6,7 @@ import React, {
     useEffect,
     type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
@@ -15,6 +16,14 @@ import { gate } from "../licensing/featureGates";
 import type { ToneContextPayload } from "../api/aiClient";
 import { supabase } from "../lib/supabase/client";
 import { buildApiUrl } from "../config/api";
+
+/**
+ * Minimum gap between AUTOMATIC licence re-reads on foreground.
+ * Mirrors AUTO_REFETCH_MIN_MS in the web `useLicense.ts` on purpose — the two
+ * platforms should not drift. Manual refreshLicense() calls ignore it, because
+ * those follow a real event we caused (a completed purchase).
+ */
+const LICENSE_REFRESH_MIN_MS = 30_000;
 
 type SettingsContextValue = {
     // Emotion insight toggle for Imotara replies
@@ -358,6 +367,39 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             // fail-open
         }
     };
+
+
+    // ---- B1: re-read the licence when the app comes back to the foreground ----
+    //
+    // 🔴 WHY. Before this, mobile refreshed the licence on startup, after its OWN
+    // purchase, and nowhere else. So a user who bought Plus on the WEB and then
+    // switched to the phone kept seeing the old tier until they fully killed and
+    // relaunched the app — backgrounding was not enough. The owner's ask was
+    // explicit: it should reflect automatically across web, Android and iOS.
+    //
+    // Web already does exactly this, via visibilitychange/focus in
+    // `useLicense.ts`. This is the mobile half of the same idea, deliberately
+    // mirroring it — including the 30 s throttle — so the two platforms behave
+    // the same rather than drifting.
+    //
+    // ⚠️ NOT a push. A licence change still only lands when the app is opened or
+    // foregrounded. True push would need Supabase Realtime on the `licenses`
+    // row, which means RLS and a publication on a security-sensitive table.
+    // Foregrounding covers the case people actually hit — pay on one device,
+    // pick up the other — at a fraction of the risk.
+    useEffect(() => {
+        let lastAuto = Date.now();
+        const sub = AppState.addEventListener("change", (next) => {
+            if (next !== "active") return;
+            if (Date.now() - lastAuto < LICENSE_REFRESH_MIN_MS) return;
+            lastAuto = Date.now();
+            // Fire-and-forget: refreshLicense already fails open, and a licence
+            // re-read must never be able to interrupt what the user is doing.
+            refreshLicense().catch(() => {});
+        });
+        return () => sub.remove();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
 
     // ---- LIC-6 + LIC-7: sync real license tier + expiry from Supabase on sign-in ----
