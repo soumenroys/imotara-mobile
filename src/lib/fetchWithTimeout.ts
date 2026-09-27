@@ -3,6 +3,7 @@
 // Use this everywhere instead of AbortSignal.timeout() or bare fetch().
 
 import { Platform } from "react-native";
+import { APP_VERSION } from "../config/appVersion";
 import { isDefinitelyOffline } from "./network/online";
 import { OfflineError } from "./network/fetchWithTimeout";
 
@@ -22,7 +23,13 @@ function withPlatformHeader(init: RequestInit = {}): RequestInit {
     const platform = Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "unknown";
     return {
         ...init,
-        headers: { ...(init.headers ?? {}), "X-Imotara-Platform": platform },
+        headers: {
+            ...(init.headers ?? {}),
+            "X-Imotara-Platform": platform,
+            // Additive only. The server uses this to warn stale clients about
+            // prices/SKUs they cannot render correctly; it never rejects on it.
+            "X-Imotara-Version": APP_VERSION,
+        },
     };
 }
 
