@@ -19,6 +19,7 @@ import { Toast, type ToastHandle } from "../components/ui/Toast";
 import { loadPendingInsights, clearPendingInsight, clearBadge, type InsightPayload } from "../lib/pendingInsights";
 import { CompanionInsightCard } from "../components/imotara/CompanionInsightCard";
 import { useSettings } from "../state/SettingsContext";
+import { gate } from "../licensing/featureGates";
 import { useAuth } from "../auth/AuthContext";
 import {
   loadStoredYearReview,
@@ -1298,7 +1299,7 @@ function TrendsScreenContent() {
   const store = useHistoryStore() as any;
   const history: any[] = store.history ?? [];
   const addToHistory: ((item: any) => void) | undefined = store.addToHistory;
-  const { toneContext, localUserScopeId, featureTipsEnabled } = useSettings() as any;
+  const { toneContext, localUserScopeId, featureTipsEnabled, licenseTier } = useSettings() as any;
 
   // ── Pending insights from Chat ─────────────────────────────────────────────
   const [pendingInsights, setPendingInsights] = useState<InsightPayload>({});
@@ -1871,6 +1872,39 @@ function TrendsScreenContent() {
           </View>
         );
       })}
+
+      {/* TRENDS_INSIGHTS — a NUDGE, never a block.
+        *
+        * 🔴 DO NOT turn this into a block. Free plans are meant to SEE the
+        * radar and heatmap with an upgrade prompt: the preview IS the upsell
+        * (owner decision, 2026-09-26). Withholding the charts removes the only
+        * way a free user discovers the feature exists. The tutorial agrees —
+        * those cards read `free: "Preview"`, not `free: false`.
+        *
+        * 🔑 WHY THIS WAS ADDED. Web has shown this nudge since the decision;
+        * mobile showed the charts with NO upsell at all — `TRENDS_INSIGHTS`
+        * appeared nowhere outside featureGates.ts. So a free mobile user got
+        * the feature and was never told it was a paid one. With enforcement
+        * now live on mobile, that was the last surface still silent.
+        */}
+      {!gate("TRENDS_INSIGHTS", licenseTier).enabled && sorted.length > 0 && (
+        <TouchableOpacity
+          onPress={() => { haptic.tap(); navigation.navigate("Settings" as never); }}
+          activeOpacity={0.8}
+          style={{
+            marginTop: 20, flexDirection: "row", alignItems: "center", gap: 10,
+            borderRadius: 14, borderWidth: 1, borderColor: colors.border,
+            backgroundColor: colors.surface, paddingHorizontal: 12, paddingVertical: 10,
+          }}
+        >
+          <Ionicons name="sparkles-outline" size={16} color={colors.accent ?? colors.textSecondary} />
+          <Text style={{ flex: 1, fontSize: 11, lineHeight: 16, color: colors.textSecondary }}>
+            Emotion insights are an <Text style={{ fontWeight: "700", color: colors.textPrimary }}>Imotara Plus</Text> feature.
+            You&apos;re seeing a preview — upgrade to keep full access.
+          </Text>
+          <Text style={{ fontSize: 11, fontWeight: "700", color: colors.accent ?? colors.textPrimary }}>Upgrade →</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Emotion radar chart */}
       {sorted.length > 0 && (
