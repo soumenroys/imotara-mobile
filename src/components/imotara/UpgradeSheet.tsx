@@ -129,7 +129,27 @@ async function pollLicenseStatus(
             );
             if (res.ok) {
                 const data = await res.json();
-                const tier = String(data?.tier ?? "").toLowerCase();
+                // 🔴 THE TIER IS AT `license.tier`, NOT `data.tier`.
+                //
+                // This read `data?.tier` — a field /api/license/status has never
+                // sent. The response is { ok, mode, license: { tier }, org, user }.
+                // So `tier` was always "", never matched, and this poll could
+                // NEVER return true: it burned its full 21 seconds and reported
+                // failure every single time.
+                //
+                // That matters because of WHERE it sits — the catch block for a
+                // failed Play verification call. At that point the user HAS PAID,
+                // Google has the money, and the webhook grants the licence
+                // server-side. This poll exists to notice that and confirm the
+                // purchase. Instead every such user was told "Verification
+                // pending — tap Restore purchases to activate", moments after
+                // paying. Reachable in production since the Play products went
+                // live on 2026-09-30.
+                //
+                // 🔑 Same bug shipped on web in settings/page.tsx (fixed 474772f).
+                // Two places, same mistake, both silently degrading to "free".
+                // The reads at the bottom of this file already did it correctly.
+                const tier = String(data?.license?.tier ?? "").toLowerCase();
                 if (tier === expectedTier || tier === "pro") return true;
             }
         } catch {
