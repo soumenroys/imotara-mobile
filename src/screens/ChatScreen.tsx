@@ -101,7 +101,7 @@ import { CRISIS_CARD_COLORS } from "../lib/safety/crisisCardColors";
 import { detectCountryCode } from "../lib/safety/detectCountry";
 import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adultContentGuard";
 import { speakMessage, stopSpeaking, currentSpeakingId } from "../lib/tts/mobileTTS";
-import { isEnabled as isFeatureEnabled, normaliseTier } from "../licensing/featureGates";
+import { isEnabled as isFeatureEnabled, normaliseTier, prettyTier } from "../licensing/featureGates";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Message-action touch target.
@@ -1576,7 +1576,7 @@ export default function ChatScreen() {
   // ── Auth: get Supabase session token for mobile API calls ──────────────────
   // Declared early — used by useVoiceInput below, which is set up before the
   // rest of the component's hooks.
-  const { accessToken, anonymousAccessToken } = useAuth();
+  const { accessToken, anonymousAccessToken, user, signOut } = useAuth();
   // Real accessToken wins when signed in; anonymousAccessToken covers guests
   // (TTS + voice-input only — see anonymousAccessToken's doc comment in
   // AuthContext.tsx for why this must not be used for anything beyond these
@@ -5005,6 +5005,35 @@ export default function ChatScreen() {
 {/* AI mode badge moved to ⋯ overflow menu — technical label not needed in default header */}
           </TouchableOpacity>
 
+          {/* Current plan — a compact TEXT badge, deliberately NOT a fourth
+              button: the buttons row below is capped at 3 to stop the header
+              overflowing on narrow phones, and a bordered pill would push it
+              over. Tapping opens Settings, where the plan and sign-in live.
+
+              🔑 Mirrors the web header (imotaraapp c35f0c9 / 8581d29): shown in
+              BOTH states, because a control that vanishes when signed out reads
+              as broken — and "Free" is accurate for an anonymous user, the
+              20/day cloud quota applies to them too. */}
+          <TouchableOpacity
+            onPress={() => { haptic.tap(); navigation.navigate("Settings"); }}
+            accessibilityRole="button"
+            accessibilityLabel={`Your plan: ${prettyTier(licenseTier)}. Opens settings.`}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            style={{ flexShrink: 0, marginRight: 8 }}
+          >
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "700",
+                letterSpacing: 0.3,
+                color: licenseTier === "FREE" ? colors.textSecondary : colors.indigo,
+              }}
+              numberOfLines={1}
+            >
+              {prettyTier(licenseTier)}
+            </Text>
+          </TouchableOpacity>
+
           {/* Buttons section — 3 items max to prevent header overflow */}
           <View style={{ flexDirection: "row", alignItems: "center", flexShrink: 0, gap: 6 }}>
 
@@ -6236,6 +6265,45 @@ export default function ChatScreen() {
                 {analysisMode === "local" ? "On-device mode — replies stay on your phone" : "Cloud mode active"}
               </Text>
             </View>
+
+            {/* Sign in / Sign out.
+                🔑 NEITHER PATH IS INVENTED HERE. "Sign in" NAVIGATES to
+                Settings, where the existing sign-in affordance lives — it does
+                NOT call signInWithGoogle() directly. On iOS, offering a
+                third-party sign-in obliges you to offer Sign in with Apple too
+                (`appleSignInAvailable` in auth/SignInPrompt.tsx), so a
+                Google-only button bolted on here would be an App Store problem.
+                One auth surface, not three. */}
+            <TouchableOpacity
+              onPress={() => {
+                setShowHeaderMenu(false);
+                haptic.tap();
+                if (user) {
+                  Alert.alert(
+                    "Sign out?",
+                    "Your conversations stay on this device. Sign in again to sync them.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Sign out", style: "destructive", onPress: () => { signOut().catch(() => {}); } },
+                    ],
+                  );
+                } else {
+                  navigation.navigate("Settings");
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={user ? "Sign out" : "Sign in"}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5, borderBottomColor: colors.border }}
+            >
+              <Ionicons
+                name={user ? "log-out-outline" : "log-in-outline"}
+                size={17}
+                color={user ? colors.textSecondary : colors.primary}
+              />
+              <Text style={{ color: user ? colors.textPrimary : colors.primary, fontSize: 14 }} numberOfLines={1}>
+                {user ? `Sign out${user.email ? ` (${user.email})` : ""}` : "Sign in"}
+              </Text>
+            </TouchableOpacity>
 
             {/* Search */}
             {messages.length > 0 && (
