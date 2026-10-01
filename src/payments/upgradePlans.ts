@@ -1,11 +1,15 @@
-// Product SKUs and pricing for native upgrade flow.
+// Product SKUs and pricing for the native upgrade flow.
 //
-// iOS App Store Connect — create these products before going live:
-//   Auto-renewable Subscriptions:
-//     com.imotara.imotara.plus_monthly  ₹99/mo
-//     com.imotara.imotara.plus_annual   ₹699/yr
-//     com.imotara.imotara.pro_monthly   ₹149/mo
-//     com.imotara.imotara.pro_annual    ₹1299/yr
+// ⚠️ The prices below are what the STORES are configured to charge. They are
+// documentation, not the source of truth for what the user sees: the sheet
+// renders the LIVE store price via `storePricing.ts`, and `priceInr` in
+// PLAN_DEFS is only the fallback when the store has not answered yet.
+//
+// iOS App Store Connect — Auto-renewable Subscriptions:
+//     com.imotara.imotara.plus_monthly  ₹149/mo      LIVE
+//     com.imotara.imotara.plus_annual   ₹1,299/yr    LIVE
+//     com.imotara.imotara.pro_monthly   ₹149/mo      RETIRED, restore only
+//     com.imotara.imotara.pro_annual    ₹1,299/yr    RETIRED, restore only
 //   Consumable In-App Purchases:
 //     com.imotara.imotara.tokens_100    ₹49
 //     com.imotara.imotara.tokens_250    ₹99
@@ -13,8 +17,9 @@
 //     com.imotara.imotara.tokens_1800   ₹499
 //
 // Android Google Play — product IDs match the server PRODUCT_CATALOG keys exactly.
-//   Create these in Play Console → Monetise → Products:
-//   Subscriptions: plus_monthly, plus_annual, pro_monthly, pro_annual
+//   Play Console → Monetise → Products.
+//   Subscriptions: plus_monthly (₹149) and plus_annual (₹1,299) are ACTIVE in
+//   174 regions since 2026-09-30. pro_monthly / pro_annual are retired.
 //   In-app products: tokens_100, tokens_250, tokens_600, tokens_1800
 
 import { Platform } from "react-native";
