@@ -438,6 +438,34 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     const pricingFor = (sku: string, fallbackInr: number) =>
         readStorePricing(storeProduct(sku), fallbackInr);
 
+    /**
+     * 🔴 ONLY OFFER WHAT THE STORE WILL ACTUALLY SELL.
+     *
+     * Observed on Android 2026-10-02: the four credit packs were advertised with
+     * prices, and none of them existed in Play Console. The device's own
+     * Billing log said so plainly —
+     *
+     *     fetchProductsAndroid payload: {"type":"in-app","skus":["tokens_100",…]}
+     *     fetchProductsAndroid result:  []
+     *
+     * — while the `subs` fetch in the same breath returned both plans. Tapping a
+     * pack called requestPurchase() with a SKU Play has never heard of, and the
+     * ₹49/₹99/₹199/₹499 on the buttons were the hardcoded `priceInr` fallbacks
+     * from upgradePlans.ts, not store prices.
+     *
+     * 🔑 Advertising an unbuyable price is worse than offering nothing: the user
+     * taps, it fails, and they conclude payment is broken.
+     *
+     * ⚠️ Deliberately a POSITIVE test (`is it in the store?`) rather than hiding
+     * on a known-empty list. Before the fetch resolves this is empty and the
+     * section is simply absent, then appears — a reveal, not a flash-and-vanish.
+     * And if a product is ever deactivated in either console, this stops
+     * advertising it without anyone needing to remember to edit the catalogue.
+     */
+    const sellableTokenPacks = TOKEN_PACK_DEFS.filter(
+        (pack) => !!storeProduct(storeSkuFor(pack.id)),
+    );
+
     // ── Sign-in prompt (shown when purchase attempted while logged out) ───────
     // On Android, WebBrowser.openAuthSessionAsync returns type:'dismiss' when the
     // OAuth redirect fires as a system deep-link intent. The session arrives async
@@ -882,12 +910,14 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                             })}
                         </View>
 
-                        {/* Token packs */}
+                        {/* Token packs — only those the store actually sells */}
+                        {sellableTokenPacks.length > 0 && (
+                          <>
                         <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, marginBottom: 12 }}>
                             Top up with message credits
                         </Text>
                         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 28 }}>
-                            {TOKEN_PACK_DEFS.map((pack) => {
+                            {sellableTokenPacks.map((pack) => {
                                 const sku = storeSkuFor(pack.id);
                                 const isBusy = purchasing === sku || purchasing === pack.id;
                                 const displayPrice = pricingFor(sku, pack.priceInr).regular;
@@ -919,6 +949,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                 );
                             })}
                         </View>
+                          </>
+                        )}
 
                         {/* Enterprise & Institutional */}
                         <View style={{
