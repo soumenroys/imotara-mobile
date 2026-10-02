@@ -13,6 +13,7 @@ import { DEBUG_UI_ENABLED } from "../config/debug";
 // ✅ Licensing gate (read-only awareness for settings layer)
 import { fromWebTier, normaliseTier, type LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
+import { publishLicenseTier } from "../licensing/licenseTierStore";
 import type { ToneContextPayload } from "../api/aiClient";
 import { supabase } from "../lib/supabase/client";
 import { buildApiUrl } from "../config/api";
@@ -337,6 +338,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             const licOrgId = statusData?.org?.orgId ?? null;
 
             await AsyncStorage.setItem(LICENSE_TIER_KEY, mobileTier);
+            // 🔴 AsyncStorage is NOT an event bus. HistoryContext read this key
+            // once at hydration and would never see this write, so the chat
+            // header stayed on its "FREE" default while this said Plus.
+            publishLicenseTier(mobileTier);
             if (expiresAt) {
                 await AsyncStorage.setItem(LICENSE_EXPIRES_AT_KEY, expiresAt);
             } else {
@@ -642,6 +647,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 if (alive) {
                     setCloudSyncAllowed(gate("CLOUD_SYNC", localTier).enabled);
                     setLicenseExpiresAt(rawExpiresAt ?? null);
+                    // Announce the hydrated value too: on a cold start this is
+                    // what everyone should be showing until the refresh lands.
+                    publishLicenseTier(localTier);
                 }
 
                 // 3) Always sync real license from Supabase on startup if signed in.

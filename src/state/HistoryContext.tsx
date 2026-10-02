@@ -40,6 +40,7 @@ import { DEBUG_UI_ENABLED } from "../config/debug";
 // ✅ Licensing gates (foundation)
 import { normaliseTier, type LicenseTier } from "../licensing/featureGates";
 import { gate } from "../licensing/featureGates";
+import { publishLicenseTier, subscribeLicenseTier } from "../licensing/licenseTierStore";
 
 export type HistoryItem = {
     id: string;
@@ -471,10 +472,31 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     // ✅ Public setter with persistence (safe; does not affect existing logic)
     const setLicenseTier = useCallback((tier: LicenseTier) => {
         _setLicenseTier(tier);
+        // Keep the other copies in step — a debug override or a post-purchase
+        // push must reach SettingsContext's consumers too, not just this one.
+        publishLicenseTier(tier);
         AsyncStorage.setItem(LICENSE_TIER_KEY, tier).catch((err) =>
             debugWarn("Failed to persist license tier:", err)
         );
     }, []);
+
+    // 🔴 THE MISSING SUBSCRIPTION — this is the actual fix.
+    //
+    // The tier is learned by SettingsContext.refreshLicense(), which fetches
+    // /api/license/status. It used to only write AsyncStorage, and this context
+    // only ever READ that key during hydration — so on a fresh install, where
+    // the key does not exist yet, `licenseTier` latched on its "FREE" default
+    // and never moved. Observed 2026-10-02: the chat header showed Free while
+    // the upgrade sheet showed Plus, for the same account, at the same moment.
+    //
+    // ⚠️ Not just a label. The HISTORY_DAYS_LIMIT retention effect below reads
+    // this value, so a Plus user stuck on FREE also had local history pruned to
+    // the free window.
+    useEffect(() => subscribeLicenseTier((tier) => {
+        // normaliseTier again rather than trusting the publisher: a legacy
+        // "PREMIUM" must still map to PLUS no matter which path announced it.
+        _setLicenseTier(normaliseTier(tier));
+    }), []);
 
     // ✅ Hydrate from AsyncStorage whenever Chat Link Key changes (prevents cross-scope leakage)
     useEffect(() => {
