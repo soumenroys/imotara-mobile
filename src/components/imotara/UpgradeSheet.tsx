@@ -185,6 +185,27 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     const purchaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Single gate: once any purchase outcome is handled, all further events are ignored
     const purchaseOutcomeHandledRef = useRef(false);
+
+    /**
+     * 🔴 HOW LONG BEFORE WE TELL SOMEONE THEIR PURCHASE MIGHT HAVE FAILED.
+     *
+     * Observed on Android 2026-10-02, on the FIRST real Play purchase this app
+     * has ever had: the old 60 s timer fired at 16:30:45, the purchase returned
+     * at 16:30:51 and verified at 16:30:54. **The user was told "Your purchase
+     * may have been received… tap Restore" six seconds BEFORE it succeeded**,
+     * then congratulated moments later. iOS was worse still, at 40 s.
+     *
+     * ⚠️ THE WINDOW IS NOT OURS. Between requestPurchase() and the callback the
+     * user is inside Google's or Apple's sheet — reading it, typing a card,
+     * clearing 3-D Secure, waiting on a bank OTP, doing Face ID. Minutes are
+     * ordinary. A bound tuned to the fast path turns a slow success into a
+     * visible failure, on the one screen where that costs money.
+     *
+     * 🔑 It remains a real safety net: without it a callback that never arrives
+     * (GMS absent, sheet dismissed with no event) would spin forever. It is
+     * simply bounded to the worst realistic payment, not the typical one.
+     */
+    const PURCHASE_TIMEOUT_MS = 300_000;
     const isRestoringRef = useRef(false);
     const handleRestoreRef = useRef<() => Promise<void>>(async () => {});
 
@@ -565,15 +586,19 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         }
         purchaseOutcomeHandledRef.current = false;
         setPurchasing(sku);
-        // Safety net: if onPurchaseSuccess never fires (Sandbox delay, iOS beta quirk),
-        // clear the spinner after 40s and direct the user to Restore.
+        // Safety net for a callback that never arrives (Sandbox delay, StoreKit
+        // quirk). See PURCHASE_TIMEOUT_MS — this was 40 s, shorter even than
+        // Android's 60 s, on a flow that routinely includes Face ID and an
+        // App Store password prompt.
         purchaseTimeoutRef.current = setTimeout(() => {
+            // Same gate as Android: never alarm a purchase already in flight.
+            if (purchaseOutcomeHandledRef.current) return;
             setPurchasing(null);
             Alert.alert(
                 "Taking longer than expected",
                 "Your purchase may have been received. Tap 'Restore previous purchases' below to activate your plan.",
             );
-        }, 40_000);
+        }, PURCHASE_TIMEOUT_MS);
         try {
             await requestPurchase({ type, request: { apple: { sku } } });
         } catch (err: any) {
@@ -622,15 +647,21 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         }
         setPurchasing(productId);
         purchaseOutcomeHandledRef.current = false;
-        // Safety net: if onPurchaseSuccess/onPurchaseError never fires (GMS missing,
-        // Play sheet closed without event), clear the spinner after 60 s.
+        // Safety net for a callback that never arrives (GMS missing, Play sheet
+        // closed without an event). See PURCHASE_TIMEOUT_MS for why it is long.
         purchaseTimeoutRef.current = setTimeout(() => {
+            // 🔴 DO NOT ALARM SOMEONE WHOSE PURCHASE IS ALREADY BEING HANDLED.
+            // onPurchaseSuccess sets this gate immediately, then awaits server
+            // verification (up to 30 s), and only clears this timer in its
+            // `finally`. Without this check the timer can fire DURING a
+            // successful verification and tell the user it may have failed.
+            if (purchaseOutcomeHandledRef.current) return;
             setPurchasing(null);
             Alert.alert(
                 "Taking longer than expected",
                 "Your purchase may have been received. Tap 'Restore previous plan' below to activate it.",
             );
-        }, 60_000);
+        }, PURCHASE_TIMEOUT_MS);
         try {
             const isSubscription = ANDROID_SUBSCRIPTION_SET.has(productId);
             if (isSubscription) {
