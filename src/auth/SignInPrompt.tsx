@@ -73,16 +73,83 @@ export function SignInPrompt({ messageCount }: Props) {
         await AsyncStorage.setItem(DISMISSED_KEY, "true");
     };
 
+    /**
+     * 🔴 THE SESSION ARRIVES OUT-OF-BAND — do not wait on the OAuth promise.
+     *
+     * Observed on Android 2026-10-02: this sheet sat on "Signing in…" for over
+     * five minutes while the user was, in fact, **already signed in**. Force-
+     * quitting and relaunching came up authenticated with history synced.
+     *
+     * The logs show exactly what happened:
+     *     12:21:56  CustomTabActivity -> supabase OAuth
+     *     12:22:01  MainActivity resumed (the redirect came back)
+     *     12:22:02  the session was written to SecureStore
+     *     (…then nothing at all for five minutes, spinner still turning)
+     *
+     * On Android the OAuth redirect arrives as a system deep-link intent, so
+     * `WebBrowser.openAuthSessionAsync` resolves as `dismiss` — or never settles
+     * at all. The old code was `await signInWithGoogle(); await handleDismiss();`
+     * which meant **if that promise never settled, the sheet never closed and
+     * `finally` never ran.** The spinner outlived the thing it was waiting for.
+     *
+     * 🔑 `UpgradeSheet` already knew this and guards against it by subscribing to
+     * `onAuthStateChange` before opening OAuth. This component did not — the
+     * knowledge existed in the codebase but had not reached here.
+     *
+     * The fix: watch the app's OWN auth state, which is the thing that actually
+     * becomes true. The promise is still awaited for the happy path and for real
+     * errors, but it is no longer what dismissal depends on.
+     */
+    useEffect(() => {
+        if (!signingIn) return;
+        if (status !== "authenticated") return;
+        setSigningInGoogle(false);
+        setSigningInApple(false);
+        void handleDismiss();
+    }, [signingIn, status]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+    /**
+     * ⚠️ LAST-RESORT UNSTICK. If neither the promise nor the auth state ever
+     * arrives — no network, the user wandered off in the browser, OAuth failed
+     * silently — the spinner must still stop. A stuck spinner reads as "broken",
+     * and the only cure the user can find is force-quitting the app.
+     *
+     * Deliberately generous: a slow OAuth round-trip on a poor connection is
+     * normal, and cutting it short would turn a slow success into a visible
+     * failure. This only catches the case where nothing is coming at all.
+     */
+    useEffect(() => {
+        if (!signingIn) return;
+        const t = setTimeout(() => {
+            setSigningInGoogle(false);
+            setSigningInApple(false);
+        }, 90_000);
+        return () => clearTimeout(t);
+    }, [signingIn]);
+
     const handleGoogle = async () => {
         if (signingIn) return;
         setSigningInGoogle(true);
-        try { await signInWithGoogle(); await handleDismiss(); } finally { setSigningInGoogle(false); }
+        // ⚠️ No `finally` that clears the spinner: on Android this promise may
+        // never settle. The effects above own the spinner's lifetime now.
+        try {
+            await signInWithGoogle();
+            // Resolved cleanly (iOS, and Android when the browser returns
+            // normally). If the session is already live the effect has dismissed
+            // us; otherwise it will the moment auth state flips.
+        } catch {
+            setSigningInGoogle(false);
+        }
     };
 
     const handleApple = async () => {
         if (signingIn) return;
         setSigningInApple(true);
-        try { await signInWithApple(); await handleDismiss(); } finally { setSigningInApple(false); }
+        try {
+            await signInWithApple();
+        } catch {
+            setSigningInApple(false);
+        }
     };
 
     if (!visible) return null;
