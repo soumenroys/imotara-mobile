@@ -311,9 +311,33 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const refreshLicense = async () => {
+    /**
+     * 🔴 `sessionOverride` EXISTS TO AVOID A DEADLOCK — do not remove it.
+     *
+     * supabase-js serialises auth work behind an internal lock. Calling ANY
+     * `supabase.auth.*` method from inside an `onAuthStateChange` callback
+     * re-enters that lock and **hangs forever** — the same trap recorded in
+     * [[ios_auth_lock_deadlock_2026_09_06]].
+     *
+     * Observed on Android 1.4.5, 2026-10-03, with the probes that found it:
+     *     [LICDBG] refreshLicense: start
+     *     [LICDBG] refreshLicense: start
+     *     (no "getSession returned" — ever)
+     *
+     * ⚠️ WORSE THAN ONE LOST REFRESH. The lock stays wedged, so EVERY later
+     * caller — the AppState foreground re-read, and the "Already purchased?
+     * Tap to check your plan" button — hangs on the same line. A user who
+     * signs in sees **Free**, and the one control offered to fix it does
+     * nothing. Only a cold restart recovers, which nobody thinks to try.
+     * (What made it look benign: a cold restart shows the right tier, but
+     * that is the STALE AsyncStorage value, not a successful fetch.)
+     *
+     * ⇒ `onAuthStateChange` already RECEIVES the session. Pass it in rather
+     * than asking supabase for the thing it just handed us.
+     */
+    const refreshLicense = async (sessionOverride?: { user?: { id?: string }; access_token?: string } | null) => {
         try {
-            const { data: { session } } = await supabase.auth.getSession();
+            const session = sessionOverride ?? (await supabase.auth.getSession()).data.session;
             if (!session?.user?.id || !session.access_token) return;
 
             // Use /api/license/status which calls resolveUserTier() — correctly handles
@@ -437,7 +461,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 // org fields, so a mid-session org membership change (e.g.
                 // removed from org) left a stale "Managed by" badge showing
                 // until the next full app restart.
-                await refreshLicense();
+                // 🔴 Pass the session through. Calling refreshLicense() with no
+                // argument would make it call supabase.auth.getSession() from
+                // inside this very callback, which deadlocks — see the comment
+                // on refreshLicense.
+                await refreshLicense(session);
             }
         );
         return () => subscription.unsubscribe();
