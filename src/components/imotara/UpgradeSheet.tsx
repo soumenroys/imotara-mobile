@@ -852,6 +852,18 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                 const pricing = pricingFor(sku, plan.priceInr);
                                 const displayPrice = pricing.regular;
                                 const offerNote = introNote(pricing);
+                                // 🔴 Never show the hardcoded ₹ fallback to someone the store
+                                // would charge in another currency. `readStorePricing` returns
+                                // `₹<priceInr>` with `fromStore: false` whenever the product has
+                                // not arrived yet — correct in India, wrong in the other ~174
+                                // markets, which since 2026-10-02/03 pay the agreed PPP band.
+                                // A US reader would see ₹149 flash before $6.99.
+                                //
+                                // 🔑 Same rule the credit packs already follow (`f31a5e5`):
+                                // say nothing rather than say a number the store will not honour.
+                                // Packs can hide entirely; a PLAN card cannot — it is the
+                                // conversion surface — so the card stays and only the figure waits.
+                                const priceIsReal = pricing.fromStore;
 
                                 // fromWebTier is the one vocabulary bridge — this used to
                                 // hand-roll `plan.tier === "pro" ? "PREMIUM" : ...`.
@@ -886,21 +898,26 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                         <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary, marginBottom: 4 }}>
                                             {prettyTier(fromWebTier(plan.tier))}
                                         </Text>
-                                        <Text style={{ fontSize: 22, fontWeight: "800", color: colors.primary, marginBottom: 2 }}>
-                                            {displayPrice}
+                                        <Text style={{
+                                            fontSize: 22, fontWeight: "800", marginBottom: 2,
+                                            color: priceIsReal ? colors.primary : colors.textSecondary,
+                                        }}>
+                                            {priceIsReal ? displayPrice : "—"}
                                         </Text>
                                         <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 12 }}>
-                                            {period !== "annual"
+                                            {!priceIsReal
+                                                ? "checking price…"
+                                                : period !== "annual"
                                                 ? "per month"
                                                 // 🔴 The per-month breakdown is a RUPEE figure from
                                                 // PLAN_DEFS. Showing "₹108/mo" under "$59.99" tells a
                                                 // US reader two different prices, so it is only shown
                                                 // when the store priced this in rupees too.
-                                                : plan.monthlyPriceInr && displayPrice.startsWith("₹")
+                                                : plan.monthlyPriceInr && priceIsReal && displayPrice.startsWith("₹")
                                                     ? `₹${plan.monthlyPriceInr}/mo billed annually`
                                                     : "billed annually"}
                                         </Text>
-                                        {offerNote ? (
+                                        {offerNote && priceIsReal ? (
                                             // The regular price stays the headline figure above; this
                                             // is the offer, never a substitute for the price.
                                             <Text style={{
