@@ -3,16 +3,27 @@
 // in-app payments through StoreKit 2 / App Store.
 //
 // Product IDs below must match the Consumable IAP products already created in
-// App Store Connect exactly — Apple doesn't support renaming a live product
-// ID, so don't "fix" these to match their real prices without also creating
-// new App Store Connect products and migrating. The name-vs-price mismatch is
-// cosmetic only: the button always renders Apple's real displayPrice, never
-// these names, so no user ever sees the wrong number.
-//   donation_49   really priced ~₹79
-//   donation_99   really priced ~₹149
-//   donation_199  really priced ~₹299
-//   donation_499  really priced ~₹499  (matches)
-//   donation_999  really priced ~₹999  (matches)
+// App Store Connect exactly — Apple doesn't support renaming a live product ID.
+//
+// ⚠️ THIS BLOCK USED TO CLAIM THE IDs WERE MISLABELLED (₹79/₹149/₹299). THAT
+// WAS WRONG. Checked against App Store Connect on 2026-10-03: four of the five
+// IDs match their India price exactly. Acting on the old comment is what led to
+// the international bands being anchored to prices that never existed.
+//
+//   ID             India price (ASC, 2026-10-03)
+//   donation_49    ₹49    ✅ matches
+//   donation_99    ₹99    ✅ matches
+//   donation_199   ₹199   ✅ matches
+//   donation_499   ₹499   ✅ matches
+//   donation_999   ₹499   ❌ MISPRICED — should be ₹999; it currently costs the
+//                          same as donation_499 in India, and India is the only
+//                          one of 175 storefronts where the tips don't step up.
+//
+// 🔑 The button always renders Apple's real `displayPrice`, never these names,
+// so no user ever sees a number from this file. But don't trust this comment
+// over the console again — verify in App Store Connect.
+// Outside India all 174 storefronts were set to the agreed PPP bands on
+// 2026-10-03; see memory `donations_ppp_banding_plan`.
 
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
