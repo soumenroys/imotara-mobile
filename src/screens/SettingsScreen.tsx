@@ -2297,7 +2297,7 @@ function SettingsScreenContent() {
                             marginBottom: 10,
                         }}
                     >
-                        Imotara is a privacy-first companion built in India. If you'd like to leave a tip to support development, you can do so below. All features remain completely free.
+                        Imotara is a privacy-first companion built in India. If you'd like to leave a tip to support development, you can do so below. A tip is not a subscription and unlocks nothing — it simply supports the work.
                     </Text>
 
                     {Platform.OS === "ios" ? (
