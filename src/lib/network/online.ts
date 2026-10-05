@@ -61,6 +61,36 @@ function classify(state: { isConnected: boolean | null; isInternetReachable: boo
  * resolved fetch, with no status short-circuit
  * (internal/internetReachability.ts — `.then(response => reachabilityTest(response))`),
  * so a non-2xx really does reach this function.
+ *
+ * 🔴 BUT IT DOES NOT RUN EVERYWHERE. Measured on a 1.4.6 release build,
+ * 2026-10-05: the probe below is NEVER FETCHED ON ANDROID.
+ *
+ *   update(state) {
+ *     if (typeof state.isInternetReachable === 'boolean' && useNativeReachability)
+ *       setIsInternetReachable(state.isInternetReachable);   // native, no fetch
+ *     else
+ *       setExpectsConnection(state.isConnected);             // only this path probes
+ *   }
+ *
+ * `useNativeReachability` defaults to TRUE and we do not override it, and
+ * Android's ConnectivityReceiver.java really does send a boolean, so Android
+ * always takes the first branch:
+ *
+ *   Android  native boolean sent  -> NO probe. reachabilityUrl and
+ *                                    reachabilityTest are BOTH DEAD CODE here.
+ *   iOS      ios/ has no such key -> probe RUNS. This test is live, and it is
+ *                                    what stops a 500 from /api/health putting
+ *                                    every iOS client into on-device mode.
+ *   web      shim sets it to null -> probe RUNS (null is not a boolean).
+ *
+ * ⛔ So do not describe anything below as an Android defence. The emulator ran
+ * this build for two minutes against a local mock and the mock logged ZERO
+ * requests, while a raw `nc` from the same emulator reached it instantly.
+ *
+ * ❓ OPEN DECISION: setting `useNativeReachability: false` would make Android
+ * probe too, so "reachable" would mean "can reach Imotara" there as this file
+ * intends — at the cost of a request every interval instead of a free OS
+ * signal. Not changed unilaterally: it alters behaviour on a shipped path.
  */
 let started = false;
 let unsubscribe: (() => void) | null = null;

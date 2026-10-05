@@ -55,6 +55,20 @@ describe("the surviving checker is the careful one", () => {
         expect(ONLINE).toMatch(/reachabilityUrl: "https:\/\/www\.imotara\.com\/api\/health"/);
     });
 
+    it("🔴 documents that the probe does NOT run on Android", () => {
+        // Measured on a 1.4.6 release build, 2026-10-05: the emulator ran this
+        // app for two minutes against a local mock and the mock logged ZERO
+        // requests, while a raw `nc` from the same emulator reached it at once.
+        // NetInfo's useNativeReachability defaults to true and we never
+        // override it, so Android takes its native boolean and never fetches.
+        // iOS has no such native key and web's shim sets null, so the probe
+        // runs on BOTH of those — which is where this test actually matters.
+        //
+        // ⛔ If this ever reads as an Android defence again, it is wrong.
+        expect(ONLINE).toMatch(/NEVER FETCHED ON ANDROID/);
+        expect(ONLINE).toMatch(/useNativeReachability/);
+    });
+
     it("⚠️ checks the BODY, not the status", () => {
         // 🔴 Until 2026-10-05 this asserted `response.status === 200` and
         // called it "the whole captive-portal defence". It was not one. A
