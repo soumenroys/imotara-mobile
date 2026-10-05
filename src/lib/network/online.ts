@@ -118,7 +118,19 @@ function applyConfig() {
     // Re-probe soon after a failure, lazily while things are working.
     reachabilityShortTimeout: 5 * 1000,
     reachabilityLongTimeout: longTimeoutMs,
-    reachabilityRequestTimeout: 8 * 1000,
+    // ⚠️ 15s, not 8s. A timeout here is read as OFFLINE, so on a genuinely slow
+    // connection a short timeout means EVERY probe fails and the person is
+    // pinned to on-device replies for as long as the network stays poor —
+    // silently, and worst for the people on the worst networks, which on this
+    // product is a large part of India. That is the expensive error named at
+    // the top of this file.
+    // Raising it only affects BLACK-HOLE networks, where packets are dropped
+    // and the request hangs. A refused connection, a DNS failure or broken TLS
+    // still throws immediately and is unaffected, so genuinely dead networks
+    // are still detected at once. The only cost is that a black hole takes 15s
+    // instead of 8s to register, and "unknown counts as online" already means
+    // we lean that way on purpose.
+    reachabilityRequestTimeout: 15 * 1000,
   });
 }
 

@@ -72,6 +72,20 @@ describe("the surviving checker is the careful one", () => {
         expect(ONLINE).toMatch(/useNativeReachability/);
     });
 
+    it("⚠️ the request timeout is generous, because a timeout reads as OFFLINE", () => {
+        // 8s pinned people on slow connections to on-device replies: every
+        // probe timed out, so they were "offline" for as long as the network
+        // stayed poor — silently, and worst for the worst networks. Raising it
+        // only affects black-hole networks; a refused connection, a DNS
+        // failure or broken TLS still throws at once.
+        // ⛔ Do not lower this to "detect offline faster". Detecting offline
+        // faster is not the goal; not declaring it wrongly is.
+        const m = ONLINE_CODE.match(/reachabilityRequestTimeout:\s*(\d+)\s*\*\s*1000/);
+        expect(m).not.toBeNull();
+        expect(Number(m![1])).toBeGreaterThanOrEqual(15);
+    });
+
+
     it("⚠️ accepts ANY http response — never the status, never our json", () => {
         // 🔴 This line has been wrong twice.
         //   `status === 200`      -> /api/health returns 500 on a missing env
