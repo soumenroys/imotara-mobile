@@ -55,10 +55,22 @@ describe("the surviving checker is the careful one", () => {
         expect(ONLINE).toMatch(/reachabilityUrl: "https:\/\/www\.imotara\.com\/api\/health"/);
     });
 
-    it("⚠️ actually CHECKS the response status", () => {
-        // The whole captive-portal defence. Hotel wifi answers every request
-        // with its own login page; without this it reads as online.
-        expect(ONLINE).toMatch(/reachabilityTest: async \(response\) => response\.status === 200/);
+    it("⚠️ checks the BODY, not the status", () => {
+        // 🔴 Until 2026-10-05 this asserted `response.status === 200` and
+        // called it "the whole captive-portal defence". It was not one. A
+        // portal that answers 200 with its login page passed, which is the
+        // very defect online.ts was created to prevent. The probe must parse
+        // OUR json instead.
+        expect(ONLINE).toMatch(/await response\.json\(\)/);
+        expect(ONLINE).not.toMatch(/reachabilityTest: async \(response\) => response\.status === 200/);
+    });
+
+    it("⛔ does NOT gate reachability on the health payload's own ok flag", () => {
+        // `ok` reports whether env vars are present. Gating on it would let a
+        // renamed Vercel variable put EVERY Android and iOS client into
+        // on-device mode while the network is fine.
+        expect(ONLINE).not.toMatch(/body\?\.ok === true/);
+        expect(ONLINE).toMatch(/typeof body\?\.ok === "boolean"/);
     });
 
     it("ChatScreen now reads that one", () => {
@@ -109,5 +121,58 @@ describe("the user's setting still means what it says", () => {
 
     it("ignores nonsense values rather than disabling the probe", () => {
         expect(ONLINE).toMatch(/if \(!isFinite\(ms\) \|\| ms <= 0 \|\| ms === longTimeoutMs\) return;/);
+    });
+});
+
+/**
+ * The string assertions above guard the shape of the source. These run the
+ * real predicate, because the 09-16 version read correctly and still let a
+ * captive portal through.
+ */
+describe("the reachability predicate, exercised", () => {
+    // Mirrors src/lib/network/online.ts exactly.
+    const reachabilityTest = async (response: { json: () => Promise<unknown> }) => {
+        try {
+            const body = (await response.json()) as { ok?: unknown; env?: unknown };
+            return typeof body?.ok === "boolean" && !!body?.env;
+        } catch {
+            return false;
+        }
+    };
+    const serving = (body: unknown) => ({
+        json: async () => {
+            if (typeof body === "string") throw new SyntaxError("Unexpected token <");
+            return body;
+        },
+    });
+
+    it("✅ a healthy response is reachable", async () => {
+        await expect(
+            reachabilityTest(serving({ ok: true, env: { NODE_ENV: "production" }, note: "..." })),
+        ).resolves.toBe(true);
+    });
+
+    it("🔴 a captive portal's login page is NOT reachable", async () => {
+        // The actual bug: hotel wifi, 200 OK, HTML body.
+        await expect(
+            reachabilityTest(serving("<html><body>Please sign in to continue</body></html>")),
+        ).resolves.toBe(false);
+    });
+
+    it("🔴 a 500 from our OWN api is still reachable", async () => {
+        // /api/health returns 500 when an env var is missing. We reached
+        // Imotara, so we are online — one bad variable must not take the
+        // whole mobile fleet offline.
+        await expect(
+            reachabilityTest(serving({ ok: false, env: { NODE_ENV: "production" }, note: "..." })),
+        ).resolves.toBe(true);
+    });
+
+    it("a portal serving valid JSON that is not ours is NOT reachable", async () => {
+        await expect(reachabilityTest(serving({ status: "captive", login: true }))).resolves.toBe(false);
+    });
+
+    it("an empty body is NOT reachable", async () => {
+        await expect(reachabilityTest(serving(null))).resolves.toBe(false);
     });
 });

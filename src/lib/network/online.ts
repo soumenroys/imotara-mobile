@@ -34,12 +34,33 @@ function classify(state: { isConnected: boolean | null; isInternetReachable: boo
  * Start listening. Safe to call more than once.
  *
  * The reachability probe is pointed at Imotara's own health endpoint rather
- * than NetInfo's default Google URL, which is what makes a captive portal
- * detectable: hotel and airport wifi answers every request with its own login
- * page, so the device is "connected" and nothing works. A probe that expects
- * HTTP 200 from OUR api sees that HTML for what it is, and — more usefully —
- * "reachable" then means "can reach Imotara", which is the only question the
- * app actually needs answered.
+ * than NetInfo's default Google URL, so that "reachable" means "can reach
+ * Imotara" — the only question the app actually needs answered.
+ *
+ * ⚠️ The test reads the BODY, not the status, and that is not fussiness.
+ * Two failures come from checking `response.status === 200`, which is what
+ * this did until 2026-10-05:
+ *
+ *   1. A captive portal is NOT caught. Hotel and airport wifi answers every
+ *      request with its own login page, very often as a plain 200 OK (and a
+ *      302 is no better — fetch follows it and lands on a 200). Status-only,
+ *      that login page reads as "online" and the app then fails every call.
+ *      This is the exact defect online.ts was created to prevent on 09-16;
+ *      the status check was believed to close it and did not.
+ *   2. A missing env var takes the whole fleet offline. /api/health returns
+ *      500 when any required env var is absent. Status-only, one renamed
+ *      variable in Vercel flips EVERY Android and iOS client to on-device
+ *      mode while the network and the rest of the API are perfectly fine.
+ *
+ * Parsing our own JSON separates the two cleanly: a portal's HTML cannot be
+ * parsed, while a 500 from our own API still proves we reached Imotara. So we
+ * check for the SHAPE of the health payload, never for `ok === true` — `ok`
+ * reports env-var health, which is none of this probe's business.
+ *
+ * ℹ️ Verified in the library source: NetInfo calls reachabilityTest for any
+ * resolved fetch, with no status short-circuit
+ * (internal/internetReachability.ts — `.then(response => reachabilityTest(response))`),
+ * so a non-2xx really does reach this function.
  */
 let started = false;
 let unsubscribe: (() => void) | null = null;
@@ -50,7 +71,16 @@ let longTimeoutMs = 60 * 1000;
 function applyConfig() {
   NetInfo.configure({
     reachabilityUrl: "https://www.imotara.com/api/health",
-    reachabilityTest: async (response) => response.status === 200,
+    reachabilityTest: async (response) => {
+      try {
+        // Our health endpoint always returns { ok, env, note }. A captive
+        // portal's login page is HTML and throws here, which is the point.
+        const body = await response.json();
+        return typeof body?.ok === "boolean" && !!body?.env;
+      } catch {
+        return false;
+      }
+    },
     // Re-probe soon after a failure, lazily while things are working.
     reachabilityShortTimeout: 5 * 1000,
     reachabilityLongTimeout: longTimeoutMs,
