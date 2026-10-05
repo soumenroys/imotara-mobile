@@ -86,6 +86,16 @@ describe("the surviving checker is the careful one", () => {
         expect(ONLINE_CODE).not.toMatch(/await response\.json\(\)/);
     });
 
+    it("⛔ Android stays on the native signal — useNativeReachability is not flipped", () => {
+        // Found by mutation testing: adding `useNativeReachability: false`
+        // passed every other test. That one line would put Android onto the
+        // probe, trading a free, accurate OS answer for "did one endpoint
+        // reply in 8s" — a single point of failure between the person and the
+        // product, and a deliberate 2026-10-05 decision NOT to take.
+        // ⚠️ If this is ever wanted, it is a product decision, not a tidy-up.
+        expect(ONLINE_CODE).not.toMatch(/useNativeReachability\s*:\s*false/);
+    });
+
     it("⛔ one endpoint's health never decides whether the product works", () => {
         // `ok` reports env-var presence. Gating on it — or on any body field —
         // couples "can the person use Imotara" to one route being healthy.
