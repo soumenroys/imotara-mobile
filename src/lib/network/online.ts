@@ -37,25 +37,32 @@ function classify(state: { isConnected: boolean | null; isInternetReachable: boo
  * than NetInfo's default Google URL, so that "reachable" means "can reach
  * Imotara" — the only question the app actually needs answered.
  *
- * ⚠️ The test reads the BODY, not the status, and that is not fussiness.
- * Two failures come from checking `response.status === 200`, which is what
- * this did until 2026-10-05:
+ * ⚠️ The test accepts ANY http response, and that is deliberate.
  *
- *   1. A captive portal is NOT caught. Hotel and airport wifi answers every
- *      request with its own login page, very often as a plain 200 OK (and a
- *      302 is no better — fetch follows it and lands on a 200). Status-only,
- *      that login page reads as "online" and the app then fails every call.
- *      This is the exact defect online.ts was created to prevent on 09-16;
- *      the status check was believed to close it and did not.
- *   2. A missing env var takes the whole fleet offline. /api/health returns
- *      500 when any required env var is absent. Status-only, one renamed
- *      variable in Vercel flips EVERY Android and iOS client to on-device
- *      mode while the network and the rest of the API are perfectly fine.
+ * What this signal DOES is pick on-device replies over cloud ones and show the
+ * offline banner, so the two ways of being wrong cost wildly different things:
  *
- * Parsing our own JSON separates the two cleanly: a portal's HTML cannot be
- * parsed, while a 500 from our own API still proves we reached Imotara. So we
- * check for the SHAPE of the health payload, never for `ok === true` — `ok`
- * reports env-var health, which is none of this probe's business.
+ *   a false "offline"  -> the person silently gets a degraded on-device reply
+ *                         when the real one was available. Reply quality is a
+ *                         protected surface, so this is the expensive error.
+ *   a false "online"   -> one request fails and falls back. Seconds lost.
+ *
+ * Everything here follows from that asymmetry, and so does the "unknown counts
+ * as online" rule below. Two earlier versions got it backwards:
+ *
+ *   `response.status === 200`  -> /api/health answers 500 when any env var is
+ *                                 missing, so one renamed Vercel variable put
+ *                                 EVERY iOS client into on-device mode while
+ *                                 the network was perfectly fine.
+ *   requiring our own json     -> better, but still stricter than web: a Vercel
+ *                                 502 html error page, or a CDN challenge, read
+ *                                 as offline when the person could have tried.
+ *
+ * 🔑 So the rule is web's rule: reaching Imotara at all is enough. One endpoint's
+ * health must never decide whether the product works — the honest test of "can
+ * we reach the cloud" is the actual request, which already falls back on its own.
+ * A captive portal is still caught, because over https it breaks TLS and the
+ * fetch THROWS rather than returning a login page.
  *
  * ℹ️ Verified in the library source: NetInfo calls reachabilityTest for any
  * resolved fetch, with no status short-circuit
@@ -87,10 +94,12 @@ function classify(state: { isConnected: boolean | null; isInternetReachable: boo
  * this build for two minutes against a local mock and the mock logged ZERO
  * requests, while a raw `nc` from the same emulator reached it instantly.
  *
- * ❓ OPEN DECISION: setting `useNativeReachability: false` would make Android
- * probe too, so "reachable" would mean "can reach Imotara" there as this file
- * intends — at the cost of a request every interval instead of a free OS
- * signal. Not changed unilaterally: it alters behaviour on a shipped path.
+ * ✅ DECIDED 2026-10-05 — LEAVE ANDROID ON THE NATIVE SIGNAL. Flipping
+ * `useNativeReachability` to false would make Android probe too, but it would
+ * replace a free, accurate OS answer with "did one endpoint reply in 8s", so a
+ * Vercel blip, a DNS hiccup or an expired cert would declare every Android user
+ * offline while their network was fine. That is a single point of failure
+ * between the person and the product. The OS signal has no such coupling.
  */
 let started = false;
 let unsubscribe: (() => void) | null = null;
@@ -101,16 +110,11 @@ let longTimeoutMs = 60 * 1000;
 function applyConfig() {
   NetInfo.configure({
     reachabilityUrl: "https://www.imotara.com/api/health",
-    reachabilityTest: async (response) => {
-      try {
-        // Our health endpoint always returns { ok, env, note }. A captive
-        // portal's login page is HTML and throws here, which is the point.
-        const body = await response.json();
-        return typeof body?.ok === "boolean" && !!body?.env;
-      } catch {
-        return false;
-      }
-    },
+    // ANY http response means we reached Imotara. Only a thrown request — DNS
+    // failure, refused connection, broken TLS, timeout — means offline, and
+    // NetInfo's own catch handles those. Deliberately identical to web's
+    // useOnlineStatus.ts. See the note above on why this must not be stricter.
+    reachabilityTest: async () => true,
     // Re-probe soon after a failure, lazily while things are working.
     reachabilityShortTimeout: 5 * 1000,
     reachabilityLongTimeout: longTimeoutMs,

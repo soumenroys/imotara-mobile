@@ -29,6 +29,9 @@ const strip = (s: string) =>
     s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
 
 const ONLINE = read("lib/network/online.ts");
+// Comments in this file explain the two wrong versions by name, so negative
+// assertions must look at CODE only or they match the explanation itself.
+const ONLINE_CODE = strip(ONLINE);
 const CHAT = strip(read("screens/ChatScreen.tsx"));
 
 describe("the duplicate is gone", () => {
@@ -69,22 +72,25 @@ describe("the surviving checker is the careful one", () => {
         expect(ONLINE).toMatch(/useNativeReachability/);
     });
 
-    it("⚠️ checks the BODY, not the status", () => {
-        // 🔴 Until 2026-10-05 this asserted `response.status === 200` and
-        // called it "the whole captive-portal defence". It was not one. A
-        // portal that answers 200 with its login page passed, which is the
-        // very defect online.ts was created to prevent. The probe must parse
-        // OUR json instead.
-        expect(ONLINE).toMatch(/await response\.json\(\)/);
-        expect(ONLINE).not.toMatch(/reachabilityTest: async \(response\) => response\.status === 200/);
+    it("⚠️ accepts ANY http response — never the status, never our json", () => {
+        // 🔴 This line has been wrong twice.
+        //   `status === 200`      -> /api/health returns 500 on a missing env
+        //                            var, so one renamed Vercel variable put
+        //                            EVERY iOS client into on-device mode.
+        //   requiring our json    -> still stricter than web: a Vercel 502 html
+        //                            page or a CDN challenge read as offline.
+        // A false "offline" silently downgrades reply quality, which is a
+        // protected surface. Reaching Imotara at all is the bar.
+        expect(ONLINE).toMatch(/reachabilityTest: async \(\) => true/);
+        expect(ONLINE_CODE).not.toMatch(/response\.status === 200/);
+        expect(ONLINE_CODE).not.toMatch(/await response\.json\(\)/);
     });
 
-    it("⛔ does NOT gate reachability on the health payload's own ok flag", () => {
-        // `ok` reports whether env vars are present. Gating on it would let a
-        // renamed Vercel variable put EVERY Android and iOS client into
-        // on-device mode while the network is fine.
-        expect(ONLINE).not.toMatch(/body\?\.ok === true/);
-        expect(ONLINE).toMatch(/typeof body\?\.ok === "boolean"/);
+    it("⛔ one endpoint's health never decides whether the product works", () => {
+        // `ok` reports env-var presence. Gating on it — or on any body field —
+        // couples "can the person use Imotara" to one route being healthy.
+        expect(ONLINE_CODE).not.toMatch(/body\?\.ok/);
+        expect(ONLINE).toMatch(/One endpoint's[\s*]+health must never decide whether the product works/);
     });
 
     it("ChatScreen now reads that one", () => {
