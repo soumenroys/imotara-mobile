@@ -172,6 +172,14 @@ describe("the reachability predicate, exercised", () => {
         await expect(reachabilityTest(serving({ status: "captive", login: true }))).resolves.toBe(false);
     });
 
+    it("\u26a0\ufe0f a foreign {ok:true} is NOT reachable \u2014 the env shape is what identifies us", async () => {
+        // Found by mutation testing: without this, deleting the `!!body?.env`
+        // check passed every test. A bare {ok:true} is a common API response,
+        // so a portal or proxy could serve one and read as reachable.
+        await expect(reachabilityTest(serving({ ok: true }))).resolves.toBe(false);
+        await expect(reachabilityTest(serving({ ok: false }))).resolves.toBe(false);
+    });
+
     it("an empty body is NOT reachable", async () => {
         await expect(reachabilityTest(serving(null))).resolves.toBe(false);
     });
