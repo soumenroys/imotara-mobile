@@ -2176,7 +2176,15 @@ function SettingsScreenContent() {
                             onPress={async () => { try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
                             style={{ marginTop: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primaryTint, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 6 }}
                         >
-                            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600", flex: 1 }}>Sign in to restore your plan</Text>
+                            {/* 🔑 Label starts with "Sign in" on purpose. It used to read "Sign in to
+                                restore your plan", which framed the ONLY sign-in affordance in Settings
+                                around plan restoration — so someone who never had a plan did not
+                                recognise it as the way to sign in at all. An org member joining their
+                                NGO or school is exactly that person, and this is the screen they look
+                                on. Web has a plain "Sign in" in the header; mobile did not, which made
+                                this the parity gap. Restoration is kept in the label because it is
+                                still what signing in does for a returning subscriber. */}
+                            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600", flex: 1 }}>Sign in or restore your plan</Text>
                             <Text style={{ fontSize: 13, color: colors.primary }}>→</Text>
                         </TouchableOpacity>
                     ) : String(licenseTier ?? "FREE").toUpperCase() === "FREE" ? (
