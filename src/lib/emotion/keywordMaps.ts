@@ -61,7 +61,7 @@ export const EN_LANG_HINT_REGEX =
 // --------------------------------------------------
 
 export const BN_SAD_REGEX =
-    /(মন খারাপ|খারাপ লাগছে|মন ভালো নেই|মনে ভালো নেই|ভালো নেই|ভাল নেই|ভালো লাগছে না|ভাল লাগছে না|দুঃখ|কষ্ট|কাঁদ|কান্না|একলা|একাকী|\bmon(\s+ta)?\s+kharap\b|\bamar\s+mon(\s+ta)?\s+kharap\b|\bkhub\s+kharap\s+lag(chh?e|che)\b|\bkharap\s+lag(chh?e|che)\b|\bmon\s+bhalo\s+na\b|\b(kichu|kicu|kisu)\s+bhalo\s+lag(chh?e|che)\s+na\b|\bbhalo\s+lag(chh?e|che)\s+na\b|\bmood\s+off\b)/i;
+    /(মন খারাপ|মন[\u0980-\u09FF\s]{1,8}খারাপ|খারাপ লাগছে|মন ভালো নেই|মনে ভালো নেই|ভালো নেই|ভাল নেই|ভালো লাগছে না|ভাল লাগছে না|দুঃখ|কষ্ট|কাঁদ|কান্না|একলা|একাকী|\bmon(\s+ta)?\s+kharap\b|\bamar\s+mon(\s+ta)?\s+kharap\b|\bkhub\s+kharap\s+lag(chh?e|che)\b|\bkharap\s+lag(chh?e|che)\b|\bmon\s+bhalo\s+na\b|\b(kichu|kicu|kisu)\s+bhalo\s+lag(chh?e|che)\s+na\b|\bbhalo\s+lag(chh?e|che)\s+na\b|\bmood\s+off\b)/i;
 
 export const BN_STRESS_REGEX =
     /(চিন্তা|দুশ্চিন্তা|টেনশন|স্ট্রেস|ভয় লাগছে|\bonek\s+chinta\s+hocch?e\b|\bkhub\s+chinta\s+hocch?e\b|\bchinta\s+hocch?e\b|\bstress\s+e\s+achi\b|\bkhub\s+stress\s+e\s+achi\b|\btension\s+e\s+achi\b|\bkhub\s+tension\s+e\s+achi\b)/i;
@@ -124,7 +124,7 @@ export const TA_CONFUSED_REGEX =
 // --------------------------------------------------
 
 export const GU_SAD_REGEX =
-    /(એકલા|એકલુ|એકલું|એકલાપણું|મન ખરાબ|ખરાબ લાગે છે|ખૂબ ખરાબ લાગે છે|\bekla\s+lage\s+che\b|\beklu\s+lage\s+che\b|\bman\s+kharap\s+che\b|\bkharab\s+lage\s+che\b|\bbahu\s+ekla\s+lage\s+che\b|\bkhub\s+kharab\s+lage\s+che\b)/i;
+    /(એકલા|એકલુ|એકલું|એકલાપણું|દુઃખ|દુખ|મન ખરાબ|ખરાબ લાગે છે|ખૂબ ખરાબ લાગે છે|\bekla\s+lage\s+che\b|\beklu\s+lage\s+che\b|\bman\s+kharap\s+che\b|\bkharab\s+lage\s+che\b|\bbahu\s+ekla\s+lage\s+che\b|\bkhub\s+kharab\s+lage\s+che\b)/i;
 
 export const GU_STRESS_REGEX =
     /(ટેન્શન|ચિંતા|ચિંતિત|ઘબરાહટ|દબાણ|બહુ ટેન્શન છે|ખૂબ ટેન્શન છે|મને ટેન્શન છે|\btension\b|\bchinta\b|\bchintit\b|\bghabrahat\b|\bdabaan\b|\bbahu\s+tension\s+che\b|\bkhub\s+tension\s+che\b|\bmane\s+tension\s+che\b)/i;
@@ -186,7 +186,7 @@ export const KN_CONFUSED_REGEX =
 // --------------------------------------------------
 
 export const ML_SAD_REGEX =
-    /(സങ്കടം|ദുഃഖം|ഒറ്റപ്പെടൽ|\bsankadam\b|\bdukham\b|\bvishamamundu\b|\bvishama thonum\b|\bvaliya sadness\b|\bmanassu shariyalla\b)/i;
+    /(സങ്കടം|ദുഃഖം|സങ്കടമ|ദുഃഖമ|വിഷമ|ഒറ്റപ്പെടൽ|\bsankadam\b|\bdukham\b|\bvishamamundu\b|\bvishama thonum\b|\bvaliya sadness\b|\bmanassu shariyalla\b)/i;
 
 export const ML_STRESS_REGEX =
     /(ടെൻഷൻ|ഉൽകണ്ഠ|\btension undu\b|\bvaliya tension\b|\bchintayundu\b|\bchinta undu\b)/i;
@@ -243,7 +243,7 @@ export const OR_CONFUSED_REGEX =
 // --------------------------------------------------
 
 export const MR_SAD_REGEX =
-    /(मन खराब|दुःख|एकटे|\bman kharab aahe\b|\bkhup kharab vatat\b|\bdukha hote\b|\bekta vatat aahe\b|\brodaycha yet aahe\b)/i;
+    /(मन खराब|दुःख|एकटे|वाईट\s*वाटत|\bman kharab aahe\b|\bkhup kharab vatat\b|\bdukha hote\b|\bekta vatat aahe\b|\brodaycha yet aahe\b)/i;
 
 export const MR_STRESS_REGEX =
     /(ताण|चिंता|टेन्शन|\bkhup tension aahe\b|\btaan jaanvat aahe\b|\bchinta vatat aahe\b|\btension vatat aahe\b)/i;
