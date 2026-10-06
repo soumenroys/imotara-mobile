@@ -367,6 +367,7 @@ function SettingsScreenContent() {
 
         // ✅ Optional licensing fields (if present in HistoryContext)
         licenseTier,
+        displayLicenseTier,
         setLicenseTier,
     } = store;
 
@@ -2093,7 +2094,10 @@ function SettingsScreenContent() {
         (typeof storeIsSyncing === "boolean" ? storeIsSyncing : false);
 
     // ✅ Licensing display + optional debug switching
-    const tierLabel = prettyTier(licenseTier);
+    // 🔴 D2 — displayLicenseTier, NOT licenseTier. After signing out the cached
+    // paid tier kept being shown, so a session-less device claimed Plus.
+    // Display only: every gate() in this file still reads licenseTier.
+    const tierLabel = prettyTier(displayLicenseTier);
     const canSetTier = typeof setLicenseTier === "function";
 
     const setTierSafe = (tier: LicenseTier) => {

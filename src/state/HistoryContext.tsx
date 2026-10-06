@@ -141,6 +141,13 @@ type HistoryContextValue = {
      * Persisted in AsyncStorage so it survives app restarts.
      */
     licenseTier: LicenseTier;
+    /**
+     * The tier as it should be DISPLAYED. Equals `licenseTier` except when the
+     * user is definitively signed out, where it is FREE — so a session-less
+     * device never claims a paid plan from a stale cache.
+     * ⚠️ Display only; `licenseTier` still drives gate().
+     */
+    displayLicenseTier: LicenseTier;
     setLicenseTier: (tier: LicenseTier) => void;
 
     /** All conversation threads for the current scope. */
@@ -387,6 +394,26 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     // ✅ Licensing state (default FREE; hydrated from AsyncStorage)
     const [licenseTier, _setLicenseTier] = useState<LicenseTier>("FREE");
 
+    // 🔴 D2 STAGE 2 — was this tier POSITIVELY CONFIRMED this session?
+    //
+    // `licenseTier` starts at "FREE" as a default, not as an answer. The
+    // retention effect below reads it, so before this flag existed a fresh
+    // install could prune local history to the free window purely because the
+    // tier had not loaded yet — pruning off a default, not a fact. That is the
+    // same shape as the 2026-10-02 bug where the header read Free while the
+    // upgrade sheet read Plus for the same account.
+    //
+    // Confirmed means: a server answer arrived via the publisher, or something
+    // explicitly set the tier. ⛔ Hydrating the AsyncStorage cache does NOT
+    // count — it is a previously-true value, and acting on it is exactly how
+    // the earlier bug destroyed history.
+    //
+    // Consequence, accepted deliberately: a genuinely FREE user who is offline
+    // and has never synced will not be pruned. Keeping too much history is
+    // recoverable; deleting someone's conversations is not.
+    const [tierConfirmed, setTierConfirmed] = useState(false);
+
+
     // ── Thread state ──────────────────────────────────────────────────────────
     const [threads, setThreads] = useState<ConversationThread[]>([]);
     const [activeThreadId, setActiveThreadIdState] = useState<string>(DEFAULT_THREAD_ID);
@@ -421,7 +448,32 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         cloudSyncAllowed,
     } = useSettings();
 
-    const { accessToken } = useAuth();
+    // ⛔ `status`, NOT `!accessToken`. The token is briefly null while the
+    // session hydrates, so keying display on its absence makes a paying user
+    // see the signed-out state FLASH on every cold start.
+    const { accessToken, status } = useAuth();
+    // 🔴 D2 STAGE 1 — the tier as it should be DISPLAYED.
+    //
+    // The defect: after signing out, the cached paid tier kept being shown, so
+    // a session-less device claimed Plus. The cache is not wrong — it is just
+    // no longer anybody's.
+    //
+    //   loading         → keep showing the cached value. Blanking here is what
+    //                     produced the "Not signed in" flash on every launch.
+    //   authenticated   → the real tier.
+    //   unauthenticated → FREE. Not null: a signed-out person genuinely has
+    //                     free-tier access, so saying FREE is both true and
+    //                     less alarming than an empty capsule.
+    //
+    // ⚠️ DISPLAY ONLY. `licenseTier` is unchanged, so gate() still behaves
+    // exactly as before — entitlement is stage 3, and the design is explicit
+    // that it must not land before the retention guard above.
+    //
+    // 🔑 Exposed as ONE derived value rather than repeating this reasoning at
+    // the header capsule, SettingsScreen and PlanSupportQuickPanel — three
+    // copies of one rule is the anti-pattern licenseTierStore exists to end.
+    const displayLicenseTier: LicenseTier =
+        status === "unauthenticated" ? "FREE" : licenseTier;
 
     // ✅ Keep latest history ref to avoid function identity churn
     const historyRef = useRef<HistoryItem[]>([]);
@@ -472,6 +524,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     // ✅ Public setter with persistence (safe; does not affect existing logic)
     const setLicenseTier = useCallback((tier: LicenseTier) => {
         _setLicenseTier(tier);
+        setTierConfirmed(true);          // an explicit set IS an answer
         // Keep the other copies in step — a debug override or a post-purchase
         // push must reach SettingsContext's consumers too, not just this one.
         publishLicenseTier(tier);
@@ -496,6 +549,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         // normaliseTier again rather than trusting the publisher: a legacy
         // "PREMIUM" must still map to PLUS no matter which path announced it.
         _setLicenseTier(normaliseTier(tier));
+        // The publisher is fed by SettingsContext.refreshLicense(), i.e. a real
+        // /api/license/status answer — including an answer of FREE.
+        setTierConfirmed(true);
     }), []);
 
     // ✅ Hydrate from AsyncStorage whenever Chat Link Key changes (prevents cross-scope leakage)
@@ -687,6 +743,13 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (!hydrated) return;
 
+        // 🔴 D2 STAGE 2 — never prune off a default. See tierConfirmed above.
+        // This deliberately runs BEFORE stage 3 (entitlement) ever lands: once
+        // the effective tier can become FREE on sign-out, this same effect
+        // would otherwise prune a SIGNED-OUT user's history to seven days, and
+        // synced items are only recoverable from a server they cannot reach.
+        if (!tierConfirmed) return;
+
         const g = gate("HISTORY_DAYS_LIMIT", licenseTier);
         const daysRaw =
             g.enabled && typeof (g as any).params?.days !== "undefined"
@@ -716,7 +779,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         if (pruned.length !== current.length) {
             setHistory(pruned);
         }
-    }, [hydrated, licenseTier]);
+    }, [hydrated, licenseTier, tierConfirmed]);
 
     // Persist to AsyncStorage whenever history changes (after hydration)
     useEffect(() => {
@@ -1272,6 +1335,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         hasUnsyncedChanges,
         potentialDuplicates,
         licenseTier,
+        displayLicenseTier,
         setLicenseTier,
         pauseAutoSync,
         resumeAutoSync,
@@ -1297,6 +1361,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         hasUnsyncedChanges,
         potentialDuplicates,
         licenseTier,
+        displayLicenseTier,
         setLicenseTier,
         pauseAutoSync,
         resumeAutoSync,

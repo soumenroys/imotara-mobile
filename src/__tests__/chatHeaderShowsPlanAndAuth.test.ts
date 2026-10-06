@@ -39,15 +39,32 @@ const SRC = fs.readFileSync(
 /** Comments here quote the very patterns being pinned — strip them first. */
 const CODE = SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
 
+/**
+ * ⚠️ UPDATED 2026-10-06 (D2 stage 1). The badge now renders
+ * `prettyTier(displayLicenseTier)` rather than `prettyTier(licenseTier)`.
+ *
+ * The three properties this file pins are UNCHANGED and all still asserted:
+ * one tier→label function, the badge outside the capped three-button row, and
+ * navigation to Settings rather than an inline sign-in. Only the ARGUMENT
+ * changed: after signing out, the cached paid tier was still being displayed,
+ * so a session-less device claimed Plus. `displayLicenseTier` is FREE once auth
+ * is definitively "unauthenticated", and identical to licenseTier otherwise.
+ *
+ * ⛔ Entitlement is deliberately NOT affected — gate() still reads
+ * licenseTier. See entitlementSurvivesSignOut.test.ts.
+ */
+const BADGE = "prettyTier(displayLicenseTier)";
+
+
 describe("🔑 the chat header shows the current plan", () => {
     it("renders the tier with prettyTier — no second tier→label map", () => {
-        expect(CODE).toMatch(/prettyTier\(licenseTier\)/);
+        expect(CODE).toContain(BADGE);
         expect(CODE).toMatch(/prettyTier/);
     });
 
     it("🔴 is NOT a fourth item inside the capped buttons row", () => {
         // The badge must sit BEFORE the row whose comment caps it at 3.
-        const badge = CODE.indexOf("prettyTier(licenseTier)");
+        const badge = CODE.indexOf(BADGE);
         const buttonsRow = CODE.indexOf('flexShrink: 0, gap: 6');
         expect(badge).toBeGreaterThan(-1);
         expect(buttonsRow).toBeGreaterThan(-1);
@@ -55,7 +72,7 @@ describe("🔑 the chat header shows the current plan", () => {
     });
 
     it("is tappable and goes to Settings, where the plan is managed", () => {
-        const badge = CODE.slice(CODE.indexOf("prettyTier(licenseTier)") - 700);
+        const badge = CODE.slice(CODE.indexOf(BADGE) - 700);
         expect(badge.slice(0, 900)).toMatch(/navigation\.navigate\("Settings"\)/);
     });
 });

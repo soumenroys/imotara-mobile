@@ -2393,6 +2393,7 @@ export default function ChatScreen() {
     pauseAutoSync,
     resumeAutoSync,
     licenseTier,
+    displayLicenseTier,
     setLicenseTier,
   } = store;
 
@@ -5017,7 +5018,7 @@ export default function ChatScreen() {
           <TouchableOpacity
             onPress={() => { haptic.tap(); navigation.navigate("Settings"); }}
             accessibilityRole="button"
-            accessibilityLabel={`Your plan: ${prettyTier(licenseTier)}. Opens settings.`}
+            accessibilityLabel={`Your plan: ${prettyTier(displayLicenseTier)}. Opens settings.`}
             hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             style={{ flexShrink: 0, marginRight: 8 }}
           >
@@ -5026,11 +5027,15 @@ export default function ChatScreen() {
                 fontSize: 11,
                 fontWeight: "700",
                 letterSpacing: 0.3,
-                color: licenseTier === "FREE" ? colors.textSecondary : colors.indigo,
+                color: displayLicenseTier === "FREE" ? colors.textSecondary : colors.indigo,
               }}
               numberOfLines={1}
             >
-              {prettyTier(licenseTier)}
+              {/* 🔴 D2 — displayLicenseTier, NOT licenseTier. After signing out the
+                  cached paid tier kept being rendered, so a session-less device
+                  claimed Plus. Display only; every gate() below still reads
+                  licenseTier. */}
+              {prettyTier(displayLicenseTier)}
             </Text>
           </TouchableOpacity>
 
