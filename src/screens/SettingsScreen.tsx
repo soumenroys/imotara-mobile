@@ -482,6 +482,63 @@ function SettingsScreenContent() {
     }, [accessToken]);
 
     // Pull: on sign-in, fetch profile from server and merge with local (server fills empty fields)
+    // ── Individual wellbeing reporting consent (org members only) ────────────
+    //
+    // Owner's spec: ONE checkbox, ON while the account is on an organisational
+    // licence and OFF otherwise. Off means the org admin sees NO user-specific
+    // data for this person — but they are STILL counted in the organisation's
+    // aggregate. Opting out is exclusion from identification, not from the
+    // numbers, and the copy below has to say so or the control is misleading.
+    //
+    // `applicable` is decided by the server, the only place that knows whether
+    // there is an active EDU/NGO membership. We render nothing when it is
+    // false: a personal user should never see a control implying that somebody
+    // could be watching them.
+    const [reportConsentApplicable, setReportConsentApplicable] = React.useState(false);
+    const [reportConsent, setReportConsent] = React.useState(false);
+    const [reportConsentOrg, setReportConsentOrg] = React.useState<string | null>(null);
+    const [reportConsentSaving, setReportConsentSaving] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!accessToken) { setReportConsentApplicable(false); return; }
+        const base = getApiBaseUrl();
+        if (!base) return;
+        let cancelled = false;
+        fetchWithTimeout(`${base}/api/org/report-consent`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        }, 12_000)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((j) => {
+                if (cancelled || !j) return;
+                setReportConsentApplicable(!!j.applicable);
+                setReportConsent(!!j.consent);
+                setReportConsentOrg(j.orgName ?? null);
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [accessToken]);
+
+    const toggleReportConsent = useCallback(async (next: boolean) => {
+        const base = getApiBaseUrl();
+        if (!base || !accessToken) return;
+        setReportConsent(next);          // optimistic
+        setReportConsentSaving(true);
+        try {
+            const r = await fetchWithTimeout(`${base}/api/org/report-consent`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ consent: next }),
+            }, 12_000);
+            // Revert rather than leave the UI claiming a privacy choice that
+            // was never saved.
+            if (!r.ok) setReportConsent(!next);
+        } catch {
+            setReportConsent(!next);
+        } finally {
+            setReportConsentSaving(false);
+        }
+    }, [accessToken]);
+
     React.useEffect(() => {
         if (!accessToken) return;
         const base = getApiBaseUrl();
@@ -2381,6 +2438,34 @@ function SettingsScreenContent() {
                     </View>
                     <Text style={{ fontSize: 13, color: colors.textSecondary }}>Enables deeper emotional reflections and gentle prompts in chat. Runs locally on your device.</Text>
                 </AppSurface>
+
+                {/* Individual wellbeing reporting — only for org members */}
+                {reportConsentApplicable && (
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500", flex: 1, paddingRight: 12 }}>
+                            Share my individual wellbeing trends
+                        </Text>
+                        <Switch
+                            value={reportConsent}
+                            disabled={reportConsentSaving}
+                            onValueChange={toggleReportConsent}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                        {reportConsentOrg ? `${reportConsentOrg}'s` : "Your organisation's"} admin can see your own mood trends alongside other members.
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
+                        Turn this off and they will see no information about you specifically. Your conversations still count
+                        towards the organisation's overall figures, anonymously — so turning it off never makes you look absent.
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
+                        Imotara never shows anyone the contents of your conversations.
+                    </Text>
+                </AppSurface>
+                )}
 
                 {/* Quick panel swipe gestures */}
                 <AppSurface style={{ marginBottom: 16 }}>
