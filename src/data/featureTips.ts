@@ -269,7 +269,7 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "connect_browse",    emoji: "🔍", title: "Browse companions",        tip: "Filter companions in the Browse tab by language, specialty (grief, anxiety, career), and availability — find the right fit before you book.", category: "settings" },
   { id: "connect_schedule",  emoji: "📅", title: "Schedule sessions",        tip: "Can't talk now? Tap 'Schedule' on any companion profile to book a future slot — both you and the companion get a reminder before it starts.", category: "settings" },
   { id: "connect_apply",     emoji: "🧑‍💼", title: "Become a companion",      tip: "Professionals can apply to join Imotara Connect as a verified companion — set your own rate and hours.", category: "settings" },
-  { id: "org_plan",          emoji: "🏢", title: "Team & Org plans",         tip: "Deploy Imotara across your organisation — ₹1,999/seat/yr for companies, ₹999 for educational institutions, ₹799 for NGOs. Self-serve at imotara.com/pricing/corporate.", category: "settings" },
+  { id: "org_plan",          emoji: "🏢", title: "Team & Org plans",         tip: "Deploy Imotara across your organisation — ₹1,999/seat/yr for companies, ₹999 for educational institutions, ₹799 for NGOs. Tell us about your organisation at imotara.com/org/new and we'll set it up.", category: "settings" },
 
 ];
 

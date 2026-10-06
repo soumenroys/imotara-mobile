@@ -97,3 +97,57 @@ describe("the one ungated path is the documented person-to-person exception", ()
         expect(connect).toMatch(/function\s+SessionRechargeModal\b/);
     });
 });
+
+/**
+ * Organisation seat purchase stays OFF the phone — owner decision, 2026-10-06.
+ *
+ * The web has two org paths: /pricing/corporate, a self-serve Razorpay checkout
+ * for 10/50/100/500 seats, and /org/new, an enquiry form that promises a reply
+ * in 24–48 hours. Mobile links only to the second, and that is deliberate.
+ *
+ * 🔴 WHY IT MATTERS MORE THAN IT LOOKS. Pointing an app user at an external
+ * payment page is precisely what Apple's and Google's anti-steering rules
+ * target — relaxed in the US since 2025, not reliably elsewhere, and unsettled
+ * in India, which is our market. Selling the same seats through IAP instead
+ * would hand the stores 15% of B2B revenue that need never pass through them:
+ * about ₹14,993 a year on a single 50-seat commercial org.
+ *
+ * Against that, no organisation has ever bought self-serve — all four existing
+ * orgs were created by the owner, and SHEOWS is provisioned manually by
+ * decision. So the exposure is real and the revenue is hypothetical.
+ *
+ * This pins the decision, because the tempting change — "just link the phone
+ * straight to the checkout" — is one line, looks like an improvement, and would
+ * move the risk onto the app itself rather than the feature.
+ */
+describe("the organisation plan is an ENQUIRY on mobile, never a checkout", () => {
+    const SETTINGS = "screens/SettingsScreen.tsx";
+
+    it("the org call-to-action opens the enquiry form", () => {
+        expect(read(SETTINGS)).toMatch(/Linking\.openURL\(\s*["']https:\/\/imotara\.com\/org\/new["']\s*\)/);
+    });
+
+    it("🔴 no screen links the phone to the web seat checkout", () => {
+        // /pricing/corporate is the self-serve Razorpay page. A link to it from
+        // inside the app is external-purchase steering.
+        const walk = (dir: string): string[] => {
+            const out: string[] = [];
+            for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+                const p = path.join(dir, e.name);
+                if (e.isDirectory()) { if (e.name !== "__tests__") out.push(...walk(p)); }
+                else if (/\.(ts|tsx)$/.test(e.name)) out.push(p);
+            }
+            return out;
+        };
+        const offenders = walk(path.join(__dirname, "..")).filter((f) =>
+            /pricing\/corporate/.test(fs.readFileSync(f, "utf8")),
+        );
+        expect(offenders).toEqual([]);
+    });
+
+    it("and the wording still says what it does", () => {
+        // "Apply" is honest here: the destination really is an application form.
+        // If the link ever becomes a checkout, this copy becomes a lie.
+        expect(read(SETTINGS)).toMatch(/Apply for org plan/);
+    });
+});
