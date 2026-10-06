@@ -79,7 +79,7 @@ import { normaliseTier, prettyTier, type LicenseTier } from "../licensing/featur
 import { gate } from "../licensing/featureGates";
 
 // ✅ Donation presets + formatting (re-used)
-import { DONATION_PRESETS, formatINRFromPaise } from "../payments/donations";
+import { DONATION_PRESETS, formatINRFromPaise, fetchDonationPresets } from "../payments/donations";
 import { orgBillingTypeMeta } from "../lib/imotara/orgBilling";
 
 /**
@@ -495,6 +495,24 @@ function SettingsScreenContent() {
     // there is an active EDU/NGO membership. We render nothing when it is
     // false: a personal user should never see a control implying that somebody
     // could be watching them.
+    // 🔴 Android donation presets must match the checkout they open.
+    //
+    // The button opens {base}/donate, which has been banded by country since
+    // web c039082 — but this screen rendered India's flat ladder to everyone,
+    // so a donor abroad saw ₹49/₹99/₹199 and then landed on different numbers.
+    // Still INR: banding decides how many rupees to ask, not which currency.
+    // ⚠️ iOS never reaches this — donations there are Apple's tip jar.
+    const [donationPresets, setDonationPresets] = React.useState(DONATION_UI_PRESETS);
+
+    React.useEffect(() => {
+        if (Platform.OS === "ios") return;
+        let cancelled = false;
+        fetchDonationPresets(getApiBaseUrl())
+            .then((p) => { if (!cancelled) setDonationPresets(p as typeof DONATION_UI_PRESETS); })
+            .catch(() => {});   // the helper already falls back; this is belt-and-braces
+        return () => { cancelled = true; };
+    }, []);
+
     const [reportConsentApplicable, setReportConsentApplicable] = React.useState(false);
     const [reportConsent, setReportConsent] = React.useState(false);
     const [reportConsentOrg, setReportConsentOrg] = React.useState<string | null>(null);
@@ -2375,7 +2393,7 @@ function SettingsScreenContent() {
                     ) : (
                         /* Android: show Razorpay preset price buttons */
                         <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                            {DONATION_UI_PRESETS.map((p) => {
+                            {donationPresets.map((p) => {
                                 const isBusy = donatingId === p.id;
                                 return (
                                 <TouchableOpacity
