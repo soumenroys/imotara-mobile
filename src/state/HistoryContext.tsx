@@ -472,8 +472,37 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     // 🔑 Exposed as ONE derived value rather than repeating this reasoning at
     // the header capsule, SettingsScreen and PlanSupportQuickPanel — three
     // copies of one rule is the anti-pattern licenseTierStore exists to end.
-    const displayLicenseTier: LicenseTier =
+    // 🔴 D2 STAGE 3 — ENTITLEMENT, not just the label.
+    //
+    // The effective tier every gate() sees. Identical to `licenseTier` except
+    // when auth is DEFINITIVELY "unauthenticated", where it is FREE — so a
+    // session-less device does not merely stop *showing* Plus, it stops
+    // *having* it. Keyed on `status` for the same reason as stage 1: the token
+    // is briefly null while hydrating, and `!accessToken` would revoke a
+    // paying user's features for a frame on every cold start.
+    const effectiveLicenseTier: LicenseTier =
         status === "unauthenticated" ? "FREE" : licenseTier;
+
+    // Display and entitlement now agree; kept as a named export because three
+    // screens already read it and the distinction mattered while stage 3 was
+    // still pending.
+    const displayLicenseTier: LicenseTier = effectiveLicenseTier;
+
+    // 🔴 THE HAZARD STAGE 3 WOULD OTHERWISE CREATE — and why stage 2 alone was
+    // NOT enough.
+    //
+    // `tierConfirmed` was set on a server answer and never cleared. So a user
+    // who signed in (confirmed), then signed out, still carried
+    // tierConfirmed === true. The moment the effective tier became FREE above,
+    // the retention effect would have run and pruned a SIGNED-OUT user's local
+    // history to seven days — and synced items are only recoverable from a
+    // server they can no longer reach. Permanent loss.
+    //
+    // Confirmation is therefore per-SESSION: signing out ends the session, so
+    // the tier is nobody's again and nothing may be pruned on it.
+    useEffect(() => {
+        if (status === "unauthenticated") setTierConfirmed(false);
+    }, [status]);
 
     // ✅ Keep latest history ref to avoid function identity churn
     const historyRef = useRef<HistoryItem[]>([]);
@@ -750,7 +779,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         // synced items are only recoverable from a server they cannot reach.
         if (!tierConfirmed) return;
 
-        const g = gate("HISTORY_DAYS_LIMIT", licenseTier);
+        const g = gate("HISTORY_DAYS_LIMIT", effectiveLicenseTier);
         const daysRaw =
             g.enabled && typeof (g as any).params?.days !== "undefined"
                 ? (g as any).params?.days
@@ -779,7 +808,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         if (pruned.length !== current.length) {
             setHistory(pruned);
         }
-    }, [hydrated, licenseTier, tierConfirmed]);
+    }, [hydrated, effectiveLicenseTier, tierConfirmed]);
 
     // Persist to AsyncStorage whenever history changes (after hydration)
     useEffect(() => {
@@ -1334,7 +1363,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         lastSyncAt,
         hasUnsyncedChanges,
         potentialDuplicates,
-        licenseTier,
+        licenseTier: effectiveLicenseTier,
         displayLicenseTier,
         setLicenseTier,
         pauseAutoSync,
@@ -1360,7 +1389,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         lastSyncAt,
         hasUnsyncedChanges,
         potentialDuplicates,
-        licenseTier,
+        effectiveLicenseTier,
         displayLicenseTier,
         setLicenseTier,
         pauseAutoSync,

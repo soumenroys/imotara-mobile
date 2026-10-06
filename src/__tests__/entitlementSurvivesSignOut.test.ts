@@ -87,7 +87,7 @@ describe("stage 2 — history is never pruned off a default tier", () => {
   });
 
   it("re-runs when confirmation arrives", () => {
-    expect(CTX()).toMatch(/\[hydrated,\s*licenseTier,\s*tierConfirmed\]/);
+    expect(CTX()).toMatch(/\[hydrated,\s*effectiveLicenseTier,\s*tierConfirmed\]/);
   });
 
   it("a server answer confirms it", () => {
@@ -115,16 +115,45 @@ describe("stage 2 — history is never pruned off a default tier", () => {
   });
 });
 
-describe("⛔ stage 3 has NOT been slipped in early", () => {
-  it("gate() still reads the raw licenseTier, not the display one", () => {
-    // If this fails, entitlement changed on sign-out. Check stage 2 is live
-    // first, or a signed-out user's synced history will be deleted.
+describe("stage 3 — entitlement, and the hazard it would otherwise create", () => {
+  it("gate() sees FREE once auth is definitively unauthenticated", () => {
     const s = CTX();
-    expect(s).not.toMatch(/gate\([^)]*displayLicenseTier/);
-    expect(s).toMatch(/gate\("HISTORY_DAYS_LIMIT",\s*licenseTier\)/);
+    expect(s).toMatch(/const\s+effectiveLicenseTier[\s\S]{0,120}status\s*===\s*"unauthenticated"\s*\?\s*"FREE"/);
   });
 
-  it("the entitlement reads in ChatScreen are untouched", () => {
-    expect(CHAT()).toMatch(/isFeatureEnabled\("TTS_ADVANCED",\s*licenseTier\)/);
+  it("every consumer gets the EFFECTIVE tier, not the raw one", () => {
+    // One value, all readers — the whole point of fixing it in this file.
+    expect(CTX()).toContain("licenseTier: effectiveLicenseTier,");
+  });
+
+  it("the retention effect gates on the EFFECTIVE tier", () => {
+    expect(CTX()).toContain('gate("HISTORY_DAYS_LIMIT", effectiveLicenseTier)');
+  });
+
+  it("🔴 signing out CLEARS confirmation — the hazard this whole order exists for", () => {
+    // ⛔ THE BUG STAGE 3 WOULD OTHERWISE HAVE SHIPPED. tierConfirmed was set on
+    // a server answer and never cleared, so a user who signed in and then
+    // signed out still carried it as true. The instant the effective tier
+    // became FREE, the retention effect would have pruned a SIGNED-OUT user's
+    // history to seven days — and synced items are only recoverable from a
+    // server they can no longer reach. Confirmation must be per-SESSION.
+    const s = CTX();
+    expect(s).toMatch(/if\s*\(status\s*===\s*"unauthenticated"\)\s*setTierConfirmed\(false\)/);
+  });
+
+  it("⇒ a signed-out device can never prune: FREE tier, but unconfirmed", () => {
+    // The two halves that make stage 3 safe, asserted together so neither can
+    // be removed on its own.
+    const s = CTX();
+    expect(s).toMatch(/setTierConfirmed\(false\)/);          // sign-out clears it
+    expect(s).toMatch(/if\s*\(!tierConfirmed\)\s*return;/); // and pruning requires it
+  });
+
+  it("keyed on status, never on a missing token", () => {
+    // Revoking a paying user's features for a frame on every cold start would
+    // be a worse bug than the one being fixed.
+    const s = CTX();
+    const i = s.indexOf("const effectiveLicenseTier");
+    expect(s.slice(i, i + 160)).not.toContain("accessToken");
   });
 });
