@@ -370,13 +370,13 @@ export const GRATITUDE_REGEX =
 // --------------------------------------------------
 
 export const POSITIVE_JOY_REGEX =
-    /(\bhappy\b|\bglad\b|\bdelighted\b|\bjoyful\b|\bcheerful\b|\bwonderful\b|\bexcited\b|feeling better|feel better|much better|so good|খুশি|আনন্দ|মন(টা)?\s*(খুব\s*)?ভাল[ো]?|ভাল[ো]?\s*লাগছে|खुश|खुशी|आनंद|आनंदी|प्रसन्न|ખુશ|આનંદ|ਖੁਸ਼|ਖੁਸ਼ੀ|ਆਨੰਦ|ଖୁସି|ଆନନ୍ଦ|സന്തോഷ|ആനന്ദ|ಸಂತೋಷ|ಆನಂದ|సంతోష|ఆనంద|சந்தோஷ|மகிழ்ச்சி|سعيد|فرح|שמח|\bglücklich\b|\bfroh\b|嬉しい|幸せ)/i;
+    /(\bhappy\b|\bglad\b|\bdelighted\b|\bjoyful\b|\bcheerful\b|\bwonderful\b|\bexcited\b|feeling better|feel better|much better|so good|খুশি|আনন্দ|মন(টা)?\s*(খুব\s*)?ভাল[ো]?|ভাল[ো]?\s*লাগছে|खुश|खुशी|आनंद|आनंदी|प्रसन्न|ખુશ|આનંદ|ਖੁਸ਼|ਖੁਸ਼ੀ|ਆਨੰਦ|ଖୁସି|ଆନନ୍ଦ|സന്തോഷ|ആനന്ദ|ಸಂತೋಷ|ಆನಂದ|సంతోష|ఆనంద|சந்தோஷ|மகிழ்ச்சி|سعيد|فرح|خوش|خوشی|مسرت|שמח|\bglücklich\b|\bfroh\b|嬉しい|幸せ|счастлив|радост|весел|开心|高兴|快乐|愉快|\bfeliz\b|\bcontent[oa]\b|\balegre\b|\balegr[íi]a\b|\bheureux\b|\bheureuse\b|\bcontente?s\b|\bjoie\b|\bravi[e]?\b|\bbahagia\b|\bsenang\b|\bgembira\b)/i;
 
 export const POSITIVE_HOPE_REGEX =
-    /(\bhopeful\b|\bhope\b|\boptimistic\b|looking forward|getting better|\bimproving\b|आशा|उम्मीद|আশা|ভরসা|આશા|ਉਮੀਦ|ଆଶା|പ്രതീക്ഷ|ಭರವಸೆ|ఆశ|நம்பிக்கை|أمل|תקווה|\bHoffnung\b|\bhoffe\b|希望)/i;
+    /(\bhopeful\b|\bhope\b|\boptimistic\b|looking forward|getting better|\bimproving\b|आशा|उम्मीद|আশা|ভরসা|આશા|ਉਮੀਦ|ଆଶା|പ്രതീക്ഷ|ಭರವಸೆ|ఆశ|நம்பிக்கை|أمل|امید|آس|תקווה|\bHoffnung\b|\bhoffe\b|希望|期待|надежд|наде[юе]|\besperanza\b|\bilusión\b|\besperança\b|\bespoir\b|j'?espère|\bharapan\b|\bberharap\b)/i;
 
 export const POSITIVE_CALM_REGEX =
-    /(\bcalm\b|\bpeaceful\b|\brelaxed\b|\brelieved\b|at peace|শান্ত|স্বস্তি|शांत|शांति|राहत|શાંત|ਸ਼ਾਂਤ|ଶାନ୍ତ|ശാന്ത|ಶಾಂತ|ప్రశాంత|அமைதி|هادئ|راحة|רגוע|\bruhig\b|\bgelassen\b|落ち着|安心)/i;
+    /(\bcalm\b|\bpeaceful\b|\brelaxed\b|\brelieved\b|at peace|শান্ত|স্বস্তি|शांत|शांति|राहत|શાંત|ਸ਼ਾਂਤ|ଶାନ୍ତ|ശാന്ത|ಶಾಂತ|ప్రశాంత|அமைதி|هادئ|راحة|سکون|پرسکون|اطمینان|רגוע|\bruhig\b|\bgelassen\b|落ち着|安心|спокой|умиротвор|расслаб|平静|放松|心安|\btranquil[oa]\b|\brelajad[oa]\b|\brelaxad[oa]\b|en paz|em paz|\bseren[oa]\b|\bcalme\b|\btranquille\b|\bapaisé[e]?\b|\bserein[e]?\b|\bdétendu[e]?\b|\btenang\b|\bdamai\b|\brileks\b)/i;
 
 /**
  * 🔴 THE अशांत TRAP. Indic scripts give \b nothing to anchor to, and the word
@@ -395,7 +395,7 @@ const CALM_FALSE_FRIENDS = /(अशांत|अशान्त|অশান্�
  * uses, because the trap is identical on both sides.
  */
 const POSITIVE_NEGATORS =
-    /(\bnot\b|\bnever\b|\bno\b|n['’]t|\bhardly\b|\bnothing\b|\bnei\b|\bnai\b|\bnahi+n?\b|नहीं|नही|ना|নেই|না|নাই|নই|இல்ல|లేదు|ಇಲ್ಲ|ഇല്ല|નથી|ਨਹੀਂ|ନାହିଁ|ليس|لا|لم|לא|אין|\bnicht\b|\bkein\b|ない|じゃない|ません|不|没有)/i;
+    /(\bnot\b|\bnever\b|\bno\b|n['’]t|\bhardly\b|\bnothing\b|\bnei\b|\bnai\b|\bnahi+n?\b|नहीं|नही|ना|নেই|না|নাই|নই|இல்ல|లేదు|ಇಲ್ಲ|ഇല്ല|નથી|ਨਹੀਂ|ନାହିଁ|ليس|لا|لم|לא|אין|\bnicht\b|\bkein\b|ない|じゃない|ません|不|没有|没|نہیں|نہ\s|(^|[^а-яёА-ЯЁ])не\s|\bнет\b|никогда|ничего|\bnunca\b|\bnada\b|\bn[ãa]o\b|\bni\b|\bpas\b|\bjamais\b|\brien\b|\baucun[e]?\b|\btidak\b|\btak\b|\bbukan\b|\bbelum\b)/i;
 
 /**
  * 🔴 THE HOLE THIS CLOSES. "I'm not happy" contains "happy", is not caught by

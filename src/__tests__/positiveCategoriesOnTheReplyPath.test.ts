@@ -177,6 +177,71 @@ describe("⚠️ and it still says no to ordinary sentences", () => {
   });
 });
 
+describe("🔴 gap 5 — THE OTHER SEVEN LANGUAGES. Imotara supports 22, not 15.", () => {
+  /**
+   * The first pass covered English, the ten Indian languages, Arabic, Hebrew,
+   * German and Japanese. Imotara supports TWENTY-TWO: Urdu, Chinese, French,
+   * Indonesian, Portuguese, Russian and Spanish were missing — and Urdu is one
+   * of the Indian-subcontinent languages the picker offers, so this was not
+   * only an "international" gap.
+   */
+  const joy: Array<[string, string]> = [
+    ["ur", "میں بہت خوش ہوں"],
+    ["zh", "我今天很开心"],
+    ["fr", "je suis heureux aujourd'hui"],
+    ["id", "saya merasa bahagia"],
+    ["pt", "estou muito feliz"],
+    ["ru", "я счастлив сегодня"],
+    ["es", "estoy muy feliz"],
+  ];
+  it.each(joy)("%s: %s is joy", (_l, t) => expect(detectPositiveText(t)).toBe("joy"));
+
+  const hopeful: Array<[string, string]> = [
+    ["ur", "مجھے امید ہے"],
+    ["zh", "我有希望"],
+    ["fr", "j'ai de l'espoir"],
+    ["id", "saya punya harapan"],
+    ["pt", "tenho esperança"],
+    ["ru", "у меня есть надежда"],
+    ["es", "tengo esperanza"],
+  ];
+  it.each(hopeful)("%s: %s is hope", (_l, t) => expect(detectPositiveText(t)).toBe("hopeful"));
+
+  const calm: Array<[string, string]> = [
+    ["ur", "مجھے سکون ہے"],
+    ["zh", "我很平静"],
+    ["fr", "je me sens calme"],
+    ["id", "saya merasa tenang"],
+    ["pt", "estou tranquilo"],
+    ["ru", "мне спокойно"],
+    ["es", "estoy tranquilo"],
+  ];
+  it.each(calm)("%s: %s is calm (as hopeful)", (_l, t) => expect(detectPositiveText(t)).toBe("hopeful"));
+
+  it("🔑 'мне спокойно' is NOT read as negated", () => {
+    // The Russian negator is "не", and it sits inside "мне". A negator pattern
+    // without boundaries turns "I feel calm" into "I do not feel calm" — the
+    // same class of bug as अशांत, arriving from the opposite direction.
+    expect(detectPositiveText("мне спокойно")).toBe("hopeful");
+  });
+
+  const negated = [
+    ["ur", "میں خوش نہیں ہوں"],
+    ["zh", "我不开心"],
+    ["fr", "je ne suis pas heureux"],
+    ["id", "saya tidak bahagia"],
+    ["pt", "não estou feliz"],
+    ["ru", "я не счастлив"],
+    ["es", "no estoy feliz"],
+  ];
+  it.each(negated)("%s: %s is NOT positive", (_l, t) => expect(detectPositiveText(t)).toBeUndefined());
+
+  it("⚠️ English 'content' is not French 'contente'", () => {
+    // \bcontent\b would make "please check the content" a joyful message.
+    expect(detectPositiveText("please check the content of the file")).toBeUndefined();
+  });
+});
+
 describe("the regexes themselves carry the vocabulary", () => {
   it("joy spans the Indic scripts, not just English", () => {
     for (const w of ["খুশি", "खुश", "આનંદ", "ਖੁਸ਼", "ଖୁସି", "സന്തോഷ", "ಸಂತೋಷ", "సంతోష", "மகிழ்ச்சி"]) {
