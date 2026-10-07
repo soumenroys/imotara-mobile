@@ -89,11 +89,11 @@ import {
   BN_ANGER_REGEX,
   HI_STRESS_REGEX,
   isSadText,
-  GRATITUDE_REGEX,
   CONFUSED_EN_REGEX,
   CRISIS_HINT_REGEX,
   isConfusedText,
   isStressText,
+  detectPositiveText,
 } from "../lib/emotion/keywordMaps";
 import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { getCrisisCopy } from "../lib/safety/crisisCopy";
@@ -550,10 +550,14 @@ function getLocalMoodHint(text: string, companionName = "Imotara"): string {
   ) {
     return "It sounds like something has really upset or frustrated you.";
   }
-  if (
-    GRATITUDE_REGEX.test(raw) ||
-    /\b(hope|hopeful|excited|looking forward|grateful|thankful|relieved|better|good mood|feeling good|happy|joyful|cheerful)\b/.test(lower)
-  ) {
+  // Positive states — multilingual, and never negated. See detectPositiveText:
+  // this branch used to be English-only outside gratitude, and "I'm not happy"
+  // used to land here.
+  const positive = detectPositiveText(raw);
+  if (positive === "joy") {
+    return "I can sense some joy or lightness in what you're sharing.";
+  }
+  if (positive) {
     return "I can sense a little bit of light or hope in what you're saying.";
   }
 
@@ -647,11 +651,19 @@ function getLocalMoodHintWithPrimary(text: string, companionName = "Imotara"): {
     };
   }
 
-  // Hopeful / grateful — multilingual
-  if (
-    GRATITUDE_REGEX.test(raw) ||
-    /\b(hope|hopeful|better|improving|relieved|grateful|happy|joy|excited)\b/.test(t)
-  ) {
+  // Joy / hopeful / grateful — multilingual, and never negated.
+  // 🔑 joy is no longer folded into "hopeful": it is already a supported local
+  // primary (the emoji-only path above returns it, and both
+  // getDefaultIntensityForPrimary and mapUserEmotionForTTS handle it), so
+  // collapsing it meant "I'm so happy" was spoken in the gratitude style.
+  const positive = detectPositiveText(raw);
+  if (positive === "joy") {
+    return {
+      primary: "joy",
+      hint: "I can sense some joy or lightness in what you're sharing.",
+    };
+  }
+  if (positive) {
     return {
       primary: "hopeful",
       hint: "I can sense a little bit of light or hope in what you're saying.",

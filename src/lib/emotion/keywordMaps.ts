@@ -349,6 +349,108 @@ export const GRATITUDE_REGEX =
     /(grateful|gratitude|thankful|thankfulness|blessed|appreciate|appreciating|appreciation|so thank(ful|ed)|thank you so much|means a lot|\bshukar\b|shukria|shukriya|aabhar|dhanyavaad|dhanyabad|dhanyawad|dhanyavad|shukriyaa|\bkritagjna\b|nanri|nandri|vandanam|\bkritajnata\b|\bkadardani\b|\bdhanyavadagalu\b|\bnandri\b|\bvanakkam\b|\bkritajnateyanu\b|\bkritajna\b|\bdhanyosmi\b|\bdhanyawadi\b|abhaari|\bshukar\s+hai\b|shukar\s+hua|bahut\s+shukriya|bahut\s+dhanyavaad|আপনার\s+কাছে\s+কৃতজ্ঞ|কৃতজ্ঞ|ধন্যবাদ|আপনাকে\s+ধন্যবাদ|நன்றி|நன்றி\s+சொல்ல|நன்றியுள்ளவர்|ధన్యవాదాలు|కృతజ్ఞత|ధన్యవాదం|ಧನ್ಯವಾದಗಳు|ಕೃತಜ್ಞತೆ|ಧನ್ಯವಾದ|ধন্যবাদ|ਧੰਨਵਾਦ|ਸ਼ੁਕਰੀਆ|ਕ੍ਰਿਤਜ੍ਞਤਾ|ধন্যবাদ|ଧନ୍ୟବାଦ|କୃତଜ୍ଞ|ଆଭାରୀ|આભાར|ધન્યવાદ|કૃતજ્ઞ|תודה|אסיר תודה|شكرا|ممتنن|\bdankbar\b|\bdanke\b|\bdankeschön\b|ありがとう|感謝|感謝します)/i;
 
 // --------------------------------------------------
+// Positive detection — joy, hope, calm, across every script we support
+//
+// 🔴 WHY THIS LIVES HERE. The positive side of the on-device classifier used to
+// be one line inside ChatScreen:
+//
+//     GRATITUDE_REGEX.test(raw) || /\b(hope|happy|joy|better|…)\b/.test(lower)
+//
+// GRATITUDE_REGEX covers thanks-words in every script, so gratitude travelled —
+// but "happy" and "calm" existed in ENGLISH ALONE. খুশি · खुश · સંતોષ · ਖੁਸ਼ ·
+// ଖୁସି · സന്തോഷ · ಸಂತೋಷ · సంతోష · மகிழ்ச்சி matched nothing at all. That is the
+// same gap part one closed for sadness, on the same surface: the label feeds
+// the SYSTEM PROMPT via emotionMemory, so a miss costs the user a reply written
+// as though they had said nothing.
+//
+// ⚠️ Deliberately HIGH-PRECISION and short. A false positive is worse than a
+// miss here — it answers an unhappy message cheerfully. Each entry is a word
+// that means the feeling and little else. Adding a language means adding a
+// word, not changing logic.
+// --------------------------------------------------
+
+export const POSITIVE_JOY_REGEX =
+    /(\bhappy\b|\bglad\b|\bdelighted\b|\bjoyful\b|\bcheerful\b|\bwonderful\b|\bexcited\b|feeling better|feel better|much better|so good|খুশি|আনন্দ|মন(টা)?\s*(খুব\s*)?ভাল[ো]?|ভাল[ো]?\s*লাগছে|खुश|खुशी|आनंद|आनंदी|प्रसन्न|ખુશ|આનંદ|ਖੁਸ਼|ਖੁਸ਼ੀ|ਆਨੰਦ|ଖୁସି|ଆନନ୍ଦ|സന്തോഷ|ആനന്ദ|ಸಂತೋಷ|ಆನಂದ|సంతోష|ఆనంద|சந்தோஷ|மகிழ்ச்சி|سعيد|فرح|שמח|\bglücklich\b|\bfroh\b|嬉しい|幸せ)/i;
+
+export const POSITIVE_HOPE_REGEX =
+    /(\bhopeful\b|\bhope\b|\boptimistic\b|looking forward|getting better|\bimproving\b|आशा|उम्मीद|আশা|ভরসা|આશા|ਉਮੀਦ|ଆଶା|പ്രതീക്ഷ|ಭರವಸೆ|ఆశ|நம்பிக்கை|أمل|תקווה|\bHoffnung\b|\bhoffe\b|希望)/i;
+
+export const POSITIVE_CALM_REGEX =
+    /(\bcalm\b|\bpeaceful\b|\brelaxed\b|\brelieved\b|at peace|শান্ত|স্বস্তি|शांत|शांति|राहत|શાંત|ਸ਼ਾਂਤ|ଶାନ୍ତ|ശാന്ത|ಶಾಂತ|ప్రశాంత|அமைதி|هادئ|راحة|רגוע|\bruhig\b|\bgelassen\b|落ち着|安心)/i;
+
+/**
+ * 🔴 THE अशांत TRAP. Indic scripts give \b nothing to anchor to, and the word
+ * for "restless/agitated" is the word for "calm" with a negating prefix glued
+ * on: शांत inside अशांत, শান্ত inside অশান্ত. A naive calm pattern therefore
+ * reads "I am very restless" as calm — a false positive on the reply surface,
+ * which is strictly worse than the miss this whole change set out to fix.
+ * These occurrences are blanked out BEFORE the calm test, rather than used to
+ * veto the whole message, so a genuine "शांत" elsewhere in the same sentence
+ * still counts.
+ */
+const CALM_FALSE_FRIENDS = /(अशांत|अशान्त|অশান্ত|અશાંત|ਅਸ਼ਾਂਤ|ଅଶାନ୍ତ|ಅಶಾಂತ|అశాంత|അശാന്ത)/g;
+
+/**
+ * Negators, for the guard below. Reads the same list web's analyticsEmotion
+ * uses, because the trap is identical on both sides.
+ */
+const POSITIVE_NEGATORS =
+    /(\bnot\b|\bnever\b|\bno\b|n['’]t|\bhardly\b|\bnothing\b|\bnei\b|\bnai\b|\bnahi+n?\b|नहीं|नही|ना|নেই|না|নাই|নই|இல்ல|లేదు|ಇಲ್ಲ|ഇല്ല|નથી|ਨਹੀਂ|ନାହିଁ|ليس|لا|لم|לא|אין|\bnicht\b|\bkein\b|ない|じゃない|ません|不|没有)/i;
+
+/**
+ * 🔴 THE HOLE THIS CLOSES. "I'm not happy" contains "happy", is not caught by
+ * EN_SAD_RE, and so used to come out as a POSITIVE state — the companion was
+ * told the person sounded hopeful in the same breath as they said they did not.
+ * The negator is looked for in a short window around the match, because in most
+ * of these languages it TRAILS the adjective ("খুশি নই", "खुश नहीं", "幸せじゃない").
+ */
+function isNegatedNear(text: string, re: RegExp): boolean {
+    const m = re.exec(text);
+    if (!m || m.index === undefined) return false;
+    // Japanese is not space-separated, so a 24-character window there spans
+    // whole sentences and would suppress a genuine positive because a negator
+    // appeared in an unrelated clause. Narrower when there is no whitespace.
+    const win = /\s/.test(text) ? 24 : 8;
+    const start = Math.max(0, m.index - win);
+    const end = Math.min(text.length, m.index + m[0].length + win);
+    return POSITIVE_NEGATORS.test(text.slice(start, end));
+}
+
+/** True when the pattern matches and is NOT negated. */
+function positiveHit(text: string, re: RegExp): boolean {
+    return re.test(text) && !isNegatedNear(text, re);
+}
+
+/**
+ * The one positive classifier for the on-device reply path.
+ *
+ * Returns a LOCAL primary label, not a canonical Emotion:
+ *   "joy"     — clear happiness
+ *   "hopeful" — hope, calm/relief, or gratitude stated as a feeling
+ *
+ * 🔑 Checked joy-first ON PURPOSE. "joy" maps to the canonical `joy` for TTS
+ * while "hopeful" maps to `gratitude`, so the order decides how the reply is
+ * SPOKEN, not merely what it is labelled.
+ *
+ * 🔑 Calm gets NO primary of its own. The canonical vocabulary is joy ·
+ * sadness · anger · fear · disgust · surprise · gratitude · neutral — there is
+ * nothing for "calm" to map to, and inventing one would be dropped silently at
+ * the TTS boundary, which is exactly what mapUserEmotionForTTS exists to stop.
+ * Calm therefore joins "relieved", which this branch already read as hopeful.
+ */
+export function detectPositiveText(raw: string): "joy" | "hopeful" | undefined {
+    const text = String(raw ?? "");
+    if (!text.trim()) return undefined;
+
+    if (positiveHit(text, POSITIVE_JOY_REGEX)) return "joy";
+    if (positiveHit(text, POSITIVE_HOPE_REGEX)) return "hopeful";
+    if (positiveHit(text.replace(CALM_FALSE_FRIENDS, " "), POSITIVE_CALM_REGEX)) return "hopeful";
+    if (positiveHit(text, GRATITUDE_REGEX)) return "hopeful";
+
+    return undefined;
+}
+
+// --------------------------------------------------
 // Crisis detection
 // Covers explicit suicidal ideation, self-harm, sexual assault/danger — across
 // all 22 Imotara-supported languages. Synced from imotaraapp's copy
