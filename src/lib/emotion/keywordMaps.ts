@@ -27,7 +27,7 @@ export const ROMAN_TE_LANG_HINT_REGEX =
 
 // Romanized Gujarati (Latin script) hints
 export const ROMAN_GU_LANG_HINT_REGEX =
-    /\b(shu|kem|kem cho|majama|majamaa|saru|saras|hve|tame|hu|hun|mane|tane|aaje|kaal|ghar|bahar|su che|barabar|thik|chaalo|chalo|joie|joye|padse|nathi|che|hatu|hase|aavjo|aavyo|javanu|jamyu|jamva|paani|thai che|lage che|saru nathi|majama nathi|taklif|darek|thodu|khub)\b/i;
+    /\b(man kharap|kharap che|shu|kem|kem cho|majama|majamaa|saru|saras|hve|tame|hu|hun|mane|tane|aaje|kaal|ghar|bahar|su che|barabar|thik|chaalo|chalo|joie|joye|padse|nathi|che|hatu|hase|aavjo|aavyo|javanu|jamyu|jamva|paani|thai che|lage che|saru nathi|majama nathi|taklif|darek|thodu|khub)\b/i;
 
 // Romanized Kannada (Latin script) hints
 export const ROMAN_KN_LANG_HINT_REGEX =
@@ -35,14 +35,14 @@ export const ROMAN_KN_LANG_HINT_REGEX =
 
 // Romanized Malayalam (Latin script) hints
 export const ROMAN_ML_LANG_HINT_REGEX =
-    /\b(entha|enthaanu|enthaada|engane|sheri|shari|ippo|inni|innale|njaan|njan|nee|ningal|enikku|ninakku|amma|achan|chetta|chechi|mone|molu|veettil|purathu|ivide|avide|entha cheyyam|sukham alle|alle|poyi|vannu|kazhicho|vellam|urakkam|saadhanam|sheriyanu|ente|ninne|ayiyo|paranjath|aarkkan|chollam|parayam|shariyanu|manasilaayi|sheriyalla|okke|ninne|enthinanu|ethinu|evideyanu|njan parayam|njan paranjath|parayanda|theernnu)\b/i;
+    /\b(valiya|vishamam|vishamamundu|budhimutt|sukhamalla|entha|enthaanu|enthaada|engane|sheri|shari|ippo|inni|innale|njaan|njan|nee|ningal|enikku|ninakku|amma|achan|chetta|chechi|mone|molu|veettil|purathu|ivide|avide|entha cheyyam|sukham alle|alle|poyi|vannu|kazhicho|vellam|urakkam|saadhanam|sheriyanu|ente|ninne|ayiyo|paranjath|aarkkan|chollam|parayam|shariyanu|manasilaayi|sheriyalla|okke|ninne|enthinanu|ethinu|evideyanu|njan parayam|njan paranjath|parayanda|theernnu)\b/i;
 
 // Romanized Punjabi (Latin script) hints
 // NOTE: Removed Hindi-overlapping words (ki, nahi, tu, main, mera, meri, maa, papa, ghar, bahar,
 // kal, roti, paani, chalo, aaja, theek, thik) to prevent false positives on Hindi Roman text.
 // Punjabi detection relies on exclusively Punjabi words.
 export const ROMAN_PA_LANG_HINT_REGEX =
-    /\b(kida|kive|kiven|haanji|hanji|thik aa|theek aa|aj|hun|tusi|sada|sadi|paji|veer|veerji|bhain|kithe|kithon|ki haal|haal chaal|changa|vadhiya|sona|ethe|othe|ohna|enha|dass|dasso|kiddan|rabb|shukar|kuri|munda|lagda|lagdi|janda|aunda|challda|gall|tussi|ki gall|sat sri akal|waheguru|hor dasso|ki halchal|chaddi|ki pata|tu thik|mere naal|teri gall)\b/i;
+    /\b(kharab aa|man kharab aa|mainu|kida|kive|kiven|haanji|hanji|thik aa|theek aa|aj|hun|tusi|sada|sadi|paji|veer|veerji|bhain|kithe|kithon|ki haal|haal chaal|changa|vadhiya|sona|ethe|othe|ohna|enha|dass|dasso|kiddan|rabb|shukar|kuri|munda|lagda|lagdi|janda|aunda|challda|gall|tussi|ki gall|sat sri akal|waheguru|hor dasso|ki halchal|chaddi|ki pata|tu thik|mere naal|teri gall)\b/i;
 
 // Romanized Marathi (Latin script) hints
 export const ROMAN_MR_LANG_HINT_REGEX =
@@ -50,7 +50,7 @@ export const ROMAN_MR_LANG_HINT_REGEX =
 
 // Romanized Odia (Latin script) hints
 export const ROMAN_OR_LANG_HINT_REGEX =
-    /\b(kana|kanha|kemiti|kemti|bhala|bhal|thik achhi|mu|tume|apana|mo|tora|ama|bahare|ethi|sethi|aaji|kouthi|kahinki|kebe|asuchi|jauchhi|soiba|thia|deba|neba|jibe|asibe|rahibe|khaiba|khauchhi|dekhuchhi|bujhilani|thare|aasiba|jaiba|paein|picha)\b/i;
+    /\b(mana|laguchhi|laguchi|lagucha|bujhiparuchi|kana|kanha|kemiti|kemti|bhala|bhal|thik achhi|mu|tume|apana|mo|tora|ama|bahare|ethi|sethi|aaji|kouthi|kahinki|kebe|asuchi|jauchhi|soiba|thia|deba|neba|jibe|asibe|rahibe|khaiba|khauchhi|dekhuchhi|bujhilani|thare|aasiba|jaiba|paein|picha)\b/i;
 
 // English "clearly English" hints (for strict English turns)
 export const EN_LANG_HINT_REGEX =
