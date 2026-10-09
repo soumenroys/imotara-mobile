@@ -275,13 +275,65 @@ export function detectLangFromScript(message: string): string {
 /** Secondary language detection for Roman-script (transliterated) Indian languages.
  *  Called only when detectLangFromScript() returns "en" to avoid overriding native-script hits.
  *  Uses global flag to count all matches per regex, picks the highest-scoring language. */
+/**
+ * How strongly a message reads as plain ENGLISH, plus an absolute veto.
+ *
+ * 🔴 Ported from the web `scriptDetection.englishSignal` on 2026-10-09 so the
+ * two platforms stop disagreeing. Measured divergence before the port, on 35
+ * real sentences: **13 disagreed, and in 11 of them MOBILE answered "en"** for
+ * a complete Indic sentence the web got right — `kem cho`, `ami valo nei`,
+ * `mera dil bhari hai`, `enakku kashtama irukku`, `njan sukhamalla`.
+ *
+ * ⚠️ Those are the SHORTEST, most common messages this product receives: a
+ * bare statement of distress. Mobile sent `lang:"en"`, and the server trusts
+ * body.lang verbatim and injects "reply in English only — do not mirror their
+ * non-English script". So the user was answered in a language they had not
+ * written in, by design, on the most vulnerable message they could send.
+ *
+ * The cause was a flat `best[1] >= 2` threshold standing in for this guard.
+ * A threshold cannot tell "kem cho" (a whole Gujarati greeting, 1 hit) from a
+ * coincidental English hit, so it rejected both.
+ */
+export function englishSignal(message: string): { score: number; vetoed: boolean } {
+  const englishStructural =
+    /\b(I'm|I've|I'll|I'd|don't|doesn't|didn't|can't|won't|isn't|aren't|wasn't|the|because|although|however|therefore|everything|something|nothing|anything)\b/gi;
+  const commonEnglish =
+    /\b(have|been|know|talk|about|anyone|lately|still|need|would|could|should|when|what|where|into|from|there|their|they|them|this|that|these|those|then|your|very|more|some|only|here|work|life|going|doing|trying|getting|being|having|making|taking|coming|thinking|looking|seeing|finding|wondering|feeling|worried|understand|myself|yourself|sometimes|always|never|already|together|another|without|through|before|after|every|other|might|really|quite|which|while|again|cannot|though|maybe)\b/gi;
+  // Grammar markers that NEVER occur in a plain English sentence. An absolute
+  // veto, because code-mixing — English nouns inside Indic grammar — is the
+  // NORMAL register for these speakers, and it must never read as English.
+  const indicGrammar =
+    /\b(hai|hain|hoon|hoga|hogi|tha|thi|raha|rahi|rahe|mein|toh|bhi|aur|nahi|nahin|ami|tumi|amar|tomar|ache|achhi|achhe|karo|bolo|kothay|kotha|jao|esho)\b/i;
+  const score =
+    (message.match(englishStructural) ?? []).length +
+    (message.match(commonEnglish) ?? []).length;
+  return { score, vetoed: indicGrammar.test(message) };
+}
+
 export function detectLangFromRomanHints(message: string): string {
   if (!message) return "en";
   const scores: Record<string, number> = {};
+  // 🔑 A one- or two-letter token is NOT evidence of a language.
+  //
+  // The rows carry real short words — `mi`/`mu`/`hu` ("I" in Marathi, Odia,
+  // Gujarati), `Na`, `Ho`, `Tu` — but two letters collide with English and with
+  // each other, so alone they prove nothing. Measured: "Ho ho ho" matched
+  // hi=[Ho,ho,ho] and nothing else, and "Na, it is fine" matched only bn=[Na].
+  // Both were answered in an Indian language.
+  //
+  // ⚠️ Deleting those tokens would be wrong — they are genuine first-person
+  // pronouns and they carry the real cases. So they still COUNT; they just
+  // cannot make a language win on their own. Verified against the cases that
+  // depend on them: "mu bhala nahin" matched or=[mu,bhala] and
+  // "mi theek nahi aahe" matched mr=[mi,theek nahi,aahe] — each has a
+  // substantive match alongside the pronoun, so both stay correct.
+  const substantive: Record<string, boolean> = {};
   const tally = (lang: string, regex: RegExp) => {
     const global = new RegExp(regex.source, regex.flags.includes("g") ? regex.flags : regex.flags + "g");
     const m = message.match(global);
-    if (m) scores[lang] = (scores[lang] || 0) + m.length;
+    if (!m) return;
+    scores[lang] = (scores[lang] || 0) + m.length;
+    if (m.some((hit) => hit.trim().length >= 3)) substantive[lang] = true;
   };
   tally("mr", ROMAN_MR_LANG_HINT_REGEX);
   tally("bn", ROMAN_BN_LANG_HINT_REGEX);
@@ -293,10 +345,22 @@ export function detectLangFromRomanHints(message: string): string {
   tally("ml", ROMAN_ML_LANG_HINT_REGEX);
   tally("pa", ROMAN_PA_LANG_HINT_REGEX);
   tally("or", ROMAN_OR_LANG_HINT_REGEX);
-  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
-  // Require at least 2 hits to avoid single-word English false positives triggering
-  // a non-English language (e.g. one coincidental Gujarati/Hindi word match in an English message).
-  return best && best[1] >= 2 ? best[0] : "en";
+  const best = Object.entries(scores)
+    .filter(([lang]) => substantive[lang])
+    .sort((a, b) => b[1] - a[1])[0];
+  if (!best) return "en";
+  // ⛔ NOT a hit threshold. See englishSignal above for why `>= 2` was wrong:
+  // it cannot distinguish a complete short Indic sentence from a coincidental
+  // English match, so it rejected both and answered in English.
+  //
+  // Instead, COMPARE the two signals. English wins only when it is unvetoed,
+  // carries real weight (>= 2 markers), and is STRICTLY stronger than the
+  // winning hint. ⚠️ Strictly — a TIE must go to the Indic hint. On web I first
+  // wrote `>=` here and it stole code-mixed Gujarati, which is the normal
+  // register for these speakers; see `englishIsNotGujarati.test.ts`.
+  const english = englishSignal(message);
+  if (!english.vetoed && english.score >= 2 && english.score > best[1]) return "en";
+  return best[0];
 }
 
 /** The value meaning "work it out from what I write" rather than a chosen language. */

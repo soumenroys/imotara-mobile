@@ -116,13 +116,65 @@ describe("Romanized (transliterated) hint detection — aiClient", () => {
         expect(detectLangFromRomanHints("ami khub bhalo achi ekhon")).toBe("bn");
     });
 
-    test("single coincidental hint word does NOT flip English", () => {
-        // "hai" alone is one hit — below the 2-hit threshold.
-        expect(detectLangFromRomanHints("wow hai that is so cool")).toBe("en");
+    test("a short COMPLETE Indic sentence is detected on one hit", () => {
+        // 🔴 REWRITTEN 2026-10-09. This block used to assert
+        //   detectLangFromRomanHints("wow hai that is so cool") === "en"
+        // on the stated grounds that "hai" alone is "below the 2-hit threshold".
+        //
+        // That threshold WAS the bug. It cannot tell a complete short Indic
+        // sentence from a coincidental English match, so it rejected both, and
+        // mobile answered ENGLISH to every one of these — the shortest, most
+        // common, most vulnerable message this product receives. Measured on 35
+        // real sentences: 13 disagreed with web and mobile was wrong in 11.
+        for (const [sentence, want] of [
+            ["kem cho", "gu"],              // a whole Gujarati greeting
+            ["majama", "gu"],
+            ["ami valo nei", "bn"],         // Bengali "I'm not well"
+            ["mera dil bhari hai", "hi"],   // "my heart is heavy"
+            ["enakku kashtama irukku", "ta"],
+            ["njan sukhamalla", "ml"],      // Malayalam "I'm not well"
+            ["nanu chennagilla", "kn"],     // Kannada "I'm not well"
+        ] as const) {
+            expect(detectLangFromRomanHints(sentence)).toBe(want);
+        }
+    });
+
+    test("⚠️ `hai` IS a Hindi marker — and that is deliberate", () => {
+        // The old test's own example now resolves to hi, and the WEB detector
+        // has always agreed (verified directly, not assumed). `hai` is the
+        // single most reliable romanized-Hindi marker there is and sits in the
+        // indicGrammar VETO list, which exists so code-mixed text — English
+        // nouns inside Indic grammar, the normal register for these speakers —
+        // is never called English.
+        expect(detectLangFromRomanHints("wow hai that is so cool")).toBe("hi");
+        // Remove the marker and it is English again, which is the real check.
+        expect(detectLangFromRomanHints("wow that is so cool")).toBe("en");
+    });
+
+    test("⛔ a 1–2 letter token alone is NOT evidence of a language", () => {
+        // Measured: "Ho ho ho" matched hi=[Ho,ho,ho] and nothing else and was
+        // answered in Hindi — a bug that PREDATED the threshold removal.
+        expect(detectLangFromRomanHints("Ho ho ho")).toBe("en");
+        expect(detectLangFromRomanHints("Na, it is fine")).toBe("en");
+        // ✅ …but the short pronouns still COUNT. These depend on them and must
+        // keep working: or=[mu,bhala] and mr=[mi,theek nahi,aahe].
+        expect(detectLangFromRomanHints("mu bhala nahin")).toBe("or");
+        expect(detectLangFromRomanHints("mi theek nahi aahe")).toBe("mr");
     });
 
     test("plain English stays en", () => {
         expect(detectLangFromRomanHints("I had a long day at work and I want to rest")).toBe("en");
+        expect(detectLangFromRomanHints("I have no one to talk to")).toBe("en");
+        expect(detectLangFromRomanHints("Everything is fine, I have work tomorrow")).toBe("en");
+        expect(detectLangFromRomanHints("Sometimes I wonder if anyone would notice")).toBe("en");
+    });
+
+    test("🔑 code-mixing is NOT collateral damage", () => {
+        // English nouns inside Indic grammar. The guard must never steal these.
+        expect(detectLangFromRomanHints("mane work ma problem che")).toBe("gu");
+        expect(detectLangFromRomanHints("enakku really kashtama irukku today")).toBe("ta");
+        expect(detectLangFromRomanHints("ami office jabo na aaj, feeling very tired")).toBe("bn");
+        expect(detectLangFromRomanHints("I know this is hard lekin mera dil bhari hai")).not.toBe("en");
     });
 });
 
