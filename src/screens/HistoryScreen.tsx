@@ -9,6 +9,7 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
+import { useAuth } from "../auth/AuthContext";
 import { fetchRemoteHistory } from "../api/historyClient";
 import { useColors, useTheme } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
@@ -362,6 +363,10 @@ export default function HistoryScreen() {
 function HistoryScreenContent() {
     const colors = useColors();
     const navigation = useNavigation<any>();
+    // 🔴 This route authenticates by BEARER TOKEN on mobile. Without it every
+    // request 401'd and the handler below rendered the error body as an empty
+    // success — "Psychological Insight" was 100% dead and said nothing.
+    const { accessToken } = useAuth();
 
     const {
         history,
@@ -509,13 +514,32 @@ function HistoryScreenContent() {
         setCapsuleInsights((v) => ({ ...v, [key]: "loading" }));
         fetchWithTimeout(
             buildApiUrl("/api/mindset-analysis"),
-            { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, period: periodLabel }) },
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                },
+                body: JSON.stringify({ messages: msgs, period: periodLabel }),
+            },
             20_000,
         )
-            .then((r) => r.json())
+            .then(async (r) => {
+                // ⛔ `r.json()` unconditionally turned a 401 body ({error:"Unauthorized"})
+                // into {analysis: undefined} and the `?? ""` below made it an
+                // empty SUCCESS, which was then cached. An outage, an expired
+                // session and "nothing to say about you" all looked identical
+                // and all looked fine.
+                if (!r.ok) throw new Error(`mindset-analysis HTTP ${r.status}`);
+                return r.json();
+            })
             .then((data: any) => setCapsuleInsights((v) => ({ ...v, [key]: { analysis: data.analysis ?? "", advice: data.advice ?? "" } })))
             .catch(() => setCapsuleInsights((v) => ({ ...v, [key]: "error" })));
-    }, [expandedCapsules, capsuleInsights, history]);
+    // ⚠️ accessToken MUST be here. Without it this callback closes over the
+    // token as it was at mount — which is null before auth resolves — and
+    // the request would go out unauthenticated again, reproducing the exact
+    // bug this fixes while looking correct at the call site.
+    }, [expandedCapsules, capsuleInsights, history, accessToken]);
 
     // ✅ QA hardening: prevent state updates after leaving screen
     const mountedRef = React.useRef(true);
