@@ -62,7 +62,23 @@ describe("the transliterate step cannot stall the whole reply", () => {
 
     it("still fails open — a timeout yields the original text, never an error", () => {
         // The catch must return text, not rethrow: an abort lands here.
-        expect(fn).toMatch(/\} catch \{\s*\n\s*return text;\s*\n\s*\} finally \{/);
+        //
+        // ⚠️ UPDATED for U20. The catch now BINDS the error and logs it, so the
+        // old shape-exact pattern no longer matches. The GUARANTEE is
+        // untouched and is what this asserts: the catch returns `text` and
+        // never rethrows. ⛔ Do not relax it to "contains return text" — the
+        // point is that this path cannot throw.
+        expect(fn).toMatch(/\} catch \(err\) \{[\s\S]*?return text;\s*\n\s*\} finally \{/);
+        const c = fn.slice(fn.indexOf("} catch (err) {"), fn.indexOf("} finally {"));
+        expect(c).not.toMatch(/throw/);
+    });
+
+    it("…and a silent failure is no longer indistinguishable from nothing to do", () => {
+        // U20: all three exits fell back to the romanized text IN SILENCE, so a
+        // broken endpoint looked exactly like one with nothing to add.
+        expect(fn).toMatch(/transliterate HTTP \$\{res\.status\} for lang=\$\{lang\}/);
+        expect(fn).toMatch(/transliterate returned nothing usable for lang=\$\{lang\}/);
+        expect(fn).toMatch(/transliterate failed for lang=\$\{lang\}/);
     });
 
     it("languages outside the seven never make the call at all", () => {

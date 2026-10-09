@@ -1,12 +1,24 @@
 // src/lib/tts/mobileTTS.ts
-// Mobile TTS — native-first, Azure Neural fallback for missing languages.
+// Mobile TTS — AZURE-FIRST when the tier allows it, native device voice otherwise.
 //
-// Strategy:
-//   1. Check Speech.getAvailableVoicesAsync() for the selected language.
-//   2. If a native voice exists → use expo-speech (free, offline-capable).
-//   3. If not → fetch the pre-generated Azure MP3 from Imotara's CDN and play via expo-av.
+// ⚠️ REWRITTEN 2026-10-10. Everything this header said was wrong, and had been
+// for a long time. It described a native-first design with a PRE-GENERATED
+// Azure MP3 on a CDN, and stated flatly that "Azure is never called for
+// English". None of that is what the code does. (U22 of the 2026-10-09 audit —
+// a comment asserting behaviour the code lacks is worse than no comment,
+// because people act on it.)
 //
-// English is always available natively on iOS and Android — Azure is never called for English.
+// What actually happens, verified against speakMessage() below:
+//   1. `useNeuralVoice` — the TTS_ADVANCED licence gate, passed in by
+//      ChatScreen — decides everything. It defaults to TRUE.
+//   2. Gate OPEN  → POST /api/tts per sentence chunk, for EVERY language
+//      INCLUDING ENGLISH, streamed and played through expo-av. A dynamic
+//      request, not a pre-generated file, and not a CDN.
+//   3. Gate CLOSED (free tier) → straight to playNativeFallback(): expo-speech
+//      with the device's own voice, and a toast if the device has no voice for
+//      that language.
+//   4. Azure failing at any point ALSO falls through to playNativeFallback(),
+//      so the device voice is the safety net rather than the default.
 
 import * as Speech        from "expo-speech";
 import { Audio }          from "expo-av";
@@ -133,11 +145,25 @@ async function transliterateIfNeeded(
         const res = await fetch(`${apiBase()}/api/tts/transliterate`, {
             method: "POST", headers, body: JSON.stringify({ text, lang }), signal: own.signal,
         });
-        if (!res.ok) return text;
+        // ⚠️ All three exits below fall back to the ORIGINAL romanized text,
+        // which is correct — but every one of them used to do it in silence,
+        // so a transliteration endpoint that was simply broken looked exactly
+        // like one that had nothing to add. (U20 of the 2026-10-09 audit.)
+        // ⛔ Still returns `text` in every case: failing open is the right
+        // behaviour and is not what changed. Only the silence did.
+        if (!res.ok) {
+            console.warn(`[mobileTTS] transliterate HTTP ${res.status} for lang=${lang} — speaking the romanized text`);
+            return text;
+        }
         const data = await res.json();
         if (data?.transliterated && typeof data.text === "string") return data.text;
+        console.warn(`[mobileTTS] transliterate returned nothing usable for lang=${lang} — speaking the romanized text`);
         return text;
-    } catch {
+    } catch (err) {
+        // A timeout here is OUR 7s timer, not a user action — worth saying so,
+        // because "pronunciation is off in Hindi" and "the transliterate call
+        // times out" are the same bug seen from two ends.
+        console.warn(`[mobileTTS] transliterate failed for lang=${lang} — speaking the romanized text:`, String(err));
         return text;
     } finally {
         clearTimeout(timer);
