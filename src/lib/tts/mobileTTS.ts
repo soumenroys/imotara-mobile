@@ -584,8 +584,22 @@ export async function speakMessage(
     // variable) since up to PREFETCH_DEPTH fetches can be in flight at once
     // — a shared timer would only ever track the most recent one.
     const CHUNK_FETCH_TIMEOUT_MS = 20_000;
+    // 🔴 Did OUR OWN timer fire the abort, rather than the person pressing stop?
+    //
+    // Both end up as the same `AbortError` on the same controller, and the
+    // catch below used to treat every AbortError as "user pressed stop" and
+    // return in silence. A user stop is in fact already handled one line
+    // earlier by the `myGen !== _generation` check — stopAll() and
+    // stopSpeaking() BOTH bump _generation before aborting — so the only
+    // thing that ever reached that branch was this 20s timeout.
+    //
+    // The result: a slow chunk fetch gave 20s of spinner and then NOTHING.
+    // No sound, no native fallback, no onDone, no error. The speaker button
+    // span forever, because the caller clears its "preparing" state from
+    // onStart/onDone and neither one ever fired.
+    let timedOut = false;
     const armedFetch = (chunkText: string): Promise<ArrayBuffer> => {
-        const t = setTimeout(() => controller.abort(), CHUNK_FETCH_TIMEOUT_MS);
+        const t = setTimeout(() => { timedOut = true; controller.abort(); }, CHUNK_FETCH_TIMEOUT_MS);
         return fetchChunkAudio(chunkText, lang, gender, accessToken, controller.signal, emotion)
             .finally(() => clearTimeout(t));
     };
@@ -667,8 +681,11 @@ export async function speakMessage(
         // no shared timer to clean up here.
         if (myGen !== _generation) return; // stopped/superseded — no fallback needed
 
-        // User-initiated stop: abort throws DOMException "AbortError" — don't fall back.
-        if (err instanceof Error && err.name === "AbortError") {
+        // User-initiated stop: abort throws DOMException "AbortError" — don't
+        // fall back. ⚠️ ONLY when it was not our own timeout: see `timedOut`.
+        // A timed-out fetch is an ordinary failure and must reach the native
+        // fallback below, which always fires a terminal callback.
+        if (err instanceof Error && err.name === "AbortError" && !timedOut) {
             _speakingId = null;
             return;
         }

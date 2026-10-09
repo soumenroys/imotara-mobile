@@ -2490,11 +2490,11 @@ export default function ChatScreen() {
       setPreparingSpeechId(botMessage.id);
       speakMessage(
         botMessage.id, botMessage.text, g, l,
-        () => { setSpeakingMessageId(null); reopenMicIfHandsfree(); },
+        () => { /* 🔴 clear BOTH: a terminal path that never fired onStart (no device voice for this language, a failed fetch) would otherwise leave the speaker spinning forever. */ setPreparingSpeechId(null); setSpeakingMessageId(null); reopenMicIfHandsfree(); },
         ttsRate, ttsPitch, guestAccessToken,
         () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
         isFeatureEnabled("TTS_ADVANCED", licenseTier),
-        () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
+        () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
         mapUserEmotionForTTS(emotion),
       );
     } else if (handsfreeRef.current) {
@@ -4700,11 +4700,11 @@ export default function ChatScreen() {
                 setPreparingSpeechId(id);
                 speakMessage(
                   id, text, gender, lang,
-                  () => { setSpeakingMessageId(null); },
+                  () => { /* 🔴 clear BOTH: a terminal path that never fired onStart (no device voice for this language, a failed fetch) would otherwise leave the speaker spinning forever. */ setPreparingSpeechId(null); setSpeakingMessageId(null); },
                   ttsRate, ttsPitch, guestAccessToken,
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
                   isFeatureEnabled("TTS_ADVANCED", licenseTier),
-                  () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
+                  () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
                 );
               }
               setActionMessage(null);
@@ -5329,11 +5329,11 @@ export default function ChatScreen() {
                 setPreparingSpeechId(id);
                 speakMessage(
                   id, text, gender, lang,
-                  () => { setSpeakingMessageId(null); },
+                  () => { /* 🔴 clear BOTH: a terminal path that never fired onStart (no device voice for this language, a failed fetch) would otherwise leave the speaker spinning forever. */ setPreparingSpeechId(null); setSpeakingMessageId(null); },
                   ttsRate, ttsPitch, guestAccessToken,
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
                   isFeatureEnabled("TTS_ADVANCED", licenseTier),
-                  () => toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"),
+                  () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
                 );
               }}
               onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); setPreparingSpeechId(null); }}
