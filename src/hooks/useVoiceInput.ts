@@ -332,7 +332,33 @@ export function useVoiceInput(
             // nothing about whether anyone spoke and must upload as before.
             // false = we metered the whole turn and never once crossed the
             // speech threshold, so there is nothing in this file to transcribe.
-            const heardNothing = heardSpeechThisTurnRef.current === false;
+            // 🔴 "WE HEARD NOTHING" AND "WE NEVER LISTENED" ARE NOT THE SAME.
+            //
+            // In hands-free this ref starts as `false` and is only ever raised
+            // by the status callback — which bails on its first line when the
+            // device does not supply `status.metering`. Plenty of Android
+            // builds do not. On those devices it stayed `false` for every turn,
+            // so the audio was NEVER UPLOADED, the turn reported empty,
+            // hands-free reopened the mic, and the person talked into a void —
+            // repeatedly, with nothing on screen explaining why.
+            // (U8 of the 2026-10-09 audit.)
+            //
+            // 🔑 A zero-length sample buffer is the tell: samples are pushed
+            // only when `metering` really is a number, so an empty buffer means
+            // we never got a single reading and therefore know NOTHING about
+            // whether anyone spoke. That is the `null` case — upload it.
+            //
+            // ⚠️ This does not reopen the "a minute of silence cost real money"
+            // hole it was written to close. A genuinely silent long recording
+            // DOES produce metering samples on a device that meters, so
+            // heardNothing still fires there exactly as before. The only turns
+            // that change are the ones we could never judge in the first place.
+            //
+            // ✅ The sibling gate already got this right: looksLikeSpeech([])
+            // returns true, so `steadyNoise` fails open on an empty buffer.
+            // This makes the two gates agree.
+            const everMetered = meteringSamplesRef.current.length > 0;
+            const heardNothing = heardSpeechThisTurnRef.current === false && everMetered;
             // A room making noise, rather than a person talking. Only ever
             // applied to hands-free, which is the mode that opens the mic on
             // its own and so is the only one that records rooms; a manual
