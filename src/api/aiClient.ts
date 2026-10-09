@@ -504,6 +504,11 @@ export async function streamChatReply(
       headers: {
         "Content-Type": "application/json",
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        // Tell the server how long we will actually wait, so it can size its
+        // own budget to fit. See planBudget() in the web repo's aiClient.ts —
+        // the server used to ASSUME this ("mobile 20-25s") and the assumption
+        // went stale the day DEFAULT_REMOTE_TIMEOUT_MS became 10s.
+        "x-imotara-client-timeout-ms": String(timeoutMs),
       },
       body: JSON.stringify(payload),
       signal: ctrl.signal,
@@ -723,6 +728,8 @@ export async function callImotaraAI(
           headers: {
             "Content-Type": "application/json",
             ...(opts?.accessToken ? { Authorization: `Bearer ${opts.accessToken}` } : {}),
+            // Same contract as streamChatReply above.
+            "x-imotara-client-timeout-ms": String(opts?.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS),
           },
           body: JSON.stringify(chatReplyPayload),
         },
