@@ -555,7 +555,24 @@ function deriveEmotionHintFromMessage(message: string): string | undefined {
  * sentinel plus the server's own placeholder guards already cover the rest.
  */
 function isUsableReply(text: string): boolean {
-  return text.trim().length > 0;
+  const t = text.trim();
+  if (!t) return false;
+  // 🔴 …and it must not be one of the known placeholder strings.
+  //
+  // The JSON path has always rejected these server-side; the STREAMING path —
+  // which is the one both clients try FIRST — had no client-side equivalent at
+  // all, so a placeholder that reached mobile was accepted as a real reply and
+  // stored in history. (The remaining half of U15 in the 2026-10-09 audit.)
+  //
+  // ⚠️ Kept deliberately identical to web's badPlaceholderText.ts. These two
+  // lists existing separately is the usual drift risk, so a test asserts they
+  // still match; RN cannot import from the web package, which is the only
+  // reason this is a copy at all.
+  return !(
+    t.includes("soft, placeholder reply") ||
+    t.includes("I tried to connect to Imotara's AI engine") ||
+    t.includes("but something went wrong")
+  );
 }
 
 /**
