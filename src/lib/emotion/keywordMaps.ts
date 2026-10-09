@@ -27,7 +27,7 @@ export const ROMAN_TE_LANG_HINT_REGEX =
 
 // Romanized Gujarati (Latin script) hints
 export const ROMAN_GU_LANG_HINT_REGEX =
-    /\b(shu|su|kem|kem cho|majama|majamaa|saru|saras|have|hve|tame|hu|hun|mane|tane|aaje|kaal|ghar|bahar|su che|barabar|thik|chaalo|chalo|joie|joye|padse|nathi|che|hatu|hase|aavjo|aavyo|javanu|jamyu|jamva|paani|thai|thai che|lage che|saru nathi|majama nathi|taklif|darek|thodu|khub)\b/i;
+    /\b(shu|kem|kem cho|majama|majamaa|saru|saras|hve|tane|aaje|kaal|ghar|bahar|su che|barabar|thik|chaalo|chalo|joie|joye|padse|nathi|che|hatu|hase|aavjo|aavyo|javanu|jamyu|jamva|paani|thai che|lage che|saru nathi|majama nathi|taklif|darek|thodu|khub)\b/i;
 
 // Romanized Kannada (Latin script) hints
 export const ROMAN_KN_LANG_HINT_REGEX =
