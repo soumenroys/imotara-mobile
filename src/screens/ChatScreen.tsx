@@ -33,7 +33,7 @@ import { useSettings } from "../state/SettingsContext";
 import { useColors, useTheme } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
 import { chatBackdrop } from "../theme/chatBackdrop";
-import { concreteLang, callImotaraAI, streamChatReply } from "../api/aiClient";
+import { concreteLang, resolveReplyLang, callImotaraAI, streamChatReply } from "../api/aiClient";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
 import { useVoiceInput } from "../hooks/useVoiceInput";
@@ -3834,7 +3834,14 @@ export default function ChatScreen() {
               if (rel === "mentor") return "mentor";
               return "calm_companion";
             })(),
-            lang: concreteLang(toneContext?.user?.preferredLang),
+            // 🔴 NOT concreteLang — that turns "auto" into "en", and the server
+            // does not re-detect (chat-reply/route.ts:833 trusts body.lang), so
+            // "en" makes it inject "Always respond in English … do not mirror
+            // their non-English script". This payload feeds the STREAMING path,
+            // which never actually ran until res.body was fixed, so the bug was
+            // masked by the JSON fallback that resolves this properly. Same
+            // function as that fallback now — one decision, one place.
+            lang: resolveReplyLang(aiMessage, toneContext?.user?.preferredLang),
             ...(toneContext?.user?.gender && toneContext.user.gender !== "prefer_not" ? { userGender: toneContext.user.gender } : {}),
             ...(toneContext?.companion?.gender && toneContext.companion.gender !== "prefer_not" ? { companionGender: toneContext.companion.gender } : {}),
             ...(toneContext?.companion?.name?.trim() ? { companionName: toneContext.companion.name.trim() } : {}),

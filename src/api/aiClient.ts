@@ -325,6 +325,43 @@ export function statedPreference(value: string | undefined | null): string | und
  * so it resolves to "en" — exactly what these call sites got from the old
  * `?? "en"` default, leaving their behaviour unchanged.
  */
+/**
+ * 🔴 THE LANGUAGE TO REPLY IN. Both request paths MUST use this.
+ *
+ * Found 2026-10-09. `callImotaraAI` (the JSON path) did this resolution
+ * inline, while ChatScreen's STREAMING payload sent
+ * `concreteLang(preferredLang)` — which turns "auto" into "en". The server
+ * does not re-detect (chat-reply/route.ts:833 reads body.lang verbatim) and
+ * on "en" it injects "Always respond in English. Even if the user's messages
+ * contain text in another script or language, reply in English only."
+ *
+ * ⚠️ That did not bite for one reason only: `res.body` does not exist on React
+ * Native, so streaming ALWAYS failed and every message fell through to the
+ * JSON path. The device verification behind commit 8a1577e — "ami khub valo
+ * nei" answered in Bengali — passed through that fallback.
+ *
+ * 🔑 The moment streaming actually works, the streaming payload becomes live
+ * and a Bengali message gets an English reply again — re-introducing the exact
+ * bug 8a1577e was written to fix. So this is not a refactor: two copies of one
+ * decision, one of which was wrong, is what caused it. There is now one.
+ *
+ * `concreteLang` remains correct for things that cannot accept "auto" — a TTS
+ * voice, a BCP-47 locale, a canned string table. It is wrong here, because
+ * "auto" means "work it out from what I wrote", and this is where that work
+ * happens.
+ */
+export function resolveReplyLang(
+    message: string,
+    preferredLang: string | undefined | null,
+): string {
+    const explicit = detectExplicitLangRequest(message);
+    const script = detectLangFromScript(message);
+    const detected = script !== "en" ? script : detectLangFromRomanHints(message);
+    const profile = statedPreference(preferredLang);
+    // explicit switch request > stated preference > detection > English
+    return explicit || profile || (detected !== "en" ? detected : "en");
+}
+
 export function concreteLang(value: string | undefined | null): string {
     return statedPreference(value) ?? "en";
 }
@@ -677,15 +714,12 @@ export async function callImotaraAI(
       //
       // "auto" (and a missing value) mean "no preference stated" and fall
       // through to detection. See isStatedPreference.
-      const _explicitLang = detectExplicitLangRequest(message);
-      const _scriptLang = detectLangFromScript(message);
-      const _detectedLang = _scriptLang !== "en" ? _scriptLang : detectLangFromRomanHints(message);
-      const _profileLang = statedPreference(
+      // Shared with ChatScreen's streaming payload — see resolveReplyLang.
+      const chatReplyLang = resolveReplyLang(
+        message,
         opts?.preferredLanguage ??
         (toneContext?.user?.preferredLang as string | undefined),
       );
-      const chatReplyLang =
-        _explicitLang || _profileLang || (_detectedLang !== "en" ? _detectedLang : "en");
 
       // Inject user's name (from Settings) as a system message so GPT can
       // personalize naturally without waiting for Supabase memory lookup.
