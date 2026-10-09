@@ -437,6 +437,45 @@ function deriveEmotionHintFromMessage(message: string): string | undefined {
  * Returns { ok, text } when [DONE] is received or on error.
  * Falls back gracefully: caller should try callImotaraAI() if this returns ok:false.
  */
+/**
+ * ⚠️ `accumulated.length > 10` WAS REJECTING VALID REPLIES.
+ *
+ * Ten characters is an ordinary COMPLETE reply in this product's languages:
+ *   "Take care."   10   → was rejected (strictly greater than)
+ *   "Theek hai."   10   → was rejected
+ *   "ठीक है।"       8   → was rejected
+ *   "ঠিক আছে।"      8   → was rejected
+ *
+ * A rejection here is not cosmetic: ChatScreen deletes the rendered bubble
+ * and issues a second full paid reply. So the shortest, warmest, most human
+ * answers were exactly the ones that cost double and arrived twice as slowly.
+ *
+ * The real question is "did we receive anything at all", and the `[DONE]`
+ * sentinel plus the server's own placeholder guards already cover the rest.
+ */
+function isUsableReply(text: string): boolean {
+  return text.trim().length > 0;
+}
+
+/**
+ * Parse a complete SSE payload that arrived in one piece (the React Native
+ * path — see the note in streamChatReply). Same wire format the incremental
+ * reader handles: `data: {"t":"..."}` lines terminated by `data: [DONE]`.
+ */
+function parseSseText(raw: string): string {
+  let accumulated = "";
+  for (const line of raw.split("\n")) {
+    if (!line.startsWith("data: ")) continue;
+    const data = line.slice(6).trim();
+    if (data === "[DONE]") break;
+    try {
+      const token = String(JSON.parse(data).t ?? "");
+      if (token) accumulated += token;
+    } catch { /* malformed SSE chunk — skip, same as the reader path */ }
+  }
+  return accumulated;
+}
+
 export async function streamChatReply(
   payload: Record<string, unknown>,
   accessToken: string | undefined,
@@ -470,7 +509,44 @@ export async function streamChatReply(
       signal: ctrl.signal,
     });
 
-    if (!res.ok || !res.body) return { ok: false, text: "" };
+    if (!res.ok) return { ok: false, text: "" };
+
+    /**
+     * 🔴 REACT NATIVE HAS NO `res.body`. THIS PATH IS THE ONLY ONE THAT RUNS
+     * ON A DEVICE.
+     *
+     * Verified 2026-10-09 by reading node_modules, not by inference:
+     *   react-native/Libraries/Network/fetch.js
+     *     -> require('whatwg-fetch'); export const fetch = global.fetch;
+     *   whatwg-fetch 3.6.20 Response exposes `_bodyInit` / `_bodyText` and
+     *   has NO `body` getter. No expo/fetch, no react-native-fetch-api, no
+     *   ReadableStream polyfill, no global.fetch override anywhere in the app.
+     *
+     * So the old guard `if (!res.ok || !res.body)` returned `{ok:false}` on
+     * EVERY message ever sent from a phone, and ChatScreen's failure branch
+     * then deleted the rendered bubble and issued a SECOND complete
+     * /api/chat-reply. Every reply cost two full LLM generations in series:
+     * ~2x the wait and ~2x the OpenAI spend, Android and iOS alike. The
+     * "word-by-word within ~500ms" this file promises has never once happened
+     * on a device.
+     *
+     * 🔑 AND THE WHOLE REPLY WAS ALREADY HERE. whatwg-fetch is XHR-based, so
+     * `await fetch()` does not resolve until the entire SSE response has
+     * downloaded — the server had already run OpenAI to completion and billed
+     * for it. The text was sitting in `_bodyInit`, reachable with res.text().
+     *
+     * ⚠️ So this is NOT "streaming for React Native". Progressive typing is
+     * genuinely impossible without a stream polyfill. It is: stop throwing
+     * away a reply we already have and paying to generate it again. The user
+     * sees the reply appear at once instead of twice as slowly.
+     */
+    if (!res.body) {
+      const accumulated = parseSseText(await res.text());
+      if (rafHandle) clearTimeout(rafHandle);
+      clearTimeout(timer);
+      onToken(accumulated);
+      return { ok: isUsableReply(accumulated), text: accumulated };
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -492,7 +568,7 @@ export async function streamChatReply(
           if (rafHandle) clearTimeout(rafHandle);
           onToken(accumulated);
           clearTimeout(timer);
-          return { ok: accumulated.length > 10, text: accumulated };
+          return { ok: isUsableReply(accumulated), text: accumulated };
         }
         try {
           const parsed = JSON.parse(data);
@@ -508,7 +584,7 @@ export async function streamChatReply(
 
     if (rafHandle) clearTimeout(rafHandle);
     clearTimeout(timer);
-    return { ok: accumulated.length > 10, text: accumulated };
+    return { ok: isUsableReply(accumulated), text: accumulated };
   } catch {
     if (rafHandle) clearTimeout(rafHandle);
     return { ok: false, text: "" };
