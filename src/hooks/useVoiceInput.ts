@@ -140,7 +140,55 @@ const AUDIBLE_DB_FLOOR = -50;
  * FileSystem.uploadAsync which handles the native multipart encoding
  * correctly in both debug and production builds.
  */
+/**
+ * 🔴 Is this worth trying again, or will a second attempt fail the same way?
+ *
+ * The caller DELETES the recording in a `finally`, so a failure here is
+ * permanent: the person spoke, and we lost it. Before this, ANY failure —
+ * a 502, a rate limit, a dropped packet — cost them their words and made them
+ * say it all again. (U3 of the 2026-10-09 audit.)
+ *
+ * ⚠️ Retry only what a retry can fix. A 400 means the audio or language was
+ * rejected and will be rejected again; a 401 means the token is wrong. Those
+ * burn a second upload to reach the same answer, and the person waits twice as
+ * long for it.
+ *
+ * 🔑 A thrown error with NO status is a network failure — the single most
+ * likely transient case on the connections this product actually runs on.
+ */
+function isRetryableTranscriptionError(err: unknown): boolean {
+    const msg = String((err as { message?: string } | null)?.message ?? err ?? "");
+    if (msg === "quota_exceeded") return false;          // a second call cannot create quota
+    const m = msg.match(/returned (\d{3})/);
+    if (!m) return true;                                  // network / upload threw — worth one retry
+    const status = Number(m[1]);
+    // 408 timeout · 429 rate limit · 5xx server. Everything else is a refusal.
+    return status === 408 || status === 429 || status >= 500;
+}
+
 async function transcribeAudio(
+    uri: string,
+    apiBaseUrl: string,
+    lang: string,
+    mimeType: string,
+    accessToken?: string,
+    companionName?: string,
+): Promise<string> {
+    try {
+        return await transcribeOnce(uri, apiBaseUrl, lang, mimeType, accessToken, companionName);
+    } catch (err) {
+        if (!isRetryableTranscriptionError(err)) throw err;
+        console.warn("[useVoiceInput] transcription failed, retrying once:", String(err));
+        // A short pause: long enough to clear a momentary blip, short enough
+        // that the person does not notice it on top of the wait they already
+        // have. ⚠️ ONE retry — a loop here would hold the mic spinner for as
+        // long as the outage lasts, which is worse than telling them plainly.
+        await new Promise((r) => setTimeout(r, 700));
+        return await transcribeOnce(uri, apiBaseUrl, lang, mimeType, accessToken, companionName);
+    }
+}
+
+async function transcribeOnce(
     uri: string,
     apiBaseUrl: string,
     lang: string,

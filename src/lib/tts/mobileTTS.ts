@@ -646,10 +646,31 @@ export async function speakMessage(
     // span forever, because the caller clears its "preparing" state from
     // onStart/onDone and neither one ever fired.
     let timedOut = false;
+    // 🔴 EACH FETCH GETS ITS OWN CONTROLLER. The timer was already per-fetch —
+    // the comment above explains why — but every chunk still shared ONE
+    // AbortController, so the timer firing for chunk 1 aborted chunk 2, which
+    // PREFETCH_DEPTH=2 guarantees is already in flight, and then left the
+    // signal permanently aborted so chunks 3, 4, 5… failed instantly. One slow
+    // chunk killed the whole remaining reply. (U2 of the 2026-10-09 audit.)
+    //
+    // ⚠️ The child MUST still follow the shared controller, or stopAll() and
+    // stopSpeaking() would stop cancelling in-flight requests — trading a
+    // wedged reply for a mic that records while the app is still talking.
+    //
+    // 🔑 Same shape as web's armedSignal() (chat/page.tsx), deliberately: web
+    // was given this pattern tonight precisely so it would not inherit this
+    // bug, and the two platforms should not drift again.
     const armedFetch = (chunkText: string): Promise<ArrayBuffer> => {
-        const t = setTimeout(() => { timedOut = true; controller.abort(); }, CHUNK_FETCH_TIMEOUT_MS);
-        return fetchChunkAudio(chunkText, lang, gender, accessToken, controller.signal, emotion)
-            .finally(() => clearTimeout(t));
+        const child = new AbortController();
+        const onParentAbort = () => child.abort();
+        if (controller.signal.aborted) child.abort();
+        else controller.signal.addEventListener("abort", onParentAbort);
+        const t = setTimeout(() => { timedOut = true; child.abort(); }, CHUNK_FETCH_TIMEOUT_MS);
+        return fetchChunkAudio(chunkText, lang, gender, accessToken, child.signal, emotion)
+            .finally(() => {
+                clearTimeout(t);
+                controller.signal.removeEventListener("abort", onParentAbort);
+            });
     };
 
     // Stage timings. "TTS takes 30-40 seconds" (intern feedback item A) was

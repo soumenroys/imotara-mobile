@@ -85,7 +85,17 @@ describe("🔴 D2 — a timeout is a failure, not a user stop", () => {
     it("the timeout marks itself before aborting", () => {
         const s = code(TTS);
         expect(s).toMatch(/let timedOut = false;/);
-        expect(s).toMatch(/setTimeout\(\(\) => \{ timedOut = true; controller\.abort\(\); \}, CHUNK_FETCH_TIMEOUT_MS\)/);
+        // ⚠️ UPDATED when U2 was fixed. The D2 property is unchanged — our own
+        // timer still MARKS itself before aborting, so it cannot be mistaken
+        // for a user stop. What changed is WHICH controller it aborts: each
+        // chunk now has its own `child`, because aborting the shared one took
+        // down every later chunk of the same reply (U2).
+        //
+        // 🔑 This assertion failing on the U2 commit was the suite doing its
+        // job — a prior guarantee noticing that something moved underneath it.
+        expect(s).toMatch(/setTimeout\(\(\) => \{ timedOut = true; child\.abort\(\); \}, CHUNK_FETCH_TIMEOUT_MS\)/);
+        // …and the shared controller is still what a real stop aborts.
+        expect(s).toMatch(/controller\.signal\.addEventListener\("abort", onParentAbort\)/);
     });
 
     it("🔑 …and the silent-return branch now excludes it", () => {
