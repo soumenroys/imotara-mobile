@@ -215,13 +215,58 @@ let _resolveCurrentChunk: (() => void) | null = null; // lets stopAll() unstick 
 
 let _voiceCache: Speech.Voice[] | null = null;
 
+/**
+ * 🔴 A promise that NEVER SETTLES is not caught by try/catch.
+ *
+ * `Speech.getAvailableVoicesAsync()` and `Speech.isSpeakingAsync()` both go
+ * through Android's TextToSpeech service. When nothing is bound to that
+ * service the bridge call can simply never come back — not reject, never
+ * return — so `await` parks forever and every terminal callback below becomes
+ * unreachable.
+ *
+ * Proven on an emulator 2026-10-09 by disabling the TTS engine
+ * (`pm disable-user com.google.android.tts`) and tapping the speaker:
+ *
+ *     W TextToSpeech: isSpeaking failed: not bound to TTS engine
+ *     I ReactNativeJS: [mobileTTS] TTS_ADVANCED gate closed — using native device voice
+ *     ← and then nothing, ever. No onStart, no onDone, no onUnavailable.
+ *
+ * The speaker button span for as long as the screen stayed open. ⚠️ This is a
+ * REAL device case, not just an emulator one: plenty of budget Android
+ * handsets ship without Google TTS or with it disabled.
+ */
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<{ value: T; timedOut: boolean }> {
+    return new Promise((resolve) => {
+        let done = false;
+        const t = setTimeout(() => {
+            if (done) return;
+            done = true;
+            resolve({ value: fallback, timedOut: true });
+        }, ms);
+        p.then(
+            (value) => { if (done) return; done = true; clearTimeout(t); resolve({ value, timedOut: false }); },
+            ()      => { if (done) return; done = true; clearTimeout(t); resolve({ value: fallback, timedOut: true }); },
+        );
+    });
+}
+
+/** Listing voices is a local query — if it has not answered by now it never will. */
+const VOICE_LIST_TIMEOUT_MS = 3_000;
+
 async function getNativeVoices(): Promise<Speech.Voice[]> {
     if (_voiceCache) return _voiceCache;
-    try {
-        _voiceCache = await Speech.getAvailableVoicesAsync();
-    } catch {
-        _voiceCache = [];
+    const { value, timedOut } = await withTimeout(
+        Speech.getAvailableVoicesAsync(), VOICE_LIST_TIMEOUT_MS, [] as Speech.Voice[],
+    );
+    // ⚠️ Do NOT cache a timeout. The cache lives for the whole session, so
+    // caching an empty list because the engine was briefly unbound would
+    // silently disable every voice until the app restarts. A real empty list
+    // is worth caching; a failure to answer is not.
+    if (timedOut) {
+        console.warn("[mobileTTS] voice list did not answer — treating as no voices for this attempt");
+        return [];
     }
+    _voiceCache = value;
     return _voiceCache;
 }
 
@@ -552,7 +597,10 @@ export async function speakMessage(
     // does not translate them itself.
     emotion?: string,
 ): Promise<void> {
-    const isSpeaking = await Speech.isSpeakingAsync();
+    // ⚠️ Unbounded for the same reason as the voice list, and it was not even
+    // in a try/catch: a rejection here threw straight out of speakMessage, and
+    // every call site is fire-and-forget, so the spinner stayed up.
+    const { value: isSpeaking } = await withTimeout(Speech.isSpeakingAsync(), VOICE_LIST_TIMEOUT_MS, false);
     if (isSpeaking || _soundObject) {
         const wasThis = _speakingId === messageId;
         await stopAll();
@@ -713,7 +761,9 @@ export async function speakPreview(
     onDone?: () => void,
     accessToken?: string,
 ): Promise<void> {
-    const isSpeaking = await Speech.isSpeakingAsync();
+    // ⚠️ Bounded for the same reason as speakMessage's — see withTimeout. The
+    // settings voice preview could hang on a device with no TTS engine too.
+    const { value: isSpeaking } = await withTimeout(Speech.isSpeakingAsync(), VOICE_LIST_TIMEOUT_MS, false);
     if (isSpeaking || _soundObject) {
         await stopAll();
         onDone?.();

@@ -2496,7 +2496,12 @@ export default function ChatScreen() {
         isFeatureEnabled("TTS_ADVANCED", licenseTier),
         () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
         mapUserEmotionForTTS(emotion),
-      );
+      ).catch((e: unknown) => {
+        /* 🔴 LAST RESORT. Every speakMessage call is fire-and-forget, so a throw anywhere inside it used to leave the speaker spinning with nothing to stop it. The spinner must not outlive the attempt, whatever went wrong. */
+        setPreparingSpeechId(null);
+        setSpeakingMessageId(null);
+        console.warn("[chat] speakMessage threw", e);
+      });
     } else if (handsfreeRef.current) {
       // No speech to wait for (empty reply text), so onDone will never fire —
       // reopen the mic here or the conversation stops dead.
@@ -4705,7 +4710,12 @@ export default function ChatScreen() {
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
                   isFeatureEnabled("TTS_ADVANCED", licenseTier),
                   () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
-                );
+                ).catch((e: unknown) => {
+                  /* 🔴 LAST RESORT. Every speakMessage call is fire-and-forget, so a throw anywhere inside it used to leave the speaker spinning with nothing to stop it. The spinner must not outlive the attempt, whatever went wrong. */
+                  setPreparingSpeechId(null);
+                  setSpeakingMessageId(null);
+                  console.warn("[chat] speakMessage threw", e);
+                });
               }
               setActionMessage(null);
             }}
@@ -5334,7 +5344,12 @@ export default function ChatScreen() {
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
                   isFeatureEnabled("TTS_ADVANCED", licenseTier),
                   () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
-                );
+                ).catch((e: unknown) => {
+                  /* 🔴 LAST RESORT. Every speakMessage call is fire-and-forget, so a throw anywhere inside it used to leave the speaker spinning with nothing to stop it. The spinner must not outlive the attempt, whatever went wrong. */
+                  setPreparingSpeechId(null);
+                  setSpeakingMessageId(null);
+                  console.warn("[chat] speakMessage threw", e);
+                });
               }}
               onStopSpeak={() => { stopSpeaking(); setSpeakingMessageId(null); setPreparingSpeechId(null); }}
               onOpenActions={setActionMessage}

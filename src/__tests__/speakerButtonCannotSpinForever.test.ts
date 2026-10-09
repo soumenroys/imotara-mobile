@@ -137,3 +137,57 @@ describe("✅ web is already correct — recorded so nobody 'fixes' it", () => {
         expect(s).toMatch(/if \(preparing \|\| speaking\) \{[\s\S]{0,200}setPreparing\(false\);/);
     });
 });
+
+describe("🔴 D3 — an unsettled promise is not caught by try/catch", () => {
+    // ⚠️ THIS is the one that actually hung on a device. D1 and D2 are real and
+    // fixed, but neither was what the owner saw: with the TTS engine disabled
+    // (`pm disable-user com.google.android.tts`) the FIXED build still span,
+    // and logcat showed execution simply stopping:
+    //
+    //     W TextToSpeech: isSpeaking failed: not bound to TTS engine
+    //     I ReactNativeJS: [mobileTTS] TTS_ADVANCED gate closed …
+    //     ← and then nothing, ever.
+    //
+    // `Speech.getAvailableVoicesAsync()` never settled, so `await` parked and
+    // every terminal callback became unreachable. A try/catch cannot help: it
+    // fires on rejection, not on a promise that never answers.
+
+    it("the voice list cannot hang", () => {
+        const s = code(TTS);
+        expect(s).toMatch(/const VOICE_LIST_TIMEOUT_MS = 3_000;/);
+        expect(s).toMatch(/withTimeout\(\s*Speech\.getAvailableVoicesAsync\(\), VOICE_LIST_TIMEOUT_MS/);
+    });
+
+    it("…nor can isSpeakingAsync, which was not even in a try/catch", () => {
+        const s = code(TTS);
+        expect(s).toMatch(/withTimeout\(Speech\.isSpeakingAsync\(\), VOICE_LIST_TIMEOUT_MS, false\)/);
+        expect(s).not.toMatch(/const isSpeaking = await Speech\.isSpeakingAsync\(\);/);
+    });
+
+    it("🔑 a TIMEOUT is never cached — only a real empty list is", () => {
+        // The cache lives for the whole session. Caching [] because the engine
+        // was briefly unbound would silently kill every voice until restart —
+        // trading a stuck spinner for silent, permanent degradation.
+        const s = code(TTS);
+        expect(s).toMatch(/if \(timedOut\) \{[\s\S]{0,220}return \[\];/);
+        const idx = s.indexOf("if (timedOut)");
+        expect(s.slice(0, idx)).not.toMatch(/_voiceCache = value;/);
+    });
+
+    it("withTimeout resolves exactly once, whichever side wins", () => {
+        const s = code(TTS);
+        const fn = s.slice(s.indexOf("function withTimeout"), s.indexOf("function withTimeout") + 700);
+        expect(fn).toMatch(/let done = false;/);
+        // both the timer and BOTH promise outcomes must check the latch
+        expect([...fn.matchAll(/if \(done\) return;/g)].length).toBe(3);
+        expect(fn).toMatch(/p\.then\(/);
+    });
+
+    it("🔑 and every call site catches, so NO throw can strand the spinner", () => {
+        const s = code(CHAT);
+        const catches = [...s.matchAll(
+            /\)\.catch\(\(e: unknown\) => \{[\s\S]{0,160}?setPreparingSpeechId\(null\);/g,
+        )].length;
+        expect(catches).toBe(3);
+    });
+});
