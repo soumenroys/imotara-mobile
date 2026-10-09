@@ -2501,6 +2501,13 @@ export default function ChatScreen() {
         setPreparingSpeechId(null);
         setSpeakingMessageId(null);
         console.warn("[chat] speakMessage threw", e);
+        /* 🔴 AND RE-ARM THE MIC. This is the AUTO-READ path, so hands-free is
+           waiting on onDone to reopen the microphone — the loop has no other
+           re-arm. A throw here used to clear the spinner and then leave the
+           conversation DEAD: no voice, no mic, nothing to tap. That is the
+           long-reported symptom 3, "after the reply the mic does not switch
+           back on" (bug_handsfree_android_loop, deferred 2026-09-26). */
+        reopenMicIfHandsfree();
       });
     } else if (handsfreeRef.current) {
       // No speech to wait for (empty reply text), so onDone will never fire —
