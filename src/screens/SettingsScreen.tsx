@@ -348,7 +348,7 @@ export default function SettingsScreen() {
 }
 
 function SettingsScreenContent() {
-    const { accessToken, signOut, signInWithGoogle } = useAuth();
+    const { accessToken, signOut, signInWithGoogle, user } = useAuth();
     const navigation = useNavigation<any>();
 
     // Keep compatibility with your current store shape, but allow optional newer fields
@@ -2227,6 +2227,23 @@ function SettingsScreenContent() {
                     <Text style={{ fontSize: 13, color: colors.textSecondary }}>
                         Current plan:{" "}
                         <Text style={{ fontWeight: "700", color: colors.textPrimary }}>{tierLabel}</Text>
+                    </Text>
+                    {/* 🔴 WHICH ACCOUNT IS THIS? Owner, 2026-10-10: "imotara should
+                        show the emil address in which the user is logged in
+                        somewhere. otherwise user will get confused."
+
+                        It is not cosmetic. Signed-in vs anonymous changes the VOICE
+                        (the neural voice has a daily quota for anonymous identities),
+                        the reply quota and whether anything syncs — and there was
+                        nothing on screen saying which state you were in. A whole
+                        investigation went into "the speech got worse" before the
+                        answer turned out to be "this device is signed out". */}
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+                        {accessToken && user?.email
+                            ? <>Signed in as <Text style={{ fontWeight: "600", color: colors.textPrimary }}>{user.email}</Text></>
+                            : accessToken
+                                ? "Signed in"
+                                : "Not signed in — this device only"}
                     </Text>
                     {/* ── Phase 5: org membership badge (billing-type-aware) ── */}
                     {orgName ? (() => {

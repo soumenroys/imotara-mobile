@@ -663,6 +663,23 @@ export async function speakMessage(
     // first — see mapUserEmotionForTTS() in ChatScreen.tsx — this function
     // does not translate them itself.
     emotion?: string,
+    // 🔴 Fires when the GOOD voice was refused because this identity has used
+    // its daily allowance — not because anything is broken.
+    //
+    // Owner, 2026-10-10: "imotara should request to login for better voice
+    // assistance." An anonymous identity gets a daily voice quota; past it,
+    // /api/tts answers 429 and playback silently becomes the device voice.
+    // That was experienced as the product breaking — faint, badly pronounced,
+    // expressionless — with nothing saying why or what to do.
+    //
+    // ⚠️ Deliberately SEPARATE from onUnavailable, which means "your device
+    // has no voice for this language" — a different problem with a different
+    // answer. Conflating them would put the wrong advice in front of someone.
+    //
+    // ⛔ LAST, and optional. Every existing caller passes `emotion`
+    // positionally, so inserting it earlier silently retypes their arguments
+    // — which is exactly what happened on the first attempt.
+    onVoiceQuotaReached?: () => void,
 ): Promise<void> {
     // ⚠️ Unbounded for the same reason as the voice list, and it was not even
     // in a try/catch: a rejection here threw straight out of speakMessage, and
@@ -920,6 +937,12 @@ export async function speakMessage(
         // played real Azure audio, then native fallback re-read the entire
         // message from the beginning). Speak only the chunks that never
         // successfully played instead.
+        // 🔑 A 429 is a RATION, not a fault. Say so, so the person can act on
+        // it — signing in removes the limit entirely. Everything else falls
+        // through silently as before, because there is nothing useful to say.
+        if (err instanceof Error && /\bTTS API 429\b/.test(err.message)) {
+            try { onVoiceQuotaReached?.(); } catch { /* never block the fallback */ }
+        }
         const remainingText = chunks.slice(playedChunks).join(" ").trim() || text;
         await playNativeFallback(remainingText, lang, rate, pitch, onDone, onStart, onUnavailable);
     }

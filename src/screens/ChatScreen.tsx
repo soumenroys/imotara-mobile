@@ -1611,6 +1611,27 @@ const MemoMessageBubble = React.memo(MessageBubble, (prev, next) => {
  */
 const VOICE_QUALITY_IS_TIER_BLIND = true;
 
+/**
+ * What to say when the neural voice has been rationed.
+ *
+ * 🔴 Owner, 2026-10-10: "imotara should request to login for better voice
+ * assistance." An ANONYMOUS identity gets a daily voice allowance; past it
+ * /api/tts answers 429 and playback silently drops to the device voice. That
+ * was experienced as the product breaking — faint, badly pronounced,
+ * expressionless Bengali — with nothing on screen saying why.
+ *
+ * ⚖️ It says what happened AND what fixes it. Signing in removes the limit
+ * entirely, which is the whole reason this message is worth showing rather
+ * than degrading in silence.
+ *
+ * ⛔ Not an Alert. The reply is already playing in the device voice; a modal
+ * would interrupt something the person is listening to.
+ */
+export const VOICE_QUOTA_NUDGE =
+  "Daily limit for the natural voice reached — using your device voice. Sign in from Settings for unlimited voice.";
+
+
+
 export default function ChatScreen() {
   const colors = useColors();
   const { isDark, toggleTheme } = useTheme();
@@ -2533,6 +2554,7 @@ export default function ChatScreen() {
         VOICE_QUALITY_IS_TIER_BLIND,
         () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
         mapUserEmotionForTTS(emotion),
+        () => { toastRef.current?.show(VOICE_QUOTA_NUDGE, "info"); },
       ).catch((e: unknown) => {
         /* 🔴 LAST RESORT. Every speakMessage call is fire-and-forget, so a throw anywhere inside it used to leave the speaker spinning with nothing to stop it. The spinner must not outlive the attempt, whatever went wrong. */
         setPreparingSpeechId(null);
@@ -4805,6 +4827,8 @@ export default function ChatScreen() {
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
                   VOICE_QUALITY_IS_TIER_BLIND,
                   () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
+                  undefined,   // emotion — not tracked on the history re-read path
+                  () => { toastRef.current?.show(VOICE_QUOTA_NUDGE, "info"); },
                 ).catch((e: unknown) => {
                   /* 🔴 LAST RESORT. Every speakMessage call is fire-and-forget, so a throw anywhere inside it used to leave the speaker spinning with nothing to stop it. The spinner must not outlive the attempt, whatever went wrong. */
                   setPreparingSpeechId(null);
@@ -5439,6 +5463,8 @@ export default function ChatScreen() {
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
                   VOICE_QUALITY_IS_TIER_BLIND,
                   () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
+                  undefined,   // emotion — not tracked on the history re-read path
+                  () => { toastRef.current?.show(VOICE_QUOTA_NUDGE, "info"); },
                 ).catch((e: unknown) => {
                   /* 🔴 LAST RESORT. Every speakMessage call is fire-and-forget, so a throw anywhere inside it used to leave the speaker spinning with nothing to stop it. The spinner must not outlive the attempt, whatever went wrong. */
                   setPreparingSpeechId(null);
