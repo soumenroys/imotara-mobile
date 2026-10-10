@@ -1581,6 +1581,36 @@ const MemoMessageBubble = React.memo(MessageBubble, (prev, next) => {
   return true;
 });
 
+/**
+ * 🔴 THE NEURAL VOICE IS NOT A PAID FEATURE. It is reply quality.
+ *
+ * Owner decision, recorded verbatim: "chat reply quality should be exactly
+ * same for any licensing tier. whatever the license type is, may be free,
+ * maybe plus" — and the standing reply-quality rule names /api/tts and the
+ * mobile voice hooks as part of the protected reply path.
+ *
+ * ⚠️ WHAT WAS WRONG. These call sites passed
+ * `isFeatureEnabled("TTS_ADVANCED", licenseTier)`, so a FREE account skipped
+ * Azure entirely and spoke through the device voice. Reported 2026-10-10:
+ * "speaking quality is totally messed up ... previous talking was much more
+ * realistic, humanly and with more emotion and expression."
+ *
+ * It was not a regression in the speech code — nothing there had changed. It
+ * was gate enforcement arriving in 1.4.3 (SOFT_LAUNCH_BYPASS_ALL_GATES went
+ * true -> false), which is when free accounts stopped reaching Azure at all.
+ * Confirmed from production: ZERO /api/tts requests while speech was playing,
+ * and the device's stored tier read FREE.
+ *
+ * ⚖️ Tier may gate QUANTITY, never QUALITY. The server already agrees — the
+ * route applies a usage quota but no tier check on the voice itself — so this
+ * was a client-side gate with nothing behind it.
+ *
+ * ⛔ Do not reintroduce a tier argument here. TTS_ADVANCED still gates the
+ * CUSTOMISATION it was named for (voice selection, rate and pitch controls in
+ * Settings); what it must never gate is how good the voice sounds.
+ */
+const VOICE_QUALITY_IS_TIER_BLIND = true;
+
 export default function ChatScreen() {
   const colors = useColors();
   const { isDark, toggleTheme } = useTheme();
@@ -2500,7 +2530,7 @@ export default function ChatScreen() {
         () => { /* 🔴 clear BOTH: a terminal path that never fired onStart (no device voice for this language, a failed fetch) would otherwise leave the speaker spinning forever. */ setPreparingSpeechId(null); setSpeakingMessageId(null); reopenMicIfHandsfree(); },
         ttsRate, ttsPitch, guestAccessToken,
         () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
-        isFeatureEnabled("TTS_ADVANCED", licenseTier),
+        VOICE_QUALITY_IS_TIER_BLIND,
         () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
         mapUserEmotionForTTS(emotion),
       ).catch((e: unknown) => {
@@ -4773,7 +4803,7 @@ export default function ChatScreen() {
                   () => { /* 🔴 clear BOTH: a terminal path that never fired onStart (no device voice for this language, a failed fetch) would otherwise leave the speaker spinning forever. */ setPreparingSpeechId(null); setSpeakingMessageId(null); },
                   ttsRate, ttsPitch, guestAccessToken,
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
-                  isFeatureEnabled("TTS_ADVANCED", licenseTier),
+                  VOICE_QUALITY_IS_TIER_BLIND,
                   () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
                 ).catch((e: unknown) => {
                   /* 🔴 LAST RESORT. Every speakMessage call is fire-and-forget, so a throw anywhere inside it used to leave the speaker spinning with nothing to stop it. The spinner must not outlive the attempt, whatever went wrong. */
@@ -5407,7 +5437,7 @@ export default function ChatScreen() {
                   () => { /* 🔴 clear BOTH: a terminal path that never fired onStart (no device voice for this language, a failed fetch) would otherwise leave the speaker spinning forever. */ setPreparingSpeechId(null); setSpeakingMessageId(null); },
                   ttsRate, ttsPitch, guestAccessToken,
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
-                  isFeatureEnabled("TTS_ADVANCED", licenseTier),
+                  VOICE_QUALITY_IS_TIER_BLIND,
                   () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
                 ).catch((e: unknown) => {
                   /* 🔴 LAST RESORT. Every speakMessage call is fire-and-forget, so a throw anywhere inside it used to leave the speaker spinning with nothing to stop it. The spinner must not outlive the attempt, whatever went wrong. */
