@@ -91,7 +91,7 @@ import {
   HI_STRESS_REGEX,
   isSadText,
   CONFUSED_EN_REGEX,
-  CRISIS_HINT_REGEX,
+  isCrisisTier2,
   isConfusedText,
   isStressText,
   detectPositiveText,
@@ -157,7 +157,15 @@ function getWeeklyRecapText(topEmotion: string, count: number, lang: string): st
 // Tier 1: hopelessness, worthlessness, trapped — distress without explicit ideation
 // Tier 0: no crisis signal
 
-const MOBILE_CRISIS_TIER2_RE = CRISIS_HINT_REGEX; // covers all 22 Imotara-supported languages (synced 2026-08-14)
+// 🔴 TIER 2 — the SHARED union, not CRISIS_HINT_REGEX alone.
+//
+// Measured 2026-10-10: the web chat page had its own tier-2 detector covering
+// 9 of 22 languages, while this screen's CRISIS_HINT_REGEX covered 22 — and the
+// web page caught 16 phrases the shared regex misses, the bare word "suicide"
+// among them. Each platform was protecting someone the other was not.
+//
+// isCrisisTier2 is the union of both, so neither can lose a phrase it used to
+// catch. ⛔ Do not narrow this back to one regex.
 
 const MOBILE_CRISIS_TIER1_RE =
   /\b(hopeless|helpless|worthless|nothing matters|give up|can'?t take (it|this) anymore|breaking down|falling apart|no one cares|all alone|empty inside|numbing|disappear|feel like a burden|i'?m a burden|everyone (would be )?better off without me|trapped|feel(ing)? trapped|no way out|no escape|can'?t see a future|thinking about (death|ending|disappearing)|thoughts of (death|ending it)|pointless|life is pointless|don'?t deserve to (live|be here)|i\s+am\s+nothing)\b/i;
@@ -183,7 +191,7 @@ const MOBILE_CRISIS_ROMAN_INDIC_TIER1_RE =
 type CrisisTier = 0 | 1 | 2;
 
 function detectMobileCrisisTier(text: string): CrisisTier {
-  if (MOBILE_CRISIS_TIER2_RE.test(text)) return 2;
+  if (isCrisisTier2(text)) return 2;
   if (
     MOBILE_CRISIS_TIER1_RE.test(text) ||
     MOBILE_CRISIS_INDIC_TIER1_RE.test(text) ||

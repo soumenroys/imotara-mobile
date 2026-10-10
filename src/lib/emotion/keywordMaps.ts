@@ -463,6 +463,84 @@ export const CRISIS_HINT_REGEX =
   /(i\s+want\s+to\s+die|want\s+to\s+die|kill\s+myself|killing\s+myself|going\s+to\s+kill\s+myself|plan\s+(to\s+)?kill\s+myself|end\s+my\s+life|ending\s+my\s+life|plan\s+(to\s+)?end\s+my\s+life|end\s+it\s+all|ending\s+everything|end\s+everything|i\s+feel\s+like\s+ending\s+everything|don'?t\s+want\s+to\s+live|do\s+not\s+want\s+to\s+live|don'?t\s+want\s+to\s+be\s+here(\s+anymore)?|cannot\s+go\s+on|can'?t\s+go\s+on|can'?t\s+take\s+it\s+anymore|cannot\s+take\s+it\s+anymore|life\s+has\s+no\s+meaning|life\s+feels\s+meaningless|no\s+point\s+in\s+(living|life)|no\s+reason\s+to\s+(live|keep\s+going|be\s+alive)|suicidal|feeling\s+suicidal|i('?m|\s+am)\s+suicidal|thinking\s+(about|of)\s+suicide|thoughts?\s+of\s+suicide|better\s+off\s+dead|better\s+off\s+without\s+me|everyone\s+(would\s+be\s+)?better\s+off\s+without\s+me|i\s+wish\s+i\s+(was|were)\s+dead|wish\s+i\s+was\s+dead|hurt\s+myself|hurting\s+myself|harm\s+myself|harming\s+myself|self.?harm(ing)?|cut\s+myself|cutting\s+myself|want\s+to\s+(hurt|cut|harm)\s+myself|think(ing)?\s+about\s+(hurting|cutting|harming)\s+myself|overdos(e|ing|ed)|took\s+too\s+many\s+(pills|tablets)|being\s+raped?|was\s+raped?|he\s+raped?\s+me|she\s+raped?\s+me|someone\s+raped?\s+me|sexual\s+assault(ed)?|sexually\s+assault(ed)?|being\s+(physically\s+)?abused|he('?s|\s+is)\s+hurting\s+me|she('?s|\s+is)\s+hurting\s+me|domestic\s+violence|not\s+safe\s+right\s+now|i('?m|\s+am)\s+not\s+safe|in\s+immediate\s+danger|ami\s+marte\s+chai|marte\s+chai|ami\s+morte\s+chai|morte\s+chai|ami\s+ar\s+parchi\s+na|ar\s+parchi\s+na|amar\s+bachte\s+ichcha\s+korch?e\s+na|bachte\s+ichhe\s+korch?e\s+na|bachte\s+icche\s+korch?e\s+na|more\s+jete\s+ichhe\s+korch?e|morte\s+ichhe\s+korch?e|bachbo\s+na|banchte\s+chai\s+na|mar\s+jana\s+hai|mar\s+jaana\s+chahta|mar\s+jaana\s+chahti|jeene\s+ka\s+mann\s+nahi|jeene\s+ka\s+man\s+nahi|jeena\s+nahi\s+hai|life\s+ka\s+koi\s+matlab\s+nahi(\s+lag\s+raha)?|main\s+marna\s+chahta\s+hu|main\s+marna\s+chahti\s+hu|main\s+marna\s+chahta\s+hoon|main\s+marna\s+chahti\s+hoon|marna\s+chahta\s+hu|marna\s+chahti\s+hu|marna\s+chahta\s+hoon|marna\s+chahti\s+hoon|main\s+jeena\s+nahi\s+chahta|main\s+jeena\s+nahi\s+chahti|hu\s+marva\s+mangu\s+chu|jivvu\s+nathi|nanage\s+badukalu\s+ishtavilla|khud\s+ko\s+hurt\s+karna|khud\s+ko\s+nuqsan|apne\s+aap\s+ko\s+hurt|আমি\s+মরতে\s+চাই|আমার\s+মরতে\s+ইচ্ছে\s+করছে|বাঁচতে\s+ইচ্ছে\s+করছে\s+না|আমি\s+বাঁচতে\s+চাই\s+না|আমি\s+আর\s+পারছি\s+না|আমার\s+বাঁচতে\s+ইচ্ছা\s+করছে\s+না|নিজেকে\s+কষ্ট\s+দিতে\s+চাই|আত্মহত্যা|मुझे\s+मर\s+जाना\s+है|मैं\s+मरना\s+चाहता\s+हूँ|मैं\s+मरना\s+चाहती\s+हूँ|जीने\s+का\s+मन\s+नहीं|जीने\s+की\s+इच्छा\s+नहीं|जीना\s+नहीं\s+है|ज़िंदगी\s+का\s+कोई\s+मतलब\s+नहीं|आत्महत्या|खुद\s+को\s+नुकसान|जिंदगी\s+खत्म\s+करना|मरायचंय|जगायचं\s+नाही|आत्महत्या\s+करायची|મારે\s+મરી\s+જવું\s+છે|મને\s+જીવવું\s+નથી|હું\s+મરવા\s+માગું\s+છું|ನನಗೆ\s+ಸಾಯಬೇಕು\s+ಅನಿಸುತ್ತಿದೆ|ನನಗೆ\s+ಬದುಕಲು\s+ಇಷ್ಟವಿಲ್ಲ|ನಾನು\s+ಸಾಯಬೇಕು|வாழ\s+வேண்டாம்|தற்கொலை|இறந்துவிட|சாக\s+வேண்டும்|చనిపోవాలి|ఆత్మహత్య|బతకాలని\s+లేదు|മരിക്കണം|ആത്മഹത്യ|ജീവിക്കണ്ട|ജീവിതം\s+വേണ്ട|אני\s+רוצה\s+למות|לא\s+רוצה\s+לחיות|התאבדות|רוצה\s+למות|לפגוע\s+בעצמי|أريد\s+أن\s+أموت|لا\s+أريد\s+أن\s+أعيش|انتحار|أريد\s+إيذاء\s+نفسي|أفكر\s+في\s+الانتحار|ich\s+will\s+sterben|ich\s+will\s+nicht\s+mehr\s+leben|Selbstmord|ich\s+will\s+mir\s+selbst\s+schaden|ich\s+denke\s+an\s+Suizid|死にたい|消えたい|自殺|自分を傷つけたい|死んでしまいたい|quiero\s+morir|no\s+quiero\s+vivir|quiero\s+matarme|quiero\s+acabar\s+con\s+mi\s+vida|acabar\s+con\s+mi\s+vida|quiero\s+terminar\s+con\s+todo|terminar\s+con\s+todo|no\s+puedo\s+m[aá]s|ya\s+no\s+aguanto\s+m[aá]s|la\s+vida\s+no\s+tiene\s+sentido|no\s+tiene\s+sentido\s+vivir|pensamientos\s+suicidas|pienso\s+en\s+el\s+suicidio|suicida|estar[ií]an\s+mejor\s+sin\s+m[ií]|mejor\s+sin\s+m[ií]|ojal[aá]\s+estuviera\s+muert[oa]|quiero\s+hacerme\s+da[ñn]o|hacerme\s+da[ñn]o|me\s+quiero\s+cortar|autolesi[oó]n|tom[eé]\s+demasiadas\s+pastillas|me\s+violaron|fui\s+violad[oa]|abuso\s+sexual|violencia\s+dom[eé]stica|no\s+estoy\s+a\s+salvo|estoy\s+en\s+peligro|je\s+veux\s+mourir|je\s+ne\s+veux\s+plus\s+vivre|je\s+veux\s+me\s+tuer|je\s+veux\s+mettre\s+fin\s+[àa]\s+ma\s+vie|mettre\s+fin\s+[àa]\s+mes\s+jours|je\s+veux\s+en\s+finir|en\s+finir\s+avec\s+tout|je\s+n'?en\s+peux\s+plus|je\s+ne\s+peux\s+plus\s+continuer|la\s+vie\s+n'?a\s+plus\s+de\s+sens|[çc]a\s+ne\s+sert\s+[àa]\s+rien\s+de\s+vivre|pens[eé]es\s+suicidaires|je\s+pense\s+au\s+suicide|suicidaire|ils\s+seraient\s+mieux\s+sans\s+moi|mieux\s+sans\s+moi|j'?aimerais\s+[êe]tre\s+mort(e)?|je\s+veux\s+me\s+faire\s+du\s+mal|je\s+veux\s+me\s+couper|je\s+veux\s+me\s+scarifier|j'?ai\s+pris\s+trop\s+de\s+m[eé]dicaments|j'?ai\s+pris\s+trop\s+de\s+pilules|j'?ai\s+[eé]t[eé]\s+violée?|on\s+m'?a\s+viol[eé]e?|agression\s+sexuelle|violence\s+domestique|violence\s+conjugale|je\s+ne\s+suis\s+pas\s+en\s+s[eé]curit[eé]|je\s+suis\s+en\s+danger|quero\s+morrer|n[ãa]o\s+quero\s+mais\s+viver|quero\s+me\s+matar|quero\s+acabar\s+com\s+minha\s+vida|quero\s+acabar\s+com\s+tudo|n[ãa]o\s+aguento\s+mais|n[ãa]o\s+consigo\s+mais\s+continuar|a\s+vida\s+n[ãa]o\s+tem\s+sentido|n[ãa]o\s+tem\s+sentido\s+viver|pensamentos\s+suicidas|penso\s+em\s+suic[ií]dio|suicida|ficariam\s+melhor\s+sem\s+mim|queria\s+estar\s+mort[oa]|quero\s+me\s+machucar|quero\s+me\s+cortar|automutila[çc][ãa]o|tomei\s+muitos\s+comprimidos|fui\s+estuprad[oa]|abusad[oa]\s+sexualmente|viol[êe]ncia\s+dom[eé]stica|n[ãa]o\s+estou\s+segur[oa]|estou\s+em\s+perigo|я\s+хочу\s+умереть|я\s+не\s+хочу\s+жить|я\s+хочу\s+убить\s+себя|я\s+хочу\s+покончить\s+с\s+собой|я\s+хочу\s+покончить\s+со\s+всем|я\s+больше\s+не\s+могу|жизнь\s+не\s+имеет\s+смысла|нет\s+смысла\s+жить|суицидальные\s+мысли|думаю\s+о\s+суициде|без\s+меня\s+было\s+бы\s+лучше|хотел\s+бы\s+я\s+умереть|хотела\s+бы\s+я\s+умереть|хочу\s+навредить\s+себе|хочу\s+порезать\s+себя|самоповреждение|выпил(а)?\s+слишком\s+много\s+таблеток|меня\s+изнасиловали|сексуальное\s+насилие|домашнее\s+насилие|я\s+в\s+опасности|мне\s+небезопасно|我想死|我不想活了|我想自杀|我想结束自己的生命|我想结束这一切|我受不了了|我撑不下去了|生活没有意义|活着没有意义|想自杀|自杀的想法|没有我他们会更好|希望自己死了|我想伤害自己|我想割伤自己|自残|吃了太多药|我被强奸了|性侵犯|家庭暴力|我不安全|我有危险|saya\s+ingin\s+mati|aku\s+ingin\s+mati|saya\s+tidak\s+ingin\s+hidup\s+lagi|saya\s+ingin\s+bunuh\s+diri|ingin\s+bunuh\s+diri|saya\s+ingin\s+mengakhiri\s+hidup\s+saya|saya\s+ingin\s+mengakhiri\s+semuanya|saya\s+tidak\s+tahan\s+lagi|saya\s+tidak\s+bisa\s+melanjutkan|hidup\s+tidak\s+ada\s+artinya|tidak\s+ada\s+gunanya\s+hidup|pikiran\s+untuk\s+bunuh\s+diri|berpikir\s+untuk\s+bunuh\s+diri|lebih\s+baik\s+tanpa\s+saya|berharap\s+saya\s+mati|saya\s+ingin\s+menyakiti\s+diri\s+sendiri|melukai\s+diri\s+sendiri|minum\s+terlalu\s+banyak\s+obat|saya\s+diperkosa|pelecehan\s+seksual|kekerasan\s+dalam\s+rumah\s+tangga|saya\s+tidak\s+aman|saya\s+dalam\s+bahaya|khud\s+ko\s+khatam\s+karna\s+chahta\s+hoon|zindagi\s+khatam\s+karna\s+chahta\s+hoon|main\s+aur\s+bardasht\s+nahi\s+kar\s+sakta|main\s+aur\s+bardasht\s+nahi\s+kar\s+sakti|khudkushi\s+ka\s+khayal|khudkushi|mere\s+baghair\s+sab\s+behtar\s+honge|khud\s+ko\s+nuksan\s+pohunchana\s+chahta\s+hoon|khud\s+ko\s+zakhmi\s+karna|میں\s+مرنا\s+چاہتا\s+ہوں|میں\s+مرنا\s+چاہتی\s+ہوں|میں\s+جینا\s+نہیں\s+چاہتا|میں\s+جینا\s+نہیں\s+چاہتی|خودکشی|خود\s+کو\s+نقصان\s+پہنچانا|زندگی\s+کا\s+کوئی\s+مطلب\s+نہیں|میرا\s+ریپ\s+ہوا|میرے\s+ساتھ\s+زیادتی\s+ہوئی|گھریلو\s+تشدد|میں\s+محفوظ\s+نہیں\s+ہوں|main\s+marna\s+chahunda\s+haan|main\s+marna\s+chahundi\s+haan|main\s+jeena\s+nahi\s+chahunda|main\s+jeena\s+nahi\s+chahundi|khud\s+nu\s+khatam\s+karna|meri\s+zindagi\s+da\s+koi\s+matlab\s+nahi|khudkushi\s+de\s+khayal|khud\s+nu\s+nuksan\s+pahunchauna|ਮੈਂ\s+ਮਰਨਾ\s+ਚਾਹੁੰਦਾ\s+ਹਾਂ|ਮੈਂ\s+ਮਰਨਾ\s+ਚਾਹੁੰਦੀ\s+ਹਾਂ|ਮੈਂ\s+ਜਿਊਣਾ\s+ਨਹੀਂ\s+ਚਾਹੁੰਦਾ|ਮੈਂ\s+ਜਿਊਣਾ\s+ਨਹੀਂ\s+ਚਾਹੁੰਦੀ|ਖੁਦਕੁਸ਼ੀ|ਆਪਣੇ\s+ਆਪ\s+ਨੂੰ\s+ਨੁਕਸਾਨ\s+ਪਹੁੰਚਾਉਣਾ|ਜ਼ਿੰਦਗੀ\s+ਦਾ\s+ਕੋਈ\s+ਮਤਲਬ\s+ਨਹੀਂ|ਮੈਂ\s+ਸੁਰੱਖਿਅਤ\s+ਨਹੀਂ\s+ਹਾਂ|ਘਰੇਲੂ\s+ਹਿੰਸਾ|mate\s+marijiba\s+mana\s+heuchi|mu\s+bachiba\s+chahenti\s+nahi|atma\s+hatya|ମୋତେ\s+ମରିଯିବାକୁ\s+ମନ\s+ହେଉଛି|ମୁଁ\s+ବଞ୍ଚିବାକୁ\s+ଚାହୁଁନାହିଁ|ଆତ୍ମହତ୍ୟା|ନିଜକୁ\s+କ୍ଷତି\s+ପହଞ୍ଚାଇବା|ଜୀବନର\s+କୌଣସି\s+ଅର୍ଥ\s+ନାହିଁ|ମୁଁ\s+ସୁରକ୍ଷିତ\s+ନୁହେଁ|ଘରୋଇ\s+ହିଂସା)/i;
 
 // --------------------------------------------------
+// TIER 2 CRISIS — kept in lockstep with the web repo's copy of this file.
+// ⚠️ TWO REPOS, TWO COPIES. There is no build step that can diff them, so
+// each repo carries crisisCardCoversEveryLanguage.test.ts, built from the same
+// 22-language list and the same 16-phrase legacy list. If you edit one, run
+// the other repo's test.
+// --------------------------------------------------
+
+export const CRISIS_TIER2_EN_LEGACY_REGEX =
+  /\b(suicide|suicidal|end my life|end it all|kill myself|don'?t want to (be here|live|exist)|can'?t go on|no reason to live|want to die|hurt myself|self.?harm|cut myself|overdose|better off dead|wish i was dead|thinking (about|of) suicide|plan(ning)? to (kill|end|harm) (myself|my life)|sexual assault|being raped?|domestic violence|i'?m not safe|not safe right now|in immediate danger|being abused)\b/i;
+
+export const CRISIS_TIER2_INDIC_LEGACY_REGEX = new RegExp(
+  [
+    // Hindi / Marathi (Devanagari)
+    "मरना चाहता","मरना चाहती","मर जाना","जीना नहीं","आत्महत्या","खुद को नुकसान","जिंदगी खत्म",
+    "मरायचंय","जगायचं नाही","आत्महत्या करायची","मरून जातो","मरून जाते",
+    // Bengali
+    "মরতে চাই","বাঁচতে চাই না","আত্মহত্যা","মরে যেতে চাই","নিজেকে কষ্ট দিতে চাই",
+    // Tamil
+    "வாழ வேண்டாம்","தற்கொலை","இறந்துவிட","சாக வேண்டும்",
+    // Telugu
+    "చనిపోవాలి","ఆత్మహత్య","బతకాలని లేదు","నన్ను నేను హాని",
+    // Kannada
+    "ಸಾಯಬೇಕು","ಆತ್ಮಹತ್ಯೆ","ಬದುಕಬೇಕಾಗಿಲ್ಲ",
+    // Malayalam
+    "മരിക്കണം","ആത്മഹത്യ","ജീവിക്കണ്ട","ജീവിതം വേണ്ട",
+    // Gujarati
+    "મરવું છે","આત્મહત્યા","જીવવું નથી",
+    // Punjabi (Gurmukhi)
+    "ਮਰਨਾ ਚਾਹੁੰਦਾ","ਆਤਮਹੱਤਿਆ","ਜਿਉਣਾ ਨਹੀਂ",
+  ].join("|"),
+);
+
+export const CRISIS_TIER2_ROMAN_LEGACY_REGEX =
+  /marna\s+chah|mar\s+jaana|mar\s+jaun|jeena\s+nahi|zindagi\s+khatam|khud\s+ko\s+hurt|aatmahatya|maraycha|jagaych\s+nahi|morte\s+chai|bachte\s+chai\s+na|atmahatya|chanipovali|saayabeku|marikknam|marikkanam|jeevanam\s+venda|saaga\s+beku/i;
+
+/**
+ * ─── TIER 2 CRISIS DETECTION — THE ONE DECISION ───────────────────────────
+ *
+ * 🔴 MEASURED 2026-10-10, and this is why this function exists.
+ *
+ * The web chat page and the mobile chat screen each had their OWN tier-2
+ * detector, and they disagreed badly:
+ *
+ *   web     covered  9 / 22 languages
+ *   mobile  covered 22 / 22
+ *
+ * ⛔ So someone typing "quiero morir", "je veux mourir", "ich will sterben",
+ * "quero morrer", "я хочу умереть", "أريد أن أموت", "אני רוצה למות", "我想死",
+ * "死にたい", "saya ingin mati", "میں مرنا چاہتا ہوں", Odia or even GUJARATI
+ * got NO crisis card on the web app — and the same sentence on their phone
+ * got one. Thirteen languages, including ten the product advertises.
+ *
+ * ⚠️ AND IT WAS NOT ONE-DIRECTIONAL. Mobile, which used CRISIS_HINT_REGEX
+ * alone, missed 14 phrases the web page caught — the bare word **"suicide"**
+ * among them, plus a batch of Indic spellings and romanisations
+ * ("aatmahatya", "saayabeku", "jeevanam venda", "મરવું છે", "ಬದುಕಬೇಕಾಗಿಲ್ಲ").
+ *
+ * 🔑 Hence the UNION, not a choice between them. Taking either detector alone
+ * would have removed protection somewhere, and for this feature "narrower" is
+ * not a trade-off to weigh — it is someone in crisis seeing nothing. The union
+ * is a superset of both by construction, so no platform can lose a phrase it
+ * used to catch.
+ *
+ * ⛔ Do not narrow this. A false positive here shows somebody a helpline they
+ * did not need; a false negative shows nothing to somebody who did.
+ */
+export function isCrisisTier2(text: string): boolean {
+    const t = String(text ?? "");
+    if (!t) return false;
+    return (
+        CRISIS_HINT_REGEX.test(t) ||                  // 22 languages, shared with the prompt
+        CRISIS_TIER2_EN_LEGACY_REGEX.test(t) ||       // the web page's original English set
+        CRISIS_TIER2_INDIC_LEGACY_REGEX.test(t) ||    // …its Indic Unicode set
+        CRISIS_TIER2_ROMAN_LEGACY_REGEX.test(t)       // …and its romanised Indic set
+    );
+}
+
+// --------------------------------------------------
 // English confusion / mental overload
 // --------------------------------------------------
 
