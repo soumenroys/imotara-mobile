@@ -95,12 +95,66 @@ export function __bufferForTest(): string[] {
     return [...lines];
 }
 
-const sink: DebugSink = (level, args) => {
+function record(level: "log" | "warn", args: unknown[]): void {
     lines.push(formatLine(level, args));
     // Bounded: drop the oldest, keep the tail.
     while (lines.length > MAX_LINES) lines.shift();
     dirty = true;
+}
+
+/**
+ * ⚠️ Only true while setDebugSink() replays what was logged before we
+ * started. Live lines are captured by the console patch below instead, so
+ * without this flag every debugLog would be recorded TWICE — once by emit()
+ * calling the sink, and once by its own console call.
+ */
+let draining = false;
+
+const sink: DebugSink = (level, args) => {
+    if (draining) record(level, args);
 };
+
+/**
+ * 🔴 CAPTURE RAW console.* TOO, not only debugLog/debugWarn.
+ *
+ * Measured 2026-10-10: 51 of the app's ~100 diagnostic calls are raw
+ * `console.log`, including EVERY `[mobileTTS]` line — the ones that say which
+ * language and voice a reply was spoken in. On Android those surface in
+ * logcat, so the gap was invisible; on iOS they went nowhere at all.
+ *
+ * The first real question asked of this log — "why did two replies use
+ * different voices?" — could not be answered because of exactly that.
+ *
+ * ⛔ Only when DEBUG_LOGS_ENABLED, which no store profile sets. The original
+ * console function is always called, so nothing changes about what the
+ * platform logger sees.
+ */
+type ConsoleFn = (...args: unknown[]) => void;
+let originals: { log: ConsoleFn; warn: ConsoleFn; error: ConsoleFn } | null = null;
+
+function patchConsole(): void {
+    if (originals) return;
+    /* eslint-disable no-console */
+    originals = {
+        log: console.log.bind(console),
+        warn: console.warn.bind(console),
+        error: console.error.bind(console),
+    };
+    console.log = (...args: unknown[]) => { try { record("log", args); } catch { /* never break logging */ } originals!.log(...args); };
+    console.warn = (...args: unknown[]) => { try { record("warn", args); } catch { /* never break logging */ } originals!.warn(...args); };
+    console.error = (...args: unknown[]) => { try { record("warn", args); } catch { /* never break logging */ } originals!.error(...args); };
+    /* eslint-enable no-console */
+}
+
+function unpatchConsole(): void {
+    if (!originals) return;
+    /* eslint-disable no-console */
+    console.log = originals.log;
+    console.warn = originals.warn;
+    console.error = originals.error;
+    /* eslint-enable no-console */
+    originals = null;
+}
 
 async function flush(): Promise<void> {
     if (!dirty) return;
@@ -132,13 +186,20 @@ export function startDiagnosticsLog(): () => void {
     // write — `dirty` only turns true once a line arrives — and a session
     // that logged nothing produced no file at all, which is indistinguishable
     // from the sink being broken.
-    sink("log", [
+    record("log", [
         `=== Imotara diagnostics — session started ${new Date().toISOString()} ===`,
     ]);
+    // Patch BEFORE the replay, so anything logged during it is still caught.
+    patchConsole();
     // setDebugSink replays anything logged before now, which is where the
     // build-identifying lines live (module-level logs run before App's
     // effects).
-    setDebugSink(sink);
+    // Drain what was logged before now — those lines name the build. The flag
+    // makes the sink accept ONLY the replay; everything live arrives via the
+    // console patch, and recording both would duplicate every debugLog.
+    draining = true;
+    setDebugSink(sink);   // replays synchronously
+    draining = false;
     timer = setInterval(() => { void flush(); }, FLUSH_MS);
     void flush();   // ...and get that header on disk immediately
     return stopDiagnosticsLog;
@@ -146,6 +207,7 @@ export function startDiagnosticsLog(): () => void {
 
 export function stopDiagnosticsLog(): void {
     if (timer) { clearInterval(timer); timer = null; }
+    unpatchConsole();
     setDebugSink(null);
     void flush();   // final write, so the last lines are not lost
 }

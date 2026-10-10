@@ -162,9 +162,9 @@ describe("🔑 the file must exist, and must name the build", () => {
     // exactly like the sink being broken.
     expect(SINKSRC).toMatch(/session started/);
     const start = SINKSRC.slice(SINKSRC.indexOf("export function startDiagnosticsLog"));
-    expect(start.indexOf('sink("log"')).toBeGreaterThan(-1);
-    // header pushed BEFORE the sink is registered, so the replay follows it
-    expect(start.indexOf('sink("log"')).toBeLessThan(start.indexOf("setDebugSink(sink)"));
+    expect(start.indexOf('record("log"')).toBeGreaterThan(-1);
+    // header written BEFORE the replay, so the build-identifying lines follow it
+    expect(start.indexOf('record("log"')).toBeLessThan(start.indexOf("setDebugSink(sink)"));
     // ...and written at once, not on the next tick
     expect(start).toMatch(/void flush\(\);\s+\/\/ \.\.\.and get that header on disk/);
   });
@@ -267,5 +267,59 @@ describe("🔑 the replay, exercised rather than read", () => {
     const got: unknown[] = [];
     d.setDebugSink((_l, args) => { got.push(args[0]); });
     expect(got).toEqual(["after-null"]);
+  });
+});
+
+describe("🔴 raw console.* must be captured too, not just debugLog", () => {
+  // ⚠️ Measured 2026-10-10: 51 of the app's diagnostic calls are raw
+  // console.log — including EVERY [mobileTTS] line, the ones that say which
+  // language and voice a reply was spoken in. On Android those surface in
+  // logcat so the gap was invisible; on iOS they went nowhere. The first real
+  // question asked of this log — "why did two replies use different voices?"
+  // — was unanswerable because of exactly that.
+  const SINKSRC = SRC(SINK);
+
+  it("console.log, warn and error are all intercepted", () => {
+    expect(SINKSRC).toMatch(/console\.log = \(\.\.\.args: unknown\[\]\) =>/);
+    expect(SINKSRC).toMatch(/console\.warn = \(\.\.\.args: unknown\[\]\) =>/);
+    expect(SINKSRC).toMatch(/console\.error = \(\.\.\.args: unknown\[\]\) =>/);
+  });
+
+  it("⛔ the original console function is still called", () => {
+    // The platform logger must keep seeing everything it saw before —
+    // logcat is what made Android diagnosable in the first place.
+    for (const fn of ["log", "warn", "error"]) {
+      expect(SINKSRC).toMatch(new RegExp(`originals!\\.${fn}\\(\\.\\.\\.args\\)`));
+    }
+  });
+
+  it("recording never breaks the log call itself", () => {
+    const patch = SINKSRC.slice(SINKSRC.indexOf("function patchConsole"));
+    expect(patch.slice(0, patch.indexOf("\nfunction unpatch")))
+      .toMatch(/try \{ record\("log", args\); \} catch/);
+  });
+
+  it("⛔ a debugLog is recorded ONCE, not twice", () => {
+    // emit() calls console AND the sink. Without the drain flag every
+    // debugLog would appear twice in the file.
+    expect(SINKSRC).toMatch(/if \(draining\) record\(level, args\);/);
+    expect(SINKSRC).toMatch(/draining = true;[\s\S]{0,200}?setDebugSink\(sink\);[\s\S]{0,120}?draining = false;/);
+  });
+
+  it("the console is patched BEFORE the replay, and restored on stop", () => {
+    const start = SINKSRC.slice(SINKSRC.indexOf("export function startDiagnosticsLog"));
+    expect(start.indexOf("patchConsole()")).toBeLessThan(start.indexOf("setDebugSink(sink)"));
+    expect(SINKSRC).toMatch(/export function stopDiagnosticsLog[\s\S]{0,160}?unpatchConsole\(\);/);
+  });
+
+  it("⛔ still silent in a store build — patching is inside the gate", () => {
+    const start = SINKSRC.slice(SINKSRC.indexOf("export function startDiagnosticsLog"));
+    expect(start.indexOf("if (!DEBUG_LOGS_ENABLED) return")).toBeLessThan(start.indexOf("patchConsole()"));
+  });
+
+  it("the [mobileTTS] lines this was built for are raw console calls", () => {
+    // If these ever move to debugLog the capture still works, but the
+    // premise of this whole block would have changed.
+    expect(SRC("src/lib/tts/mobileTTS.ts")).toMatch(/console\.log\(`\[mobileTTS\] speakMessage start lang=/);
   });
 });
