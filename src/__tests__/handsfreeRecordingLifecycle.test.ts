@@ -321,10 +321,43 @@ describe("defect 3: a microphone that hears nothing must give up quickly", () =>
     it("the hook's real constants match the numbers asserted above", () => {
         expect(HOOK_CODE).toMatch(/NO_SPEECH_GIVE_UP_MS = 10_000/);
         expect(HOOK_CODE).toMatch(/NO_CLEAR_SPEECH_GIVE_UP_MS = 20_000/);
+        // ⚠️ RE-POINTED, not relaxed. Both decisions below used to read
+        // `heardSpeechThisTurnRef.current === false` inline, in two places.
+        // That conflated "metered, and nothing reached the mic" with "this
+        // device reports no metering at all" — the second gets `false` too,
+        // and so collected the SHORT 10s give-up, cutting off a speaker the
+        // phone simply could not measure. The decision is now one exported
+        // function, `classifyTurnAudio`, and both callers ask it. Its own
+        // table lives in classifyTurnAudio.test.ts; what matters HERE is the
+        // wiring: that the short deadline is still reached by exactly one
+        // verdict, and that the upload decision agrees with the deadline.
         expect(HOOK_CODE).toMatch(
-            /deadline = heardSpeechThisTurnRef\.current === false\s*\? NO_SPEECH_GIVE_UP_MS[\s\S]{0,80}: NO_CLEAR_SPEECH_GIVE_UP_MS/);
+            /deadline = classifyTurnAudio\([\s\S]{0,160}?\) === "nothing-to-send"\s*\?\s*NO_SPEECH_GIVE_UP_MS[\s\S]{0,120}?:\s*NO_CLEAR_SPEECH_GIVE_UP_MS/);
         expect(HOOK_CODE).toMatch(/heardSpeechThisTurnRef\.current = autoStopOnSilenceRef\.current \? false : null/);
-        expect(HOOK_CODE).toMatch(/const heardNothing = heardSpeechThisTurnRef\.current === false/);
+        expect(HOOK_CODE).toMatch(/const heardNothing = audioVerdict === "nothing-to-send"/);
+
+        // ⛔ The old inline test must not come back in either decision — it is
+        // the bug, not a shorthand for it.
+        expect(HOOK_CODE).not.toMatch(/heardSpeechThisTurnRef\.current === false/);
+
+        // The metering-sample count is what distinguishes the two `false`
+        // cases, so it has to reach the function — a call that passed only
+        // the flag, or a literal, would compile and silently restore the old
+        // behaviour for that one decision.
+        //
+        // ⚠️ EVERY call site, not "at least one". Asserting a single match
+        // let a mutation that fed the DEADLINE a hard-coded 0 slip through,
+        // because the upload call still satisfied the pattern.
+        const callArgs = [...HOOK_CODE.matchAll(/(?<!function )classifyTurnAudio\(([\s\S]*?)\)/g)]
+            .map((m) => m[1].replace(/\/\/[^\n]*/g, "").replace(/\s+/g, " ").trim());
+        // Both decisions must consult the SAME function, or they can
+        // disagree: a turn whose audio is thrown away but whose deadline was
+        // generous, or the reverse. One of these is the deadline, one is the
+        // upload. (The lookbehind keeps the declaration out of the count.)
+        expect(callArgs.length).toBeGreaterThanOrEqual(2);
+        for (const args of callArgs) {
+            expect(args).toBe("heardSpeechThisTurnRef.current, meteringSamplesRef.current.length,");
+        }
     });
 
     it("the manual 60s cap is untouched — a pause mid-thought must not cut you off", () => {

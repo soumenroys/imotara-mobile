@@ -29,12 +29,25 @@ import { describe, it, expect } from "@jest/globals";
 import fs from "fs";
 import path from "path";
 import { looksLikeSpeech } from "../lib/voiceActivity";
+import { classifyTurnAudio } from "../hooks/useVoiceInput";
 
 const raw = (f: string) => fs.readFileSync(path.join(process.cwd(), f), "utf8");
 const V = "src/hooks/useVoiceInput.ts";
 
-/** Mirror of the gate, so the DECISION is asserted and not just its shape. */
-const heardNothing = (ref: boolean | null, sampleCount: number) => ref === false && sampleCount > 0;
+/**
+ * ⚠️ THIS WAS A MIRROR — a second copy of the gate, written here as
+ * `ref === false && sampleCount > 0`. It is now the REAL decision, imported.
+ *
+ * 🔑 Why that matters: a mirror can only ever agree with itself. When the
+ * hook's two call sites were unified behind `classifyTurnAudio`, this file's
+ * four behavioural tests kept passing against the copy, and only the one
+ * source-shape assertion below noticed anything had moved. A mirror that
+ * drifts is worse than no test, because it still reports green — the same
+ * mechanism that let the English→Gujarati threshold bug sit for six months
+ * behind a test asserting the broken behaviour.
+ */
+const heardNothing = (ref: boolean | null, sampleCount: number) =>
+  classifyTurnAudio(ref, sampleCount) === "nothing-to-send";
 
 describe("🔴 a device that never meters must still be transcribed", () => {
   it("⛔ metered, and genuinely quiet ⇒ skip the upload (unchanged)", () => {
@@ -56,10 +69,18 @@ describe("🔴 a device that never meters must still be transcribed", () => {
     expect(heardNothing(null, 40)).toBe(false);
   });
 
-  it("🔑 the SOURCE makes the same decision, not just this mirror", () => {
+  it("🔑 the SOURCE still routes the gate through that decision", () => {
+    // ⚠️ RE-POINTED, not relaxed. The first U8 fix wrote this decision inline
+    // as `heardSpeechThisTurnRef.current === false && everMetered`, and
+    // patched only the UPLOAD gate — the turn DEADLINE went on making the
+    // original mistake. Both now share the exported function, so the shape
+    // to pin is that the gate asks it and trusts its verdict.
     const s = raw(V);
-    expect(s).toMatch(/const everMetered = meteringSamplesRef\.current\.length > 0;/);
-    expect(s).toMatch(/const heardNothing = heardSpeechThisTurnRef\.current === false && everMetered;/);
+    expect(s).toMatch(/const audioVerdict = classifyTurnAudio\(/);
+    expect(s).toMatch(/const heardNothing = audioVerdict === "nothing-to-send";/);
+    // ⛔ Neither spelling of the old inline test may return.
+    expect(s).not.toMatch(/heardSpeechThisTurnRef\.current === false/);
+    expect(s).not.toMatch(/const everMetered =/);
   });
 });
 

@@ -166,6 +166,43 @@ function isRetryableTranscriptionError(err: unknown): boolean {
     return status === 408 || status === 429 || status >= 500;
 }
 
+/**
+ * 🔴 DID WE ACTUALLY LISTEN, OR DID WE JUST FAIL TO MEASURE?
+ *
+ * `heardSpeechThisTurnRef` is `false` in two completely different situations:
+ *
+ *   a) we metered the whole turn and never crossed the speech floor
+ *      -> there is genuinely nothing in this recording
+ *   b) the device never reported `metering` at ALL, so the status callback
+ *      returned on its first line every time and the ref was never raised
+ *      -> we know NOTHING about whether anyone spoke
+ *
+ * Treating (b) as (a) is what made hands-free discard real speech on devices
+ * that do not meter: the audio was never uploaded, the turn reported empty,
+ * the mic reopened, and the person talked into a void. (U8, 2026-10-09.)
+ *
+ * 🔑 A zero-length sample buffer separates them: samples are pushed ONLY when
+ * `metering` really is a number.
+ *
+ * ⚠️ EXPORTED AND PURE ON PURPOSE. Inline in a 600-line hook this could only
+ * ever be checked by reading it, or by owning a phone that does not meter.
+ * Now it can be tested exhaustively on any machine, which is the difference
+ * between "believed correct" and "known correct".
+ */
+export type TurnAudioVerdict = "nothing-to-send" | "unknown" | "heard-speech";
+
+export function classifyTurnAudio(
+    heardSpeech: boolean | null,
+    meteringSampleCount: number,
+): TurnAudioVerdict {
+    // null = we were not metering at all (a manual recording). Always upload.
+    if (heardSpeech === null) return "unknown";
+    if (heardSpeech) return "heard-speech";
+    // false, but we never got a single reading — that is (b), not (a).
+    if (meteringSampleCount === 0) return "unknown";
+    return "nothing-to-send";
+}
+
 async function transcribeAudio(
     uri: string,
     apiBaseUrl: string,
@@ -357,8 +394,11 @@ export function useVoiceInput(
             // ✅ The sibling gate already got this right: looksLikeSpeech([])
             // returns true, so `steadyNoise` fails open on an empty buffer.
             // This makes the two gates agree.
-            const everMetered = meteringSamplesRef.current.length > 0;
-            const heardNothing = heardSpeechThisTurnRef.current === false && everMetered;
+            const audioVerdict = classifyTurnAudio(
+                heardSpeechThisTurnRef.current,
+                meteringSamplesRef.current.length,
+            );
+            const heardNothing = audioVerdict === "nothing-to-send";
             // A room making noise, rather than a person talking. Only ever
             // applied to hands-free, which is the mode that opens the mic on
             // its own and so is the only one that records rooms; a manual
@@ -566,9 +606,21 @@ export function useVoiceInput(
                 // mid-sentence never cuts anybody off.
                 let deadline = maxDurationMs;
                 if (autoStopOnSilenceRef.current && !hasSpokenRef.current) {
-                    deadline = heardSpeechThisTurnRef.current === false
-                        ? NO_SPEECH_GIVE_UP_MS          // nothing reached the mic at all
-                        : NO_CLEAR_SPEECH_GIVE_UP_MS;   // noise, or someone very quiet
+                    // ⚠️ THE SAME CONFLATION LIVED HERE TOO, and the first U8
+                    // fix missed it: a device that never meters was given the
+                    // SHORT "nothing reached the mic" deadline and cut off
+                    // mid-sentence after 10s. It belongs in the "we cannot
+                    // tell" bucket, which is the longer one.
+                    //
+                    // ⛔ On a device that DOES meter nothing changes at all:
+                    // the sample buffer is non-empty, so the verdict is
+                    // "nothing-to-send" exactly as before.
+                    deadline = classifyTurnAudio(
+                        heardSpeechThisTurnRef.current,
+                        meteringSamplesRef.current.length,
+                    ) === "nothing-to-send"
+                        ? NO_SPEECH_GIVE_UP_MS          // metered, and nothing reached the mic
+                        : NO_CLEAR_SPEECH_GIVE_UP_MS;   // noise, someone very quiet, or no metering
                 }
                 if (elapsed >= deadline || elapsed >= maxDurationMs) {
                     void stopRecordingRef.current();
