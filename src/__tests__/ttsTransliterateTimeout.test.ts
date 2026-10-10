@@ -107,7 +107,13 @@ describe("the stage timings needed for the on-device session", () => {
     });
 
     it("logs it once, on the first chunk only", () => {
-        const block = src.slice(src.indexOf("TIME TO FIRST SOUND") - 300, src.indexOf("TIME TO FIRST SOUND"));
+        // ⚠️ Anchor on the console.log ITSELF, not on any mention of the
+        // phrase. A comment elsewhere in the file now quotes "TIME TO FIRST
+        // SOUND", and indexOf found that first — slicing a window that never
+        // contained the guard. The guarantee is unchanged.
+        const at = src.indexOf("console.log(`[mobileTTS] TIME TO FIRST SOUND");
+        expect(at).toBeGreaterThan(-1);
+        const block = src.slice(at - 300, at);
         expect(block).toMatch(/if \(i === 0\) \{/);
     });
 });

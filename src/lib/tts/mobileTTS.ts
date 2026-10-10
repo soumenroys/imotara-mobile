@@ -445,12 +445,26 @@ async function fetchChunkAudio(
     accessToken: string | undefined,
     signal: AbortSignal,
     emotion?: string,
+    // 🔑 WHICH CHUNK OF THE REPLY THIS IS. The anonymous daily quota counts
+    // requests, and a reply is 3-4 requests — so "15 a day" delivered three
+    // to five spoken replies, after which the voice silently became the
+    // device one. Reported 2026-10-10. The server now counts only chunk 0,
+    // making the limit mean replies.
+    //
+    // ⚖️ Omitting it is SAFE, not cheaper: the server counts a request with
+    // no chunkIndex exactly as before, which is what every build already in
+    // the wild does.
+    chunkIndex?: number,
 ): Promise<ArrayBuffer> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
     const res = await fetch(
         `${apiBase()}/api/tts`,
-        { method: "POST", headers, body: JSON.stringify({ text, lang, gender: gender ?? "neutral", ...(emotion ? { emotion } : {}) }), signal },
+        { method: "POST", headers, body: JSON.stringify({
+            text, lang, gender: gender ?? "neutral",
+            ...(emotion ? { emotion } : {}),
+            ...(typeof chunkIndex === "number" ? { chunkIndex } : {}),
+        }), signal },
     );
     if (!res.ok) throw new Error(`TTS API ${res.status}`);
     return res.arrayBuffer();
@@ -713,13 +727,13 @@ export async function speakMessage(
     // 🔑 Same shape as web's armedSignal() (chat/page.tsx), deliberately: web
     // was given this pattern tonight precisely so it would not inherit this
     // bug, and the two platforms should not drift again.
-    const armedFetchOnce = (chunkText: string): Promise<ArrayBuffer> => {
+    const armedFetchOnce = (chunkText: string, chunkIndex: number): Promise<ArrayBuffer> => {
         const child = new AbortController();
         const onParentAbort = () => child.abort();
         if (controller.signal.aborted) child.abort();
         else controller.signal.addEventListener("abort", onParentAbort);
         const t = setTimeout(() => { timedOut = true; child.abort(); }, CHUNK_FETCH_TIMEOUT_MS);
-        return fetchChunkAudio(chunkText, lang, gender, accessToken, child.signal, emotion)
+        return fetchChunkAudio(chunkText, lang, gender, accessToken, child.signal, emotion, chunkIndex)
             .finally(() => {
                 clearTimeout(t);
                 controller.signal.removeEventListener("abort", onParentAbort);
@@ -756,9 +770,9 @@ export async function speakMessage(
      * happen at 20s. Reply quality is the protected surface here, and the
      * device voice is the degraded outcome this exists to avoid.
      */
-    const armedFetch = async (chunkText: string): Promise<ArrayBuffer> => {
+    const armedFetch = async (chunkText: string, chunkIndex: number): Promise<ArrayBuffer> => {
         try {
-            return await armedFetchOnce(chunkText);
+            return await armedFetchOnce(chunkText, chunkIndex);
         } catch (err) {
             // Not our timer, or the turn is already over — do not retry.
             if (!timedOut || myGen !== _generation || controller.signal.aborted) throw err;
@@ -767,7 +781,9 @@ export async function speakMessage(
                 `(cold start?) — retrying once before dropping to the device voice`,
             );
             timedOut = false;   // the retry gets its own verdict
-            return await armedFetchOnce(chunkText);
+            // ⚠️ Same index: a retry is the SAME chunk of the SAME reply, so it
+            // must not be counted as a second reply against the quota.
+            return await armedFetchOnce(chunkText, chunkIndex);
         }
     };
 
@@ -850,7 +866,7 @@ export async function speakMessage(
         const PREFETCH_DEPTH = 2;
         const queue: Promise<ArrayBuffer>[] = [];
         for (let i = 0; i < Math.min(PREFETCH_DEPTH, chunks.length); i++) {
-            queue.push(armedFetch(chunks[i]));
+            queue.push(armedFetch(chunks[i], i));
         }
 
         for (let i = 0; i < chunks.length; i++) {
@@ -863,7 +879,7 @@ export async function speakMessage(
             if (myGen !== _generation) return;
 
             const nextIndex = i + PREFETCH_DEPTH;
-            if (nextIndex < chunks.length) queue.push(armedFetch(chunks[nextIndex]));
+            if (nextIndex < chunks.length) queue.push(armedFetch(chunks[nextIndex], nextIndex));
 
             // Alternate filenames so writing the prefetched next chunk never
             // clobbers the file the previous chunk might still be playing.

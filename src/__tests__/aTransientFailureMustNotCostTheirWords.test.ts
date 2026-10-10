@@ -90,7 +90,10 @@ describe("🔴 U2 — one slow chunk no longer kills the rest of the reply", () 
 
   it("each chunk fetch gets its OWN controller", () => {
     expect(s).toMatch(/const child = new AbortController\(\);/);
-    expect(s).toMatch(/fetchChunkAudio\(chunkText, lang, gender, accessToken, child\.signal, emotion\)/);
+    // ⚠️ RE-POINTED: the call grew a `chunkIndex` argument so the quota can
+    // count replies instead of chunks. The guarantee here is unchanged —
+    // the fetch is handed the CHILD signal, not the shared one.
+    expect(s).toMatch(/fetchChunkAudio\(chunkText, lang, gender, accessToken, child\.signal, emotion, chunkIndex\)/);
   });
 
   it("⛔ the timer aborts the CHILD, not the shared controller", () => {
