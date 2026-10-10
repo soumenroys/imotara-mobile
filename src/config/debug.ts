@@ -70,11 +70,49 @@ const envOverride = parseBool(
 export const DEBUG_UI_ENABLED: boolean =
   typeof envOverride === "boolean" ? envOverride : __DEV__;
 
-export function debugLog(...args: any[]) {
-  // Allow logs ONLY when explicitly enabled via env in production.
-  if (IS_PROD && envOverride !== true) return;
+/**
+ * Read the separate logging override.
+ *
+ * 🔴 WHY THIS IS NOT THE SAME FLAG. On 2026-10-10 a failure was reported from
+ * a real iPhone — the reply fell back to on-device mode and the app claimed it
+ * had gone offline — and there was NOTHING to diagnose it with. debugLog and
+ * debugWarn are no-ops in a production build unless
+ * EXPO_PUBLIC_IMOTARA_DEBUG_UI is set, and no EAS profile sets it, so
+ * `remoteStatus` (the one number that would have named the failure) was
+ * computed and discarded on every device build ever shipped.
+ *
+ * ⚠️ But EXPO_PUBLIC_IMOTARA_DEBUG_UI cannot simply be switched on: it also
+ * renders debug-only UI — a panel in HistoryScreen, compatibility metadata on
+ * chat bubbles. Turning that on for test builds would change what the person
+ * testing actually sees, which makes the test less like the real thing.
+ *
+ * 🔑 So logging is its own switch. When it is unset, behaviour is EXACTLY what
+ * it was: DEBUG_UI_ENABLED alone decided whether logs appeared (in production
+ * that flag is only true when the override is true, which made the old
+ * IS_PROD check redundant).
+ *
+ * ⛔ Never enable this for the production or TestFlight profiles. These logs
+ * include reply text, which is the person's own conversation. It stays on the
+ * device — nothing is uploaded — but there is no reason for a store build to
+ * write it to the system log at all.
+ */
+const logsOverride = parseBool(
+  process?.env?.EXPO_PUBLIC_IMOTARA_DEBUG_LOGS ??
+    process?.env?.IMOTARA_DEBUG_LOGS,
+);
 
-  if (DEBUG_UI_ENABLED) {
+/**
+ * Whether debugLog / debugWarn write anything.
+ *
+ * Resolution order:
+ * 1. EXPO_PUBLIC_IMOTARA_DEBUG_LOGS, when set   ✅ logs WITHOUT debug UI
+ * 2. DEBUG_UI_ENABLED — the previous behaviour, unchanged
+ */
+export const DEBUG_LOGS_ENABLED: boolean =
+  typeof logsOverride === "boolean" ? logsOverride : DEBUG_UI_ENABLED;
+
+export function debugLog(...args: any[]) {
+  if (DEBUG_LOGS_ENABLED) {
     // eslint-disable-next-line no-console
     console.log(...args);
   }
@@ -84,10 +122,7 @@ export function debugLog(...args: any[]) {
  * Optional helper for gated warnings.
  */
 export function debugWarn(...args: any[]) {
-  // Allow warns ONLY when explicitly enabled via env in production.
-  if (IS_PROD && envOverride !== true) return;
-
-  if (DEBUG_UI_ENABLED) {
+  if (DEBUG_LOGS_ENABLED) {
     // eslint-disable-next-line no-console
     console.warn(...args);
   }
