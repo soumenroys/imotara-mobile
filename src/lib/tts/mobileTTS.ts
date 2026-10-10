@@ -713,7 +713,7 @@ export async function speakMessage(
     // 🔑 Same shape as web's armedSignal() (chat/page.tsx), deliberately: web
     // was given this pattern tonight precisely so it would not inherit this
     // bug, and the two platforms should not drift again.
-    const armedFetch = (chunkText: string): Promise<ArrayBuffer> => {
+    const armedFetchOnce = (chunkText: string): Promise<ArrayBuffer> => {
         const child = new AbortController();
         const onParentAbort = () => child.abort();
         if (controller.signal.aborted) child.abort();
@@ -726,12 +726,88 @@ export async function speakMessage(
             });
     };
 
+    /**
+     * 🔴 ONE RETRY ON OUR OWN TIMEOUT, BEFORE SURRENDERING THE GOOD VOICE.
+     *
+     * Reported from a physical iPhone 2026-10-10: the FIRST tap on the
+     * speaker produced an almost inaudible reply, and tapping again gave a
+     * loud, correct one. The device log says exactly why:
+     *
+     *   08:09:32  speakMessage start lang=en textLen=514 chunks=3
+     *   08:09:53  Azure TTS failed, falling back to native: AbortError   <- 21s
+     *   08:10:28  speakMessage start lang=en   (the person pressing again)
+     *   08:10:31  chunk 1/3 fetched in 2806ms                            <- 2.8s
+     *
+     * A cold Vercel function plus Azure synthesis exceeded the 20s ceiling,
+     * so the first play fell back to the DEVICE voice — quieter, flatter, and
+     * not the companion's gender. The second attempt hit a warm function and
+     * took 2.8 seconds.
+     *
+     * 🔑 The person had already found the fix by hand: press it again. This
+     * does that once, automatically, because by then the function is warm —
+     * which is precisely why their second press worked.
+     *
+     * ⛔ ONLY on our own timeout. A user stop bumps _generation and is
+     * handled before this; an HTTP error means the server answered and would
+     * answer the same way again, so retrying it would only add latency to a
+     * genuine outage.
+     *
+     * ⚖️ Worst case is one extra wait before the native fallback that used to
+     * happen at 20s. Reply quality is the protected surface here, and the
+     * device voice is the degraded outcome this exists to avoid.
+     */
+    const armedFetch = async (chunkText: string): Promise<ArrayBuffer> => {
+        try {
+            return await armedFetchOnce(chunkText);
+        } catch (err) {
+            // Not our timer, or the turn is already over — do not retry.
+            if (!timedOut || myGen !== _generation || controller.signal.aborted) throw err;
+            console.warn(
+                `[mobileTTS] chunk fetch hit the ${CHUNK_FETCH_TIMEOUT_MS}ms ceiling ` +
+                `(cold start?) — retrying once before dropping to the device voice`,
+            );
+            timedOut = false;   // the retry gets its own verdict
+            return await armedFetchOnce(chunkText);
+        }
+    };
+
     // Stage timings. "TTS takes 30-40 seconds" (intern feedback item A) was
     // reported without any way to tell WHICH stage was slow, and the answer
     // needs a real device — the emulator's network and audio stack are not a
     // fair proxy. These logs make that session a reading exercise rather than
     // an exploratory one: filter logcat for [mobileTTS].
     const tSpeakStart = Date.now();
+
+    // 🔴 LEAVE THE RECORDING ROUTE **BEFORE** THE FIRST SOUND IS FETCHED.
+    //
+    // Reported from a physical iPhone 2026-10-10, two symptoms, one cause:
+    //   "only first time pressing the speaker is always very faint to hear"
+    //   "during the reading of the whole text, the voice is getting changed
+    //    in the midway"
+    //
+    // The person had SPOKEN first. Voice input leaves the iOS audio session in
+    // playAndRecord, and iOS routes playback in that category to the RECEIVER
+    // (the earpiece) — which is exactly "very faint" with the volume at
+    // maximum. playChunkAndWait does set allowsRecordingIOS:false, but it does
+    // so immediately before createAsync, giving iOS no time to move the route,
+    // so chunk 1 comes out of the earpiece. By a later chunk the switch has
+    // landed and the speaker takes over — heard as the voice CHANGING
+    // mid-message, which is the second symptom.
+    //
+    // 🔑 Doing it here, before the first network fetch, gives the route the
+    // whole synthesis wait (~2.8s measured on that device) to settle. The
+    // per-chunk call stays as a guard for anything that re-enters recording
+    // mid-reply; this one makes the FIRST chunk right.
+    //
+    // ⛔ Never throws: audio mode is a best-effort hint, and failing to set it
+    // must not cost the person their reply.
+    await Audio.setAudioModeAsync({
+        allowsRecordingIOS:         false,
+        playsInSilentModeIOS:       true,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground:    true,
+    }).catch(() => {});
+
     let cleanText = stripMarkdown(text);
     // Romanized-Indic-input TTS pronunciation fix — see
     // transliterateIfNeeded's doc comment above. Runs once here, before

@@ -275,6 +275,28 @@ export async function recoverFromFailedStart(
     return (await io.isPermissionGranted()) ? "generic-error" : "permission-blocked";
 }
 
+/**
+ * Which script the transcript came back in — the one thing that says whether
+ * the language hint worked, without logging the person's whole sentence.
+ */
+function scriptOf(text: string): string {
+    if (/[\u0980-\u09FF]/.test(text)) return "bengali";
+    if (/[\u0900-\u0963\u0966-\u097F]/.test(text)) return "devanagari";
+    if (/[\u0B80-\u0BFF]/.test(text)) return "tamil";
+    if (/[\u0C00-\u0C7F]/.test(text)) return "telugu";
+    if (/[\u0A80-\u0AFF]/.test(text)) return "gujarati";
+    if (/[\u0A00-\u0A7F]/.test(text)) return "gurmukhi";
+    if (/[\u0C80-\u0CFF]/.test(text)) return "kannada";
+    if (/[\u0D00-\u0D7F]/.test(text)) return "malayalam";
+    if (/[\u0B00-\u0B7F]/.test(text)) return "odia";
+    if (/[\u0600-\u06FF]/.test(text)) return "arabic";
+    if (/[\u0590-\u05FF]/.test(text)) return "hebrew";
+    if (/[\u3040-\u30FF]/.test(text)) return "kana";
+    if (/[\u4E00-\u9FFF]/.test(text)) return "cjk";
+    if (/[\u0400-\u04FF]/.test(text)) return "cyrillic";
+    return "latin";
+}
+
 async function transcribeAudio(
     uri: string,
     apiBaseUrl: string,
@@ -491,7 +513,18 @@ export function useVoiceInput(
                     // All presets produce MPEG_4/AAC/.m4a on both platforms.
                     // (Android LOW_QUALITY is overridden at record time to avoid
                     // THREE_GPP/3gp which Whisper v1 does not accept.)
+                    // 🔴 LOG THE HINT AND THE RESULT. Reported 2026-10-10 from
+                    // a physical iPhone: spoke Bengali, got Hindi text and a
+                    // Hindi reply. The device log could not say whether we had
+                    // TOLD Whisper "hi", or sent "auto" and Whisper guessed
+                    // wrong — and those need opposite fixes. One line makes the
+                    // next report answerable instead of inferred.
+                    console.log(`[useVoiceInput] transcribe hint=${langRef.current}`);
                     transcript = await transcribeAudio(uri, apiBaseUrl!, langRef.current, "audio/m4a", accessTokenRef.current, companionNameRef.current);
+                    console.log(
+                        `[useVoiceInput] transcript script=${scriptOf(transcript)} ` +
+                        `len=${transcript.length} head=${JSON.stringify(transcript.slice(0, 40))}`,
+                    );
                 } catch (err: any) {
                     console.warn("[useVoiceInput] Transcription failed:", err);
                     // Same abandonment check as below — without it this alert
