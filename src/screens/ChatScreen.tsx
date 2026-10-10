@@ -3864,7 +3864,36 @@ export default function ChatScreen() {
 
           let remote: any = { ok: false, replyText: "" };
 
-          if (wantsCloud && isOnline) {
+          // 🔴 DO NOT GATE THE CLOUD ATTEMPT ON THE CONNECTIVITY PROBE.
+          //
+          // This used to read `wantsCloud && isOnline`, and that single `&&`
+          // was the difference between a real reply and an on-device one.
+          //
+          // ⚠️ `isOnline` comes from NetInfo, and ON iOS THAT IS A PROBE —
+          // a fetch of /api/health with a timeout (online.ts explains why
+          // Android uses the native signal and iOS does not). A slow network,
+          // a Vercel blip or a cold start makes that probe time out, NetInfo
+          // reports "offline", and every reply silently became a template-
+          // grade on-device answer while the network was perfectly fine.
+          // Observed on the iOS simulator 2026-10-10: the banner read
+          // "You're offline — will reply using on-device mode" while the same
+          // machine was serving cloud replies to curl.
+          //
+          // 🔑 online.ts ALREADY SAYS THIS IS THE EXPENSIVE ERROR:
+          //   "a false 'offline' -> the person silently gets a degraded
+          //    on-device reply when the real one was available. Reply quality
+          //    is a protected surface."
+          //   "the honest test of 'can we reach the cloud' is the actual
+          //    request, which already falls back on its own."
+          // The gate contradicted the reasoning in its own dependency.
+          //
+          // ⚖️ Costs nothing when the device is GENUINELY offline:
+          // fetchWithTimeout calls isDefinitelyOffline() on its first line and
+          // throws OfflineError IMMEDIATELY — no socket, no timeout, no wait.
+          // The local reply arrives just as fast as before, the offline banner
+          // still shows, and the "Couldn't connect" toast stays suppressed
+          // (it is still guarded by `isOnline`).
+          if (wantsCloud) {
             // ── Streaming path (fast perceived response) ──────────────────────
             streamingMsgIdRef.current = null;
             let streamedText = "";
