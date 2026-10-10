@@ -268,8 +268,17 @@ export function detectLangFromScript(message: string): string {
   if (/[\u067E\u0686\u0688\u0691\u0679\u06AF\u06A9\u06BA\u06D2\u06D3]/.test(message)) return "ur";
   if (/[\u0600-\u06FF]/.test(message)) return "ar";        // Arabic
   if (/[\u0400-\u04FF]/.test(message)) return "ru";        // Russian/Cyrillic
-  if (/[\u4E00-\u9FFF]/.test(message)) return "zh";        // Chinese
-  if (/[\u3040-\u30FF]/.test(message)) return "ja";        // Japanese
+  // 🔴 KANA BEFORE KANJI. Kana (\u3040-\u30FF) is unique to Japanese; the CJK
+  // ideographs below are SHARED between the two languages. Testing Chinese
+  // first meant any ordinary Japanese sentence — which nearly always mixes
+  // kanji with kana — was classified as Chinese.
+  //
+  // ⚠️ "今日は気分が悪い" returned "zh". This feeds resolveReplyLang, so a
+  // Japanese speaker with no stated language was answered IN CHINESE.
+  // Found 2026-10-10 while testing the script detector on the web side,
+  // which had the identical ordering.
+  if (/[\u3040-\u30FF]/.test(message)) return "ja";        // Japanese (kana — unambiguous)
+  if (/[\u4E00-\u9FFF]/.test(message)) return "zh";        // Chinese (CJK ideographs — shared)
   return "en";
 }
 
