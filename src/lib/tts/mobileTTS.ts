@@ -24,6 +24,7 @@ import * as Speech        from "expo-speech";
 import { Audio }          from "expo-av";
 import { File, Paths }    from "expo-file-system";
 import { fetchWithTimeout } from "../fetchWithTimeout";
+import { detectLangFromRomanHints } from "../../api/aiClient";
 
 // ── BCP-47 map ────────────────────────────────────────────────────────────────
 // Only consulted for the on-device native-fallback path (Azure request
@@ -178,7 +179,33 @@ export function detectMessageLang(text: string, fallbackLang: string): string {
         const count = text.match(re)?.length ?? 0;
         if (count > 0 && (!best || count > best.count)) best = { lang, count };
     }
-    if (!best) return fallbackLang; // pure Latin script — trust the app setting
+    if (!best) {
+        // 🔴 PURE LATIN IS NOT PROOF OF ENGLISH. The companion frequently
+        // replies in ROMANIZED Indic — "Hu saaru chhu, tane shanti male evi
+        // shubhkamna" is Gujarati written in Latin letters — and this used to
+        // fall straight through to the app setting.
+        //
+        // ⚠️ That setting is `concreteLang(preferredLang)`, which maps "auto"
+        // AND an unset preference to "en". So for anyone who has not picked a
+        // language, every romanized reply was read aloud BY AN ENGLISH VOICE
+        // speaking Gujarati words — and because the language came out as "en"
+        // it also skipped transliteration, so Azure never saw native script
+        // either. Observed on Android 2026-10-10:
+        //     [mobileTTS] speakMessage start lang=en ... transliterate=0ms
+        // on a reply that was entirely Gujarati.
+        //
+        // 🔑 The WEB app already does this — resolveTTSLang consults the
+        // roman-hint detector before the profile setting, precisely because
+        // that setting "is frequently stale/unset". Same decision, two
+        // copies, and only one of them had been fixed.
+        //
+        // ⚖️ An explicit choice still wins: this only runs when script
+        // detection found nothing, and the detector returns "en" for genuine
+        // English, so English replies are unaffected.
+        const fromRoman = detectLangFromRomanHints(text);
+        if (fromRoman && fromRoman !== "en") return fromRoman;
+        return fallbackLang; // genuinely English-looking — trust the app setting
+    }
 
     if (best.lang === "hi") {
         if (MARATHI_HINT.test(text)) return "mr";
