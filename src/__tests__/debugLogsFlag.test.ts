@@ -212,3 +212,52 @@ describe("the status that was being discarded is actually logged", () => {
     expect(src).toMatch(/remoteStatus/);
   });
 });
+
+describe("🔴 the flag must survive Expo's build-time env inlining", () => {
+  const SRC = fs.readFileSync(
+    path.join(process.cwd(), "src/config/debug.ts"), "utf8");
+
+  it("⛔ EXPO_PUBLIC_ vars are read with PLAIN member access, never `?.`", () => {
+    // Measured 2026-10-10 on a Release simulator build. Expo's babel plugin
+    // replaces the member expression `process.env.EXPO_PUBLIC_*` with a
+    // literal at BUILD time; it does not transform the
+    // OptionalMemberExpression that `?.` produces. The optional-chained form
+    // therefore survives as a runtime lookup into `process.env`, which is not
+    // populated in a release Hermes bundle — so it reads `undefined` always.
+    //
+    // 🔑 Both flags here were written with `?.`, which made them inert in
+    // every release build ever shipped, and made the eas.json change that
+    // enables logging for the `internal` profile do nothing.
+    expect(SRC).not.toMatch(/process\s*\?\.\s*env\s*\?\.\s*EXPO_PUBLIC_/);
+    expect(SRC).not.toMatch(/process\.env\s*\?\.\s*EXPO_PUBLIC_/);
+    expect(SRC).toMatch(/process\.env\.EXPO_PUBLIC_IMOTARA_DEBUG_UI/);
+    expect(SRC).toMatch(/process\.env\.EXPO_PUBLIC_IMOTARA_DEBUG_LOGS/);
+  });
+
+  it("the NON-prefixed legacy names keep optional chaining", () => {
+    // Expo only inlines the EXPO_PUBLIC_ prefix, so these stay real runtime
+    // lookups and must not assume `process.env` exists.
+    expect(SRC).toMatch(/process\s*\?\.\s*env\s*\?\.\s*IMOTARA_DEBUG_UI/);
+    expect(SRC).toMatch(/process\s*\?\.\s*env\s*\?\.\s*IMOTARA_DEBUG_LOGS/);
+  });
+
+  it("⛔ no OTHER file reads an EXPO_PUBLIC var through optional chaining", () => {
+    // The same mistake anywhere else would silently disable that feature in
+    // release while working perfectly in dev — the worst shape of bug.
+    const root = path.join(process.cwd(), "src");
+    const bad: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) { if (e.name !== "__tests__") walk(full); continue; }
+        if (!/\.tsx?$/.test(e.name)) continue;
+        const t = fs.readFileSync(full, "utf8");
+        if (/process\s*\?\.\s*env\s*\?\.\s*EXPO_PUBLIC_|process\.env\s*\?\.\s*EXPO_PUBLIC_/.test(t)) {
+          bad.push(path.relative(process.cwd(), full));
+        }
+      }
+    };
+    walk(root);
+    expect(bad).toEqual([]);
+  });
+});

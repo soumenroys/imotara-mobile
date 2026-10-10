@@ -55,8 +55,28 @@ export const IS_PROD = !__DEV__;
  */
 const envOverride = parseBool(
   // Expo public env (preferred)
-  process?.env?.EXPO_PUBLIC_IMOTARA_DEBUG_UI ??
-    // Fallback for older setups
+  //
+  // 🔴 PLAIN MEMBER ACCESS, NOT `process?.env?.`. Measured 2026-10-10 against
+  // a Release simulator build: Expo's babel plugin replaces the member
+  // expression `process.env.EXPO_PUBLIC_*` with a literal at BUILD time, and
+  // it does not transform the OptionalMemberExpression that `?.` produces. So
+  // the optional-chained form survives into the bundle as a runtime property
+  // lookup — and `process.env` is not populated at runtime in a release
+  // Hermes bundle, so it read `undefined` every time.
+  //
+  // ⚠️ That means this flag has NEVER worked in a release build. It was
+  // written defensively and the defensiveness is what broke it.
+  //
+  // 🔑 The A/B that showed it, inside one bundle: config/api.ts reads
+  // `process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL` plainly, and the URL really
+  // did change when the build env changed; these two read with `?.` and
+  // produced no logs at all under the same build.
+  //
+  // ⛔ Do not "harden" this back to `process?.env?.` — that is the bug.
+  // After inlining there is no runtime lookup left to be unsafe.
+  process.env.EXPO_PUBLIC_IMOTARA_DEBUG_UI ??
+    // Fallback for older setups. This one is NOT inlined (Expo only inlines
+    // the EXPO_PUBLIC_ prefix), so it stays a runtime lookup and keeps `?.`.
     process?.env?.IMOTARA_DEBUG_UI,
 );
 
@@ -97,7 +117,11 @@ export const DEBUG_UI_ENABLED: boolean =
  * write it to the system log at all.
  */
 const logsOverride = parseBool(
-  process?.env?.EXPO_PUBLIC_IMOTARA_DEBUG_LOGS ??
+  // ⛔ Plain member access — see the note on envOverride above. Written with
+  // `?.` first, which silently made this entire flag inert: the eas.json
+  // change that sets it for the `internal` profile had no effect at all, and
+  // the "device builds are now diagnosable" claim was false.
+  process.env.EXPO_PUBLIC_IMOTARA_DEBUG_LOGS ??
     process?.env?.IMOTARA_DEBUG_LOGS,
 );
 
