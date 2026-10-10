@@ -203,6 +203,78 @@ export function classifyTurnAudio(
     return "nothing-to-send";
 }
 
+/**
+ * Undo a half-started recording.
+ *
+ * 🔴 WHY THIS IS A FUNCTION. Found on a real iPhone 2026-09-16: an alert
+ * reading "Could not start recording" while the composer showed "Recording…
+ * 6s" in red and the iOS orange microphone dot was lit — the device syslog
+ * confirmed the mic was genuinely live. `createAsync` resolves, recordingRef
+ * is set, setState("recording") runs and the timer starts, and THEN any of
+ * setProgressUpdateInterval / setOnRecordingStatusUpdate / setInterval can
+ * throw. The recovery used to undo none of it.
+ *
+ * That recovery only runs when a native call fails mid-setup, which cannot be
+ * provoked by using the app — so it was shipped on the strength of reading it.
+ * As an injectable function its every step is assertable on any machine.
+ *
+ * ⛔ THE ORDER IS LOAD-BEARING, not stylistic:
+ *   1. clear the timer   — or it fires against a recorder that is being torn
+ *                          down and calls stop again
+ *   2. unload the recorder, THEN restore the audio mode. Setting
+ *      allowsRecordingIOS:false while a recording is still running is itself
+ *      suspected of producing the original Android report: a red indicator
+ *      over a microphone that captures nothing.
+ *   3. delete the partial file — stopAndUnloadAsync releases the recorder but
+ *      leaves the .m4a on disk, so without this every failed start would
+ *      leave a voice recording in the cache forever.
+ *
+ * Returns which alert the caller should raise; it raises none itself, so the
+ * decision is testable without a UI.
+ */
+export type FailedStartRecovery = "permission-blocked" | "generic-error";
+
+export interface FailedStartIO {
+    clearTimer: () => void;
+    /** Detaches the recorder from the hook and hands it over, or null. */
+    takeRecording: () => {
+        /** Resolves a RecordingStatus we deliberately ignore. */
+        stopAndUnload: () => Promise<unknown>;
+        /** Safe after an unload error: returns the cached path, no native call. */
+        getUri: () => string | null;
+    } | null;
+    /** setState("idle") + setDurationMs(0), so the button stays tappable. */
+    toIdle: () => void;
+    restoreAudioMode: () => void;
+    deleteFile: (uri: string) => void;
+    isPermissionGranted: () => Promise<boolean>;
+}
+
+export async function recoverFromFailedStart(
+    io: FailedStartIO,
+): Promise<FailedStartRecovery> {
+    io.clearTimer();
+
+    const partial = io.takeRecording();
+    if (partial) {
+        try {
+            await partial.stopAndUnload();
+        } catch {
+            /* already gone — carry on with the rest of the cleanup */
+        }
+        const partialUri = partial.getUri();
+        if (partialUri) io.deleteFile(partialUri);
+    }
+
+    io.toIdle();
+
+    // M-2: setAudioModeAsync may have succeeded before createAsync threw,
+    // leaving Android in DoNotMix mode. Restore it unconditionally.
+    io.restoreAudioMode();
+
+    return (await io.isPermissionGranted()) ? "generic-error" : "permission-blocked";
+}
+
 async function transcribeAudio(
     uri: string,
     apiBaseUrl: string,
@@ -631,49 +703,42 @@ export function useVoiceInput(
         } catch (err) {
             console.warn("[useVoiceInput] startRecording error:", err);
 
-            // Undo anything that DID succeed before the throw.
-            //
-            // Found on a real iPhone 2026-09-16: an alert reading "Could not
-            // start recording" appeared while the composer showed "Recording…
-            // 6s" in red and the iOS orange microphone dot was lit — the device
-            // syslog confirmed the mic was genuinely live. The cause was here:
-            // createAsync resolves, recordingRef is set, setState("recording")
-            // runs and the timer starts — and then ANY of the calls after that
-            // (setProgressUpdateInterval, setOnRecordingStatusUpdate,
-            // setInterval) can throw and land in this catch, which used to undo
-            // none of it. The old comment below claimed the state was "kept
-            // idle", which was only ever true when the throw beat
-            // setState("recording").
-            //
-            // Order matters: unload the recorder FIRST, then restore the audio
-            // mode. Setting allowsRecordingIOS:false while a recording is still
-            // running is itself suspected of producing the original Android
-            // report — a red indicator over a microphone that captures nothing.
-            clearTimer();
-            const partial = recordingRef.current;
-            recordingRef.current = null;
-            if (partial) {
-                try { await partial.stopAndUnloadAsync(); } catch { /* already gone */ }
-                // ...and take its file with it. stopAndUnloadAsync releases the
-                // recorder but leaves the .m4a on disk, so without this every
-                // failed start would leave a voice recording in the cache
-                // forever. getURI() is safe after an unload error — it returns
-                // the cached path string and makes no native call.
-                const partialUri = partial.getURI();
-                if (partialUri) FileSystem.deleteAsync(partialUri, { idempotent: true }).catch(() => {});
-            }
-            setState("idle");
-            setDurationMs(0);
+            // Undo anything that DID succeed before the throw. The sequence
+            // and its load-bearing ordering live in recoverFromFailedStart,
+            // where they are tested; this supplies the real collaborators.
+            const outcome = await recoverFromFailedStart({
+                clearTimer,
+                takeRecording: () => {
+                    const partial = recordingRef.current;
+                    recordingRef.current = null;
+                    if (!partial) return null;
+                    return {
+                        stopAndUnload: () => partial.stopAndUnloadAsync(),
+                        getUri: () => partial.getURI(),
+                    };
+                },
+                toIdle: () => {
+                    setState("idle");
+                    setDurationMs(0);
+                },
+                restoreAudioMode: () => {
+                    Audio.setAudioModeAsync({
+                        allowsRecordingIOS: false,
+                        interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+                        shouldDuckAndroid: true,
+                    }).catch(() => {});
+                },
+                deleteFile: (uri) => {
+                    FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+                },
+                isPermissionGranted: async () => {
+                    const { granted } = await Audio.getPermissionsAsync()
+                        .catch(() => ({ granted: false, canAskAgain: false }));
+                    return granted;
+                },
+            });
 
-            // M-2: setAudioModeAsync may have succeeded before createAsync threw,
-            // leaving Android in DoNotMix mode. Restore it unconditionally.
-            Audio.setAudioModeAsync({
-                allowsRecordingIOS: false,
-                interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-                shouldDuckAndroid: true,
-            }).catch(() => {});
-            const { granted } = await Audio.getPermissionsAsync().catch(() => ({ granted: false, canAskAgain: false }));
-            if (!granted) {
+            if (outcome === "permission-blocked") {
                 Alert.alert(
                     "Microphone access blocked",
                     "Imotara needs microphone access to use voice input. Please enable it in Settings.",

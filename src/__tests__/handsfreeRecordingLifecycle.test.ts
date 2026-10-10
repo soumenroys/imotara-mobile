@@ -104,9 +104,36 @@ describe("defect 1: the wiring", () => {
         return HOOK_CODE.slice(i, end);
     };
 
-    it("the catch unloads a recorder that did get created", () => {
-        expect(body()).toMatch(/recordingRef\.current/);
-        expect(body()).toMatch(/stopAndUnloadAsync/);
+    // ⚠️ RE-POINTED, not relaxed. The cleanup used to sit inline in this
+    // catch, so the only way to check it was to match its text. It now lives
+    // in the exported `recoverFromFailedStart`, where every step AND the
+    // order of the steps is asserted behaviourally, on any machine:
+    //
+    //     src/__tests__/failedStartRecovery.test.ts
+    //
+    // ⛔ Do not re-add text assertions for the ORDER here. One of them
+    // survived the extraction by accident — it compared the positions of
+    // `stopAndUnloadAsync` and `allowsRecordingIOS: false`, which after the
+    // move are two properties of an object literal whose order means
+    // nothing. A green test that can no longer fail for the right reason is
+    // worse than a red one. What belongs here is the WIRING: that the catch
+    // delegates, and that it hands over the real collaborators.
+
+    it("the catch delegates to the tested recovery, rather than improvising", () => {
+        expect(body()).toMatch(/await recoverFromFailedStart\(\{/);
+    });
+
+    it("…and the recovery it calls is the one that is actually tested", () => {
+        // A local helper of the same name would satisfy the assertion above.
+        expect(HOOK_CODE).toMatch(/export async function recoverFromFailedStart\(/);
+    });
+
+    it("the catch hands over a recorder it has DETACHED from the hook", () => {
+        // Handing over a recorder still on recordingRef would let a later
+        // turn find and re-stop the same one.
+        const b = body();
+        expect(b).toMatch(/const partial = recordingRef\.current;\s*\n\s*recordingRef\.current = null;/);
+        expect(b).toMatch(/stopAndUnload: \(\) => partial\.stopAndUnloadAsync\(\)/);
     });
 
     it("the catch takes the half-written recording FILE with it", () => {
@@ -114,26 +141,55 @@ describe("defect 1: the wiring", () => {
         // disk. Without this, every failed start left a voice recording in the
         // cache forever — found while auditing storage cleanup, 2026-09-16.
         const b = body();
-        expect(b).toMatch(/partial\.getURI\(\)/);
-        expect(b).toMatch(/FileSystem\.deleteAsync\(partialUri, \{ idempotent: true \}\)/);
+        expect(b).toMatch(/getUri: \(\) => partial\.getURI\(\)/);
+        expect(b).toMatch(
+            /deleteFile: \(uri\) => \{\s*\n\s*FileSystem\.deleteAsync\(uri, \{ idempotent: true \}\)/);
     });
 
     it("the catch clears the duration timer", () => {
-        expect(body()).toMatch(/clearTimer\(\)/);
+        // Passed as the real `clearTimer`, not a no-op stand-in.
+        expect(body()).toMatch(/^\s*clearTimer,$/m);
     });
 
     it("the catch puts the state back to idle", () => {
         // The old comment claimed the state was "kept idle" — true only when
         // the throw beat setState("recording"). After it, nothing reset it.
-        expect(body()).toMatch(/setState\("idle"\)/);
+        const b = body();
+        expect(b).toMatch(/toIdle: \(\) => \{\s*\n\s*setState\("idle"\);\s*\n\s*setDurationMs\(0\);/);
     });
 
-    it("the audio mode is restored AFTER the recorder is unloaded, not before", () => {
+    it("the audio mode really is restored, with recording switched off", () => {
         // Setting allowsRecordingIOS:false while a recording is still running
         // is itself suspected of breaking capture — the original "red but
-        // records nothing".
+        // records nothing". That it happens AFTER the unload is asserted in
+        // failedStartRecovery.test.ts, which can still fail for that reason.
+        //
+        // ⚠️ The call must be the collaborator's FIRST statement. A looser
+        // pattern let `restoreAudioMode: () => { if (0) Audio.setAudio...`
+        // through: the text was all still present, merely unreachable. Text
+        // matching cannot see reachability, and the behavioural test cannot
+        // help — it asserts that the FUNCTION calls its collaborator, which
+        // it still does when the collaborator is a no-op. Pinning the first
+        // statement is what actually closes that gap.
         const b = body();
-        expect(b.indexOf("stopAndUnloadAsync")).toBeLessThan(b.indexOf("allowsRecordingIOS: false"));
+        expect(b).toMatch(
+            /restoreAudioMode: \(\) => \{\s*\n\s*Audio\.setAudioModeAsync\(\{[\s\S]*?allowsRecordingIOS: false/);
+    });
+
+    it("the permission check is the real one, and drives which alert is shown", () => {
+        const b = body();
+        expect(b).toMatch(
+            /isPermissionGranted: async \(\) => \{\s*\n\s*const \{ granted \} = await Audio\.getPermissionsAsync\(\)/);
+        expect(b).toMatch(/if \(outcome === "permission-blocked"\)/);
+        expect(b).toMatch(/Microphone access blocked/);
+        expect(b).toMatch(/Could not start recording/);
+    });
+
+    it("⛔ the cleanup is not ALSO done inline — one owner, not two", () => {
+        // Two copies would drift, and the inline one is the untested one.
+        const b = body();
+        expect(b).not.toMatch(/setState\("idle"\);\s*\n\s*setDurationMs\(0\);\s*\n\s*\n?\s*\/\/ M-2/);
+        expect(b.match(/stopAndUnloadAsync/g)?.length).toBe(1);
     });
 });
 
