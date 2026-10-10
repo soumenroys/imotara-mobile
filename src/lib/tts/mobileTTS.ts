@@ -807,6 +807,15 @@ export async function speakMessage(
         playThroughEarpieceAndroid: false,
         staysActiveInBackground:    true,
     }).catch(() => {});
+    // 🔑 The SETTLE GAP, which is the whole point of doing this here. iOS
+    // moves the output route asynchronously, so what matters is how long it
+    // gets before the first sound. Pair this with "TIME TO FIRST SOUND"
+    // below: that difference is the settle time the route actually had.
+    //
+    // ⚠️ This cannot be verified from a simulator — it has no earpiece, so
+    // AVAudioSession routing is not emulated at all. The numbers are the
+    // closest thing to evidence available without a person listening.
+    console.log(`[mobileTTS] left recording route at +${Date.now() - tSpeakStart}ms`);
 
     let cleanText = stripMarkdown(text);
     // Romanized-Indic-input TTS pronunciation fix — see
