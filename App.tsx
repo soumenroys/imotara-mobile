@@ -1,6 +1,7 @@
 // App.tsx
 import React, { useEffect } from "react";
 import { startConnectivityWatch } from "./src/lib/network/online";
+import { startDiagnosticsLog } from "./src/lib/diagnostics/fileLog";
 import { sweepAudioCaches } from "./src/lib/audioCacheSweeper";
 import { StatusBar } from "expo-status-bar";
 import { Platform, View, Text, TouchableOpacity, Linking } from "react-native";
@@ -135,6 +136,15 @@ export default function App() {
   // connectivity state stays "unknown" forever, every fetch behaves exactly
   // as it did before, and the offline short-circuit never fires (UX-10).
   useEffect(() => startConnectivityWatch(), []);
+
+  // Give debug output somewhere to go. ⛔ A no-op unless the logging flag is
+  // set, which no store profile sets — this neither registers a sink nor
+  // creates a file in a production build.
+  //
+  // 🔴 It exists because `console.log` output does NOT reach the iOS device
+  // log in a Release build (measured 2026-10-10, with the flag provably on),
+  // so a failure reported from a phone left no app-level trace at all.
+  useEffect(() => startDiagnosticsLog(), []);
 
   // Clear out voice recordings and exports that nothing else will. The
   // recording hook deletes its own file on every exit path it controls; what

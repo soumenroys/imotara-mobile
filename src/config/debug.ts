@@ -135,19 +135,78 @@ const logsOverride = parseBool(
 export const DEBUG_LOGS_ENABLED: boolean =
   typeof logsOverride === "boolean" ? logsOverride : DEBUG_UI_ENABLED;
 
-export function debugLog(...args: any[]) {
-  if (DEBUG_LOGS_ENABLED) {
-    // eslint-disable-next-line no-console
-    console.log(...args);
+/**
+ * An extra destination for debug output.
+ *
+ * 🔴 WHY THIS EXISTS. Measured 2026-10-10: `console.log` output does NOT reach
+ * the iOS device log in a Release React Native build — verified with the flag
+ * provably on (inlined at the bytecode level). So enabling logging was
+ * necessary but not sufficient: the helpers ran and nothing was readable
+ * anywhere. A device failure still left no app-level trace.
+ *
+ * ⚠️ Registered from outside rather than imported here, because this file is
+ * imported by almost everything and must stay dependency-free and incapable
+ * of throwing. The sink itself owns the file I/O.
+ */
+export type DebugSink = (level: "log" | "warn", args: unknown[]) => void;
+
+let sink: DebugSink | null = null;
+
+/**
+ * Lines logged BEFORE a sink was installed.
+ *
+ * 🔑 These are the valuable ones. Module-level logs run as the bundle
+ * evaluates — long before App's effects — and they are the facts that
+ * identify the build: which API base URL it was compiled against, which flags
+ * are on. A wrong base URL was a real misdiagnosis on 2026-10-10, and this is
+ * the line that names it. Without a replay they were all dropped and the file
+ * began mid-session.
+ *
+ * Bounded, and released as soon as it is handed over.
+ */
+const early: Array<{ level: "log" | "warn"; args: unknown[] }> = [];
+const MAX_EARLY = 50;
+
+/** Install (or with null, remove) the extra destination. */
+export function setDebugSink(next: DebugSink | null): void {
+  sink = next;
+  if (!next) return;
+  // Hand over whatever was logged before this point, in order, then let it go.
+  const pending = early.splice(0, early.length);
+  for (const e of pending) {
+    try {
+      next(e.level, e.args);
+    } catch {
+      /* a broken sink must not stop the replay, or the app */
+    }
   }
+}
+
+function emit(level: "log" | "warn", args: any[]): void {
+  if (!DEBUG_LOGS_ENABLED) return;
+  // eslint-disable-next-line no-console
+  if (level === "warn") console.warn(...args); else console.log(...args);
+  // ⛔ A broken sink must never take the app down, and must never stop the
+  // console call above from having happened.
+  try {
+    if (sink) {
+      sink(level, args);
+    } else if (early.length < MAX_EARLY) {
+      // No sink yet — hold it for the replay in setDebugSink.
+      early.push({ level, args });
+    }
+  } catch {
+    /* a diagnostics channel is not worth an app crash */
+  }
+}
+
+export function debugLog(...args: any[]) {
+  emit("log", args);
 }
 
 /**
  * Optional helper for gated warnings.
  */
 export function debugWarn(...args: any[]) {
-  if (DEBUG_LOGS_ENABLED) {
-    // eslint-disable-next-line no-console
-    console.warn(...args);
-  }
+  emit("warn", args);
 }
