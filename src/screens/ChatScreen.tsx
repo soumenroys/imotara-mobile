@@ -98,6 +98,7 @@ import {
 } from "../lib/emotion/keywordMaps";
 import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { getCrisisCopy } from "../lib/safety/crisisCopy";
+import { crisisCardLangFor } from "../lib/safety/crisisCardLang";
 import { CRISIS_CARD_COLORS } from "../lib/safety/crisisCardColors";
 import { detectCountryCode } from "../lib/safety/detectCountry";
 import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adultContentGuard";
@@ -5486,7 +5487,14 @@ export default function ChatScreen() {
               showSyncBadge={showSyncBadge}
               reactionsSet={chatReactionsSet}
               crisisThreshold={crisisThresholdSetting}
-              lang={concreteLang(toneContext?.user?.preferredLang)}
+              // 🔴 NOT concreteLang(preferredLang) — that turned "auto" into
+              // "en", so anyone who never picked a language got the crisis
+              // card in ENGLISH. All 22 translations existed and were
+              // unreachable. See crisisCardLangFor.
+              lang={crisisCardLangFor(
+                toneContext?.user?.preferredLang,
+                messages.filter((m) => m.from === "user").slice(-4).map((m) => m.text),
+              )}
               isDarkTheme={isDark}
             />
           );}}
