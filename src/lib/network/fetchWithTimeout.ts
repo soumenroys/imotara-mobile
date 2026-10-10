@@ -2,7 +2,7 @@
 
 import { Platform } from "react-native";
 import { APP_VERSION } from "../../config/appVersion";
-import { isDefinitelyOffline } from "./online";
+import { isDefinitelyOffline, noteReachedTheInternet } from "./online";
 
 // Was 20000. Twenty seconds is a very long time to watch a typing indicator,
 // and it was spent twice — /api/chat-reply then /api/respond — before the
@@ -147,7 +147,21 @@ export async function fetchWithTimeout(
     }
 
     try {
-        return await fetch(url, { ...withPlatformHeader(init), signal: controller.signal });
+        const res = await fetch(url, { ...withPlatformHeader(init), signal: controller.signal });
+        // 🔑 A response — ANY response, including a 4xx or 5xx — proves the
+        // device reached the internet. That is stronger evidence than the
+        // reachability probe, which is one more HTTP request and can miss its
+        // window on a cold serverless start while the connection is fine.
+        //
+        // Reported 2026-10-10: the app showed "offline" and answered from the
+        // on-device engine on full wifi. It cannot do that any more while
+        // real requests are coming back.
+        //
+        // ⛔ Only ever moves the state towards ONLINE. A failure here says
+        // nothing — a server can be down while the network is healthy — so
+        // the catch path deliberately does not mark anything.
+        noteReachedTheInternet();
+        return res;
     } finally {
         clearTimeout(id);
     }

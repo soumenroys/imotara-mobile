@@ -134,13 +134,64 @@ function applyConfig() {
   });
 }
 
+/**
+ * 🔴 HOW MANY FAILED PROBES BEFORE WE CALL IT OFFLINE.
+ *
+ * Reported 2026-10-10: "very frequently it is showing either offline or using
+ * local instead of good wifi connectivity ... why the hell is it showing
+ * offline though the tower is full or wifi is strongly available".
+ *
+ * One slow probe was enough. The reachability check is a real HTTP request to
+ * /api/health, and that endpoint is a serverless function — a cold start, a
+ * momentary blip or a QUIC stall makes it miss its 15s window while the
+ * connection is perfectly fine. A single miss flipped the app to offline,
+ * which shows the banner AND routes the next reply to the on-device engine.
+ *
+ * ⚖️ The asymmetry at the top of this file decides the number: a false
+ * "offline" silently degrades reply quality, a false "online" costs seconds.
+ * So require the bad news to repeat before believing it. The probe re-runs
+ * after reachabilityShortTimeout (5s), so a genuinely dead network is still
+ * recognised within seconds — just not from one unlucky request.
+ */
+const OFFLINE_CONFIRMATIONS = 2;
+let consecutiveOfflineProbes = 0;
+
+function publish(next: Connectivity): void {
+  if (next === current) return;
+  current = next;
+  for (const l of listeners) { try { l(next); } catch { /* a listener must not stop the others */ } }
+}
+
 function attach() {
   unsubscribe = NetInfo.addEventListener((state) => {
     const next = classify(state);
-    if (next === current) return;
-    current = next;
-    for (const l of listeners) { try { l(next); } catch { /* a listener must not stop the others */ } }
+
+    if (next === "offline") {
+      consecutiveOfflineProbes += 1;
+      // ⛔ Not yet. One failed probe is not evidence of a dead network.
+      if (consecutiveOfflineProbes < OFFLINE_CONFIRMATIONS) return;
+    } else {
+      consecutiveOfflineProbes = 0;
+    }
+
+    publish(next);
   });
+}
+
+/**
+ * 🔑 A REQUEST THAT ACTUALLY SUCCEEDED IS PROOF, and it outranks any probe.
+ *
+ * The app makes real requests constantly — replies, speech, transcription. If
+ * one of them comes back, the device demonstrably has a network, whatever
+ * /api/health happened to do. Before this, the banner could say "You're
+ * offline" while replies were arriving, which is exactly what was reported.
+ *
+ * ⚖️ This can only move the state TOWARDS online, and only on evidence
+ * stronger than the probe's. It never claims offline.
+ */
+export function noteReachedTheInternet(): void {
+  consecutiveOfflineProbes = 0;
+  publish("online");
 }
 
 /**
