@@ -37,6 +37,7 @@ import { concreteLang, transcriptionLangHint, resolveReplyLang, callImotaraAI, s
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
 import { useVoiceInput } from "../hooks/useVoiceInput";
+import { replyFallbackNotice } from "../lib/network/failureNotice";
 import {
     detectMemories,
     addMemory,
@@ -4352,21 +4353,16 @@ export default function ChatScreen() {
 
           debugWarn("Imotara mobile AI error:", error);
 
-          // Surface a brief, actionable toast based on error type
-          const errMsg = error instanceof Error ? error.message : String(error);
-          const isNetwork =
-            errMsg.includes("Network") ||
-            errMsg.includes("fetch") ||
-            errMsg.includes("connect") ||
-            (typeof navigator !== "undefined" && !navigator.onLine);
-          const isTimeout = errMsg.includes("timeout") || errMsg.includes("Timeout");
-          if (isNetwork) {
-            toastRef.current?.show("No internet — replied on device", "info");
-          } else if (isTimeout) {
-            toastRef.current?.show("Server took too long — replied on device", "info");
-          } else {
-            toastRef.current?.show("Went offline — replied on device", "info");
-          }
+          // Surface a brief, actionable toast based on error type.
+          //
+          // 🔴 This block used to classify by substring-matching the error
+          // MESSAGE, and its first branch could never be false: the last
+          // clause was `typeof navigator !== "undefined" && !navigator.onLine`,
+          // and React Native defines navigator WITHOUT onLine, so `!undefined`
+          // made it true for every error. Every AI failure said "No internet"
+          // and the other two branches were unreachable. The cause now comes
+          // from the error's type — see replyFallbackNotice.
+          toastRef.current?.show(replyFallbackNotice(error), "info");
 
           const wantsCloud = analysisMode !== "local" && cloudSyncAllowed;
           const wantsInsights = emotionInsightsEnabled;

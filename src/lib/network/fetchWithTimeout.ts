@@ -18,11 +18,34 @@ export class OfflineError extends Error {
   }
 }
 
+/**
+ * Why a request failed, when it failed before any server answered.
+ *
+ * 🔴 This exists because the distinction was being recovered from the error
+ * MESSAGE downstream, and could not be. See classifyNetworkFailure.
+ */
+export type NetworkFailureKind =
+  /** The device told us it has no connectivity. We never tried. */
+  | "offline"
+  /** Our own deadline fired. The server may be fine, just slow. */
+  | "timeout"
+  /** The request could not leave the device, or nothing answered. */
+  | "unreachable";
+
 /** The first remote call failed for a reason a second call cannot fix. */
 export class NetworkUnavailableError extends Error {
-  constructor(detail: string) {
+  /**
+   * ⚠️ Carried, not re-derived. This error used to wrap the original's
+   * message and nothing else, so everything downstream had to guess the cause
+   * by matching text — and an AbortError's message is "Aborted", which matches
+   * no keyword anyone thought to look for.
+   */
+  readonly kind: NetworkFailureKind;
+
+  constructor(detail: string, kind: NetworkFailureKind = "unreachable") {
     super(detail);
     this.name = "NetworkUnavailableError";
+    this.kind = kind;
   }
 }
 
@@ -36,12 +59,46 @@ export class NetworkUnavailableError extends Error {
  * reachable and simply refused.
  */
 export function isNetworkFailure(err: unknown): boolean {
-  if (err instanceof OfflineError || err instanceof NetworkUnavailableError) return true;
+  return classifyNetworkFailure(err) !== null;
+}
+
+/**
+ * WHY a request failed — or null when a server answered and said no.
+ *
+ * 🔴 Reported 2026-10-10: after sending, the app "suddenly went offline" on a
+ * phone whose connection was demonstrably fine (it had just uploaded a voice
+ * recording). The cause was downstream of here: ChatScreen classified the
+ * failure by substring-matching the error's MESSAGE, and our own timeout
+ * arrives as an AbortError whose message is "Aborted" — which contains
+ * neither "Network", "fetch", "connect" nor "timeout". It therefore fell past
+ * every branch into a catch-all that said the device had gone offline.
+ *
+ * 🔑 The kind is knowable exactly here, from the error's TYPE, and nowhere
+ * else. Returning it means no caller has to guess from prose.
+ *
+ * ⚠️ The membership of this set must stay identical to what isNetworkFailure
+ * returned before it was expressed in terms of this function: aiClient uses it
+ * to decide whether a SECOND endpoint is worth trying, and widening it would
+ * silently stop that fallback from ever running.
+ */
+export function classifyNetworkFailure(err: unknown): NetworkFailureKind | null {
+  if (err instanceof OfflineError) return "offline";
+  if (err instanceof NetworkUnavailableError) return err.kind;
+
   const name = (err as { name?: string } | null)?.name ?? "";
   const message = String((err as { message?: string } | null)?.message ?? "");
-  return name === "AbortError"
-      || name === "TypeError"
-      || /network request failed|timeout|aborted/i.test(message);
+
+  // Our own AbortController firing. "Aborted" is the whole message.
+  if (name === "AbortError") return "timeout";
+  // React Native's way of saying the request never left the device.
+  if (name === "TypeError") return "unreachable";
+
+  if (/timeout|aborted/i.test(message)) return "timeout";
+  if (/network request failed/i.test(message)) return "unreachable";
+
+  // A server answered. That is worth a second endpoint — and it is NOT
+  // something to describe to the person as being offline.
+  return null;
 }
 
 

@@ -34,6 +34,7 @@ import {
   fetchWithTimeout,
   DEFAULT_REMOTE_TIMEOUT_MS,
   isNetworkFailure,
+  classifyNetworkFailure,
   NetworkUnavailableError,
 } from "../lib/network/fetchWithTimeout";
 
@@ -940,8 +941,13 @@ export async function callImotaraAI(
       // same thing, which is how a message sent with no signal used to cost
       // twenty seconds and then twenty more. A server that answered and said
       // no is different: that is worth a second endpoint.
-      if (isNetworkFailure(chatErr)) {
-        throw new NetworkUnavailableError(chatErr?.message ?? "network unavailable");
+      const failureKind = classifyNetworkFailure(chatErr);
+      if (failureKind) {
+        // ⚠️ Carry the KIND. Wrapping only the message is what made a timeout
+        // indistinguishable from being offline by the time ChatScreen saw it:
+        // an AbortError's message is "Aborted", which matches no keyword.
+        throw new NetworkUnavailableError(
+          chatErr?.message ?? "network unavailable", failureKind);
       }
     }
     // ── /api/chat-reply failed or returned non-GPT response — fall through to /api/respond ──
