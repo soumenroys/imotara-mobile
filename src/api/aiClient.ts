@@ -426,6 +426,51 @@ export function resolveReplyLang(
     return explicit || profile || (detected !== "en" ? detected : "en");
 }
 
+/**
+ * Which language to tell Whisper the microphone audio is in.
+ *
+ * 🔴 Reported 2026-10-10, physical iPhone: spoke Bengali, got ENGLISH text in
+ * the composer. The cause was `concreteLang(preferredLang)` — it maps "auto"
+ * AND an unset preference to "en" (see statedPreference), and
+ * /api/voice/transcribe forwards a recognised code to Whisper verbatim as
+ * `language=en`. Whisper then renders Bengali speech as English words. It was
+ * not mis-detecting anything; it had been told the audio was English.
+ *
+ * ⚠️ "auto" alone is not a good enough answer either. The transcribe route
+ * notes, from its own history, that bare auto-detection "mislabels short Indic
+ * utterances as Hindi/Arabic" — which is why explicit codes were added there in
+ * the first place. A one-second "haan" is exactly the case hands-free produces.
+ *
+ * 🔑 So when the person has stated no preference, the CONVERSATION is the best
+ * evidence available: someone whose last messages are in Bengali script is
+ * overwhelmingly likely to be speaking Bengali. That costs nothing and needs no
+ * detection of its own.
+ *
+ * Order: a stated preference wins (they chose it) > the script of the recent
+ * conversation > "auto", which the route turns into Whisper's own detection.
+ *
+ * ⚖️ Deliberately NOT using romanized hints. A history of romanized Bengali
+ * ("ami valo nei") would resolve to `bn`, and Whisper with language=bn returns
+ * NATIVE script — silently switching someone from the script they have been
+ * typing in. Latin-script history therefore stays on "auto".
+ */
+export function transcriptionLangHint(
+    preferredLang: string | undefined | null,
+    recentTexts: string[],
+): string {
+    const stated = statedPreference(preferredLang);
+    if (stated) return stated;
+    // Most recent first — the current language matters more than an old one.
+    for (let i = recentTexts.length - 1; i >= 0; i--) {
+        const fromScript = detectLangFromScript(recentTexts[i] ?? "");
+        if (fromScript !== "en") return fromScript;
+    }
+    // ⛔ "auto", never "en". An English-looking history is not evidence that
+    // the next spoken sentence is English — it is the absence of evidence,
+    // and "en" would reintroduce the exact bug this function exists for.
+    return "auto";
+}
+
 export function concreteLang(value: string | undefined | null): string {
     return statedPreference(value) ?? "en";
 }

@@ -33,7 +33,7 @@ import { useSettings } from "../state/SettingsContext";
 import { useColors, useTheme } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
 import { chatBackdrop } from "../theme/chatBackdrop";
-import { concreteLang, resolveReplyLang, callImotaraAI, streamChatReply } from "../api/aiClient";
+import { concreteLang, transcriptionLangHint, resolveReplyLang, callImotaraAI, streamChatReply } from "../api/aiClient";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
 import { useVoiceInput } from "../hooks/useVoiceInput";
@@ -1956,8 +1956,14 @@ export default function ChatScreen() {
   // voiceLangRef is set to the user's preferredLang once toneContext loads (see effect below).
   // voiceLang (state) mirrors it so useVoiceInput re-renders when the language changes —
   // ref mutations alone don't trigger re-renders, so opts.lang was always stuck at "en".
-  const voiceLangRef = React.useRef("en");
-  const [voiceLang, setVoiceLang] = useState("en");
+  //
+  // 🔴 "auto", NOT "en". Reported 2026-10-10: spoke Bengali on a real iPhone,
+  // got ENGLISH text in the composer. The default here is the second half of
+  // that bug — this value is only corrected once toneContext loads, so a mic
+  // press before then told Whisper the audio was English. See the effect
+  // below for the first half.
+  const voiceLangRef = React.useRef("auto");
+  const [voiceLang, setVoiceLang] = useState("auto");
 
   // Forward refs. The focus effect and handleNoSpeech are declared above the
   // callbacks they need, and both use [] deps, so they reach them through
@@ -2729,11 +2735,38 @@ export default function ChatScreen() {
   // Keep voiceLangRef and voiceLang state in sync with toneContext so transcription
   // uses the correct language. Both must be updated: ref for instant access in callbacks,
   // state to trigger a re-render so useVoiceInput receives the updated opts.lang.
+  //
+  // 🔴 NOT concreteLang — the same trap as the chat-reply payload below, which
+  // carries its own note about it. concreteLang turns "auto" AND an unset
+  // preference into "en" (aiClient statedPreference: `if (!v || v === AUTO_LANG)
+  // return undefined`), and /api/voice/transcribe passes a recognised code
+  // straight to Whisper as `language=en`. Whisper then renders Bengali speech
+  // as English words — which is exactly what was reported on 2026-10-10:
+  // "spoke in Bengali ... that is translated into english".
+  //
+  // 🔑 Whisper does NOT need a language. The route already omits the parameter
+  // for any code it does not recognise and lets Whisper auto-detect, so "auto"
+  // reaches it and does the right thing. concreteLang's own doc comment lists
+  // what it is for — "a TTS voice, a BCP-47 locale, a canned string table, an
+  // RTL check" — and transcription is not one of them.
+  //
+  // ⚖️ Effect of this change: a user who has CHOSEN a language still sends that
+  // code, exactly as before. Only "auto" and unset change, and they change
+  // from a wrong answer ("en") to no answer, which is what auto-detect wants.
   React.useEffect(() => {
-    const lang = concreteLang(toneContext?.user?.preferredLang);
+    const lang = transcriptionLangHint(
+      toneContext?.user?.preferredLang,
+      // Last few turns, oldest first — enough to see the current language
+      // without letting a long-abandoned one win.
+      messages.slice(-6).map((m) => m.text),
+    );
     voiceLangRef.current = lang;
     setVoiceLang(lang);
-  }, [toneContext?.user?.preferredLang]);
+    // ⚠️ messages.LENGTH, not `messages`. The array identity changes on every
+    // streamed token, so depending on it would re-run this — and re-render the
+    // voice hook — dozens of times per reply. A new turn changes the length,
+    // which is the only thing that can change the conversation's language.
+  }, [toneContext?.user?.preferredLang, messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // P3/P5 — Companion insight effect (needs history, toneContext, accessToken)
   useEffect(() => {
