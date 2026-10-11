@@ -6,6 +6,7 @@
 
 import { IMOTARA_API_BASE_URL } from "../config/api";
 import { debugLog, debugWarn } from "../config/debug";
+import { DEVANAGARI_LETTERS, devanagariLang } from "../lib/lang/devanagariHint";
 import {
   BN_SAD_REGEX, BN_ANGER_REGEX, BN_FEAR_REGEX,
   HI_SAD_REGEX, HI_ANGER_REGEX, HI_FEAR_REGEX,
@@ -255,7 +256,11 @@ export function deriveToneForChatReply(
 export function detectLangFromScript(message: string): string {
   if (!message) return "en";
   if (/[\u0980-\u09FF]/.test(message)) return "bn";        // Bengali
-  if (/[\u0904-\u0939\u0958-\u0963\u0971-\u097F]/.test(message)) return "hi"; // Hindi/Devanagari
+  // \uD83D\uDD34 Marathi and Hindi share Devanagari, so the range alone cannot separate
+  // them. This returned "hi" for EVERY Devanagari string, which meant a Marathi
+  // speaker was answered in Hindi \u2014 while mobileTTS.ts, using this very hint,
+  // spoke the reply in a Marathi voice. One sentence, two answers.
+  if (DEVANAGARI_LETTERS.test(message)) return devanagariLang(message);
   if (/[\u0B80-\u0BFF]/.test(message)) return "ta";        // Tamil
   if (/[\u0C00-\u0C7F]/.test(message)) return "te";        // Telugu
   if (/[\u0A80-\u0AFF]/.test(message)) return "gu";        // Gujarati

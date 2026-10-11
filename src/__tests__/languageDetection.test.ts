@@ -58,10 +58,25 @@ describe("Devanagari: Hindi vs Marathi disambiguation", () => {
         expect(detectMessageLang(ambiguous, "hi")).toBe("hi");
     });
 
-    test("aiClient (KNOWN LIMITATION): detectLangFromScript maps ALL Devanagari to hi", () => {
-        // aiClient has no Marathi hint pass — documenting current behavior so a
-        // future unification is a conscious decision, not an accident.
-        expect(detectLangFromScript(marathi)).toBe("hi");
+    test("✅ LIMITATION CLOSED 2026-10-11: aiClient now agrees with mobileTTS", () => {
+        // This test used to assert "hi" and was titled "KNOWN LIMITATION",
+        // saying: "documenting current behavior so a future unification is a
+        // conscious decision, not an accident."
+        //
+        // 🔑 The decision was made. `detectLangFromScript` picks the REPLY
+        // language and `detectMessageLang` picks the VOICE — so while they
+        // disagreed, a Marathi speaker was SPOKEN TO in Marathi and ANSWERED in
+        // Hindi. Both now read MARATHI_HINT from lib/lang/devanagariHint.ts.
+        //
+        // ⛔ Re-pointed, not loosened: it still asserts an exact language, and
+        // the line below pins the two implementations AGREEING, which is the
+        // property that was actually missing.
+        expect(detectLangFromScript(marathi)).toBe("mr");
+        expect(detectLangFromScript(marathi)).toBe(detectMessageLang(marathi, "en"));
+
+        // …and Hindi must not have been dragged along with it.
+        expect(detectLangFromScript(hindi)).toBe("hi");
+        expect(detectLangFromScript(hindi)).toBe(detectMessageLang(hindi, "en"));
     });
 });
 

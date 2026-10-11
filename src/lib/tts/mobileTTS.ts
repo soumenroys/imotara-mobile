@@ -24,6 +24,7 @@ import * as Speech        from "expo-speech";
 import { Audio }          from "expo-av";
 import { File, Paths }    from "expo-file-system";
 import { fetchWithTimeout } from "../fetchWithTimeout";
+import { MARATHI_HINT } from "../lang/devanagariHint";
 import { detectLangFromRomanHints } from "../../api/aiClient";
 
 // ── BCP-47 map ────────────────────────────────────────────────────────────────
@@ -80,7 +81,10 @@ const SCRIPT_RANGES: Array<{ lang: string; re: RegExp }> = [
 // match anything, which is why an earlier version of this fix passed all
 // tests except Marathi until switching to plain substring matching.
 const URDU_HINT    = /[ٹڈڑںے]/;
-const MARATHI_HINT = /आहे|नाही|माझ[ेा]|तुझ[ेा]|होत[ेी]|मी |तुम्ही/;
+// 🔑 MARATHI_HINT now lives in lib/lang/devanagariHint.ts. It used to be
+// declared here AND in imotaraapp's chat page, while aiClient.ts — which picks
+// the REPLY language — had no copy at all. So this file spoke Marathi in a
+// Marathi voice while the reply came back in Hindi. One export, one answer.
 
 // Romanized-Indic-input TTS pronunciation fix (2026-08-15) — mirrors
 // imotaraapp's src/lib/azure-tts/transliterate.ts (see there for the full

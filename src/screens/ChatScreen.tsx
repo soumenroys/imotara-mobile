@@ -55,6 +55,8 @@ import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { getConversationDepth } from "../lib/imotara/companionLetter";
 import { useIsOnline, setConnectivityCheckInterval } from "../lib/network/online";
+import { localSourceLabel, type LocalReason } from "../lib/chat/localSourceLabel";
+import { isRtlLang } from "../lib/lang/rtlLangs";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
@@ -203,6 +205,10 @@ function detectMobileCrisisTier(text: string): CrisisTier {
 
 type ChatMessageSource = "cloud" | "local";
 
+// 🔑 The "(offline)" label and WHY a reply is local both live in one module, so
+// the renderer cannot start guessing again. See localSourceLabel.ts for the
+// 2026-10-11 incident this prevents.
+
 // Typing animation states for Imotara mobile chat
 type TypingStatus = "idle" | "thinking" | "responding";
 
@@ -214,6 +220,8 @@ type ChatMessage = {
   moodHint?: string;
   isSynced?: boolean;
   source?: ChatMessageSource;
+  /** Only meaningful when `source === "local"`. See LocalReason. */
+  localReason?: LocalReason;
   isPending?: boolean; // for "Syncing…" state
 
   // ✅ NEW: parity metadata (from /api/respond)
@@ -1188,7 +1196,7 @@ function MessageBubble({
   const bubbleContent = (
     <>
       <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textPrimary, opacity: 0.75, marginBottom: 2 }}>
-        {isUser ? "You" : `${companionName || "Imotara"}${message.source === "local" ? " (offline)" : ""}`}
+        {isUser ? "You" : `${companionName || "Imotara"}${localSourceLabel(message)}`}
       </Text>
 
       {!isUser
@@ -1476,16 +1484,35 @@ function MessageBubble({
         // helpline number included — measured 1.19-2.36:1. See crisisCardColors.
         const cc = CRISIS_CARD_COLORS[isDarkTheme ? "dark" : "light"];
 
+        // 🔴 VERIFIED ON A REAL iPHONE, 2026-10-11. The Arabic card rendered its
+        // TEXT correctly — the 💛 moved to the right of the string, so bidi
+        // works — inside an LTR CONTAINER: header left-aligned, the dismiss "x"
+        // on the right, and the helpline label/number the wrong way round.
+        //
+        // ⛔ I18nManager cannot fix this card. It keys off the STORED language,
+        // the person was on "auto", and RN only applies direction at the NEXT
+        // cold start (see lib/rtl.ts). A card whose whole purpose is to answer
+        // the message just typed cannot wait for a relaunch.
+        //
+        // ⇒ Direction is applied PER CARD, from the language the card is
+        // already speaking. Scoped, immediate, and it touches nothing else.
+        const rtl = isRtlLang(lang);
+        const rowDir: "row" | "row-reverse" = rtl ? "row-reverse" : "row";
+        const textAlign: "left" | "right" = rtl ? "right" : "left";
+        const writingDirection: "ltr" | "rtl" = rtl ? "rtl" : "ltr";
+        // The dismiss "x" sits opposite the title, so its margin flips too.
+        const dismissMargin = rtl ? { marginRight: 8 } : { marginLeft: 8 };
+
         if (tier === 1) {
           return (
             <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: Math.min(screenWidth * 0.88, 560), borderRadius: 14, borderWidth: 1, borderColor: cc.tier1.border, backgroundColor: cc.tier1.bg, paddingHorizontal: 14, paddingVertical: 12 }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <Text style={{ fontSize: 13, fontWeight: "700", color: cc.tier1.title, flex: 1 }}>{"\u{1F49C}"} {copy.t1Title}</Text>
+              <View style={{ flexDirection: rowDir, justifyContent: "space-between", alignItems: "flex-start" }}>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: cc.tier1.title, flex: 1, textAlign, writingDirection }}>{"\u{1F49C}"} {copy.t1Title}</Text>
                 <TouchableOpacity onPress={() => onDismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={{ fontSize: 14, color: cc.tier1.dismiss, opacity: cc.tier1.dismissOpacity, marginLeft: 8 }}>x</Text>
+                  <Text style={{ fontSize: 14, color: cc.tier1.dismiss, opacity: cc.tier1.dismissOpacity, ...dismissMargin }}>x</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={{ marginTop: 8, fontSize: 12, color: cc.tier1.body, opacity: cc.tier1.bodyOpacity, lineHeight: 18 }}>
+              <Text style={{ marginTop: 8, fontSize: 12, color: cc.tier1.body, opacity: cc.tier1.bodyOpacity, lineHeight: 18, textAlign, writingDirection }}>
                 {copy.t1Body}
               </Text>
               {(() => {
@@ -1495,7 +1522,7 @@ function MessageBubble({
                 return (
                   <TouchableOpacity
                     onPress={() => Linking.openURL(`tel:${primary.contact.replace(/[^\d+]/g, "")}`)}
-                    style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 10, paddingHorizontal: 4 }}
+                    style={{ marginTop: 8, flexDirection: rowDir, alignItems: "center", gap: 6, paddingVertical: 10, paddingHorizontal: 4 }}
                     accessibilityRole="link"
                     accessibilityLabel={`Call ${primary.label}: ${primary.contact}`}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -1511,10 +1538,10 @@ function MessageBubble({
 
         return (
           <View style={{ marginTop: 2, marginBottom: 6, marginLeft: 4, maxWidth: Math.min(screenWidth * 0.88, 560), borderRadius: 14, borderWidth: 1, borderColor: cc.tier2.border, backgroundColor: cc.tier2.bg, paddingHorizontal: 14, paddingVertical: 12 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: cc.tier2.title, flex: 1 }}>{"\u{1F49B}"} {copy.t2Title}</Text>
+            <View style={{ flexDirection: rowDir, justifyContent: "space-between", alignItems: "flex-start" }}>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: cc.tier2.title, flex: 1, textAlign, writingDirection }}>{"\u{1F49B}"} {copy.t2Title}</Text>
               <TouchableOpacity onPress={() => onDismissCrisisCard(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={{ fontSize: 14, color: cc.tier2.dismiss, opacity: cc.tier2.dismissOpacity, marginLeft: 8 }}>x</Text>
+                <Text style={{ fontSize: 14, color: cc.tier2.dismiss, opacity: cc.tier2.dismissOpacity, ...dismissMargin }}>x</Text>
               </TouchableOpacity>
             </View>
             <View style={{ marginTop: 10, gap: 6 }}>
@@ -1528,7 +1555,7 @@ function MessageBubble({
                   <TouchableOpacity
                     key={label}
                     onPress={() => Linking.openURL(`tel:${number.replace(/[^\d+]/g, "")}`)}
-                    style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, paddingHorizontal: 4 }}
+                    style={{ flexDirection: rowDir, justifyContent: "space-between", paddingVertical: 10, paddingHorizontal: 4 }}
                     accessibilityRole="link"
                     accessibilityLabel={`Call ${label}: ${number}`}
                     hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
@@ -1539,7 +1566,7 @@ function MessageBubble({
                 ));
               })()}
             </View>
-            <Text style={{ marginTop: 10, fontSize: 11, color: cc.tier2.title, opacity: cc.tier2.footerOpacity }}>
+            <Text style={{ marginTop: 10, fontSize: 11, color: cc.tier2.title, opacity: cc.tier2.footerOpacity, textAlign, writingDirection }}>
               {copy.t2Footer}
             </Text>
           </View>
@@ -3830,6 +3857,10 @@ export default function ChatScreen() {
               timestamp: safetyTs,
               isSynced: false,
               source: "local",
+              // ⛔ Never went to the cloud by design. Labelling this "(offline)"
+              // told people their connection had failed while they were being
+              // shown a content-guard message — false, and alarming.
+              localReason: "by_design",
             };
             if (mountedRef.current) {
               addToHistory({
@@ -4089,6 +4120,17 @@ export default function ChatScreen() {
             !(remote?.ok && String(remote?.replyText || "").trim().length > 0);
           const cloudQuotaHit = cloudFailed && remote?.errorMessage === "quota_exceeded";
 
+          // 🔑 Stamp WHY a reply is local HERE, where the answer is actually
+          // known, instead of letting the renderer guess from `isOnline` — see
+          // lib/chat/localSourceLabel.ts. This is the same triple the honest
+          // toast below already uses, so the label and the toast can no longer
+          // disagree with each other.
+          const localReason: LocalReason = cloudQuotaHit
+            ? "quota"
+            : !isOnline
+              ? "offline"
+              : "cloud_failed";
+
           if (cloudFailed && isOnline && !cloudQuotaHit) {
             toastRef.current?.show("Couldn't connect — used on-device mode.", "error");
           }
@@ -4334,6 +4376,8 @@ export default function ChatScreen() {
             moodHint,
             isSynced: false,
             source,
+            // Only meaningful when `source === "local"`; harmless otherwise.
+            ...(source === "local" ? { localReason } : {}),
 
             // ✅ NEW parity metadata
             reflectionSeed,
@@ -4463,6 +4507,11 @@ export default function ChatScreen() {
             moodHint: wantsInsights && userMood?.primary ? userMood.hint : undefined,
             isSynced: false,
             source: "local",
+            // 🔴 This is the CATCH path — the cloud call threw. On 2026-10-11
+            // that produced "Imotara (offline)" on a phone with wifi AND mobile
+            // data on. If NetInfo says we have a connection, the failure was
+            // ours, not theirs, and the label must not say otherwise.
+            localReason: isOnline ? "cloud_failed" : "offline",
 
             // ✅ parity metadata for local fallback
             reflectionSeed,
@@ -4682,6 +4731,9 @@ export default function ChatScreen() {
       timestamp: now,
       isSynced: false,
       source: "local",
+      // ⛔ A greeting is not a degraded reply. It used to render as
+      // "Imotara (offline)" before the person had even typed anything.
+      localReason: "by_design",
     };
     setMessages((prev) => [greetMsg, ...prev.filter((m) => !m.id.startsWith("greeting-"))]);
   // eslint-disable-next-line react-hooks/exhaustive-deps

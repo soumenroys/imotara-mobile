@@ -21,9 +21,14 @@
 
 import { I18nManager } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { RTL_LANGS as RTL_LANG_SET } from "./lang/rtlLangs";
 
 const SETTINGS_STORAGE_KEY = "imotara_settings_v1";
-const RTL_LANGS = new Set(["ar", "he", "ur"]);
+
+// 🔑 The RTL language set lives in lib/lang/rtlLangs.ts, with no native imports,
+// so a test can ask "is Arabic RTL?" without booting AsyncStorage. Re-exported
+// here because this file is the historical home and callers still look for it.
+export { isRtlLang, RTL_LANGS } from "./lang/rtlLangs";
 
 export async function syncI18nManagerFromStoredSettings(): Promise<void> {
   try {
@@ -41,7 +46,7 @@ export async function syncI18nManagerFromStoredSettings(): Promise<void> {
     // a false mismatch and force-disabled RTL, actively breaking correct
     // native rendering. Fixed 2026-08-14 before first release of this file.
     const lang: string | undefined = parsed?.toneContext?.user?.preferredLang;
-    const shouldBeRtl = !!lang && RTL_LANGS.has(lang);
+    const shouldBeRtl = !!lang && RTL_LANG_SET.has(lang);
 
     if (I18nManager.isRTL !== shouldBeRtl) {
       I18nManager.allowRTL(shouldBeRtl);
