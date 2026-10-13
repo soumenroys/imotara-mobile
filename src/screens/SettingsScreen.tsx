@@ -49,6 +49,10 @@ import {
     cancelInactivityReminder,
     setCompanionNameForReminders,
     isCheckInReminderEnabled,
+    getSnoozedUntil,
+    snoozeCheckInReminder,
+    resumeCheckInReminder,
+    SNOOZE_DAYS,
     getSavedReminderTime,
     getSavedNotifPrefs,
     saveNotifPrefs,
@@ -614,6 +618,28 @@ function SettingsScreenContent() {
 
     // ✅ Daily check-in reminder
     const [reminderEnabled, setReminderEnabled] = React.useState(false);
+    // Pause / turn off. Owner decision 2026-10-13 (option a): Free may pause
+    // 3 or 5 days; paid tiers may turn reminders off for good.
+    const [snoozedUntil, setSnoozedUntil] = React.useState<Date | null>(null);
+
+    React.useEffect(() => {
+        getSnoozedUntil().then(setSnoozedUntil).catch(() => {});
+    }, []);
+
+    const handleSnooze = async (days: 3 | 5) => {
+        const until = await snoozeCheckInReminder(days);
+        setSnoozedUntil(until);
+    };
+
+    const handleResume = async () => {
+        await resumeCheckInReminder();
+        setSnoozedUntil(null);
+        // Put the reminder back now rather than waiting for the next app open.
+        if (reminderEnabled) {
+            await scheduleCheckInReminder(reminderHour, reminderMinute, notifSound, notifBadge)
+                .catch(() => {});
+        }
+    };
     const [reminderLoading, setReminderLoading] = React.useState(false);
     const [reminderHour, setReminderHour] = React.useState(DEFAULT_HOUR);
     const [reminderMinute, setReminderMinute] = React.useState(DEFAULT_MINUTE);
@@ -2641,6 +2667,56 @@ function SettingsScreenContent() {
                             <SettingRow label="Show badge" description="Show a badge on the app icon">
                                 <Switch value={notifBadge} onValueChange={handleNotifBadgeToggle} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#ffffff" />
                             </SettingRow>
+                            {/* Pause / turn off.
+                                ⚠️ The system notification switch always remains
+                                free to everyone — that is what keeps a paywalled
+                                in-app off switch defensible, so it is SAID here
+                                rather than left implied. */}
+                            <View>
+                                <Text style={{ fontSize: 13, color: colors.textPrimary, marginBottom: 6 }}>
+                                    {snoozedUntil ? "Reminders paused" : "Pause reminders"}
+                                </Text>
+                                {snoozedUntil ? (
+                                    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+                                        <Text style={{ fontSize: 12, color: colors.textSecondary, flexShrink: 1 }}>
+                                            Resumes on{" "}
+                                            {snoozedUntil.toLocaleDateString(undefined, { day: "numeric", month: "long" })}
+                                        </Text>
+                                        <TouchableOpacity
+                                            onPress={handleResume}
+                                            style={{
+                                                paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12,
+                                                borderWidth: 1.5, minHeight: 40, borderColor: colors.primary,
+                                                backgroundColor: colors.primaryTint,
+                                            }}
+                                        >
+                                            <Text style={{ fontSize: 12, color: colors.primary }}>Resume now</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : (
+                                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                        {SNOOZE_DAYS.map((d) => (
+                                            <TouchableOpacity
+                                                key={d}
+                                                onPress={() => handleSnooze(d)}
+                                                style={{
+                                                    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12,
+                                                    borderWidth: 1.5, minHeight: 40,
+                                                    borderColor: colors.border, backgroundColor: "transparent",
+                                                }}
+                                            >
+                                                <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                                                    Pause {d} days
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                )}
+                                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 8, lineHeight: 16 }}>
+                                    You can also silence Imotara entirely in your device notification settings, at any time.
+                                </Text>
+                            </View>
+
                             {/* N-2: Inactivity threshold */}
                             <View>
                                 <Text style={{ fontSize: 13, color: colors.textPrimary, marginBottom: 6 }}>Nudge if silent for</Text>

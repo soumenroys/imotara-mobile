@@ -4,8 +4,9 @@ import { startConnectivityWatch } from "./src/lib/network/online";
 import { startDiagnosticsLog } from "./src/lib/diagnostics/fileLog";
 import { sweepAudioCaches } from "./src/lib/audioCacheSweeper";
 import { StatusBar } from "expo-status-bar";
-import { Platform, View, Text, TouchableOpacity, Linking } from "react-native";
+import { Platform, View, Text, TouchableOpacity, Linking, AppState } from "react-native";
 import RootNavigator from "./src/navigation/RootNavigator";
+import { rearmAfterSnooze } from "./src/notifications/checkInReminder";
 import ConsentGateMount from "./src/components/legal/ConsentGateMount";
 import AppThemeProvider from "./src/theme/AppThemeProvider";
 import { ThemeProvider } from "./src/theme/ThemeContext";
@@ -159,6 +160,19 @@ export default function App() {
   // never throws, and deliberately not awaited — storage housekeeping must
   // not delay the first screen.
   useEffect(() => { void sweepAudioCaches(); }, []);
+
+  // Re-arm the daily reminder when a pause has expired.
+  // ⚠️ Nothing else can do this: snoozing CANCELS the scheduled notification,
+  // so there is no pending event left to wake us up and put it back. Without
+  // this, a 3-day pause would be permanent — which is exactly the free-tier
+  // trap the owner's snooze-only decision is meant not to be.
+  useEffect(() => {
+    void rearmAfterSnooze();
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active") void rearmAfterSnooze();
+    });
+    return () => sub.remove();
+  }, []);
 
   return (
     <ErrorBoundary>

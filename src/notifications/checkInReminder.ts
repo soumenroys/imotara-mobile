@@ -725,3 +725,99 @@ export async function isCheckInReminderEnabled(): Promise<boolean> {
     // scheduleCheckInReminderWithReason reports a reason rather than a boolean.
     return val !== "0";
 }
+
+// ─── Snooze ──────────────────────────────────────────────────────────────────
+//
+// Owner decision 2026-10-13, option (a): Free may pause for 3 or 5 days; paid
+// tiers may turn reminders off for good.
+//
+// ⛔ On mobile the reminder is a LOCAL notification, so a stored date alone
+// suppresses nothing — the OS would still fire what is already scheduled. A
+// snooze must therefore CANCEL the scheduled notification and re-arm it when
+// the pause ends. A flag that changes nothing is the setup-≠-outcome trap.
+
+/** ISO instant the current pause ends. Absent when not paused. */
+const CHECKIN_SNOOZED_UNTIL_KEY = "imotara.checkin.snoozedUntil";
+
+/** Pause lengths offered. Mirrors SNOOZE_DAYS in the web repo. */
+export const SNOOZE_DAYS = [3, 5] as const;
+export type SnoozeDays = (typeof SNOOZE_DAYS)[number];
+
+/**
+ * When the pause ends, or null.
+ *
+ * ⚠️ Junk must NOT read as "paused forever": that would silence someone's
+ * reminders permanently with no way for them to notice.
+ */
+export async function getSnoozedUntil(now: Date = new Date()): Promise<Date | null> {
+    try {
+        const raw = await AsyncStorage.getItem(CHECKIN_SNOOZED_UNTIL_KEY);
+        if (!raw) return null;
+        const t = Date.parse(raw);
+        if (!Number.isFinite(t) || t <= now.getTime()) return null;
+        return new Date(t);
+    } catch {
+        return null;
+    }
+}
+
+/** True while a pause is running. */
+export async function isSnoozed(now: Date = new Date()): Promise<boolean> {
+    return (await getSnoozedUntil(now)) !== null;
+}
+
+/**
+ * Pauses the daily reminder for `days`, cancelling what is already scheduled.
+ * Returns when it will resume, so the caller can SAY so — silent resumption is
+ * what produces "this app won't stop notifying me".
+ */
+export async function snoozeCheckInReminder(
+    days: SnoozeDays,
+    now: Date = new Date(),
+): Promise<Date | null> {
+    if (!(SNOOZE_DAYS as readonly number[]).includes(days)) return null;
+    const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    try {
+        await AsyncStorage.setItem(CHECKIN_SNOOZED_UNTIL_KEY, until.toISOString());
+        // ⛔ The cancel is the part that actually works. Without it the OS keeps
+        // firing the already-scheduled reminder and the control is theatre.
+        await cancelCheckInReminder();
+        await cancelInactivityReminder();
+        return until;
+    } catch {
+        return null;
+    }
+}
+
+/** Clears a pause. ⚠️ Always permitted — only turning reminders OFF is a paid control. */
+export async function resumeCheckInReminder(): Promise<void> {
+    try {
+        await AsyncStorage.removeItem(CHECKIN_SNOOZED_UNTIL_KEY);
+    } catch {
+        /* ignore */
+    }
+}
+
+/**
+ * Re-arms the reminder once a pause has expired.
+ *
+ * Call on app open. ⚠️ Nothing else will: the notification was cancelled, so
+ * there is no scheduled event to wake us up and put it back. Without this a
+ * 3-day pause would be permanent, which is exactly the free-tier trap the
+ * owner's option (a) is meant not to be.
+ */
+export async function rearmAfterSnooze(now: Date = new Date()): Promise<boolean> {
+    try {
+        const raw = await AsyncStorage.getItem(CHECKIN_SNOOZED_UNTIL_KEY);
+        if (!raw) return false;
+        const t = Date.parse(raw);
+        if (Number.isFinite(t) && t > now.getTime()) return false; // still paused
+        await AsyncStorage.removeItem(CHECKIN_SNOOZED_UNTIL_KEY);
+        if (!(await isCheckInReminderEnabled())) return false;
+        const { hour, minute } = await getSavedReminderTime();
+        const res = await scheduleCheckInReminderWithReason(hour, minute);
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
