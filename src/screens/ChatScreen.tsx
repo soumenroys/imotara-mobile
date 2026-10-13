@@ -3069,12 +3069,14 @@ export default function ChatScreen() {
       if (isTyping || isSendingRef.current) {
         resetTypingState("background");
       }
-      // Schedule inactivity nudge in the user's preferred language
+      // Schedule inactivity nudge in the user's preferred language.
+      // ⛔ The message TEXT is deliberately not read here any more. The nudge
+      // names the day of the last conversation, never what was said, because a
+      // lock screen is read by whoever picks the phone up.
       const lastUserMsg = [...messages].reverse().find((m) => m.from === "user");
       const lastActivityTs = lastUserMsg?.timestamp ?? Date.now();
-      const lastContext = lastUserMsg?.text?.trim() || undefined;
       const notifLang = toneContext?.user?.preferredLang || undefined;
-      scheduleInactivityReminder(lastActivityTs, lastContext, notifLang).catch(() => {});
+      scheduleInactivityReminder(lastActivityTs, notifLang).catch(() => {});
     },
     onForeground: () => {
       // If we come back and a typing cycle has been hanging too long, reset.

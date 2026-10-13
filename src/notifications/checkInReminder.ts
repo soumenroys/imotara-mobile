@@ -8,6 +8,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const CHECKIN_NOTIFICATION_ID_KEY = "imotara.checkin.notif.id";
 const CHECKIN_ENABLED_KEY = "imotara.checkin.enabled";
+/** Language the scheduled reminder should speak. Written when rescheduling. */
+const CHECKIN_LANG_KEY = "imotara.checkin.lang";
 const CHECKIN_HOUR_KEY = "imotara.checkin.hour";
 const CHECKIN_MINUTE_KEY = "imotara.checkin.minute";
 const INACTIVITY_NOTIF_ID_KEY = "imotara.checkin.inactivity.id";
@@ -151,7 +153,11 @@ export async function scheduleCheckInReminderWithReason(
         const id = await Notifications.scheduleNotificationAsync({
             content: {
                 title: withCompanionName("Imotara is here for you 💙", companionName),
-                body: "How are you feeling today? A moment of reflection can make a big difference.",
+                // ⛔ No longer one static line. buildCheckInBody picks copy in
+                // the person's language and, when there is something to refer
+                // back to, names the DAY of the last conversation — never what
+                // was said. A lock screen is read by whoever picks the phone up.
+                body: await buildCheckInBody(),
                 data: { type: "checkin" },
             },
             trigger: {
@@ -205,7 +211,17 @@ type NudgeLang = {
     gt: string;               // generic title
     gb: string[];             // generic body variants
     pt: string;               // personalised title
-    pb: (s: string) => string[]; // personalised body variants
+    /**
+     * Personalised body variants — call with the LOCALISED WEEKDAY of the last
+     * conversation.
+     *
+     * ⛔ Never the person's own words. A lock-screen notification is read by
+     * whoever picks the phone up: a partner, a parent, a colleague. Quoting
+     * someone's message about their marriage or their diagnosis can out their
+     * use of a mental-health app to the person they are trying to get away
+     * from. Mirrors imotaraapp/src/lib/imotara/nudgeStrings.ts.
+     */
+    rb: (day: string) => string[];
 };
 
 function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -219,10 +235,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "It's a good time to check in with yourself. Imotara is here.",
         ],
         pt: "Imotara remembers 💙",
-        pb: (s) => [
-            `You mentioned "${s}" — how has that been going? I'm here 💙`,
-            `Last time you shared "${s}" — I've been thinking about you 💙`,
-            `"${s}" — that stayed with me. How are you feeling now? 💙`,
+        rb: (d) => [
+            `There\u2019s something from ${d} I\u2019ve been wondering about.`,
+            `Something from ${d} has stayed with me. How are you now?`,
+            `I\u2019ve been thinking about ${d}. Want to pick it up?`,
         ],
     },
     hi: {
@@ -233,10 +249,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "अपने आप से मिलने का यह अच्छा समय है। Imotara यहाँ है।",
         ],
         pt: "Imotara को याद है 💙",
-        pb: (s) => [
-            `आपने "${s}" का ज़िक्र किया था — अब कैसा चल रहा है? मैं यहाँ हूँ 💙`,
-            `पिछली बार "${s}" के बारे में बताया — मैं आपके बारे में सोच रही थी 💙`,
-            `"${s}" — यह मेरे मन में था। अब कैसा महसूस कर रहे हैं? 💙`,
+        rb: (d) => [
+            `${d} की एक बात मेरे मन में है।`,
+            `${d} की बात मुझे याद है। अब कैसा लग रहा है?`,
+            `${d} के बारे में सोच रही थी। बात करें?`,
         ],
     },
     bn: {
@@ -247,10 +263,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "নিজেকে একটু সময় দিন। Imotara এখানে আছে।",
         ],
         pt: "Imotara মনে রেখেছে 💙",
-        pb: (s) => [
-            `আপনি "${s}" এর কথা বলেছিলেন — এখন কেমন চলছে? আমি এখানে আছি 💙`,
-            `গতবার "${s}" নিয়ে বলেছিলেন — আপনার কথা মনে পড়ছে 💙`,
-            `"${s}" — এটা আমার মনে ছিল। এখন কেমন লাগছে? 💙`,
+        rb: (d) => [
+            `${d}-এর একটা কথা আমার মনে আছে।`,
+            `${d}-এ যা বলেছিলে, মনে রয়ে গেছে। এখন কেমন লাগছে?`,
+            `${d}-এর কথা ভাবছিলাম। একটু বলবে?`,
         ],
     },
     mr: {
@@ -261,10 +277,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "स्वतःशी बोलण्याची ही चांगली वेळ आहे. Imotara इथे आहे.",
         ],
         pt: "Imotara ला आठवतं 💙",
-        pb: (s) => [
-            `तुम्ही "${s}" बद्दल सांगितलं होतं — आता कसं चाललंय? मी इथे आहे 💙`,
-            `मागच्या वेळी "${s}" बद्दल बोललात — मी तुमच्याबद्दल विचार करत होते 💙`,
-            `"${s}" — हे माझ्या मनात होतं. आता तुम्हाला कसं वाटतंय? 💙`,
+        rb: (d) => [
+            `${d}ची एक गोष्ट माझ्या मनात आहे.`,
+            `${d}चं बोलणं लक्षात राहिलं. आता कसं वाटतंय?`,
+            `${d}बद्दल विचार करत होते. बोलूया?`,
         ],
     },
     ta: {
@@ -275,10 +291,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "கொஞ்சம் நேரம் ஒதுக்குங்கள். Imotara இங்கே இருக்கிறது.",
         ],
         pt: "Imotara நினைவில் வைத்திருக்கிறது 💙",
-        pb: (s) => [
-            `நீங்கள் "${s}" பற்றி சொன்னீர்கள் — இப்போது எப்படி? நான் இங்கே இருக்கிறேன் 💙`,
-            `கடந்த முறை "${s}" பற்றி பகிர்ந்தீர்கள் — உங்களை நினைத்தேன் 💙`,
-            `"${s}" — இது என் மனதில் இருந்தது. இப்போது எப்படி உணர்கிறீர்கள்? 💙`,
+        rb: (d) => [
+            `${d} அன்று பேசியது மனதில் இருக்கிறது.`,
+            `${d} அன்றைய விஷயம் நினைவில் உள்ளது. இப்போது எப்படி இருக்கிறீர்கள்?`,
+            `${d} பற்றி யோசித்துக் கொண்டிருந்தேன். பேசலாமா?`,
         ],
     },
     te: {
@@ -289,10 +305,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "మీ మనసుతో మాట్లాడే సమయం ఇది. Imotara ఇక్కడ ఉంది.",
         ],
         pt: "Imotara గుర్తు పట్టింది 💙",
-        pb: (s) => [
-            `మీరు "${s}" గురించి చెప్పారు — ఇప్పుడు ఎలా ఉంది? నేను ఇక్కడ ఉన్నాను 💙`,
-            `గత సారి "${s}" గురించి పంచుకున్నారు — మిమ్మల్ని గురించి ఆలోచిస్తున్నాను 💙`,
-            `"${s}" — అది నా మనసులో ఉంది. ఇప్పుడు ఎలా అనిపిస్తోంది? 💙`,
+        rb: (d) => [
+            `${d} నాటి ఒక విషయం నా మనసులో ఉంది.`,
+            `${d} నాడు చెప్పినది గుర్తుంది. ఇప్పుడు ఎలా ఉంది?`,
+            `${d} గురించి ఆలోచిస్తున్నాను. మాట్లాడదామా?`,
         ],
     },
     gu: {
@@ -303,10 +319,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "પોતાની સાથે સમય વિતાવો. Imotara અહીં છે.",
         ],
         pt: "Imotara ને યાદ છે 💙",
-        pb: (s) => [
-            `તમે "${s}" વિશે કહ્યું હતું — હવે કેવું ચાલે છે? હું અહીં છું 💙`,
-            `છેલ્લી વખત "${s}" વિશે વાત કરી — હું તમારા વિશે વિચારી રહ્યો/રહ્યી છું 💙`,
-            `"${s}" — આ મારા મનમાં હતું. હવે તમને કેવું લાગે છે? 💙`,
+        rb: (d) => [
+            `${d}ની એક વાત મારા મનમાં છે.`,
+            `${d}ની વાત યાદ રહી ગઈ. અત્યારે કેવું લાગે છે?`,
+            `${d} વિશે વિચારતી હતી. વાત કરીએ?`,
         ],
     },
     kn: {
@@ -317,10 +333,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "ನಿಮ್ಮ ಮನಸ್ಸಿನೊಂದಿಗೆ ಕಾಲ ಕಳೆಯಿರಿ. Imotara ಇಲ್ಲಿದೆ.",
         ],
         pt: "Imotara ನೆನಪಿಟ್ಟಿದೆ 💙",
-        pb: (s) => [
-            `ನೀವು "${s}" ಬಗ್ಗೆ ಹೇಳಿದ್ದಿರಿ — ಈಗ ಅದು ಹೇಗಿದೆ? ನಾನಿದ್ದೇನೆ 💙`,
-            `ಕಳೆದ ಬಾರಿ "${s}" ಬಗ್ಗೆ ಹಂಚಿಕೊಂಡಿದ್ದಿರಿ — ನಿಮ್ಮ ಬಗ್ಗೆ ಯೋಚಿಸುತ್ತಿದ್ದೆ 💙`,
-            `"${s}" — ಇದು ನನ್ನ ಮನಸ್ಸಿನಲ್ಲಿತ್ತು. ಈಗ ಹೇಗೆ ಅನಿಸುತ್ತಿದೆ? 💙`,
+        rb: (d) => [
+            `${d} ದಿನದ ಒಂದು ವಿಷಯ ನನ್ನ ಮನಸ್ಸಿನಲ್ಲಿದೆ.`,
+            `${d} ಹೇಳಿದ್ದು ನೆನಪಿದೆ. ಈಗ ಹೇಗನಿಸುತ್ತಿದೆ?`,
+            `${d} ಬಗ್ಗೆ ಯೋಚಿಸುತ್ತಿದ್ದೆ. ಮಾತಾಡೋಣವೇ?`,
         ],
     },
     ml: {
@@ -331,10 +347,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "സ്വയം ഒന്ന് ശ്രദ്ധിക്കാനുള്ള നേരം. Imotara ഇവിടെ ഉണ്ട്.",
         ],
         pt: "Imotara ഓർക്കുന്നു 💙",
-        pb: (s) => [
-            `നിങ്ങൾ "${s}" പറഞ്ഞിരുന്നു — ഇപ്പോൾ എങ്ങനെ ഉണ്ട്? ഞാൻ ഇവിടെ ഉണ്ട് 💙`,
-            `കഴിഞ്ഞ തവണ "${s}" പങ്കുവെച്ചിരുന്നു — നിങ്ങളെ ഓർത്തുകൊണ്ടിരുന്നു 💙`,
-            `"${s}" — ഇത് എന്റെ മനസ്സിൽ ഉണ്ടായിരുന്നു. ഇപ്പോൾ എങ്ങനെ? 💙`,
+        rb: (d) => [
+            `${d} പറഞ്ഞ ഒരു കാര്യം മനസ്സിലുണ്ട്.`,
+            `${d} പറഞ്ഞത് ഓർമ്മയിലുണ്ട്. ഇപ്പോൾ എങ്ങനെയുണ്ട്?`,
+            `${d} കുറിച്ച് ആലോചിക്കുകയായിരുന്നു. സംസാരിക്കാമോ?`,
         ],
     },
     pa: {
@@ -345,10 +361,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "ਆਪਣੇ ਆਪ ਨਾਲ ਸਮਾਂ ਬਿਤਾਓ। Imotara ਇੱਥੇ ਹੈ।",
         ],
         pt: "Imotara ਨੂੰ ਯਾਦ ਹੈ 💙",
-        pb: (s) => [
-            `ਤੁਸੀਂ "${s}" ਬਾਰੇ ਕਿਹਾ ਸੀ — ਹੁਣ ਕਿਵੇਂ ਚੱਲ ਰਿਹਾ ਹੈ? ਮੈਂ ਇੱਥੇ ਹਾਂ 💙`,
-            `ਪਿਛਲੀ ਵਾਰ "${s}" ਬਾਰੇ ਦੱਸਿਆ — ਮੈਂ ਤੁਹਾਡੇ ਬਾਰੇ ਸੋਚ ਰਹੀ ਸੀ 💙`,
-            `"${s}" — ਇਹ ਮੇਰੇ ਮਨ ਵਿੱਚ ਸੀ। ਹੁਣ ਕਿਵੇਂ ਮਹਿਸੂਸ ਕਰਦੇ ਹੋ? 💙`,
+        rb: (d) => [
+            `${d} ਦੀ ਇੱਕ ਗੱਲ ਮੇਰੇ ਮਨ ਵਿੱਚ ਹੈ।`,
+            `${d} ਦੀ ਗੱਲ ਯਾਦ ਰਹੀ। ਹੁਣ ਕਿਵੇਂ ਲੱਗ ਰਿਹਾ ਹੈ?`,
+            `${d} ਬਾਰੇ ਸੋਚ ਰਹੀ ਸੀ। ਗੱਲ ਕਰੀਏ?`,
         ],
     },
     or: {
@@ -359,10 +375,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "ନିଜ ସହ ଅଳ୍ପ ସମୟ କଟାନ୍ତୁ। Imotara ଏଠି ଅଛି।",
         ],
         pt: "Imotara ମନେ ଅଛି 💙",
-        pb: (s) => [
-            `ଆପଣ "${s}" ବିଷୟରେ କହିଥିଲେ — ଏବେ ଚାଲୁଛି? ମୁଁ ଏଠି ଅଛି 💙`,
-            `ଶେଷ ଥର "${s}" ବିଷୟରେ ଅଂଶ ନେଇଥିଲେ — ଆପଣଙ୍କ ପ୍ରତି ଭାବୁଥିଲି 💙`,
-            `"${s}" — ଏହା ମୋ ମନରେ ଥିଲା। ଏବେ ଆପଣ କେମିତି ଅନୁଭବ କରୁଛନ୍ତି? 💙`,
+        rb: (d) => [
+            `${d} ର ଗୋଟିଏ କଥା ମୋ ମନରେ ଅଛି।`,
+            `${d} ରେ କହିଥିବା କଥା ମନେ ଅଛି। ଏବେ କେମିତି ଲାଗୁଛି?`,
+            `${d} ବିଷୟରେ ଭାବୁଥିଲି। କଥା ହେବା?`,
         ],
     },
     ar: {
@@ -373,10 +389,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "خصّص لنفسك لحظة. Imotara هنا.",
         ],
         pt: "Imotara تتذكر 💙",
-        pb: (s) => [
-            `ذكرت "${s}" — كيف تسير الأمور الآن؟ أنا هنا 💙`,
-            `في آخر مرة شاركت "${s}" — كنت أفكر فيك 💙`,
-            `"${s}" — كان هذا في بالي. كيف تشعر الآن؟ 💙`,
+        rb: (d) => [
+            `هناك شيء من يوم ${d} ما زلت أفكر فيه.`,
+            `ما قلته يوم ${d} بقي في بالي. كيف حالك الآن؟`,
+            `كنت أفكر في يوم ${d}. نتحدث؟`,
         ],
     },
     ur: {
@@ -387,10 +403,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "اپنے ساتھ وقت گزاریں۔ Imotara یہاں ہے۔",
         ],
         pt: "Imotara کو یاد ہے 💙",
-        pb: (s) => [
-            `آپ نے "${s}" کا ذکر کیا تھا — اب کیسا چل رہا ہے؟ میں یہاں ہوں 💙`,
-            `پچھلی بار "${s}" کے بارے میں بتایا — آپ کے بارے میں سوچ رہی تھی 💙`,
-            `"${s}" — یہ میرے ذہن میں تھا۔ اب کیسا محسوس کر رہے ہیں؟ 💙`,
+        rb: (d) => [
+            `${d} کی ایک بات میرے ذہن میں ہے۔`,
+            `${d} کو جو کہا تھا، یاد رہ گیا۔ اب کیسا لگ رہا ہے؟`,
+            `${d} کے بارے میں سوچ رہی تھی۔ بات کریں؟`,
         ],
     },
     ru: {
@@ -401,10 +417,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "Уделите себе минуту. Imotara здесь.",
         ],
         pt: "Imotara помнит 💙",
-        pb: (s) => [
-            `Вы упоминали "${s}" — как это продвигается? Я здесь 💙`,
-            `В прошлый раз вы рассказывали о "${s}" — я думала о вас 💙`,
-            `"${s}" — это было у меня на уме. Как себя чувствуете сейчас? 💙`,
+        rb: (d) => [
+            `Есть кое-что с ${d}, о чём я думаю.`,
+            `То, что вы сказали в ${d}, осталось со мной. Как вы сейчас?`,
+            `Я думала о ${d}. Поговорим?`,
         ],
     },
     zh: {
@@ -415,10 +431,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "给自己一点时间。Imotara 在这里。",
         ],
         pt: "Imotara 还记得 💙",
-        pb: (s) => [
-            `你曾提到"${s}"——现在情况怎么样了？我在这里 💙`,
-            `上次你分享了关于"${s}"的事——我一直在想你 💙`,
-            `"${s}"——这一直在我心里。你现在感觉如何？💙`,
+        rb: (d) => [
+            `${d}的一件事我一直记着。`,
+            `${d}你说的话我还记得。现在感觉怎么样？`,
+            `我一直在想${d}的事。要聊聊吗？`,
         ],
     },
     ja: {
@@ -429,10 +445,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "自分自身と向き合う時間を。Imotara はここにいます。",
         ],
         pt: "Imotara は覚えています 💙",
-        pb: (s) => [
-            `「${s}」とおっしゃっていましたね——今はどうなりましたか？ここにいます 💙`,
-            `前回「${s}」についてお話しいただきました——ずっと気にかけていました 💙`,
-            `「${s}」——ずっと心に残っていました。今はどんな気持ちですか？ 💙`,
+        rb: (d) => [
+            `${d}のことが、ずっと心に残っています。`,
+            `${d}に話してくれたこと、覚えています。今はどうですか？`,
+            `${d}のこと、考えていました。少し話しませんか。`,
         ],
     },
     es: {
@@ -443,10 +459,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "Tómate un momento para ti. Imotara está aquí.",
         ],
         pt: "Imotara recuerda 💙",
-        pb: (s) => [
-            `Mencionaste "${s}" — ¿cómo ha ido eso? Aquí estoy 💙`,
-            `La última vez compartiste "${s}" — he estado pensando en ti 💙`,
-            `"${s}" — lo tenía en mente. ¿Cómo te sientes ahora? 💙`,
+        rb: (d) => [
+            `Hay algo del ${d} en lo que he estado pensando.`,
+            `Algo del ${d} se me quedó. ¿Cómo estás ahora?`,
+            `He estado pensando en el ${d}. ¿Hablamos?`,
         ],
     },
     fr: {
@@ -457,10 +473,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "Prenez un moment pour vous. Imotara est là.",
         ],
         pt: "Imotara se souvient 💙",
-        pb: (s) => [
-            `Vous avez mentionné "${s}" — comment ça s'est passé ? Je suis là 💙`,
-            `La dernière fois vous avez partagé "${s}" — j'ai pensé à vous 💙`,
-            `"${s}" — j'y pensais. Comment vous sentez-vous maintenant ? 💙`,
+        rb: (d) => [
+            `Il y a quelque chose de ${d} auquel je repense.`,
+            `Quelque chose de ${d} m\u2019est resté. Comment allez-vous maintenant ?`,
+            `Je repensais à ${d}. On en parle ?`,
         ],
     },
     de: {
@@ -471,10 +487,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "Gönn dir einen Moment. Imotara ist für dich da.",
         ],
         pt: "Imotara erinnert sich 💙",
-        pb: (s) => [
-            `Du hast "${s}" erwähnt — wie läuft es damit? Ich bin hier 💙`,
-            `Beim letzten Mal hast du über "${s}" gesprochen — ich habe an dich gedacht 💙`,
-            `"${s}" — das hatte ich im Kopf. Wie fühlst du dich jetzt? 💙`,
+        rb: (d) => [
+            `Da ist etwas von ${d}, worüber ich nachgedacht habe.`,
+            `Etwas von ${d} ist mir geblieben. Wie geht es Ihnen jetzt?`,
+            `Ich habe an ${d} gedacht. Wollen wir reden?`,
         ],
     },
     pt: {
@@ -485,10 +501,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "Reserve um momento para você. Imotara está aqui.",
         ],
         pt: "Imotara se lembra 💙",
-        pb: (s) => [
-            `Você mencionou "${s}" — como isso tem ido? Estou aqui 💙`,
-            `Da última vez você compartilhou "${s}" — fiquei pensando em você 💙`,
-            `"${s}" — isso ficou na minha mente. Como está se sentindo? 💙`,
+        rb: (d) => [
+            `Há algo de ${d} em que tenho pensado.`,
+            `Algo de ${d} ficou comigo. Como está agora?`,
+            `Tenho pensado em ${d}. Conversamos?`,
         ],
     },
     id: {
@@ -499,10 +515,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "Luangkan waktu sejenak untuk dirimu. Imotara ada di sini.",
         ],
         pt: "Imotara ingat 💙",
-        pb: (s) => [
-            `Kamu menyebutkan "${s}" — bagaimana perkembangannya? Aku di sini 💙`,
-            `Terakhir kali kamu berbagi "${s}" — aku memikirkanmu 💙`,
-            `"${s}" — itu ada di pikiranku. Sekarang bagaimana perasaanmu? 💙`,
+        rb: (d) => [
+            `Ada sesuatu dari hari ${d} yang masih saya pikirkan.`,
+            `Sesuatu dari ${d} masih terasa. Bagaimana kabarmu sekarang?`,
+            `Saya memikirkan ${d}. Mau cerita?`,
         ],
     },
     he: {
@@ -513,10 +529,10 @@ const NUDGE: Record<string, NudgeLang> = {
             "תן/תני לעצמך רגע. Imotara כאן.",
         ],
         pt: "Imotara זוכרת 💙",
-        pb: (s) => [
-            `הזכרת "${s}" — איך זה התפתח? אני כאן 💙`,
-            `בפעם האחרונה שיתפת "${s}" — חשבתי עליך 💙`,
-            `"${s}" — זה היה בראשי. איך אתה/את מרגיש/ה עכשיו? 💙`,
+        rb: (d) => [
+            `יש משהו מ${d} שאני עדיין חושבת עליו.`,
+            `משהו מ${d} נשאר איתי. איך את/ה מרגיש/ה עכשיו?`,
+            `חשבתי על ${d}. רוצה לדבר?`,
         ],
     },
 };
@@ -528,14 +544,64 @@ export function getNudgeStrings(lang?: string): NudgeLang {
 }
 
 /** Builds a localised, warm notification body for the inactivity nudge. */
-export function buildInactivityPayload(lastContext?: string, lang?: string, companionName?: string | null): { title: string; body: string } {
+/**
+ * The localised weekday of a conversation, e.g. "বৃহস্পতিবার" for bn.
+ *
+ * Verified 2026-10-13 that ICU resolves a native weekday for all 22 supported
+ * languages, Odia and Malayalam included. Returns null on failure so the caller
+ * falls back to the generic copy rather than shipping a half-built sentence.
+ */
+export function localisedWeekday(at: Date, lang?: string | null): string | null {
+    try {
+        const base = String(lang ?? "en").trim().toLowerCase().split(/[-_]/)[0] || "en";
+        const w = new Intl.DateTimeFormat(base, { weekday: "long" }).format(at);
+        return w && w.trim() ? w : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Body for the inactivity nudge.
+ *
+ * ⛔ `lastActivityAt` replaced the old `lastContext` string on purpose: the
+ * payload now references WHEN the conversation happened, never WHAT was said.
+ * Taking a Date rather than text makes it impossible to pass a message in by
+ * accident — the type no longer allows it.
+ */
+export function buildInactivityPayload(
+    lastActivityAt?: Date | null,
+    lang?: string,
+    companionName?: string | null,
+): { title: string; body: string } {
     const L = getNudgeStrings(lang);
     const say = (t: string) => withCompanionName(t, companionName);
-    if (!lastContext) {
-        return { title: say(L.gt), body: say(pick(L.gb)) };
+    const generic = { title: say(L.gt), body: say(pick(L.gb)) };
+    if (!lastActivityAt) return generic;
+    const day = localisedWeekday(lastActivityAt, lang);
+    if (!day) return generic;
+    return { title: say(L.pt), body: say(pick(L.rb(day))) };
+}
+
+/**
+ * Body for the DAILY check-in reminder, in the person's language.
+ *
+ * ⚠️ Local notifications are scheduled with FIXED TEXT at schedule time, so
+ * this cannot ask about a conversation that has not happened yet — the text is
+ * at best one session stale. That is why ChatScreen reschedules after each
+ * session rather than scheduling once and forgetting.
+ */
+export async function buildCheckInBody(): Promise<string> {
+    try {
+        const [lang, companionName] = await Promise.all([
+            AsyncStorage.getItem(CHECKIN_LANG_KEY),
+            getSavedCompanionName(),
+        ]);
+        const L = getNudgeStrings(lang ?? undefined);
+        return withCompanionName(pick(L.gb), companionName);
+    } catch {
+        return "How are you feeling today? A moment of reflection can make a big difference.";
     }
-    const snippet = truncateToWord(lastContext.replace(/[.!?,;:]+$/, "").trim(), 50);
-    return { title: say(L.pt), body: say(pick(L.pb(snippet))) };
 }
 
 /**
@@ -544,7 +610,13 @@ export function buildInactivityPayload(lastContext?: string, lang?: string, comp
  * Pass lastContext (the user's last message text) and lang (ISO code, e.g. "hi")
  * to personalise the notification in the user's preferred language.
  */
-export async function scheduleInactivityReminder(lastActivityTs: number, lastContext?: string, lang?: string): Promise<void> {
+/**
+ * ⚠️ `lastContext` was REMOVED from this signature on purpose (2026-10-13).
+ * It used to carry the person's last message so the nudge could quote it. The
+ * nudge now names the day instead, and taking the text at all would invite
+ * someone to put it back on a lock screen.
+ */
+export async function scheduleInactivityReminder(lastActivityTs: number, lang?: string): Promise<void> {
     const Notifications = getNotifications();
     if (!Notifications) return;
 
@@ -567,7 +639,10 @@ export async function scheduleInactivityReminder(lastActivityTs: number, lastCon
     if (silentFor >= thresholdMs) return; // already overdue — skip, daily reminder covers it
 
     const fireInMs = thresholdMs - silentFor;
-    const { title, body } = buildInactivityPayload(lastContext, lang, await getSavedCompanionName());
+    // ⛔ lastActivityTs, NOT lastContext. The payload references when the
+    // conversation happened, never what was said.
+    const { title, body } = buildInactivityPayload(
+        new Date(lastActivityTs), lang, await getSavedCompanionName());
     try {
         const id = await Notifications.scheduleNotificationAsync({
             content: {
@@ -636,5 +711,17 @@ export async function cancelInactivityReminder(): Promise<void> {
 
 export async function isCheckInReminderEnabled(): Promise<boolean> {
     const val = await AsyncStorage.getItem(CHECKIN_ENABLED_KEY);
-    return val === "1";
+    // ⚠️ DEFAULT ON (owner requirement 2026-10-10). This used to be
+    // `val === "1"`, so an unset key meant OFF and the reminder only existed
+    // for people who went looking for it.
+    //
+    // ⛔ "0" is the only way to be off. An unset key is a person who has never
+    // expressed a preference, and the product's default for them is on — not a
+    // silent opt-out they never chose.
+    //
+    // 🔑 This flag is the SETTING, not the outcome: iOS delivers nothing without
+    // the permission prompt and Android 13+ needs POST_NOTIFICATIONS. A toggle
+    // reading ON while the OS refuses is the setup-≠-outcome trap, which is why
+    // scheduleCheckInReminderWithReason reports a reason rather than a boolean.
+    return val !== "0";
 }

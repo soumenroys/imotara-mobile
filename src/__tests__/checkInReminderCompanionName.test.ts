@@ -52,7 +52,11 @@ describe("the text follows the chosen name", () => {
     it("the inactivity payload applies the name to title AND body, personalised or not", () => {
         for (let i = 0; i < 30; i++) { // bodies are picked at random
             const generic = buildInactivityPayload(undefined, "en", "Maya");
-            const personal = buildInactivityPayload("my exam tomorrow", "en", "Maya");
+            // RE-POINTED 2026-10-13: this used to pass the person's message
+            // text. buildInactivityPayload now takes the DATE of the last
+            // conversation — the type no longer allows a message through.
+            const personal = buildInactivityPayload(
+                new Date("2026-10-15T10:00:00Z"), "en", "Maya");
             for (const p of [generic, personal]) {
                 expect(p.title).not.toMatch(/Imotara/);
                 expect(p.body).not.toMatch(/Imotara/);
