@@ -6,6 +6,7 @@ import { sweepAudioCaches } from "./src/lib/audioCacheSweeper";
 import { StatusBar } from "expo-status-bar";
 import { Platform, View, Text, TouchableOpacity, Linking } from "react-native";
 import RootNavigator from "./src/navigation/RootNavigator";
+import ConsentGateMount from "./src/components/legal/ConsentGateMount";
 import AppThemeProvider from "./src/theme/AppThemeProvider";
 import { ThemeProvider } from "./src/theme/ThemeContext";
 import HistoryProvider from "./src/state/HistoryContext";
@@ -121,6 +122,10 @@ function AppShell() {
               on short-screen devices squeezed the tab bar enough to make its
               icons/labels overlap when the keyboard was open. */}
           <RootNavigator />
+
+          {/* First-use Terms/Privacy acceptance. Renders nothing once accepted.
+              Sits AFTER RootNavigator so it overlays whatever is on screen. */}
+          <ConsentGateMount />
 
           <StatusBar style="auto" />
         </HistoryProvider>
