@@ -113,6 +113,21 @@ function AppShell() {
   return (
     <AppThemeProvider>
       <ThemeProvider>
+      {/* 🔴 ConsentGateMount WRAPS the app — it does not sit beside it.
+          Until Terms/Privacy are accepted it renders the gate and NOTHING ELSE;
+          none of the providers below are even mounted.
+
+          It used to be a sibling <Modal> after RootNavigator, on the assumption
+          that later in the tree meant on top. A wiped Android emulator proved
+          otherwise on 2026-10-13: SignInPrompt's own modal covered it, because
+          Android stacks modals by RUNTIME PRESENTATION ORDER. A person on a
+          fresh install could reach sign-in, and create an account, without ever
+          passing the gate.
+
+          ⛔ Do not move this back inside. A gate that renders alongside the app
+          can always be raced by another overlay; a gate the app mounts BEHIND
+          cannot. It sits inside ThemeProvider because the gate uses useColors. */}
+      <ConsentGateMount>
       {/* Settings MUST wrap HistoryProvider because HistoryProvider calls useSettings() */}
       <AuthProvider>
       <SettingsProvider>
@@ -124,14 +139,11 @@ function AppShell() {
               icons/labels overlap when the keyboard was open. */}
           <RootNavigator />
 
-          {/* First-use Terms/Privacy acceptance. Renders nothing once accepted.
-              Sits AFTER RootNavigator so it overlays whatever is on screen. */}
-          <ConsentGateMount />
-
           <StatusBar style="auto" />
         </HistoryProvider>
       </SettingsProvider>
       </AuthProvider>
+      </ConsentGateMount>
       </ThemeProvider>
     </AppThemeProvider>
   );

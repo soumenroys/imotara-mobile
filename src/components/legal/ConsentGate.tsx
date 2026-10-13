@@ -15,7 +15,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
     Linking,
-    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -111,9 +110,12 @@ export default function ConsentGate({ lang, countryCode, onAccepted, surface }: 
     const dir = rtl ? ("rtl" as const) : ("ltr" as const);
     const align = rtl ? ("right" as const) : ("left" as const);
 
+    // ⛔ NOT a <Modal> any more. The gate is now mounted INSTEAD of the app
+    // (App.tsx), so there is nothing behind it to overlay — and a Modal would
+    // reintroduce the very stacking race that let SignInPrompt cover it on
+    // Android. A plain full-screen View cannot be raced.
     return (
-        <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={() => {}}>
-            <View style={styles.scrim}>
+        <View style={styles.scrim}>
                 <ScrollView
                     contentContainerStyle={styles.scrollInner}
                     showsVerticalScrollIndicator={false}
@@ -196,9 +198,8 @@ export default function ConsentGate({ lang, countryCode, onAccepted, surface }: 
                             </Pressable>
                         </View>
                     </View>
-                </ScrollView>
-            </View>
-        </Modal>
+            </ScrollView>
+        </View>
     );
 }
 
