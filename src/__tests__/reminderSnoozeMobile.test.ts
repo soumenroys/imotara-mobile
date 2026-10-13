@@ -91,3 +91,44 @@ describe("pausing the reminder on mobile", () => {
         expect(SETTINGS).toMatch(/Resumes on/);
     });
 });
+
+describe("🔴 gaps found in the 2026-10-13 verification pass", () => {
+    it("⛔ the reminder language is RESOLVED, not read from a key nothing writes", () => {
+        // FOUND IN REVIEW: buildCheckInBody read a CHECKIN_LANG_KEY that was
+        // never written anywhere, so every daily reminder fell back to English
+        // — in all 22 languages, silently, with every test still green.
+        expect(MOD).toMatch(/export async function resolveReminderLang/);
+        expect(MOD).toMatch(/imotara_settings_v1/);
+        expect(MOD).not.toMatch(/getItem\(CHECKIN_LANG_KEY\)/);
+    });
+
+    it("⛔ 'auto' falls through to the DEVICE LOCALE, never to English", () => {
+        // Collapsing "auto" to English is the trap that put the crisis card in
+        // English for everyone on the default setting (a6f167f).
+        const fn = MOD.slice(MOD.indexOf("export async function resolveReminderLang"));
+        const body = fn.slice(0, 900);
+        expect(body).toMatch(/!== "auto"/);
+        expect(body).toMatch(/resolvedOptions\(\)\.locale/);
+    });
+
+    it("⛔ paid tiers can turn reminders off on mobile, as they can on web", () => {
+        // Mobile offered pause only, so a Plus subscriber had a control on web
+        // that did not exist on their phone.
+        expect(MOD).toMatch(/export async function disableCheckInReminder/);
+        expect(SETTINGS).toMatch(/canDisableReminders/);
+        expect(SETTINGS).toMatch(/licenseTier !== "free"/);
+    });
+
+    it("⛔ turning off also clears a pause", () => {
+        // Otherwise a stale snooze could expire and re-arm the reminder behind
+        // the person's back, undoing an explicit "off".
+        const fn = MOD.slice(MOD.indexOf("export async function disableCheckInReminder"));
+        expect(fn.slice(0, 700)).toMatch(/resumeCheckInReminder\(\)/);
+    });
+
+    it("⛔ re-arming respects an explicit off", () => {
+        // rearmAfterSnooze must not resurrect a reminder the person disabled.
+        const fn = MOD.slice(MOD.indexOf("export async function rearmAfterSnooze"));
+        expect(fn.slice(0, 800)).toMatch(/isCheckInReminderEnabled\(\)/);
+    });
+});

@@ -52,6 +52,7 @@ import {
     getSnoozedUntil,
     snoozeCheckInReminder,
     resumeCheckInReminder,
+    disableCheckInReminder,
     SNOOZE_DAYS,
     getSavedReminderTime,
     getSavedNotifPrefs,
@@ -629,6 +630,17 @@ function SettingsScreenContent() {
     const handleSnooze = async (days: 3 | 5) => {
         const until = await snoozeCheckInReminder(days);
         setSnoozedUntil(until);
+    };
+
+    // ⚠️ PAID CONTROL. Mirrors the web "Turn off" button; free tiers are offered
+    // pause only. gate() is the same helper every other tier control uses, so
+    // this cannot drift from the licensing model.
+    const canDisableReminders = licenseTier !== "free";
+
+    const handleDisableReminders = async () => {
+        await disableCheckInReminder();
+        setReminderEnabled(false);
+        setSnoozedUntil(null);
     };
 
     const handleResume = async () => {
@@ -2710,6 +2722,20 @@ function SettingsScreenContent() {
                                                 </Text>
                                             </TouchableOpacity>
                                         ))}
+                                        {canDisableReminders && (
+                                            <TouchableOpacity
+                                                onPress={handleDisableReminders}
+                                                style={{
+                                                    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12,
+                                                    borderWidth: 1.5, minHeight: 40,
+                                                    borderColor: colors.border, backgroundColor: "transparent",
+                                                }}
+                                            >
+                                                <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                                                    Turn off
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )}
                                     </View>
                                 )}
                                 <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 8, lineHeight: 16 }}>

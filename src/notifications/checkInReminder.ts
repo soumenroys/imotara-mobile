@@ -8,8 +8,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const CHECKIN_NOTIFICATION_ID_KEY = "imotara.checkin.notif.id";
 const CHECKIN_ENABLED_KEY = "imotara.checkin.enabled";
-/** Language the scheduled reminder should speak. Written when rescheduling. */
-const CHECKIN_LANG_KEY = "imotara.checkin.lang";
 const CHECKIN_HOUR_KEY = "imotara.checkin.hour";
 const CHECKIN_MINUTE_KEY = "imotara.checkin.minute";
 const INACTIVITY_NOTIF_ID_KEY = "imotara.checkin.inactivity.id";
@@ -594,13 +592,42 @@ export function buildInactivityPayload(
 export async function buildCheckInBody(): Promise<string> {
     try {
         const [lang, companionName] = await Promise.all([
-            AsyncStorage.getItem(CHECKIN_LANG_KEY),
+            resolveReminderLang(),
             getSavedCompanionName(),
         ]);
         const L = getNudgeStrings(lang ?? undefined);
         return withCompanionName(pick(L.gb), companionName);
     } catch {
         return "How are you feeling today? A moment of reflection can make a big difference.";
+    }
+}
+
+/**
+ * Which language the scheduled reminder should speak.
+ *
+ * 🔴 FOUND IN REVIEW 2026-10-13: an earlier draft read a `CHECKIN_LANG_KEY`
+ * that NOTHING EVER WROTE, so every reminder fell back to English — in all 22
+ * languages, silently. Reading the settings store directly removes the write
+ * step that was missing, and keeps one source of truth.
+ *
+ * ⛔ "auto" is not a language. It means "match what they write", and a
+ * notification has no input to match — so it falls through to the DEVICE
+ * LOCALE rather than to English. Collapsing "auto" to English is the trap that
+ * put the crisis card in English for everyone on the default setting.
+ */
+export async function resolveReminderLang(): Promise<string | undefined> {
+    try {
+        const raw = await AsyncStorage.getItem("imotara_settings_v1");
+        const stored = raw ? JSON.parse(raw)?.user?.preferredLang : undefined;
+        if (typeof stored === "string" && stored && stored !== "auto") return stored;
+    } catch {
+        /* fall through to the device locale */
+    }
+    try {
+        const loc = new Intl.DateTimeFormat().resolvedOptions().locale;
+        return loc ? loc.split(/[-_]/)[0] : undefined;
+    } catch {
+        return undefined;
     }
 }
 
@@ -819,5 +846,27 @@ export async function rearmAfterSnooze(now: Date = new Date()): Promise<boolean>
         return res.ok;
     } catch {
         return false;
+    }
+}
+
+/**
+ * Turns the daily reminder off for good.
+ *
+ * ⚠️ PAID CONTROL — owner decision 2026-10-13, option (a). The caller must
+ * check the tier; this function does not, because on mobile there is no server
+ * in the path to enforce it and a check here would be trivially bypassed
+ * anyway. The gate that matters is the UI not offering it, plus the server-side
+ * gate on the web twin.
+ */
+export async function disableCheckInReminder(): Promise<void> {
+    try {
+        await AsyncStorage.setItem(CHECKIN_ENABLED_KEY, "0");
+        await cancelCheckInReminder();
+        await cancelInactivityReminder();
+        // ⛔ Clear any pause too: "off" must not be silently undone by a stale
+        // snooze expiring and re-arming the reminder behind the person's back.
+        await resumeCheckInReminder();
+    } catch {
+        /* ignore */
     }
 }
