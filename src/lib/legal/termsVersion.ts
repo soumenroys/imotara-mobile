@@ -22,7 +22,7 @@
 // Keep it in lockstep with the "Effective date" printed on src/app/terms/page.tsx.
 
 /** Effective date of the currently published Terms + Privacy Policy. */
-export const TERMS_VERSION = "2026-10-13";
+export const TERMS_VERSION = "2026-10-13b";
 
 /**
  * Everything we persist when someone accepts. Each field exists for a reason:
