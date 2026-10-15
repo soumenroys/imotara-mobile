@@ -96,11 +96,25 @@ Use this document to fill in the Data Safety form in Google Play Console.
 
 ### Location — ⛔ READ THE GATE BEFORE FILLING THIS IN
 
-> ## ⛔ THIS SECTION IS NOT YET TRUE. DO NOT ENTER IT IN THE FORM YET.
-> It becomes true **only when the usage-geography recorder is deployed to the
-> mobile apps** (`imotaraapp` `4c5823e` / `f10c85f`, plus an EAS build). Until
-> then **Location stays "No"**, exactly as it is in §5 below. Filing this early
-> would make the form inaccurate in the other direction.
+> ## ⛔ THIS SECTION IS NOT YET TRUE — AND MY FIRST VERSION OF THIS GATE NAMED THE WRONG TRIGGER.
+> It said this became true "at the next EAS build". **It does not.** The
+> recorder runs **server-side on `/api/respond`**, which every ALREADY-INSTALLED
+> iOS and Android build calls, and those builds already send
+> `X-Imotara-Platform`. So mobile usage would begin being recorded **the instant
+> the WEB deploys** — no app release involved. A gate naming the wrong trigger
+> is worse than no gate, because it buys false time.
+>
+> **What actually switches it on:** setting **`IMOTARA_USAGE_GEO_MOBILE=true`**
+> in Vercel. The recorder is **web-only by default** and returns early for
+> ios/android without it (`imotaraapp src/lib/analytics/usageGeo.ts`).
+>
+> ▶️ **THE ORDER, and it only works in this order:**
+> 1. Enter the Location section below in the Play Console form, and the Apple
+>    label (Coarse Location · Not Linked to You · Analytics).
+> 2. **Then** set `IMOTARA_USAGE_GEO_MOBILE=true`.
+>
+> Until step 2, **Location stays "No"** as §5 says, and that remains accurate
+> however many times the web deploys.
 
 | Data Type | Collected | Shared | Required or Optional | Purpose |
 |-----------|-----------|--------|----------------------|---------|
