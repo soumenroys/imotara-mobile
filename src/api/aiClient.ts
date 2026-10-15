@@ -38,6 +38,7 @@ import {
   classifyNetworkFailure,
   NetworkUnavailableError,
 } from "../lib/network/fetchWithTimeout";
+import { rememberServerCountry } from "../lib/safety/resolveCrisisCountry";
 
 // Mobile safety: avoid UI freezes if server returns an unexpectedly huge string.
 const MAX_REMOTE_REPLY_CHARS = 5000;
@@ -1123,6 +1124,17 @@ export async function callImotaraAI(
     // - data.meta.emotionLabel: string
     // - data.meta.emotion: { primary: string, intensity: "low"|"medium"|"high", ... }
     const meta = data?.meta;
+
+    // 🔑 The country the EDGE saw, for the crisis card. Both clients otherwise
+    // resolve it from the Intl locale, which is a language preference and not
+    // a location: a Bengali- or Hindi-locale phone in London reports IN and is
+    // shown Tele-MANAS 14416, a short code that does not dial from the UK. The
+    // people most likely to keep a home-country locale are exactly the people
+    // furthest from that country's helplines.
+    // ⛔ Fire-and-forget: a crisis card must never wait on an analytics-shaped
+    // write, and an explicit Settings choice still beats this.
+    // ⇒ src/lib/safety/resolveCrisisCountry.ts
+    void rememberServerCountry((meta as { resolvedCountry?: unknown } | undefined)?.resolvedCountry);
 
     const metaEmotionObj =
       meta &&

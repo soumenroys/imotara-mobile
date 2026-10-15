@@ -99,6 +99,7 @@ import {
   detectPositiveText,
 } from "../lib/emotion/keywordMaps";
 import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
+import { hydrateCrisisCountry, resolveCrisisCountry } from "../lib/safety/resolveCrisisCountry";
 import { getCrisisCopy } from "../lib/safety/crisisCopy";
 import { crisisCardLangFor } from "../lib/safety/crisisCardLang";
 import { CRISIS_CARD_COLORS } from "../lib/safety/crisisCardColors";
@@ -1520,7 +1521,12 @@ function MessageBubble({
                 // the 59 with its own numbers — a crisis card with no helpline
                 // on it. getCrisisResourcesForCountry now always answers, so
                 // there is nothing left to guard.
-                const resources = getCrisisResourcesForCountry(detectCountryCode());
+                // 🔴 resolveCrisisCountry(), NOT detectCountryCode(). This card
+                // used to ignore the person's own Settings choice entirely —
+                // imotara.crisis.country.v1 was written by SettingsScreen and
+                // read by nobody — and fell back to the Intl LOCALE, which is a
+                // language preference, not a location.
+                const resources = getCrisisResourcesForCountry(resolveCrisisCountry());
                 const primary = resources.primary[0];
                 return (
                   <TouchableOpacity
@@ -1549,7 +1555,7 @@ function MessageBubble({
             </View>
             <View style={{ marginTop: 10, gap: 6 }}>
               {(() => {
-                const countryCode = detectCountryCode();
+                const countryCode = resolveCrisisCountry();
                 const resources = getCrisisResourcesForCountry(countryCode);
                 // ⚠️ `lines` was previously empty for any country outside the
                 // 59 listed ones, so this card rendered its heading and its
@@ -1695,6 +1701,13 @@ export default function ChatScreen() {
   // Companion quick panel — opened by swiping right from the left edge strip
   const [companionPanelVisible, setCompanionPanelVisible] = useState(false);
   const companionPanelVisibleRef = useRef(false);
+  // 🔑 Load the crisis-country sources once, before any card can render: the
+  // person's Settings choice and the country the last reply's edge reported.
+  // Both are cached in memory afterwards, because the card renders inline and
+  // cannot await. ⛔ If this never resolves the card still works — it falls
+  // back to the locale guess, which is what it used before.
+  useEffect(() => { void hydrateCrisisCountry(); }, []);
+
   useEffect(() => { companionPanelVisibleRef.current = companionPanelVisible; }, [companionPanelVisible]);
 
   const [planPanelVisible, setPlanPanelVisible] = useState(false);

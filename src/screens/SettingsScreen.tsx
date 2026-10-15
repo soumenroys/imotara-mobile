@@ -86,6 +86,7 @@ import { gate } from "../licensing/featureGates";
 // ✅ Donation presets + formatting (re-used)
 import { DONATION_PRESETS, formatINRFromPaise, fetchDonationPresets } from "../payments/donations";
 import { orgBillingTypeMeta } from "../lib/imotara/orgBilling";
+import { setCrisisCountryOverride } from "../lib/safety/resolveCrisisCountry";
 
 /**
  * ✅ TS FIX:
@@ -1471,7 +1472,12 @@ function SettingsScreenContent() {
     const handleCrisisCountryChange = async (code: string) => {
         setCrisisCountry(code);
         setShowCrisisCountryModal(false);
-        await AsyncStorage.setItem(CRISIS_COUNTRY_KEY, code).catch(() => {});
+        // 🔴 This used to write to AsyncStorage and nothing else — the key was
+        // read by NOBODY, so a person who found this control, set it, and
+        // trusted it was still shown the auto-detected numbers. The resolver
+        // owns the write now, and the crisis card reads it.
+        // ⇒ src/lib/safety/resolveCrisisCountry.ts
+        await setCrisisCountryOverride(code);
     };
 
     // M-6: API timeout

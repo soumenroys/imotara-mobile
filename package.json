@@ -18,7 +18,8 @@
     "moduleNameMapper": {
       "^expo-av$": "<rootDir>/jest/stubs/expo-av.js",
       "^expo-speech$": "<rootDir>/jest/stubs/expo-speech.js",
-      "^expo-file-system$": "<rootDir>/jest/stubs/expo-file-system.js"
+      "^expo-file-system$": "<rootDir>/jest/stubs/expo-file-system.js",
+      "^@react-native-async-storage/async-storage$": "<rootDir>/jest/stubs/async-storage.js"
     },
     "testMatch": [
       "**/__tests__/**/*.test.ts",
