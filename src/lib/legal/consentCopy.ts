@@ -78,8 +78,24 @@ export const CONSENT_COPY_BY_LANG: Record<string, ConsentCopy> = {
     id: { title: "Selamat datang di Imotara", warm: "Ruang pribadi untuk apa yang benar-benar Anda rasakan — hanya milik Anda, kapan saja.", body: "Imotara adalah teman untuk merenung — bukan terapis atau dokter. Imotara tidak memberikan nasihat medis.", emergencyLead: "Jika Anda dalam bahaya, atau terpikir untuk menyakiti diri sendiri, carilah bantuan sekarang.", agree: "Saya berusia 13 tahun atau lebih. Jika saya di bawah 18 tahun, orang tua atau wali saya menyetujui penggunaan ini. Saya menerima {terms} dan {privacy}.", termsLabel: "Ketentuan", privacyLabel: "Kebijakan Privasi", cta: "Lanjutkan" },
 };
 
-/** The minimum age stated on the gate. Owner decision, 2026-10-13. */
-export const MINIMUM_AGE = 18;
+/**
+ * The minimum age stated on the gate. Owner decision, 2026-10-13: **13**, with
+ * parental consent required under 18.
+ *
+ * 🔴 THIS SAID 18 UNTIL 2026-10-15, and the test that was supposed to catch it
+ * passed anyway. It asserted `copy.agree.includes(String(MINIMUM_AGE))` — and
+ * every translation DOES contain "18", because of the parental-consent clause
+ * in the very same sentence. So the guard on the minimum age was being
+ * satisfied by a different number that happened to be nearby.
+ *
+ * ⛔ The 22 translations were right all along; it was the constant and the
+ * assertion that were wrong. The test now pins BOTH numbers, which is why the
+ * coincidence can no longer hide a mistake.
+ */
+export const MINIMUM_AGE = 13;
+
+/** Below this age a parent or guardian must agree. Stated in the same sentence. */
+export const PARENTAL_CONSENT_BELOW = 18;
 
 /**
  * Copy for a language, falling back to English.

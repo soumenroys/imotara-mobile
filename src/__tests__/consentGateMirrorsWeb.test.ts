@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { CONSENT_COPY_BY_LANG, getConsentCopy, MINIMUM_AGE } from "../lib/legal/consentCopy";
+import { CONSENT_COPY_BY_LANG, getConsentCopy, MINIMUM_AGE, PARENTAL_CONSENT_BELOW } from "../lib/legal/consentCopy";
 // ⚠️ Mobile exports CRISIS_COPY_LANGS; the web twin of this file imports
 // CRISIS_BANNER_BY_LANG. The two repos name the crisis copy differently —
 // same facts, different export. Do not "fix" one to match the other without
@@ -55,14 +55,24 @@ describe("the consent gate speaks every language the crisis card does", () => {
         expect(missing).toEqual([]);
     });
 
-    it("states the minimum age in every translation", () => {
-        const ageless = Object.entries(CONSENT_COPY_BY_LANG)
-            .filter(([, copy]) =>
-                !copy.agree.includes(String(MINIMUM_AGE)) &&
-                !copy.agree.includes("\u0b67\u0b6e") &&   // Odia 18
-                !copy.agree.includes("\u09e7\u09ee"))     // Bengali 18
-            .map(([lang]) => lang);
-        expect(ageless).toEqual([]);
+    it("🔴 states BOTH the minimum age and the parental-consent age, in every translation", () => {
+        // 🔑 This checked ONE number until 2026-10-15, and MINIMUM_AGE was
+        // wrong (18, when the decision was 13). It passed regardless, because
+        // every translation contains "18" in the parental-consent half of the
+        // same sentence. Requiring both makes that coincidence impossible.
+        const DIGITS: Record<string, (n: number) => string> = {
+            or: (n) => String(n).replace(/[0-9]/g, (d) => "\u0b66\u0b67\u0b68\u0b69\u0b6a\u0b6b\u0b6c\u0b6d\u0b6e\u0b6f"[Number(d)]),
+            bn: (n) => String(n).replace(/[0-9]/g, (d) => "\u09e6\u09e7\u09e8\u09e9\u09ea\u09eb\u09ec\u09ed\u09ee\u09ef"[Number(d)]),
+        };
+        const missing: string[] = [];
+        for (const [lang, copy] of Object.entries(CONSENT_COPY_BY_LANG)) {
+            const local = DIGITS[lang] ?? ((n: number) => String(n));
+            if (!copy.agree.includes(local(MINIMUM_AGE))) missing.push(`${lang}: minimum age`);
+            if (!copy.agree.includes(local(PARENTAL_CONSENT_BELOW))) missing.push(`${lang}: parental age`);
+        }
+        expect(missing).toEqual([]);
+        expect(MINIMUM_AGE).toBe(13);
+        expect(PARENTAL_CONSENT_BELOW).toBe(18);
     });
 
     it("never collapses an unknown language or 'auto' into a throw", () => {
