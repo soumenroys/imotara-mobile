@@ -3,6 +3,13 @@ export type CrisisResource = {
     label: string;
     contact: string;
     note?: string;
+    /**
+     * Set ONLY when the line is reached on the web rather than by phone.
+     * ⛔ Every renderer must prefer this over a `tel:` link — a `tel:` built
+     * from "findahelpline.com" dials nothing, which is the one failure mode a
+     * crisis card cannot have.
+     */
+    url?: string;
 };
 
 export type CountryCrisisResources = {
@@ -522,6 +529,42 @@ export const EGYPT_CRISIS_RESOURCES: CountryCrisisResources = {
 
 // ─── Lookup map ───────────────────────────────────────────────────────────────
 
+// ─── Everywhere else ─────────────────────────────────────────────────────────
+
+/**
+ * 🔴 THE FALLBACK FOR THE ~140 COUNTRIES NOT LISTED ABOVE, and for the user
+ * whose country we could not determine at all.
+ *
+ * ⛔ IT CARRIES NO PHONE NUMBER ON PURPOSE. There is no number that is correct
+ * everywhere — 112 is wrong in the US and much of Asia, 911 is wrong across
+ * most of Europe and Africa — and a crisis card that prints a number which
+ * does not answer is worse than one that prints none. So this points at
+ * findahelpline.com, a free directory that resolves the *reader's* own country
+ * to a real local service.
+ *
+ * ⚠️ It replaced two defects that both shipped for months:
+ *   · no country detected    → INDIAN numbers shown to the whole world
+ *   · country not in the map → `null`, i.e. the Tier-1 card rendered no
+ *     helpline at all and the Tier-2 card rendered an EMPTY list of numbers
+ *     under a heading promising help.
+ *
+ * 🔴 MOBILE IS THE WORSE CASE. The web gets a real country from Vercel's
+ * x-vercel-ip-country header; mobile has only detectCountryCode(), an Intl
+ * locale heuristic, so an unlisted country here is routine rather than rare.
+ */
+export const INTERNATIONAL_CRISIS_RESOURCES: CountryCrisisResources = {
+    countryCode: "ZZ",
+    primary: [
+        {
+            id: "intl-find-a-helpline",
+            label: "Find a Helpline",
+            contact: "findahelpline.com",
+            url: "https://findahelpline.com",
+            note: "Free, confidential helplines in your own country, in your own language.",
+        },
+    ],
+};
+
 const COUNTRY_RESOURCES_MAP: Record<string, CountryCrisisResources> = {
     // Asia
     IN: INDIA_CRISIS_RESOURCES,
@@ -593,13 +636,16 @@ const COUNTRY_RESOURCES_MAP: Record<string, CountryCrisisResources> = {
 
 /**
  * Returns crisis resources for the given ISO 3166-1 alpha-2 country code.
- * Falls back to India resources if no country code is provided.
- * Returns null if the country has no configured resources.
+ *
+ * 🔑 NEVER RETURNS NULL, and never falls back to one country's numbers. An
+ * unrecognised or missing code yields INTERNATIONAL_CRISIS_RESOURCES, so every
+ * caller is guaranteed at least one reachable line without inventing a
+ * fallback of its own — the Tier-1 card's invented fallback was `return null`,
+ * which showed a person in crisis no helpline at all.
  */
 export function getCrisisResourcesForCountry(
     countryCode?: string | null,
-): CountryCrisisResources | null {
+): CountryCrisisResources {
     const code = String(countryCode ?? "").trim().toUpperCase();
-    if (!code) return INDIA_CRISIS_RESOURCES;
-    return COUNTRY_RESOURCES_MAP[code] ?? null;
+    return COUNTRY_RESOURCES_MAP[code] ?? INTERNATIONAL_CRISIS_RESOURCES;
 }

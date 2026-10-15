@@ -1516,12 +1516,15 @@ function MessageBubble({
                 {copy.t1Body}
               </Text>
               {(() => {
+                // 🔴 This used to `return null` when the country was not one of
+                // the 59 with its own numbers — a crisis card with no helpline
+                // on it. getCrisisResourcesForCountry now always answers, so
+                // there is nothing left to guard.
                 const resources = getCrisisResourcesForCountry(detectCountryCode());
-                const primary = resources?.primary?.[0];
-                if (!primary) return null;
+                const primary = resources.primary[0];
                 return (
                   <TouchableOpacity
-                    onPress={() => Linking.openURL(`tel:${primary.contact.replace(/[^\d+]/g, "")}`)}
+                    onPress={() => Linking.openURL(primary.url ?? `tel:${primary.contact.replace(/[^\d+]/g, "")}`)}
                     style={{ marginTop: 8, flexDirection: rowDir, alignItems: "center", gap: 6, paddingVertical: 10, paddingHorizontal: 4 }}
                     accessibilityRole="link"
                     accessibilityLabel={`Call ${primary.label}: ${primary.contact}`}
@@ -1548,13 +1551,19 @@ function MessageBubble({
               {(() => {
                 const countryCode = detectCountryCode();
                 const resources = getCrisisResourcesForCountry(countryCode);
-                const lines: { label: string; number: string }[] = [];
-                if (resources?.emergency) lines.push({ label: resources.emergency.label, number: resources.emergency.contact });
-                resources?.primary?.slice(0, 2).forEach((r) => lines.push({ label: r.label, number: r.contact }));
-                return lines.map(({ label, number }) => (
+                // ⚠️ `lines` was previously empty for any country outside the
+                // 59 listed ones, so this card rendered its heading and its
+                // footer with NO numbers between them. It can no longer be
+                // empty: `primary` always holds at least the international
+                // directory. The international entry has no `emergency`, so
+                // that part legitimately stays conditional.
+                const lines: { label: string; number: string; url?: string }[] = [];
+                if (resources.emergency) lines.push({ label: resources.emergency.label, number: resources.emergency.contact });
+                resources.primary.slice(0, 2).forEach((r) => lines.push({ label: r.label, number: r.contact, url: r.url }));
+                return lines.map(({ label, number, url }) => (
                   <TouchableOpacity
                     key={label}
-                    onPress={() => Linking.openURL(`tel:${number.replace(/[^\d+]/g, "")}`)}
+                    onPress={() => Linking.openURL(url ?? `tel:${number.replace(/[^\d+]/g, "")}`)}
                     style={{ flexDirection: rowDir, justifyContent: "space-between", paddingVertical: 10, paddingHorizontal: 4 }}
                     accessibilityRole="link"
                     accessibilityLabel={`Call ${label}: ${number}`}
