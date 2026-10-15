@@ -94,9 +94,54 @@ Use this document to fill in the Data Safety form in Google Play Console.
 
 ---
 
+### Location — ⛔ READ THE GATE BEFORE FILLING THIS IN
+
+> ## ⛔ THIS SECTION IS NOT YET TRUE. DO NOT ENTER IT IN THE FORM YET.
+> It becomes true **only when the usage-geography recorder is deployed to the
+> mobile apps** (`imotaraapp` `4c5823e` / `f10c85f`, plus an EAS build). Until
+> then **Location stays "No"**, exactly as it is in §5 below. Filing this early
+> would make the form inaccurate in the other direction.
+
+| Data Type | Collected | Shared | Required or Optional | Purpose |
+|-----------|-----------|--------|----------------------|---------|
+| Approximate location | **Yes** — country + region, inferred from IP | No | Required | Analytics |
+| Precise location | No | No | — | — |
+
+**Why it must be declared, verified against Google's guidance 2026-10-16** —
+[Data safety — provide information](https://support.google.com/googleplay/android-developer/answer/10787469):
+
+> *"Approximate location that is inferred, such as via IP address or Access
+> Point Name, must be disclosed here."*
+
+⛔ **Three exemptions were checked and none applies:**
+- **"Anonymous data"** is an exemption from **SHARING**, not from collection. We do not share it, so it is irrelevant here.
+- **Aggregation is not listed as an exemption at all.** That our rows carry no identifier makes the data safer; it does not make it undeclarable.
+- **Ephemeral processing** requires data "only stored in memory and retained for no longer than necessary to service the specific request". A daily counter is stored, so it does not qualify. ⚠️ Note that even ephemeral data "must still be included in your form response" — it is merely hidden from the public listing.
+
+**What is actually stored** — one row per `(day, country, region, platform)` with
+a count, and nothing else. No user id, no session id, no IP in any form, no
+coordinates, no city, and no timestamp finer than the day. Rows older than 100
+days are summed into one row per month, destroying the exact date. The app
+requests **no location permission**; the country is inferred server-side from
+the network the request arrives on, so a device with location services off is
+counted identically. ⇒ `imotaraapp docs/sql/usage_geo_daily.sql`.
+
+**🍎 APPLE'S ANSWER IS DIFFERENT, AND THE DIFFERENCE IS REAL.** Apple defines
+collection as transmitting off device **and storing in readable form for longer
+than it takes to service the request** — *"if an authentication token or IP
+address is sent on a server call and not retained… you do not need to disclose
+this."* So Imotara's **pre-existing** uses of the header (crisis numbers, PPP
+donation banding, TTS region routing) are genuinely not collection for Apple,
+while Google would still want them in the form as ephemeral. Once the counter
+is stored, declare **Coarse Location**, marked **"Not Linked to You"**, purpose
+**Analytics** — Apple has no aggregation exemption either, and unlinked data is
+still disclosed, just in the unlinked column.
+
+---
+
 ## 5. Data NOT collected (explicitly confirm these as "No" in the form)
 
-- Location
+- Location — ⚠️ true **today**; see the gated section above before the next mobile release
 - Contacts
 - Calendar events
 - Camera
