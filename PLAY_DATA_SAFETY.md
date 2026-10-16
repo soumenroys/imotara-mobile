@@ -211,12 +211,17 @@ Google asks these for every ticked type:
 > 📍 **STATE, 2026-10-16 — step 1 is half done, so step 2 is still blocked.**
 > - 🍎 **Apple: DONE and LIVE.** The label was published this day; see §4a. Coarse
 >   Location is on the product page under *Data Not Linked to You → Location*.
-> - 🤖 **Play: STAGED, NOT SENT.** The form is filled and saved in the console but
->   has not gone through **Publishing overview → send for review**, so the
->   declaration is not yet in force. ⛔ An unsent Play form is the same as no form.
-> - ⇒ `IMOTARA_USAGE_GEO_MOBILE` **stays unset** until the Play submission is sent
->   and accepted. Apple being done is not half a licence to start collecting; the
->   gate is one switch and it feeds both stores.
+> - 🤖 **Play: SENT FOR REVIEW this day.** *Publishing overview → Submit 1 change
+>   for review → Send changes for review.* Google's pre-submit quick checks passed
+>   with nothing flagged, and the console now reads **"Changes in review — Your
+>   changes are now in review."** Exactly one change went: *App content → Data
+>   safety*, nothing else bundled. **Reviews are typically ≤7 days.**
+>   ⚠️ The confirmation dialog carries **no certification tick** — the attestation
+>   was made when the questionnaire was saved, not at send time.
+> - ⇒ `IMOTARA_USAGE_GEO_MOBILE` **stays unset until the review comes back
+>   ACCEPTED.** In review is not accepted. Apple being done was never half a
+>   licence to start collecting, and neither is a pending Google review; the gate
+>   is one switch and it feeds both stores.
 
 | Data Type | Collected | Shared | Required or Optional | Purpose |
 |-----------|-----------|--------|----------------------|---------|
