@@ -885,7 +885,10 @@ function SettingsScreenContent() {
                 generatedAt: new Date().toISOString().slice(0, 10),
             };
             const encoded = btoa(encodeURIComponent(JSON.stringify(snap)));
-            const url = `https://imotaraapp.vercel.app/family/view?snap=${encoded}`;
+            // ⛔ BUSINESS.siteUrl, never the API base and never a hardcoded host.
+            // This link gets SHARED — it has to be imotara.com on the other
+            // person's screen. See the note on siteUrl in config/businessIdentity.
+            const url = `${BUSINESS.siteUrl}/family/view?snap=${encoded}`;
             setFamilySnapUrl(url);
             return url;
         } catch {
@@ -5549,6 +5552,40 @@ function SettingsScreenContent() {
                                     {"\n"}
                                     {BUSINESS.email}
                                 </Text>
+
+                                {/* 🔴 Until 2026-10-16 this app linked to NO social channel at
+                                    all — not X, Instagram, YouTube or LinkedIn. Almost every
+                                    Imotara user is on mobile, so the people most likely to
+                                    follow us were the only ones given no way to.
+                                    ⛔ The owner's social table is the source of truth; these
+                                    come from BUSINESS.social, never hardcoded here. */}
+                                <View
+                                    style={{
+                                        flexDirection: "row",
+                                        flexWrap: "wrap",
+                                        gap: 14,
+                                        marginTop: 12,
+                                        paddingTop: 10,
+                                        borderTopWidth: 1,
+                                        borderTopColor: "rgba(255,255,255,0.06)",
+                                    }}
+                                >
+                                    {([
+                                        ["Instagram", BUSINESS.social.instagram],
+                                        ["YouTube",   BUSINESS.social.youtube],
+                                        ["X",         BUSINESS.social.x],
+                                        ["LinkedIn",  BUSINESS.social.linkedin],
+                                    ] as const).map(([label, url]) => (
+                                        <Text
+                                            key={label}
+                                            accessibilityRole="link"
+                                            onPress={() => { void Linking.openURL(url); }}
+                                            style={{ fontSize: 12, color: colors.accent }}
+                                        >
+                                            {label}
+                                        </Text>
+                                    ))}
+                                </View>
                             </>
                         );
                     })()}
@@ -5559,7 +5596,7 @@ function SettingsScreenContent() {
 
                 {/* ── Admin Tools (EDU / ENTERPRISE only) ──────────────────── */}
                 {gate("ADMIN_DASHBOARD", licenseTier).enabled && (() => {
-                    const adminUrl = `${process.env.EXPO_PUBLIC_IMOTARA_API_BASE_URL || "https://imotaraapp.vercel.app"}/admin`;
+                    const adminUrl = `${BUSINESS.siteUrl}/admin`;
                     const messageCount = history.length;
                     return (
                         <AppSurface style={{ marginHorizontal: 16, marginBottom: 24 }}>

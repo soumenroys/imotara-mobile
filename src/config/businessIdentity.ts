@@ -37,6 +37,36 @@ export const BUSINESS = {
 
     /** The one public mailbox. Support, billing, privacy, legal — all of it. */
     email: "info@imotara.com",
+
+    /**
+     * 🔴 THE PUBLIC SITE. Use this for any URL a USER WILL SEE OR SHARE.
+     *
+     * ⛔ NOT the API base. `IMOTARA_API_BASE_URL` in src/config/api.ts resolves
+     * to localhost in development and to a Metro host on a device — correct for
+     * API calls, catastrophic in a link someone sends their mother.
+     *
+     * ⚠️ WHY THIS EXISTS. Until 2026-10-16 the family mood-snapshot link was
+     * hardcoded to `https://imotaraapp.vercel.app/family/view`. Every snapshot a
+     * user shared with their family sent that person to the raw deployment URL
+     * instead of imotara.com. Nothing was broken — both resolve — which is
+     * exactly why it survived: a shared link is the one surface word of mouth
+     * actually travels on, and ours pointed at a domain that will never rank and
+     * does not look like a company.
+     */
+    siteUrl: "https://www.imotara.com",
+
+    /**
+     * ⛔ THE OWNER'S SOCIAL TABLE IS THE SOURCE OF TRUTH, not this file and not
+     * the code. Mirrors `social` in imotaraapp's src/lib/imotara/businessIdentity.ts.
+     * Facebook and WaBhai are deliberately absent: the table holds a bare
+     * facebook.com root and a login page, neither of which is a profile.
+     */
+    social: {
+        x:         "https://x.com/imotaraofficial",
+        instagram: "https://www.instagram.com/imotaraofficial/",
+        youtube:   "https://www.youtube.com/@Imotara",
+        linkedin:  "https://www.linkedin.com/in/imotara",
+    },
 } as const;
 
 /** "6/B, Kalipada Mukherjee Road, Barisha, Kolkata, West Bengal – 700008, India" */
