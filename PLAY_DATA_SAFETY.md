@@ -36,6 +36,49 @@ Use this document to fill in the Data Safety form in Google Play Console.
 > ⛔ **I am not a lawyer and this is a legal attestation.** Read the evidence
 > column and decide each line yourself. Confidence is marked honestly.
 
+### ✅ ENTERED IN THE CONSOLE 2026-10-16 — staged, **NOT yet sent to Google**
+
+All ten types are filled in and saved. ⛔ **The final step is not done**: the console says
+*"Change saved. Send for review in Publishing overview."* A dialog offered to go there and
+**"Not now" was clicked** — sending the declaration for review is the owner's act, not mine.
+
+**Exactly what is staged**, as the store listing will render it:
+
+| Data type | Required? | Purpose | Ephemeral |
+|---|---|---|---|
+| Name | Optional | App functionality, Personalization | No |
+| Email address | Optional | Account management | No |
+| **User IDs** | **Required** | App functionality | No |
+| Address | Optional | Fraud prevention, security & compliance | No |
+| Other info | Optional | Fraud prevention, security & compliance | No |
+| Purchase history | Optional | App functionality | No |
+| **Approximate location** | **Required** | **Analytics** | No |
+| Photos | Optional | Fraud prevention, security & compliance | No |
+| **Health info** | **Required** | App functionality | No |
+| Voice or sound recordings | Optional | App functionality | **YES** ⇒ disclosed in the form but **not shown on the public listing** |
+| In-app messages · App interactions | — | *(pre-existing, untouched)* | — |
+
+**Nothing is marked Shared.** The listing reads *"this app doesn't share user data with other
+companies or organizations."* Transfers to OpenAI/Azure and Razorpay are service providers
+processing on our behalf, which Google exempts from "sharing".
+
+⛔ **Deliberately NOT ticked:** Payment info (Razorpay collects card details under its own terms
+— Google's *Payment services* exemption) · Precise location · Phone number · Contacts · Calendar ·
+Files and docs · Web browsing · Device or other IDs.
+
+### 🔑 THE THREE "REQUIRED" ENTRIES, which are the judgement calls
+A user **cannot turn these off while using the app**, so claiming otherwise would be false:
+- **User IDs** — `anonId` is generated whether or not you sign in;
+- **Approximate location** — derived server-side from the network the request arrives on;
+- **Health info** — emotion is derived from any chat message and stored with the record. Mood
+  detection is the product; there is no switch.
+
+### ⚠️ TWO ORDERING FACTS THAT ARE EASY TO GET WRONG
+1. **Per-type answers do not survive a page reload** unless **Save draft** is pressed afterwards.
+   The first attempt at *Name* was lost to exactly this.
+2. **`IMOTARA_USAGE_GEO_MOBILE` is still unset**, so mobile geo is **not being recorded**. Turn it
+   on **only after** this declaration has been sent and accepted ⇒ `imotaraapp src/lib/analytics/usageGeo.ts`.
+
 ### The table, with evidence
 
 | Play type | Declare | Confidence | Evidence in the code |
