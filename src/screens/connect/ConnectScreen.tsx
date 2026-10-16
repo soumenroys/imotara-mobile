@@ -1710,7 +1710,7 @@ function ProfileView({ consultant: c, colors, insets, accessToken, userId, onBac
                         if (!langsMatch) {
                             Alert.alert(
                                 "Enable Translation?",
-                                `Your language and your counselor's language differ. Enable auto-translation for this session?\n\n+10% per-minute rate · 1–3s delay · Machine translation`,
+                                `Your language and your companion's language differ. Enable auto-translation for this session?\n\n+10% per-minute rate · 1–3s delay · Machine translation`,
                                 [
                                     { text: "No, English only", style: "cancel", onPress: () => startSession("instant", undefined, false) },
                                     { text: "Yes, enable (+10%)", onPress: () => startSession("instant", undefined, true) },
