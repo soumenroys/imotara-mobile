@@ -66,6 +66,7 @@ export const BUSINESS = {
         instagram: "https://www.instagram.com/imotaraofficial/",
         youtube:   "https://www.youtube.com/@Imotara",
         linkedin:  "https://www.linkedin.com/in/imotara",
+        facebook:  "https://www.facebook.com/imotaraofficial",
     },
 } as const;
 

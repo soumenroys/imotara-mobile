@@ -5575,6 +5575,7 @@ function SettingsScreenContent() {
                                         ["YouTube",   BUSINESS.social.youtube],
                                         ["X",         BUSINESS.social.x],
                                         ["LinkedIn",  BUSINESS.social.linkedin],
+                                        ["Facebook",  BUSINESS.social.facebook],
                                     ] as const).map(([label, url]) => (
                                         <Text
                                             key={label}

@@ -83,7 +83,7 @@ describe("the app links to the social channels", () => {
      */
     it("settings exposes all four channels from BUSINESS.social", () => {
         const code = stripComments(read("src/screens/SettingsScreen.tsx"));
-        for (const key of ["instagram", "youtube", "x", "linkedin"]) {
+        for (const key of ["instagram", "youtube", "x", "linkedin", "facebook"]) {
             expect(code).toContain(`BUSINESS.social.${key}`);
         }
     });
@@ -97,5 +97,6 @@ describe("the app links to the social channels", () => {
         expect(cfg).toContain('instagram: "https://www.instagram.com/imotaraofficial/"');
         expect(cfg).toContain('youtube:   "https://www.youtube.com/@Imotara"');
         expect(cfg).toContain('linkedin:  "https://www.linkedin.com/in/imotara"');
+        expect(cfg).toContain('facebook:  "https://www.facebook.com/imotaraofficial"');
     });
 });
