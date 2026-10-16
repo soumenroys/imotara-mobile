@@ -21,6 +21,55 @@ Use this document to fill in the Data Safety form in Google Play Console.
 
 ## 4. Data Types — What to declare
 
+> # 🔴 AUDITED AGAINST THE CODE, 2026-10-16 — and the LIVE FORM AND THIS DOC BOTH DISAGREED WITH IT
+>
+> Opened the live Data safety form in Play Console. **Only three data types were
+> ticked** — Messages 1/3, App activity 1/5, and the Approximate location added
+> that day. Personal info **0/9**, Health and fitness **0/2**, Photos **0/2**,
+> Audio **0/3**, Device IDs **0/1**.
+>
+> ⚠️ **This document was also wrong**, in the other direction: it listed Payment
+> info as collected (it is exempt) and omitted Photos, Address and the
+> government-ID uploads entirely. Neither source could be trusted, so every line
+> below was re-derived **from the code**, with the file that proves it.
+>
+> ⛔ **I am not a lawyer and this is a legal attestation.** Read the evidence
+> column and decide each line yourself. Confidence is marked honestly.
+
+### The table, with evidence
+
+| Play type | Declare | Confidence | Evidence in the code |
+|---|---|---|---|
+| **Personal info → Name** | **Collected**, optional, App functionality | **High** | `SettingsScreen.tsx:581` sends `name` to `/api/profile/sync`; the server **upserts it into `user_memory`** (`profile/sync/route.ts:144`) |
+| **Personal info → Email address** | **Collected**, optional, Account management | **High** | Google/Apple OAuth via Supabase (`AuthContext.tsx`); the address lands in `auth.users`. An account is optional — the app works signed-out |
+| **Personal info → User IDs** | **Collected**, required, App functionality | **High** | `anonId` persists in AsyncStorage (`lib/legal/anonId.ts`) and is sent as `x-imotara-user`; signed-in users send a Supabase uid |
+| **Personal info → Address** | **Collected**, optional, App functionality | **Medium** | Connect consultant registration uploads **"Proof of Address — utility bill, bank statement"** (`ConnectScreen.tsx:4536`). Consultants only, not ordinary users |
+| **Personal info → Other info** | **Collected**, optional, App functionality | **Medium** | Same flow uploads **"Government Photo ID — Passport, Aadhaar, Driver's License"** and **Proof of Age** (`:4535`, `:4537`); plus `ageTone` and `gender` from profile sync |
+| **Photos and videos → Photos** | **Collected**, optional, App functionality | **High** | A **selfie** plus the document images go to `/api/connect/upload-doc` and `/upload-photo` via `FileSystem.uploadAsync` (`ConnectScreen.tsx:4631`) |
+| **Health and fitness → Health info** | **Collected**, optional, App functionality | **High** 🔴 | `/api/history` **persists an `emotion` field per record** (`history/route.ts:85-110`), and the column exists in the schema. Mood tracking is the product — this is the single most important missing line |
+| **Messages → In-app messages** | **Collected** ✅ *(already ticked)* | — | Chat text to `/api/respond` and `/api/history` |
+| **App activity** | 1/5 ✅ *(already ticked)* | — | — |
+| **Audio → Voice or sound recordings** | **Collected, mark EPHEMERAL**, optional | **High** | Audio is uploaded to `/api/voice/transcribe` and **never retained** — no Storage upload, no filesystem write; the only DB write is a `usage_events` quota row. ⚠️ Google: ephemeral data *"must still be included in your form response"*, it is simply **not shown on the listing** |
+| **Financial info → Purchase history** | **Collected**, optional, App functionality | **Medium** | `productId` + `purchaseToken` sent to `/api/payments/google-play/verify` (`UpgradeSheet.tsx:94`); the resulting licence is stored |
+| **Financial info → Payment info** | ⛔ **Do NOT declare — exempt** | **High** | Razorpay collects card details in **its own checkout** under its own terms; the app never sees them. Google's *"Payment services"* exemption covers exactly this ⇒ the old version of this doc was **wrong** to list it |
+| **Location → Approximate location** | **Collected**, required, Analytics | **High** | IP-derived server-side, stored only as a **daily (country, region, platform) count** with no identifier ⇒ `imotaraapp docs/sql/usage_geo_daily.sql`. ⛔ Precise location stays **unticked** — lat/long headers are never read, asserted by test |
+
+### ⚠️ Answers for the follow-up questions, per type
+Google asks these for every ticked type:
+- **Collected or shared?** → **Collected** for all. **Nothing is shared.** Transfers to OpenAI/Azure (transcription, replies) and Razorpay are to **service providers processing on our behalf**, which Google exempts from "sharing".
+- **Processed ephemerally?** → **Yes for Voice only.** Everything else is stored.
+- **Required or optional?** → **Required**: User IDs, Approximate location (collected automatically). **Optional**: everything else — the app works signed-out, Connect is opt-in, voice is opt-in.
+- **Purpose** → App functionality for most; **Analytics** for Approximate location; **Account management** for Email.
+
+
+> ## ⛔ EVERYTHING FROM HERE TO §5 IS THE OLD, PRE-AUDIT VERSION — SUPERSEDED 2026-10-16
+> It is kept only so the change is traceable. **The evidence table above is the
+> one to fill the form from.** These older tables are wrong in both directions:
+> they list **Payment info** as collected (it is exempt — Razorpay collects card
+> details under its own terms) and they omit **Photos**, **Address** and the
+> **government-ID uploads** entirely. ⚠️ Two hand-kept copies drift, and the one
+> someone fills a legal form from should never be the stale one.
+
 ### Personal Info
 
 | Data Type | Collected | Shared | Required or Optional | Purpose |
@@ -155,7 +204,7 @@ still disclosed, just in the unlinked column.
 
 ## 5. Data NOT collected (explicitly confirm these as "No" in the form)
 
-- Location — ⚠️ true **today**; see the gated section above before the next mobile release
+- ~~Location~~ — ⛔ **NO LONGER TRUE.** Approximate location is collected (IP-derived, aggregated). See the evidence table in §4.
 - Contacts
 - Calendar events
 - Camera
