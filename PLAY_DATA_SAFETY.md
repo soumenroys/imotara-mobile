@@ -207,6 +207,16 @@ Google asks these for every ticked type:
 >
 > Until step 2, **Location stays "No"** as §5 says, and that remains accurate
 > however many times the web deploys.
+>
+> 📍 **STATE, 2026-10-16 — step 1 is half done, so step 2 is still blocked.**
+> - 🍎 **Apple: DONE and LIVE.** The label was published this day; see §4a. Coarse
+>   Location is on the product page under *Data Not Linked to You → Location*.
+> - 🤖 **Play: STAGED, NOT SENT.** The form is filled and saved in the console but
+>   has not gone through **Publishing overview → send for review**, so the
+>   declaration is not yet in force. ⛔ An unsent Play form is the same as no form.
+> - ⇒ `IMOTARA_USAGE_GEO_MOBILE` **stays unset** until the Play submission is sent
+>   and accepted. Apple being done is not half a licence to start collecting; the
+>   gate is one switch and it feeds both stores.
 
 | Data Type | Collected | Shared | Required or Optional | Purpose |
 |-----------|-----------|--------|----------------------|---------|
@@ -245,16 +255,83 @@ still disclosed, just in the unlinked column.
 
 ---
 
+## 4a. 🍎 The Apple App Privacy label — PUBLISHED AND LIVE, 2026-10-16
+
+> ⛔ **APPLE HAS NO DRAFT AND NO REVIEW STEP.** Play stages a form and you send it
+> for review; App Store Connect's button says **Publish** and the product page
+> updates **immediately**, before any new build. Read the dialog's own words
+> before clicking: *"All other changes will be immediately available."*
+> There is no undo and no reviewer between you and the public listing.
+>
+> ⚠️ **And each data type publishes on its own.** The wizard runs per type and
+> ends in its own Publish, so a session abandoned halfway leaves the label
+> **partly updated and live** — new types named on the page with no purpose or
+> linkage behind them. Finish all of them in one sitting or start none.
+
+**App:** Imotara, Apple ID `6756697569` → Distribution → App Privacy.
+
+**12 types declared.** 5 were already there; the 7 below were added this day.
+
+| Apple data type | Purpose | Linked to user? | Tracking | Why |
+|---|---|---|---|---|
+| **Coarse Location** | **Analytics** | **❌ Not Linked** | No | The usage-geo counter. Country + region only, no identifier on the row — §4 |
+| Health | App Functionality | ✅ Linked | No | Mood/wellbeing content in chat and memory |
+| Name | App Functionality | ✅ Linked | No | `SettingsScreen.tsx:581` → `user_memory` |
+| Email Address | App Functionality | ✅ Linked | No | OAuth account, `auth.users` |
+| Physical Address | App Functionality | ✅ Linked | No | Connect counsellor registration |
+| Photos or Videos | App Functionality | ✅ Linked | No | Connect selfie + ID documents |
+| Purchases | App Functionality | ✅ Linked | No | IAP receipt → licence |
+
+**Already declared, untouched:** Other User Content, User ID, Product
+Interaction, Crash Data, Performance Data.
+
+**Resulting product page:**
+- *Data Linked to You* — Identifiers, User Content, Usage Data, Purchases, Contact Info, Health & Fitness
+- *Data Not Linked to You* — Diagnostics, **Location**
+
+⛔ **"Used for tracking" is NO on every single type**, so no ATT prompt is
+implied and no IDFA claim is made. **Device ID stays undeclared** — Apple's own
+rule is that requesting IDFA obliges you to declare Device ID *and* mark it for
+tracking. Ticking either by accident is how an app acquires an ATT obligation it
+cannot satisfy.
+
+### ⛔ Audio Data is deliberately NOT declared — and the reason is Apple's, not ours
+
+Apple's definition, quoted from the dialog that gates this very form:
+
+> *"'Collect' refers to transmitting data off the device in a way that allows you
+> and/or your third-party partners to access it for a period longer than
+> necessary to service the transmitted request in real time."*
+
+Voice is transcribed and the audio discarded; nothing is retained. Under that
+definition it is not collection, so it is not declared.
+
+🔴 **Google has no such carve-out**, which is why Voice **is** on the Play form,
+marked *processed ephemerally*. ⚠️ The two forms are **not** copies of each
+other — deriving one from the other is the mistake, in either direction.
+
+---
+
 ## 5. Data NOT collected (explicitly confirm these as "No" in the form)
 
 - ~~Location~~ — ⛔ **NO LONGER TRUE.** Approximate location is collected (IP-derived, aggregated). See the evidence table in §4.
+- ~~Photos / videos~~ — ⛔ **NO LONGER TRUE, AND IT NEVER WAS.** The Connect
+  counsellor sign-up uploads a **selfie and ID document images**
+  (`ConnectScreen.tsx:4631` → `/api/connect/upload-doc`, `/upload-photo`). This
+  line sat here contradicting §4's own evidence table, which is exactly how a
+  stale "No" list gets copied into a legal form. See §4.
 - Contacts
 - Calendar events
 - Camera
-- Photos / videos
 - Files / documents
 - Web browsing history
-- Crash logs
+- Crash logs — ✅ still true. `@sentry/react-native` is a dependency but
+  **dormant**: `initSentry()` returns before `Sentry.init()` unless
+  `EXPO_PUBLIC_SENTRY_DSN` is set, and it is set nowhere in this repo
+  (`src/lib/sentry.ts:15`). No crash payload leaves the device.
+  ⚠️ Apple's label **does** carry *Crash Data* — declared ~6 months ago, before
+  this check, and left untouched. Over-declaring to Apple is safe; it is the one
+  line in that label the current code does not back.
 - Device or other IDs (IDFA / GAID)
 - Advertising data
 
