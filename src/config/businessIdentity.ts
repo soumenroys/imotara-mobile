@@ -65,7 +65,10 @@ export const BUSINESS = {
         x:         "https://x.com/imotaraofficial",
         instagram: "https://www.instagram.com/imotaraofficial/",
         youtube:   "https://www.youtube.com/@Imotara",
-        linkedin:  "https://www.linkedin.com/in/imotara",
+        // 🔴 The COMPANY page, not the `/in/` personal profile — corrected
+        // 2026-10-17 in both repos. `sameAs` naming a person profile asserts
+        // that a person IS the organisation. See imotaraapp's businessIdentity.
+        linkedin:  "https://www.linkedin.com/company/imotara",
         facebook:  "https://www.facebook.com/imotaraofficial",
     },
 } as const;

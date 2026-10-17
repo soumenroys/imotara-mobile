@@ -96,7 +96,24 @@ describe("the app links to the social channels", () => {
         expect(cfg).toContain('x:         "https://x.com/imotaraofficial"');
         expect(cfg).toContain('instagram: "https://www.instagram.com/imotaraofficial/"');
         expect(cfg).toContain('youtube:   "https://www.youtube.com/@Imotara"');
-        expect(cfg).toContain('linkedin:  "https://www.linkedin.com/in/imotara"');
+        expect(cfg).toContain('linkedin:  "https://www.linkedin.com/company/imotara"');
         expect(cfg).toContain('facebook:  "https://www.facebook.com/imotaraofficial"');
+    });
+
+    it("the LinkedIn link is the COMPANY page, never a personal profile", () => {
+        /**
+         * 🔴 Corrected 2026-10-17. This read `/in/imotara` — a LinkedIn member
+         * profile, display name "Imotara App" — in both repos. An app's social
+         * row and a site's `sameAs` are both claims about which accounts ARE
+         * the organisation, and a `/in/` URL is a person.
+         *
+         * 🔑 Asserted as a SHAPE, not only as an exact string. The equality
+         * check above pins today's value; this one pins the rule, so a future
+         * edit to a different wrong personal URL still fails.
+         */
+        const cfg = read("src/config/businessIdentity.ts");
+        const line = cfg.split("\n").find((l) => l.includes("linkedin:")) ?? "";
+        expect(line).toMatch(/linkedin\.com\/company\//);
+        expect(line).not.toMatch(/linkedin\.com\/in\//);
     });
 });
