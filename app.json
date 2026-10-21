@@ -22,7 +22,32 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Imotara uses the microphone so you can share how you feel by speaking instead of typing.",
         "NSPhotoLibraryUsageDescription": "Imotara may access your photo library when you choose to share content from the app.",
-        "NSPhotoLibraryAddUsageDescription": "Imotara may save shared content to your photo library."
+        "NSPhotoLibraryAddUsageDescription": "Imotara may save shared content to your photo library.",
+        "CFBundleAllowMixedLocalizations": true,
+        "CFBundleLocalizations": [
+          "en",
+          "hi",
+          "bn",
+          "mr",
+          "ta",
+          "te",
+          "gu",
+          "pa",
+          "kn",
+          "ml",
+          "or",
+          "ur",
+          "ar",
+          "he",
+          "ru",
+          "zh-Hans",
+          "ja",
+          "es",
+          "fr",
+          "de",
+          "pt",
+          "id"
+        ]
       },
       "usesAppleSignIn": true,
       "privacyManifests": {
@@ -142,6 +167,118 @@
     },
     "updates": {
       "url": "https://u.expo.dev/d035812a-a728-4703-85a5-f8e957e233bf"
+    },
+    "locales": {
+      "en": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "hi": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "bn": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "mr": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "ta": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "te": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "gu": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "pa": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "kn": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "ml": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "or": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "ur": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "ar": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "he": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "ru": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "zh-Hans": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "ja": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "es": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "fr": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "de": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "pt": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      },
+      "id": {
+        "ios": {
+          "CFBundleDisplayName": "Imotara"
+        }
+      }
     }
   }
 }
