@@ -78,6 +78,18 @@ function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Pr
 // Used in onPurchaseSuccess when Platform.OS === 'android'.
 // The actual purchase trigger happens via requestPurchase/requestSubscription in useIAP.
 
+/**
+ * 🔴 A GUEST IS NOT SIGNED IN (25 Oct 2026). On the phone a guest's session IS
+ * the anonymous one, so `!!session?.access_token` called every guest signed in —
+ * and a guest could pay Plus onto an identity that vanishes on reinstall. Guests
+ * now see the quota card's "Upgrade" (their replies are counted since 1.6.0),
+ * so the sheet must send them to sign in first. Same line AuthContext draws
+ * between accessToken and anonymousAccessToken.
+ */
+function isRealAccount(session: { access_token?: string; user?: { is_anonymous?: boolean } } | null | undefined): boolean {
+    return !!session?.access_token && session.user?.is_anonymous !== true;
+}
+
 async function verifyAndroidPurchase(
     productId: ProductId,
     purchaseToken: string,
@@ -218,9 +230,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                 session = refreshed;
             }
             setUserEmail(session?.user?.email);
-            setIsSignedIn(!!session?.access_token);
-            isSignedInRef.current = !!session?.access_token;
-            accessTokenRef.current = session?.access_token ?? null;
+            setIsSignedIn(isRealAccount(session));
+            isSignedInRef.current = isRealAccount(session);
+            accessTokenRef.current = isRealAccount(session) ? session!.access_token : null;
 
             // Read the freshest tier from AsyncStorage — avoids the stale React state
             // in HistoryContext when SettingsContext has already written a newer tier.
@@ -238,9 +250,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     // Keep isSignedIn in sync with the global auth state (handles async deep-link OAuth)
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setIsSignedIn(!!session?.access_token);
-            isSignedInRef.current = !!session?.access_token;
-            accessTokenRef.current = session?.access_token ?? null;
+            setIsSignedIn(isRealAccount(session));
+            isSignedInRef.current = isRealAccount(session);
+            accessTokenRef.current = isRealAccount(session) ? session!.access_token : null;
             setUserEmail(session?.user?.email);
         });
         return () => subscription.unsubscribe();
@@ -297,7 +309,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                             new Promise<never>((_, reject) =>
                                 setTimeout(() => reject(new Error("session_timeout")), 10_000)),
                         ]);
-                        accessToken = result.data.session?.access_token ?? null;
+                        accessToken = isRealAccount(result.data.session) ? result.data.session!.access_token : null;
                         if (accessToken) accessTokenRef.current = accessToken;
                     } catch (e) {
                         if (DEBUG_UI_ENABLED) console.log("[IAP] getSession timeout/error:", String(e));
@@ -498,21 +510,22 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
             let resolved = false;
             let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
-            const resolve = (session: { access_token?: string; user?: { email?: string } } | null) => {
+            const resolve = (session: { access_token?: string; user?: { email?: string; is_anonymous?: boolean } } | null) => {
                 if (resolved) return;
                 resolved = true;
                 if (cleanupTimer) { clearTimeout(cleanupTimer); cleanupTimer = null; }
                 subscription.unsubscribe();
                 setUserEmail(session?.user?.email);
-                setIsSignedIn(!!session?.access_token);
-                isSignedInRef.current = !!session?.access_token;
+                setIsSignedIn(isRealAccount(session));
+                isSignedInRef.current = isRealAccount(session);
                 setSigningIn(false);
-                if (session?.access_token) setTimeout(() => onSuccess(), 0);
+                // ⛔ An anonymous session event is not the sign-in we are waiting for.
+                if (isRealAccount(session)) setTimeout(() => onSuccess(), 0);
             };
 
             const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
                 if (resolved) return;
-                if (event === "SIGNED_IN" && session?.access_token) {
+                if (event === "SIGNED_IN" && isRealAccount(session)) {
                     resolve(session);
                 }
             });
@@ -523,7 +536,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
 
                     if (!resolved) {
                         const { data: { session } } = await supabase.auth.getSession();
-                        if (session?.access_token) {
+                        if (isRealAccount(session)) {
                             resolve(session);
                             return;
                         }
@@ -549,7 +562,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                     await signInWithApple();
                     if (!resolved) {
                         const { data: { session } } = await supabase.auth.getSession();
-                        if (session?.access_token) {
+                        if (isRealAccount(session)) {
                             resolve(session);
                         } else {
                             // Apple sign-in resolves synchronously — if no session, it failed
@@ -718,7 +731,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                     const { data: { session: refreshed } } = await supabase.auth.refreshSession();
                     session = refreshed;
                 }
-                if (!session?.access_token) {
+                if (!session || !isRealAccount(session)) {
                     Alert.alert("Sign in required", "Please sign in to restore your purchases.");
                     return;
                 }
