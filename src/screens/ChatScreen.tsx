@@ -36,6 +36,22 @@ import { chatBackdrop } from "../theme/chatBackdrop";
 import { concreteLang, transcriptionLangHint, resolveReplyLang, callImotaraAI, streamChatReply, detectLangFromScript } from "../api/aiClient";
 import { getInviteState, shouldOfferInvite } from "../notifications/checkInInvite";
 import { askForRating, getRatingState, shouldAskForRating } from "../feedback/ratingPrompt";
+import { warmWelcomeText } from "../lib/welcome/warmWelcome";
+
+/**
+ * Which language the welcome speaks before the person has typed anything.
+ * ⛔ "auto" is not a language — it means "match what they write", and nothing
+ * is written yet — so it falls to the DEVICE locale, never straight to English
+ * (the trap that once put the crisis card in English for everyone on default).
+ */
+function welcomeLang(preferred?: string | null): string {
+  if (preferred && preferred !== "auto") return preferred;
+  try {
+    return new Intl.DateTimeFormat().resolvedOptions().locale.split(/[-_]/)[0] || "en";
+  } catch {
+    return "en";
+  }
+}
 import CheckInInviteCard from "../components/imotara/CheckInInviteCard";
 import { isCheckInReminderEnabled, isSnoozed } from "../notifications/checkInReminder";
 import { useAuth } from "../auth/AuthContext";
@@ -5686,16 +5702,20 @@ export default function ChatScreen() {
           )}
           {messages.length === 0 && initialLoadDone && (
             <View style={{ paddingTop: 24, paddingBottom: 16 }}>
-              <Text
-                style={{ fontSize: 15, color: colors.textSecondary, marginBottom: 6 }}
+              {/* 👋 The companion speaks first — one warm question in the person's own
+                  language, instead of grey English text ⇒ lib/welcome/warmWelcome.
+                  ⛔ Display only: never saved to History, never sent to the model. */}
+              <View
+                accessibilityRole="text"
+                style={{ alignSelf: "flex-start", maxWidth: "88%", marginBottom: 20, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: "rgba(148, 163, 184, 0.25)", borderWidth: 1, borderColor: "rgba(148, 163, 184, 0.4)" }}
               >
-                {toneContext?.user?.name
-                  ? `Welcome, ${toneContext.user.name}.`
-                  : "Welcome to Imotara."}
-              </Text>
-              <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 20 }}>
-                Start by sharing how you feel — {effectiveCompanionName} listens without judgment.
-              </Text>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textPrimary, opacity: 0.75, marginBottom: 2 }}>
+                  {effectiveCompanionName}
+                </Text>
+                <Text style={{ fontSize: 15, color: colors.textPrimary }}>
+                  {warmWelcomeText(welcomeLang(toneContext?.user?.preferredLang), toneContext?.user?.name)}
+                </Text>
+              </View>
 
               {/* Conversation starters */}
               <Text

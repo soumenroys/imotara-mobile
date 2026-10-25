@@ -40,7 +40,9 @@ describe("companion-voice strings follow the chosen name", () => {
 
     it.each([
         ["offline banner",   /You're offline — \$\{effectiveCompanionName\} will reply using on-device mode/],
-        ["empty-state line", /Start by sharing how you feel — \{effectiveCompanionName\} listens without judgment\./],
+        // RE-POINTED 26 Oct 2026: the grey empty-state line became the warm welcome bubble,
+        // which is labelled with the companion's name (lib/welcome/warmWelcome).
+        ["empty-state welcome", /marginBottom: 2 \}\}>\s*\{effectiveCompanionName\}\s*<\/Text>\s*<Text style=\{\{ fontSize: 15, color: colors\.textPrimary \}\}>\s*\{warmWelcomeText\(/],
         ["first-time tip",   /Just talk — \$\{effectiveCompanionName\} listens without judgment\./],
         ["unsent letter",    /— \{effectiveCompanionName\} will/],
         ["grief space",      /Grief &amp; Loss space — \{effectiveCompanionName\} will hold this with you/],
@@ -55,7 +57,8 @@ describe("⚠️ brand strings are UNCHANGED — the product is still called Imo
         ["chat export header", /Imotara Chat Export/],
         ["share sheet title",  /title: "Imotara Chat"/],
         ["account instruction", /login into Imotara account from Settings/],
-        ["product welcome",    /"Welcome to Imotara\."/],
+        // REMOVED 26 Oct 2026: "Welcome to Imotara." no longer exists — the empty chat now
+        // opens with the COMPANION speaking (warm welcome), so there is no product line to pin.
         ["error log prefix",   /"Imotara mobile AI error:"/],
     ])("%s still says Imotara", (_label, re) => {
         expect(CHAT).toMatch(re);
