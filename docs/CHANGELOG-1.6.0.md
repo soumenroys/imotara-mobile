@@ -1,9 +1,9 @@
 # Imotara 1.5.9 → 1.6.0 — Change Log
 
-Prepared 25 Oct 2026 · iOS and Android build 160 · web 1.6.0. **Not yet built or submitted.**
+Prepared 25 Oct 2026 · iOS and Android **build 161** (build 160 was built and replaced the same day, to carry the safety and payment fixes below) · web 1.6.0.
 
-A small release: two hardening changes and a dependency refresh since the 1.5.9 build
-(`a29a0a8`). Nothing in the chat, voice, reminders or crisis support changes for the user.
+Since the 1.5.9 build (`a29a0a8`): the crisis card follows where you are, guests are counted
+like Free, a payment guard, two hardening changes and a dependency refresh.
 
 ## 1. What users can see
 
@@ -11,6 +11,18 @@ A small release: two hardening changes and a dependency refresh since the 1.5.9 
   declared only English, so the store page said "Languages: English". The app itself is
   unchanged: it still follows the phone's language, and crisis numbers and reminders still
   follow the phone's locale (checked on the simulator with bn-IN, hi-IN and sw-KE).
+
+- 🆘 **The crisis card shows the helplines for the country you are in** (`ae2b2d5`). It used to
+  follow the phone's LANGUAGE setting: a Bengali- or Hindi-language phone in London was shown
+  Tele-MANAS, which does not dial from the UK. The server now sends the country its network
+  sees, on every chat reply; an explicit choice in Settings still wins.
+- **Guests get the 20 cloud replies a day the app already told them about** (`2fa5ef2`). A
+  guest's chat carried no identity, so it was neither counted nor limited. Guests who received
+  the free lifetime Plus in September keep it, and stay unlimited.
+- 💳 **A guest is asked to sign in before paying or restoring** (`77c0892`). The upgrade screen
+  counted a guest as signed in, so a plan could be bought onto an identity that disappears on
+  reinstall. Nobody was affected (checked: every paid plan is on a real account); the server
+  now refuses it too.
 
 ## 2. Security
 
@@ -46,13 +58,21 @@ A small release: two hardening changes and a dependency refresh since the 1.5.9 
 ## Google Play — "What's new" (≤500 characters)
 
 ```
-Security and reliability updates under the hood. Nothing changes in how you use Imotara.
+The crisis card now shows helplines for the country you are actually in, not the one your phone's language suggests.
+
+Signing in before buying a plan keeps it safe if you ever reinstall.
+
+Security and reliability updates.
 ```
 
 ## App Store — "What's New in This Version"
 
 ```
+The crisis card now shows helplines for the country you are actually in, not the one your phone's language suggests.
+
+Signing in before buying a plan keeps it safe if you ever reinstall.
+
 The App Store page now lists all 22 languages Imotara speaks, including Bengali, Hindi, Tamil, Telugu and Urdu.
 
-Security and reliability updates under the hood. Nothing changes in how you use Imotara.
+Security and reliability updates.
 ```
