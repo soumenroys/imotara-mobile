@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import { Platform, View, Text, TouchableOpacity, Linking, AppState } from "react-native";
 import RootNavigator from "./src/navigation/RootNavigator";
 import { rearmAfterSnooze } from "./src/notifications/checkInReminder";
+import { ensureDailyReminderScheduled } from "./src/notifications/checkInInvite";
 import ConsentGateMount from "./src/components/legal/ConsentGateMount";
 import AppThemeProvider from "./src/theme/AppThemeProvider";
 import { ThemeProvider } from "./src/theme/ThemeContext";
@@ -178,8 +179,12 @@ export default function App() {
   // so there is no pending event left to wake us up and put it back. Without
   // this, a 3-day pause would be permanent — which is exactly the free-tier
   // trap the owner's snooze-only decision is meant not to be.
+  // 🔴 The daily check-in is ON by default but was only ever SCHEDULED when
+  // someone touched its switch in Settings — so almost nobody received it
+  // (25 Oct 2026). Schedule it at launch when the OS already allows
+  // notifications. ⛔ Never asks for permission here ⇒ notifications/checkInInvite.
   useEffect(() => {
-    void rearmAfterSnooze();
+    void rearmAfterSnooze().then(() => ensureDailyReminderScheduled());
     const sub = AppState.addEventListener("change", (next) => {
       if (next === "active") void rearmAfterSnooze();
     });

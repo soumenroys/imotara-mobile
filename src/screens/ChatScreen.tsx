@@ -33,7 +33,10 @@ import { useSettings } from "../state/SettingsContext";
 import { useColors, useTheme } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
 import { chatBackdrop } from "../theme/chatBackdrop";
-import { concreteLang, transcriptionLangHint, resolveReplyLang, callImotaraAI, streamChatReply } from "../api/aiClient";
+import { concreteLang, transcriptionLangHint, resolveReplyLang, callImotaraAI, streamChatReply, detectLangFromScript } from "../api/aiClient";
+import { getInviteState, shouldOfferInvite } from "../notifications/checkInInvite";
+import CheckInInviteCard from "../components/imotara/CheckInInviteCard";
+import { isCheckInReminderEnabled, isSnoozed } from "../notifications/checkInReminder";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
 import { useVoiceInput } from "../hooks/useVoiceInput";
@@ -240,6 +243,9 @@ type ChatMessage = {
     compatibility?: any;
   };
   isQuotaNotice?: boolean;
+  /** The one-time "Shall I check in with you tomorrow?" card ⇒ notifications/checkInInvite. */
+  isCheckInInvite?: boolean;
+  inviteLang?: string;
 };
 
 // Phase 2.2.2 — local followUp de-dupe (best-effort, avoids immediate repeats)
@@ -2781,6 +2787,8 @@ export default function ChatScreen() {
   const TRIAL_BANNER_DISMISSED_KEY = "imotara.trial.bannerDismissed.v1";
   const [showTrialBanner, setShowTrialBanner] = useState(false);
   const [quotaCardShown, setQuotaCardShown] = useState(false);
+  // Once per app run at most; the stored state makes it once EVER ⇒ checkInInvite.
+  const inviteOfferedRef = useRef(false);
   const [showUpgradeSheet, setShowUpgradeSheet] = useState(false);
   useEffect(() => {
     if (!licenseExpiresAt || cloudSyncAllowed) return;
@@ -4453,6 +4461,34 @@ export default function ChatScreen() {
           // with the equivalent web fix (see chat/page.tsx's Phase 2.2a).
           setTypingStatus("responding");
           haptic.receive();
+          // 🔑 The check-in invite: once ever, after a real exchange, NEVER near a crisis
+          //    turn — any distress signal anywhere in this conversation keeps it away.
+          //    A card under the reply; the reply itself is untouched ⇒ checkInInvite.
+          const trailing: ChatMessage[] = [];
+          if (!cloudQuotaHit && !inviteOfferedRef.current) {
+            try {
+              const userTexts = [...messages.filter((m) => m.from === "user").map((m) => m.text ?? ""), trimmed];
+              const offer = shouldOfferInvite({
+                state: await getInviteState(),
+                userMessageCount: userTexts.length,
+                crisisInThread: userTexts.some((t) => detectMobileCrisisTier(t) > 0),
+                remindersOn: await isCheckInReminderEnabled(),
+                paused: await isSnoozed(),
+              });
+              if (offer) {
+                inviteOfferedRef.current = true;
+                const pref = toneContext?.user?.preferredLang;
+                trailing.push({
+                  id: `checkin-invite-${botTimestamp}`,
+                  from: "bot",
+                  text: "",
+                  timestamp: botTimestamp + 1,
+                  isCheckInInvite: true,
+                  inviteLang: pref && pref !== "auto" ? pref : detectLangFromScript(trimmed),
+                });
+              }
+            } catch { /* never let the invite get in the way of a reply */ }
+          }
           const extraMessages: ChatMessage[] = [];
           if (cloudQuotaHit && !quotaCardShown) {
             setQuotaCardShown(true);
@@ -4474,9 +4510,10 @@ export default function ChatScreen() {
             setMessages((prev) => [
               ...extraMessages,
               ...prev.map((m) => (m.id === streamId ? { ...botMessage, id: streamId } : m)),
+              ...trailing,
             ]);
           } else {
-            setMessages((prev) => [...prev, ...extraMessages, botMessage]);
+            setMessages((prev) => [...prev, ...extraMessages, botMessage, ...trailing]);
           }
           smoothScrollToBottom(scrollViewRef);
           await speakReplyIfEnabled(botMessage, finalEmotion);
@@ -5497,6 +5534,18 @@ export default function ChatScreen() {
           renderItem={({ item: message, index }) => {
             const prevMsg = index > 0 ? displayMessages[index - 1] ?? null : null;
             const prevPrevMsg = index > 1 ? displayMessages[index - 2] ?? null : null;
+            if (message.isCheckInInvite) {
+              // Answering removes the card; its outcome is a toast, never a chat message.
+              const retire = () => setMessages((prev) => prev.filter((m) => m.id !== message.id));
+              return (
+                <CheckInInviteCard
+                  lang={message.inviteLang}
+                  colors={colors}
+                  onDone={({ text, kind }) => { retire(); if (text) toastRef.current?.show(text, kind); }}
+                  onChooseTime={() => { retire(); navigation.navigate("Settings"); }}
+                />
+              );
+            }
             return message.isQuotaNotice ? (
             <View style={{ marginHorizontal: 16, marginVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: "rgba(139,92,246,0.30)", backgroundColor: colors.surface, padding: 16 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
