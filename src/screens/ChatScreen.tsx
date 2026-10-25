@@ -4048,9 +4048,13 @@ export default function ChatScreen() {
             streamingMsgIdRef.current = null;
             let streamedText = "";
 
+            // 🔑 guestAccessToken, not accessToken (25 Oct 2026): a guest's chat
+            //    carried NO token, so the server could neither record it nor apply
+            //    the 20/day that the header's "Free" already promised guests —
+            //    guest retention was unmeasurable and guest cost uncapped.
             const streamResult = await streamChatReply(
               cloudPayload,
-              accessToken || undefined,
+              guestAccessToken,
               (accumulated) => {
                 if (!mountedRef.current) return;
                 if (!streamingMsgIdRef.current) {
@@ -4118,7 +4122,7 @@ export default function ChatScreen() {
                 preferredLanguage: toneContext?.user?.preferredLang || undefined,
                 threadId: localUserScopeId || undefined,
                 userId: localUserScopeId || undefined,
-                accessToken: accessToken || undefined,
+                accessToken: guestAccessToken, // same reason as the stream above
                 timeoutMs: apiTimeoutMs,
               });
             }
