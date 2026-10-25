@@ -146,6 +146,7 @@
       "./plugins/withAndroidImeInsets",
       "./plugins/withIosSimulatorArch",
       "./plugins/withAndroidRawSounds",
+      "./plugins/withAndroidTextBounds",
       "@react-native-community/datetimepicker",
       [
         "expo-build-properties",
