@@ -100,6 +100,7 @@ import {
   isConfusedText,
   isStressText,
   detectPositiveText,
+  EN_FELT_A_LOT_RE,
 } from "../lib/emotion/keywordMaps";
 import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { hydrateCrisisCountry, resolveCrisisCountry } from "../lib/safety/resolveCrisisCountry";
@@ -565,6 +566,9 @@ function getLocalMoodHint(text: string, companionName = "Imotara"): string {
   }
   if (
     isStressText(raw) ||
+    // ⛔ Overload phrases go HERE (mood line/History), never into isStressText,
+    // which also feeds aiClient's reply hint. See EN_FELT_A_LOT_RE.
+    EN_FELT_A_LOT_RE.test(raw) ||
     /\b(worry|worried|anxious|scared|panic|nervous|stressed|overwhelmed|afraid|fear)\b/.test(lower)
   ) {
     return "It sounds like something is making you feel tense or worried.";
@@ -657,6 +661,7 @@ function getLocalMoodHintWithPrimary(text: string, companionName = "Imotara"): {
   // Stressed / anxious — 10 Indian languages
   if (
     isStressText(raw) ||
+    EN_FELT_A_LOT_RE.test(raw) ||
     /\b(anxious|anxiety|panic|panicking|scared|fear|worried|worry|nervous|tense|stress|stressed)\b/.test(t)
   ) {
     return {

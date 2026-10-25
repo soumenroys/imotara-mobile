@@ -708,8 +708,28 @@ export function isStressText(raw: string): boolean {
   return STRESS_REGEXES.some((re) => re.test(raw));
 }
 
+/**
+ * FELT heaviness / overload, in English — PHRASES, never bare words.
+ *
+ * 25 Oct 2026: "Long day. I feel heavy…" and "Work has been a lot… not doing
+ * enough" — both real — were saved to History as NEUTRAL on both apps, and the
+ * NGO trend read them the same way. Phrases, because "heavy rain", "the price
+ * is low", "low on cash" and "not enough time" must stay neutral.
+ *
+ * ⚠️ Shared by History/the mood line (both apps) AND the analytics label. On
+ * mobile History feeds the emotional-history summary that reaches the reply
+ * prompt; that effect was measured live before shipping (owner chose A,
+ * 25 Oct: 3 conversations × 3 samples, replies equal or better, light turns not
+ * dramatised). Re-measure before widening these.
+ */
+export const EN_FELT_HEAVY_RE =
+  /(feel(s|ing)? (so |really |very |a bit |kind of )?heavy|heavy[- ]?heart(ed)?|weigh(s|ing|ed)? (on|down) me|weighed down|(feel(ing)?|i'?m|i'?ve been|i have been) (so |really |very |a bit |pretty )?low\b(?! on)|not (doing|being) (good )?enough\b|\bnot good enough\b|i'?m not enough\b)/i;
+export const EN_FELT_A_LOT_RE =
+  /((has|have|'s) been (a lot|too much)|it'?s (all )?(a lot|too much)\b|(all|way) too much|so much (going on|on my plate|to do)|\bswamped\b|drowning in)/i;
+
 export function isSadText(raw: string): boolean {
   if (!raw) return false;
   if (SAD_REGEXES.some((re) => re.test(raw))) return true;
-  return EN_SAD_RE.test(raw.toLowerCase());
+  // Felt heaviness counts too ("I feel heavy", "been so low") — see EN_FELT_HEAVY_RE.
+  return EN_SAD_RE.test(raw.toLowerCase()) || EN_FELT_HEAVY_RE.test(raw);
 }
