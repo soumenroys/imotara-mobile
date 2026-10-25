@@ -25,7 +25,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { haptic, setHapticIntensity } from "../lib/haptics";
 import * as Clipboard from "expo-clipboard";
-import { Image } from "react-native";
+import { Image, AppState } from "react-native";
 import { resolveAvatarImage } from "../assets/avatarImages";
 
 import { useHistoryStore } from "../state/HistoryContext";
@@ -35,6 +35,7 @@ import type { ColorPalette } from "../theme/colors";
 import { chatBackdrop } from "../theme/chatBackdrop";
 import { concreteLang, transcriptionLangHint, resolveReplyLang, callImotaraAI, streamChatReply, detectLangFromScript } from "../api/aiClient";
 import { getInviteState, shouldOfferInvite } from "../notifications/checkInInvite";
+import { askForRating, getRatingState, shouldAskForRating } from "../feedback/ratingPrompt";
 import CheckInInviteCard from "../components/imotara/CheckInInviteCard";
 import { isCheckInReminderEnabled, isSnoozed } from "../notifications/checkInReminder";
 import { useAuth } from "../auth/AuthContext";
@@ -4493,6 +4494,27 @@ export default function ChatScreen() {
                 });
               }
             } catch { /* never let the invite get in the way of a reply */ }
+          }
+          // ⭐ The rating prompt — rare, never near distress, never with the invite
+          //    in the same turn, never during hands-free voice ⇒ feedback/ratingPrompt.
+          //    Asked a few seconds AFTER the reply shows so the OS sheet never covers
+          //    a reply someone is still reading.
+          if (!cloudQuotaHit && trailing.length === 0 && !handsfreeRef.current) {
+            try {
+              const userTexts = [...messages.filter((m) => m.from === "user").map((m) => m.text ?? ""), trimmed];
+              const now = Date.now();
+              if (shouldAskForRating({
+                state: await getRatingState(now),
+                now,
+                userMessageCount: userTexts.length,
+                crisisInThread: userTexts.some((t) => detectMobileCrisisTier(t) > 0),
+                inviteThisTurn: false,
+              })) {
+                setTimeout(() => {
+                  if (mountedRef.current && !handsfreeRef.current && AppState.currentState === "active") void askForRating();
+                }, 6000);
+              }
+            } catch { /* never let the prompt get in the way of a reply */ }
           }
           const extraMessages: ChatMessage[] = [];
           if (cloudQuotaHit && !quotaCardShown) {
