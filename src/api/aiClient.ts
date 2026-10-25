@@ -641,6 +641,18 @@ function isUsableReply(text: string): boolean {
  * path — see the note in streamChatReply). Same wire format the incremental
  * reader handles: `data: {"t":"..."}` lines terminated by `data: [DONE]`.
  */
+/**
+ * 🔑 /api/chat-reply now sends the country the edge saw — first on a stream
+ * (`data: {"meta":{"resolvedCountry":"GB"}}`), in `meta` on JSON. Only the rarely
+ * used /api/respond fallback used to carry it, so the crisis card stayed on the
+ * phone's LOCALE: a Bengali-locale phone in London was shown Tele-MANAS (25 Oct).
+ * ⛔ Fire-and-forget; an explicit Settings choice still wins ⇒ resolveCrisisCountry.
+ */
+function noteServerCountry(parsed: unknown): void {
+  const c = (parsed as { meta?: { resolvedCountry?: unknown } } | null)?.meta?.resolvedCountry;
+  if (c) void rememberServerCountry(c);
+}
+
 function parseSseText(raw: string): string {
   let accumulated = "";
   for (const line of raw.split("\n")) {
@@ -648,7 +660,9 @@ function parseSseText(raw: string): string {
     const data = line.slice(6).trim();
     if (data === "[DONE]") break;
     try {
-      const token = String(JSON.parse(data).t ?? "");
+      const parsed = JSON.parse(data);
+      noteServerCountry(parsed);
+      const token = String(parsed.t ?? "");
       if (token) accumulated += token;
     } catch { /* malformed SSE chunk — skip, same as the reader path */ }
   }
@@ -756,6 +770,7 @@ export async function streamChatReply(
         }
         try {
           const parsed = JSON.parse(data);
+          noteServerCountry(parsed);
           const token = String(parsed.t ?? "");
           if (token) {
             accumulated += token;
@@ -916,6 +931,7 @@ export async function callImotaraAI(
         let chatData: any = null;
         try { chatData = await chatRes.json(); } catch { /* fall through */ }
 
+        noteServerCountry(chatData);
         const chatReplyText = String(chatData?.text ?? "").trim();
 
         // LIC-2: quota exceeded — skip /api/respond cloud fallback, let ChatScreen use local reply
