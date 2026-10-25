@@ -37,7 +37,9 @@ async function getSavedCompanionName(): Promise<string | null> {
 
 export const DEFAULT_HOUR = 20;
 export const DEFAULT_MINUTE = 0;
-export const DEFAULT_INACTIVITY_HOURS = 48;
+// 72 h (was 48) — owner approved 25 Oct 2026: one gentle win-back after THREE
+// quiet days. Anyone who picked a value in Settings keeps theirs.
+export const DEFAULT_INACTIVITY_HOURS = 72;
 
 export async function getSavedReminderTime(): Promise<{ hour: number; minute: number }> {
     try {
@@ -633,7 +635,7 @@ export async function resolveReminderLang(): Promise<string | undefined> {
 
 /**
  * Schedules a one-time "we miss you" nudge after the configured inactivity period.
- * Reads inactivityHours from saved prefs (default 48h).
+ * Reads inactivityHours from saved prefs (default 72h).
  * Pass lastContext (the user's last message text) and lang (ISO code, e.g. "hi")
  * to personalise the notification in the user's preferred language.
  */
@@ -649,9 +651,22 @@ export async function scheduleInactivityReminder(lastActivityTs: number, lang?: 
 
     const enabled = await isCheckInReminderEnabled();
     if (!enabled) return;
+    // Paused reminders mean NO nudges — this one included.
+    if (await isSnoozed()) return;
 
-    const granted = await requestNotificationPermission();
-    if (!granted) return;
+    // ⛔ Permission STATUS only — never ask. This runs as the app goes to the
+    // background; requestPermissionsAsync() here popped the system prompt at the
+    // moment someone was leaving (found 25 Oct 2026). Asking belongs to a tap.
+    try {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== "granted") return;
+    } catch {
+        return;
+    }
+
+    // ⛔ "auto" is not a language — it would fall to English. Resolve it the way
+    // the daily reminder does (settings, then the device locale).
+    const nudgeLang = lang && lang !== "auto" ? lang : await resolveReminderLang();
 
     // Cancel previous inactivity notification
     const prevId = await AsyncStorage.getItem(INACTIVITY_NOTIF_ID_KEY);
@@ -669,7 +684,7 @@ export async function scheduleInactivityReminder(lastActivityTs: number, lang?: 
     // ⛔ lastActivityTs, NOT lastContext. The payload references when the
     // conversation happened, never what was said.
     const { title, body } = buildInactivityPayload(
-        new Date(lastActivityTs), lang, await getSavedCompanionName());
+        new Date(lastActivityTs), nudgeLang, await getSavedCompanionName());
     try {
         const id = await Notifications.scheduleNotificationAsync({
             content: {
