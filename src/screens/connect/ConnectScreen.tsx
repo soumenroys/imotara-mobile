@@ -2262,7 +2262,20 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
     }, [session.id]);
 
     // Translation helpers
-    async function translateMessage(msgId: string, text: string, lang: string) {
+    //
+    // The SENDER's own session language (chosen at booking) is the source
+    // language — the server only guesses from the text when it is missing, and
+    // that guess is measured wrong ~15% of the time on plain English. Until
+    // 25 Oct 2026 mobile never sent it. A session has exactly two participants,
+    // so anyone who is not the user is the consultant (sender_id is an auth user
+    // id; session.consultant_id is the PROFILE id, so it is never compared).
+    function senderLang(senderId: string | undefined): string | undefined {
+        if (!senderId) return undefined;
+        if (senderId === session.user_id) return session.user_lang ?? undefined;
+        return session.consultant_lang ?? undefined;
+    }
+
+    async function translateMessage(msgId: string, text: string, lang: string, senderId?: string) {
         if (!accessToken) return;
         const key = `${msgId}::${lang}`;
         setTranslating((prev) => { const s = new Set(prev); s.add(msgId); return s; });
@@ -2270,7 +2283,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             const res = await cfetch(buildApiUrl("/api/connect/translate"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken ?? ""}` },
-                body: JSON.stringify({ text, targetLang: lang }),
+                body: JSON.stringify({ text, targetLang: lang, sourceLang: senderLang(senderId) }),
             });
             const d = await res.json();
             if (d.ok && d.translatedText && d.translatedText.trim() !== text.trim()) {
@@ -2290,7 +2303,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
             // Trigger translations outside setMessages updater — calling setState
             // from inside another state updater violates React's rules.
             messages.forEach((m: any) => {
-                if (!translations.has(`${m.id}::${lang}`)) translateMessage(m.id, m.content, lang);
+                if (!translations.has(`${m.id}::${lang}`)) translateMessage(m.id, m.content, lang, m.sender_id);
             });
         }
     }
@@ -2312,7 +2325,7 @@ function ChatView({ session, colors, insets, accessToken, userId, onBack }: {
                     cfetch(buildApiUrl("/api/connect/translate"), {
                         method: "POST",
                         headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken ?? ""}` },
-                        body: JSON.stringify({ text: msg.content, targetLang: lang }),
+                        body: JSON.stringify({ text: msg.content, targetLang: lang, sourceLang: senderLang(msg.sender_id) }),
                     }).then((r) => r.json()).then((d) => {
                         if (d.ok && d.translatedText && d.translatedText.trim() !== msg.content.trim()) {
                             setTranslations((prev) => new Map(prev).set(key, d.translatedText));
