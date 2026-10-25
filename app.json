@@ -100,7 +100,10 @@
           }
         ],
         "NSPrivacyTracking": false
-      }
+      },
+      "associatedDomains": [
+        "applinks:www.imotara.com"
+      ]
     },
     "android": {
       "package": "com.imotara.imotara",
@@ -116,6 +119,28 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.imotara.com",
+              "pathPrefix": "/open"
+            },
+            {
+              "scheme": "https",
+              "host": "www.imotara.com",
+              "pathPrefix": "/auth/app-callback"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
       ]
     },
     "web": {
