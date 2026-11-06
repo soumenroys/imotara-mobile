@@ -2580,6 +2580,7 @@ export default function ChatScreen() {
     orgName,
     orgRole,
     orgBillingType,
+    billingIssue,
   } = useSettings();
 
   // Speaks a reply when either switch asks for it, and hands the mic back
@@ -6448,6 +6449,7 @@ export default function ChatScreen() {
         onSend={() => handleSend()}
         onMicPress={handleMicPress}
         firstTimeTip={showFirstTimeTip ? `Just talk — ${effectiveCompanionName} listens without judgment.` : null}
+        billingIssue={billingIssue}
       />
       {renderActionSheet()}
 
