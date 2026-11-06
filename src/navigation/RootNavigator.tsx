@@ -97,8 +97,12 @@ function SyncStatusStrip() {
 const Tab = createBottomTabNavigator();
 const ONBOARDING_KEY = "imotara.onboarding.done.v1";
 
+// https://www.imotara.com/open/<screen> is a verified App Link / Universal Link
+// (public/.well-known on the web). Listing it here makes /open/chat land on
+// Chat instead of just opening the app; without the app, the web sends the same
+// link to /chat. Only screens the web also has should be linked this way.
 const linking = {
-    prefixes: ["imotara://"],
+    prefixes: ["imotara://", "https://www.imotara.com/open"],
     config: {
         screens: {
             Chat: "chat",
