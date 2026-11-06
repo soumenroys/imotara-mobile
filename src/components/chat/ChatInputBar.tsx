@@ -2,9 +2,10 @@
 // Bottom input area for ChatScreen — text field, mic button, send button.
 
 import React from "react";
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Platform, Linking } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { ColorPalette } from "../../theme/colors";
+import { billingBannerText, BUTTON, MANAGE_URL, type BillingIssue } from "../../licensing/billingIssue";
 
 export type VoiceInputState = "idle" | "recording" | "transcribing";
 
@@ -20,6 +21,8 @@ type Props = {
   onSend: () => void;
   onMicPress: () => void;
   firstTimeTip?: string | null;
+  /** "Your last payment didn't go through" — store subscription in its grace period (6 Nov 2026). */
+  billingIssue?: BillingIssue | null;
 };
 
 export function ChatInputBar({
@@ -34,6 +37,7 @@ export function ChatInputBar({
   onSend,
   onMicPress,
   firstTimeTip,
+  billingIssue,
 }: Props) {
   const paddingBottom = 8;
   const isPad = Platform.OS === "ios" && Platform.isPad;
@@ -54,6 +58,34 @@ export function ChatInputBar({
           ...(isPad ? { maxWidth: 700, alignSelf: "center", width: "100%" } : {}),
         }}
       >
+      {/* 🔑 Grace-period notice — same words and same store link as the website (owner, 6 Nov 2026).
+          Calm, one line, one action: only the store can fix a card. */}
+      {billingIssue && Date.parse(billingIssue.until) > Date.now() ? (
+        <View
+          accessibilityRole="alert"
+          style={{
+            marginBottom: 8,
+            padding: 10,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: "rgba(245, 158, 11, 0.35)",
+            backgroundColor: "rgba(245, 158, 11, 0.12)",
+          }}
+        >
+          <Text style={{ fontSize: 12, lineHeight: 17, color: colors.textPrimary }}>
+            {billingBannerText(billingIssue)}
+          </Text>
+          <TouchableOpacity
+            accessibilityRole="link"
+            onPress={() => { void Linking.openURL(MANAGE_URL[billingIssue.store]); }}
+            style={{ marginTop: 6, alignSelf: "flex-start" }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textPrimary, textDecorationLine: "underline" }}>
+              {BUTTON[billingIssue.store]}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       {firstTimeTip ? (
         <Text
           style={{
