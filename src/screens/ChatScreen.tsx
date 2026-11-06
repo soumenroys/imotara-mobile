@@ -129,7 +129,6 @@ import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adult
 import { speakMessage, stopSpeaking, currentSpeakingId } from "../lib/tts/mobileTTS";
 import { isEnabled as isFeatureEnabled, normaliseTier, prettyTier } from "../licensing/featureGates";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { openingGreeting } from "../lib/welcome/openingGreeting";
 
 // Message-action touch target.
 //
@@ -5697,17 +5696,6 @@ export default function ChatScreen() {
             if (pullOffset < -60) handleRefresh();
           }}
           ListHeaderComponent={<View>
-          {/* 🔑 Who is replying — the chat's first words, in the person's language
-              (owner, 6 Nov 2026) ⇒ lib/welcome/openingGreeting. Shown, never stored. */}
-          <View
-            accessibilityRole="text"
-            testID="opening-greeting"
-            style={{ alignSelf: "flex-start", maxWidth: "88%", marginTop: 12, marginBottom: 12, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: "rgba(148, 163, 184, 0.25)", borderWidth: 1, borderColor: "rgba(148, 163, 184, 0.4)" }}
-          >
-            <Text style={{ fontSize: 15, color: colors.textPrimary }}>
-              {openingGreeting(effectiveCompanionName, welcomeLang(toneContext?.user?.preferredLang))}
-            </Text>
-          </View>
           {messages.length === 0 && !initialLoadDone && (
             <View style={{ paddingVertical: 40, alignItems: "center" }}>
               <ActivityIndicator size="small" color={colors.textSecondary} />

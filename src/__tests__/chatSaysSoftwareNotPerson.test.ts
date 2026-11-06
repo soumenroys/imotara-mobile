@@ -1,34 +1,32 @@
 import fs from "fs";
 import path from "path";
-import { openingGreeting, OPENING_GREETING } from "../lib/welcome/openingGreeting";
+import { CONSENT_COPY_BY_LANG } from "../lib/legal/consentCopy";
 
 const ROOT = path.join(__dirname, "..", "..");
 const read = (p: string) => fs.readFileSync(path.join(ROOT, p), "utf8");
 
 /**
- * 🔑 Owner, 30 Oct 2026: the chat must say that no person writes the replies.
- * 🔄 Owner, 6 Nov 2026 (testing 1.6.3): the line under the box "looks so
- * artificial" ⇒ said ONCE, as the chat's opening greeting, in the person's own
- * language (all 22), and nothing under the box. Same table as the website.
+ * 🔑 Owner, 30 Oct 2026: the app must say that no person writes the replies.
+ * 🔄 Owner, 6 Nov 2026 (testing 1.6.3): the line under the chat box "looks so
+ * artificial" ⇒ said ONCE, on the first-visit WELCOME screen, in the person's
+ * own language and the screen's own voice — and nothing under the box.
+ * ⚠️ Owner chose first visit only; advised that some places expect a repeated
+ * reminder (decision recorded 6 Nov 2026). Same copy as the website.
  */
-describe("the chat says who is replying — in its opening greeting", () => {
-  it("the owner's words in English, with the companion's own name", () => {
-    expect(openingGreeting()).toBe("I'm Imotara — a private companion. My replies come from software, so you can say anything.");
-    expect(openingGreeting("Mira", "en")).toContain("I'm Mira — a private companion.");
+describe("the welcome screen says who writes the replies", () => {
+  it("every language has the line, and it names software", () => {
+    expect(Object.keys(CONSENT_COPY_BY_LANG)).toHaveLength(22);
+    for (const [k, c] of Object.entries(CONSENT_COPY_BY_LANG)) expect([k, c.software.length > 10]).toEqual([k, true]);
+    expect(CONSENT_COPY_BY_LANG.en.software).toBe("Its replies come from software, so you can say anything.");
   });
 
-  it("in the person's own language — all 22, each naming the companion once", () => {
-    expect(Object.keys(OPENING_GREETING).sort()).toEqual(["ar","bn","de","en","es","fr","gu","he","hi","id","ja","kn","ml","mr","or","pa","pt","ru","ta","te","ur","zh"]);
-    for (const [k, t] of Object.entries(OPENING_GREETING)) expect([k, t.split("{name}").length - 1]).toEqual([k, 1]);
-    expect(openingGreeting("Mira", "bn")).toMatch(/^আমি Mira — /);
-    expect(openingGreeting(null, "xx")).toBe(openingGreeting(null, "en"));
+  it("the welcome screen shows it under the 'not a therapist' line", () => {
+    const gate = read("src/components/legal/ConsentGate.tsx");
+    expect(gate.indexOf("{copy.software}")).toBeGreaterThan(gate.indexOf("{copy.body}"));
   });
 
-  it("shown first in the chat list, in the chosen language", () => {
-    expect(read("src/screens/ChatScreen.tsx")).toMatch(/openingGreeting\(effectiveCompanionName, welcomeLang\(toneContext\?\.user\?\.preferredLang\)\)/);
-  });
-
-  it("⛔ nothing under the box any more", () => {
+  it("⛔ nothing under the chat box, and no greeting bubble in the chat", () => {
     expect(read("src/components/chat/ChatInputBar.tsx")).not.toContain("Replies come from software");
+    expect(read("src/screens/ChatScreen.tsx")).not.toContain("opening-greeting");
   });
 });
