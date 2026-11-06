@@ -140,6 +140,8 @@ export default function ConsentGate({ lang, countryCode, onAccepted, surface }: 
                             {/* The disclaimer. ⛔ Demoted in WEIGHT only — still
                                 explicit, still above the fold. */}
                             <Text style={styles.disclaimer}>{copy.body}</Text>
+                            {/* Who writes the replies — said once, here (owner, 6 Nov 2026) */}
+                            <Text style={[styles.disclaimer, { marginTop: 4 }]}>{copy.software}</Text>
 
                             <View
                                 style={[

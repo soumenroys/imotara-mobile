@@ -243,15 +243,6 @@ export function ChatInputBar({
           <Text style={{ color: "#fff", fontWeight: "700" }} allowFontScaling={false}>Send</Text>
         </TouchableOpacity>
       </View>
-      {/* Who is replying. 🔑 Owner, 30 Oct 2026: Imotara is positioned as a
-          "private companion", not an "AI companion", so this line is where a
-          reader learns that no person writes the replies — shown everywhere,
-          not only where a law requires it (same line as web chat). */}
-      <Text
-        style={{ marginTop: 4, fontSize: 10, textAlign: "center", color: colors.textSecondary }}
-      >
-        Replies come from software, not a person.
-      </Text>
       </View>{/* end iPad centering wrapper */}
     </View>
   );
