@@ -17,6 +17,7 @@ import { publishLicenseTier } from "../licensing/licenseTierStore";
 import type { ToneContextPayload } from "../api/aiClient";
 import { supabase } from "../lib/supabase/client";
 import { buildApiUrl } from "../config/api";
+import { parseBillingIssue, type BillingIssue } from "../licensing/billingIssue";
 
 /**
  * Minimum gap between AUTOMATIC licence re-reads on foreground.
@@ -72,6 +73,13 @@ type SettingsContextValue = {
      * Null if not on a timed license.
      */
     licenseExpiresAt: string | null;
+
+    /**
+     * "Your last payment didn't go through" — set while an App Store / Google Play
+     * subscription is in its billing grace period (web /api/license/status, 6 Nov 2026).
+     * ⇒ components/imotara/BillingIssueBanner.tsx. Null otherwise.
+     */
+    billingIssue: BillingIssue | null;
 
     /**
      * Optional helper to re-check the current license tier from AsyncStorage
@@ -293,6 +301,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // ✅ Licensing-derived flag (default FREE behavior: device-only)
     const [cloudSyncAllowed, setCloudSyncAllowed] = useState<boolean>(false);
     const [licenseExpiresAt, setLicenseExpiresAt] = useState<string | null>(null);
+    const [billingIssue, setBillingIssue] = useState<BillingIssue | null>(null);
     const [orgId,   setOrgId]   = useState<string | null>(null);
     const [orgName, setOrgName] = useState<string | null>(null);
     const [orgRole, setOrgRole] = useState<string | null>(null);
@@ -374,6 +383,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
             setCloudSyncAllowed(gate("CLOUD_SYNC", mobileTier).enabled);
             setLicenseExpiresAt(expiresAt);
+            // 🔑 Grace-period notice (6 Nov 2026). Additive field — an older server omits it ⇒ null.
+            setBillingIssue(parseBillingIssue(statusData?.billingIssue));
 
             // ── Phase 5: org membership awareness (from /api/license/status response) ──
             if (licOrgId) {
@@ -883,6 +894,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setAutoSyncDelaySeconds,
                 cloudSyncAllowed,
                 licenseExpiresAt,
+                billingIssue,
                 refreshCloudSyncAllowed,
                 refreshLicense,
                 debugUIEnabled: DEBUG_UI_ENABLED,
