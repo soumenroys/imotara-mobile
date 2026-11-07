@@ -21,6 +21,8 @@ import { useAuth } from "../auth/AuthContext";
 import { buildApiUrl } from "../config/api";
 
 import { OnboardingModal, type OnboardingResult } from "../components/imotara/OnboardingModal";
+import { DEFERRED, FIRST_OPEN_RESULT, shouldOfferDeferredSetup } from "../lib/onboarding/firstRun";
+import { getInviteState } from "../notifications/checkInInvite";
 import { useColors, useTheme } from "../theme/ThemeContext";
 let NavigationBar: typeof import("expo-navigation-bar") | null = null;
 try { NavigationBar = require("expo-navigation-bar"); } catch { /* not available in dev builds */ }
@@ -158,10 +160,27 @@ export default function RootNavigator() {
     const [onboardingVisible, setOnboardingVisible] = useState(false);
     const [trendsBadge, setTrendsBadge] = useState(0);
 
+    // #97a (owner, 7 Nov 2026): first open goes STRAIGHT TO THE CHAT with the
+    // "Skip setup" defaults; the setup is offered once on a later open, after a
+    // first real conversation ⇒ lib/onboarding/firstRun.ts.
     useEffect(() => {
-        AsyncStorage.getItem(ONBOARDING_KEY).then((val) => {
-            if (!val) setOnboardingVisible(true);
-        });
+        (async () => {
+            const val = await AsyncStorage.getItem(ONBOARDING_KEY);
+            if (!val) {
+                await handleOnboardingComplete(FIRST_OPEN_RESULT, DEFERRED);
+                return;
+            }
+            if (val === DEFERRED) {
+                const [inviteState, storedSettings] = await Promise.all([
+                    getInviteState(),
+                    AsyncStorage.getItem("imotara_settings_v1"),
+                ]);
+                if (shouldOfferDeferredSetup({ onboardingValue: val, inviteState, storedSettings })) {
+                    setOnboardingVisible(true);
+                }
+            }
+        })().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Poll badge count every 10s so it updates after Chat computes new insights
@@ -172,9 +191,9 @@ export default function RootNavigator() {
         return () => clearInterval(timer);
     }, []);
 
-    const handleOnboardingComplete = async (result: OnboardingResult) => {
+    const handleOnboardingComplete = async (result: OnboardingResult, doneValue: string = "1") => {
         setOnboardingVisible(false);
-        await AsyncStorage.setItem(ONBOARDING_KEY, "1");
+        await AsyncStorage.setItem(ONBOARDING_KEY, doneValue);
 
         // Apply settings from onboarding
         if (setAnalysisMode) setAnalysisMode(result.analysisMode);
