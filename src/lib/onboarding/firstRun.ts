@@ -43,3 +43,27 @@ export function shouldOfferDeferredSetup(args: {
         return false;
     }
 }
+
+/**
+ * Stored by Settings → "Restart onboarding": show the setup on the next open.
+ * 🔴 7 Nov 2026: Restart used to REMOVE the key, which since #97a means "first
+ * open" ⇒ the setup never appeared and the first-open defaults were applied
+ * instead (style reset, replies switched to cloud).
+ */
+export const RESTART = "restart";
+
+/**
+ * What a finished (or skipped) setup may change.
+ * ⛔ The setup never asks about on-device vs cloud, so it changes that ONLY on
+ * a true first open (when nothing was chosen yet). ⛔ "Skip" never erases a
+ * companion style the person already chose.
+ */
+export function applyOnboardingResult(
+    result: OnboardingResult,
+    current: { relationship?: string | null },
+    firstOpen: boolean,
+): { relationship: string; analysisMode: OnboardingResult["analysisMode"] | null } {
+    const kept = current.relationship && current.relationship !== "prefer_not" ? current.relationship : null;
+    const relationship = result.relationship === "prefer_not" && kept ? kept : result.relationship;
+    return { relationship, analysisMode: firstOpen ? result.analysisMode : null };
+}

@@ -33,7 +33,7 @@ describe("⛔ never on the first open", () => {
   });
   const nav = readFileSync(join(__dirname, "../navigation/RootNavigator.tsx"), "utf8");
   it("usedBefore is set only AFTER the first-open branch has returned", () => {
-    const firstOpenReturn = nav.indexOf("await handleOnboardingComplete(FIRST_OPEN_RESULT, DEFERRED);");
+    const firstOpenReturn = nav.indexOf("await handleOnboardingComplete(FIRST_OPEN_RESULT, DEFERRED, true);");
     const ret = nav.indexOf("return;", firstOpenReturn);
     const set = nav.indexOf("setUsedBefore(true);");
     expect(firstOpenReturn).toBeGreaterThan(0);

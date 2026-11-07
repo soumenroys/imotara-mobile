@@ -1068,7 +1068,9 @@ function SettingsScreenContent() {
                 {
                     text: "Restart", style: "destructive",
                     onPress: async () => {
-                        await AsyncStorage.removeItem(ONBOARDING_DONE_KEY).catch(() => {});
+                        // ⛔ NOT removeItem: an empty key now means "first open" (#97a),
+                        // which applies defaults instead of showing the setup.
+                        await AsyncStorage.setItem(ONBOARDING_DONE_KEY, "restart").catch(() => {});
                         setOnboardingResetMsg("Onboarding will appear next time you open Imotara.");
                     },
                 },

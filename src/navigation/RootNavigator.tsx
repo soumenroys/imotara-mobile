@@ -21,7 +21,7 @@ import { useAuth } from "../auth/AuthContext";
 import { buildApiUrl } from "../config/api";
 
 import { OnboardingModal, type OnboardingResult } from "../components/imotara/OnboardingModal";
-import { DEFERRED, FIRST_OPEN_RESULT, shouldOfferDeferredSetup } from "../lib/onboarding/firstRun";
+import { DEFERRED, FIRST_OPEN_RESULT, RESTART, applyOnboardingResult, shouldOfferDeferredSetup } from "../lib/onboarding/firstRun";
 import { getInviteState } from "../notifications/checkInInvite";
 import { useColors, useTheme } from "../theme/ThemeContext";
 import * as Application from "expo-application";
@@ -203,10 +203,15 @@ export default function RootNavigator() {
             // ⛔ first open ⇒ the update notice stays off too (owner, 7 Nov 2026):
             // setUsedBefore below is never reached on this launch.
             if (!val) {
-                await handleOnboardingComplete(FIRST_OPEN_RESULT, DEFERRED);
+                await handleOnboardingComplete(FIRST_OPEN_RESULT, DEFERRED, true);
                 return;
             }
             setUsedBefore(true);
+            // Settings → "Restart onboarding" ⇒ show the setup now (never the first-open defaults).
+            if (val === RESTART) {
+                setOnboardingVisible(true);
+                return;
+            }
             if (val === DEFERRED) {
                 const [inviteState, storedSettings] = await Promise.all([
                     getInviteState(),
@@ -228,12 +233,14 @@ export default function RootNavigator() {
         return () => clearInterval(timer);
     }, []);
 
-    const handleOnboardingComplete = async (result: OnboardingResult, doneValue: string = "1") => {
+    const handleOnboardingComplete = async (result: OnboardingResult, doneValue: string = "1", firstOpen = false) => {
         setOnboardingVisible(false);
         await AsyncStorage.setItem(ONBOARDING_KEY, doneValue);
 
-        // Apply settings from onboarding
-        if (setAnalysisMode) setAnalysisMode(result.analysisMode);
+        // ⛔ The setup never asks on-device vs cloud ⇒ it sets that only on a true
+        // first open; "Skip" never erases a style already chosen (7 Nov 2026).
+        const applied = applyOnboardingResult(result, { relationship: toneContext?.companion?.relationship }, firstOpen);
+        if (setAnalysisMode && applied.analysisMode) setAnalysisMode(applied.analysisMode);
 
         const nextToneContext = {
             ...(toneContext ?? {}),
@@ -245,7 +252,7 @@ export default function RootNavigator() {
                 ...(toneContext?.companion ?? {}),
                 enabled: true,
                 name: toneContext?.companion?.name || "Imotara",
-                relationship: result.relationship,
+                relationship: applied.relationship,
             },
         };
 
