@@ -190,7 +190,7 @@ export const FEATURE_TIPS: FeatureTip[] = [
   // ── Privacy ───────────────────────────────────────────────────────────────
   { id: "local_first",       emoji: "🔒", title: "Local-first architecture", tip: "Your conversation history is kept on your device. Replies come from our secure servers by default — switch to on-device only in Settings if you prefer.", category: "privacy" },
   { id: "no_ads",            emoji: "🚫", title: "No ads, ever",             tip: "Imotara has no ads and never sells your data — your conversations are yours alone.", category: "privacy" },
-  { id: "no_tracking",       emoji: "👁️", title: "No usage tracking",        tip: "Imotara collects zero analytics about you — no usage data, no behaviour profiling.", category: "privacy" },
+  { id: "no_tracking",       emoji: "👁️", title: "No tracking tools",        tip: "No ads and no tracking tools in the app. We only count how many replies you use, to apply your daily limit — never what you write.", category: "privacy" },
   { id: "no_llm_local",      emoji: "🧠", title: "On-device = no server",    tip: "On-device mode never sends your messages anywhere — everything stays on your phone.", category: "privacy" },
   { id: "emotion_consent",   emoji: "✅", title: "Emotion analysis consent", tip: "You choose whether Imotara tracks your emotions — revoke consent anytime in Settings.", category: "privacy" },
   { id: "what_syncs",        emoji: "🔍", title: "What syncs vs what stays", tip: "Account backup only syncs conversation history — not emotions, notes, or journal entries.", category: "privacy" },

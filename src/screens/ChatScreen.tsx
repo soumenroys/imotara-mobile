@@ -1890,8 +1890,12 @@ export default function ChatScreen() {
   useEffect(() => {
     if (intakeInitialisedRef.current) return;
     intakeInitialisedRef.current = true;
+    // #97a (owner, 7 Nov 2026): the 3-step questionnaire no longer opens by
+    // itself — it stood between a new person and the message box, in English
+    // only. The starters below (22 languages) are the way in. Marked done so an
+    // old install mid-questionnaire is not left half-way.
     AsyncStorage.getItem(INTAKE_KEY).then((v) => {
-      if (!v) setIntakeStep(1);
+      if (!v) AsyncStorage.setItem(INTAKE_KEY, "1").catch(() => {});
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
