@@ -118,7 +118,10 @@ import {
   isStressText,
   detectPositiveText,
   EN_FELT_A_LOT_RE,
+  HI_ANGER_REGEX, TA_ANGER_REGEX, TE_ANGER_REGEX, GU_ANGER_REGEX, KN_ANGER_REGEX, ML_ANGER_REGEX,
+  PA_ANGER_REGEX, OR_ANGER_REGEX, MR_ANGER_REGEX, JP_ANGER_REGEX, HE_ANGER_REGEX, AR_ANGER_REGEX, DE_ANGER_REGEX,
 } from "../lib/emotion/keywordMaps";
+import { returningFeeling, returningLangOf, returningLine, type FeelingDetectors, type ReturningFeeling } from "../lib/welcome/returningLine";
 import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { hydrateCrisisCountry, resolveCrisisCountry } from "../lib/safety/resolveCrisisCountry";
 import { getCrisisCopy } from "../lib/safety/crisisCopy";
@@ -223,6 +226,40 @@ function detectMobileCrisisTier(text: string): CrisisTier {
     MOBILE_CRISIS_ROMAN_INDIC_TIER1_RE.test(text)
   ) return 1;
   return 0;
+}
+
+// #77c (7 Nov 2026): what the returning line may say ⇒ lib/welcome/returningLine.ts
+// (byte-identical to the web's). ⛔ isCrisis = any crisis tier — never narrower.
+const ANGER_RES = [BN_ANGER_REGEX, HI_ANGER_REGEX, TA_ANGER_REGEX, TE_ANGER_REGEX, GU_ANGER_REGEX, KN_ANGER_REGEX,
+  ML_ANGER_REGEX, PA_ANGER_REGEX, OR_ANGER_REGEX, MR_ANGER_REGEX, JP_ANGER_REGEX, HE_ANGER_REGEX, AR_ANGER_REGEX, DE_ANGER_REGEX];
+const EN_ANGER_RE = /\b(angry|anger|furious|mad at|irritated|annoyed|rage|frustrated|pissed)\b/i;
+export const RETURNING_DETECTORS: FeelingDetectors = {
+  isCrisis: (t) => detectMobileCrisisTier(t) > 0,
+  isSad: (t) => isSadText(t),
+  isStressed: (t) => isStressText(t) || /\b(anxious|anxiety|worried|worry|nervous|panic|stressed|overwhelmed|scared)\b/i.test(t),
+  isAngry: (t) => EN_ANGER_RE.test(t) || ANGER_RES.some((re) => { re.lastIndex = 0; return re.test(t); }),
+};
+
+/**
+ * The returning line for this platform. English speakers keep the richer
+ * topic lines ("…some work stress…") ⛔ never degrade; everyone else gets the
+ * feeling line in their own language. A crisis always wins.
+ */
+export function mobileReturningLine(p: {
+  userTexts: string[];
+  preferredLang?: string | null;
+  englishTopicLine?: string | null;
+  heavy: boolean;
+  englishPrefix?: string;
+}): { feeling: ReturningFeeling; lang: string; text: string } {
+  const last = p.userTexts[p.userTexts.length - 1] ?? "";
+  const lang = returningLangOf(p.preferredLang) ?? returningLangOf(detectLangFromScript(last)) ?? "en";
+  const feeling = returningFeeling(p.userTexts, RETURNING_DETECTORS, p.heavy);
+  const prefix = lang === "en" && p.englishPrefix ? `${p.englishPrefix} ` : "";
+  if (feeling !== "crisis" && lang === "en" && p.englishTopicLine) {
+    return { feeling, lang, text: `${prefix}${p.englishTopicLine}` };
+  }
+  return { feeling, lang, text: `${prefix}${returningLine(feeling, lang)}` };
 }
 
 type ChatMessageSource = "cloud" | "local";
@@ -2784,18 +2821,25 @@ export default function ChatScreen() {
         reOpener: "Last time there was some family tension weighing on you. How has that been?" },
     ];
 
-    const recentUserText = sorted.filter((m: any) => m.from === "user").slice(-4).map((m: any) => m.text ?? "").join(" ");
+    const userTexts = sorted.filter((m: any) => m.from === "user").map((m: any) => m.text ?? "");
+    const recentUserText = userTexts.slice(-4).join(" ");
     const matched = EN2_TOPICS.find((t) => t.pattern.test(recentUserText));
-    if (matched) { setSessionGreeting(matched.reOpener); return; }
 
     const heavyPattern = /low|tense|worried|upset|frustrated|stuck|sad|anxious|overwhelmed|hurt|difficult|hard time|heavy/i;
     const lastBotMsgs = sorted.filter((m: any) => m.from === "bot").slice(-3);
     const isHeavy = lastBotMsgs.some((m: any) => heavyPattern.test(m.text ?? ""));
-    if (isHeavy) {
-      const h = new Date().getHours();
-      const timeGreet = h < 12 ? "Good morning." : h < 17 ? "Good afternoon." : "Good evening.";
-      setSessionGreeting(`${timeGreet} Last time you were carrying something heavy. How are you feeling now?`);
-    }
+
+    // #77c: in their language, crisis-safe. This banner says something only
+    // when there is something to say — a plain welcome is the greeting's job.
+    const h = new Date().getHours();
+    const r = mobileReturningLine({
+      userTexts,
+      preferredLang: toneContext?.user?.preferredLang,
+      englishTopicLine: matched?.reOpener ?? null,
+      heavy: isHeavy,
+      englishPrefix: matched ? undefined : h < 12 ? "Good morning." : h < 17 ? "Good afternoon." : "Good evening.",
+    });
+    if (r.feeling !== "plain") setSessionGreeting(r.text);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThreadId, activeHistory.length, sessionGreetingEnabled]);
 
@@ -4815,22 +4859,23 @@ export default function ChatScreen() {
           { pattern: /\b(family|parents?|toxic|controlling|expectations|family pressure|family conflict)\b/i,
             reOpener: `${timeGreet} Last time there was some family tension weighing on you. How has that been?` },
         ];
-        const recentUserText = messages.filter((m) => m.from === "user").slice(-4).map((m) => m.text).join(" ");
+        const userTexts = messages.filter((m) => m.from === "user").map((m) => m.text ?? "");
+        const recentUserText = userTexts.slice(-4).join(" ");
         const matched = EN2_TOPICS.find((t) => t.pattern.test(recentUserText));
-        if (matched) {
-          greetText = matched.reOpener;
-        } else {
-          // UX-4 fallback: generic heavy-emotion greeting
-          const lastBotMsgs = messages.filter((m) => m.from === "bot").slice(-3);
-          const prevEmotion = lastBotMsgs
-            .map((m) => m.moodHint ?? "")
-            .find((h) => /low|tense|worried|upset|frustrated|stuck/i.test(h));
-          if (prevEmotion) {
-            greetText = `${timeGreet} Last time we talked, things seemed a little heavy. How are you doing now?`;
-          } else {
-            greetText = `${timeGreet} Good to have you back. How has your day been?`;
-          }
-        }
+        // UX-4: the "things seemed heavy" signal from the last replies' mood
+        const lastBotMsgs = messages.filter((m) => m.from === "bot").slice(-3);
+        const prevEmotion = lastBotMsgs
+          .map((m) => m.moodHint ?? "")
+          .find((h) => /low|tense|worried|upset|frustrated|stuck/i.test(h));
+        // #77c: in their language, crisis-safe. English keeps "Good evening, Name." + the topic lines.
+        greetText = mobileReturningLine({
+          userTexts,
+          preferredLang: toneContext?.user?.preferredLang,
+          // these topic lines already open with "Good evening, Name." — no second prefix
+          englishTopicLine: matched?.reOpener ?? null,
+          heavy: !!prevEmotion,
+          englishPrefix: matched ? undefined : timeGreet,
+        }).text;
       }
     }
 
