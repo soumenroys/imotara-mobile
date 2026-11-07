@@ -26,6 +26,10 @@ describe("real messages ⇒ the right line, in the right language", () => {
     expect(f).toBe("stressed");
     expect(returningLine(f, "hi")).toBe(RETURNING_LINES.hi.stressed);
   });
+  it("Hindi 'टेंशन' (both spellings) now reads as worry — owner OK 7 Nov", () => {
+    expect(returningFeeling(["मुझे बहुत टेंशन है"], real)).toBe("stressed");
+    expect(returningFeeling(["बहुत टेन्शन हो रहा है"], real)).toBe("stressed");
+  });
   it("⛔ English crisis words ⇒ the crisis line, never a feeling", () => {
     const f = returningFeeling(["I feel sad", "I want to end my life"], real);
     expect(f).toBe("crisis");
