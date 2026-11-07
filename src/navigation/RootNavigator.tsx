@@ -24,6 +24,11 @@ import { OnboardingModal, type OnboardingResult } from "../components/imotara/On
 import { DEFERRED, FIRST_OPEN_RESULT, shouldOfferDeferredSetup } from "../lib/onboarding/firstRun";
 import { getInviteState } from "../notifications/checkInInvite";
 import { useColors, useTheme } from "../theme/ThemeContext";
+import * as Application from "expo-application";
+import { fetchWithTimeout } from "../lib/fetchWithTimeout";
+import { APP_VERSION } from "../config/appVersion";
+import { RECHECK_AFTER_MS, deviceLocale, shouldOfferUpdate, updateStrings } from "../lib/update/updatePrompt";
+import UpdateAvailableBanner, { STORE_PLATFORM, openStorePage } from "../components/imotara/UpdateAvailableBanner";
 let NavigationBar: typeof import("expo-navigation-bar") | null = null;
 try { NavigationBar = require("expo-navigation-bar"); } catch { /* not available in dev builds */ }
 
@@ -153,11 +158,40 @@ export default function RootNavigator() {
 
     useAppLifecycle({
         debounceMs: 400,
-        onForeground: () => { void runResumeSync(); },
+        onForeground: () => { void runResumeSync(); void checkForUpdate(); },
     });
 
     // --- Onboarding ---
     const [onboardingVisible, setOnboardingVisible] = useState(false);
+
+    // --- "A new version is available" (owner, 7 Nov 2026) ⇒ lib/update/updatePrompt.ts ---
+    // ⛔ never on the first open: `usedBefore` turns true only when the onboarding
+    // key was ALREADY there when this launch began.
+    const [usedBefore, setUsedBefore] = useState(false);
+    const [updateVisible, setUpdateVisible] = useState(false);
+    const lastUpdateCheckRef = useRef(0);
+
+    const checkForUpdate = async () => {
+        if (!usedBefore || !STORE_PLATFORM) return;
+        const now = Date.now();
+        if (now - lastUpdateCheckRef.current < RECHECK_AFTER_MS) return;
+        lastUpdateCheckRef.current = now;
+        try {
+            const r = await fetchWithTimeout(buildApiUrl("/api/app/latest-version"), {}, 8_000);
+            if (!r.ok) return;
+            const j = (await r.json()) as Record<string, unknown>;
+            const installed = Application.nativeApplicationVersion ?? APP_VERSION;
+            setUpdateVisible(shouldOfferUpdate({ firstOpen: false, installed, latest: j?.[STORE_PLATFORM] }));
+        } catch {
+            // offline / server down ⇒ say nothing; the next open tries again
+            lastUpdateCheckRef.current = 0;
+        }
+    };
+
+    useEffect(() => {
+        void checkForUpdate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [usedBefore]);
     const [trendsBadge, setTrendsBadge] = useState(0);
 
     // #97a (owner, 7 Nov 2026): first open goes STRAIGHT TO THE CHAT with the
@@ -166,10 +200,13 @@ export default function RootNavigator() {
     useEffect(() => {
         (async () => {
             const val = await AsyncStorage.getItem(ONBOARDING_KEY);
+            // ⛔ first open ⇒ the update notice stays off too (owner, 7 Nov 2026):
+            // setUsedBefore below is never reached on this launch.
             if (!val) {
                 await handleOnboardingComplete(FIRST_OPEN_RESULT, DEFERRED);
                 return;
             }
+            setUsedBefore(true);
             if (val === DEFERRED) {
                 const [inviteState, storedSettings] = await Promise.all([
                     getInviteState(),
@@ -327,6 +364,16 @@ export default function RootNavigator() {
                 visible={onboardingVisible}
                 onComplete={(result) => { void handleOnboardingComplete(result); }}
             />
+
+            {updateVisible && STORE_PLATFORM && !onboardingVisible ? (
+                <UpdateAvailableBanner
+                    top={insets.top}
+                    colors={colors}
+                    strings={updateStrings(toneContext?.user?.preferredLang, deviceLocale())}
+                    onUpdate={() => { setUpdateVisible(false); void openStorePage(STORE_PLATFORM!); }}
+                    onLater={() => setUpdateVisible(false)}
+                />
+            ) : null}
         </View>
     );
 }
