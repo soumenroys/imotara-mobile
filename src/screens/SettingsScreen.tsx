@@ -2217,8 +2217,9 @@ function SettingsScreenContent() {
                         marginBottom: 16,
                     }}
                 >
-                    Imotara Mobile. By default your messages stay on this
-                    device. From here you can try early emotion insights and sync
+                    Imotara Mobile. Your history is kept on this device, and replies
+                    come from our secure servers unless you switch to on-device only
+                    below. From here you can try early emotion insights and sync
                     options — future versions will add full cloud backup controls and
                     teen safety settings.
                     {"\n\n"}Your messages are never shared publicly — sync only stores a

@@ -44,7 +44,8 @@ const STEPS: Step[] = [
     icon: "shield-checkmark-outline",
     iconColor: "rgba(52,211,153,1)",
     title: "Your data, your control",
-    body: "Everything you share stays on your device unless you choose to sync. Nothing is sold. You can export or delete your history anytime from Settings.",
+    // #94 (owner, 7 Nov 2026): replies use our servers by default (onboarding sets "cloud") — say so.
+    body: "Your history is kept on your device. To reply, your messages go to our secure servers — you can switch to on-device only in Settings. Nothing is sold. You can export or delete your history anytime.",
   },
 ];
 

@@ -188,7 +188,7 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "depth_levels",      emoji: "📶", title: "Depth grows over time",    tip: "After 10 messages, Imotara shifts tone. After 30 and 50 messages, it deepens further.", category: "companion" },
 
   // ── Privacy ───────────────────────────────────────────────────────────────
-  { id: "local_first",       emoji: "🔒", title: "Local-first architecture", tip: "Every conversation is stored only on your device by default — nothing leaves without your action.", category: "privacy" },
+  { id: "local_first",       emoji: "🔒", title: "Local-first architecture", tip: "Your conversation history is kept on your device. Replies come from our secure servers by default — switch to on-device only in Settings if you prefer.", category: "privacy" },
   { id: "no_ads",            emoji: "🚫", title: "No ads, ever",             tip: "Imotara has no ads and never sells your data — your conversations are yours alone.", category: "privacy" },
   { id: "no_tracking",       emoji: "👁️", title: "No usage tracking",        tip: "Imotara collects zero analytics about you — no usage data, no behaviour profiling.", category: "privacy" },
   { id: "no_llm_local",      emoji: "🧠", title: "On-device = no server",    tip: "On-device mode never sends your messages anywhere — everything stays on your phone.", category: "privacy" },
