@@ -10,8 +10,13 @@
 // crisis tier, the sheet waits for another day.
 // ⛔ Never over a reply being read: only once the latest message is Imotara's.
 
-/** Same "first real conversation" signal as the check-in invite. */
-export const SIGN_IN_AFTER_USER_MESSAGES = 3;
+/**
+ * After the 5th message from the person. ⚠️ NOT 3: the check-in invite ("Shall
+ * I check in with you tomorrow?") appears after the 3rd, and in the simulator
+ * (8 Nov) the sign-in sheet rose over that card — two asks at once. The invite
+ * keeps the 3rd message; sign-in waits two more.
+ */
+export const SIGN_IN_AFTER_USER_MESSAGES = 5;
 
 export function shouldOfferSignIn(p: {
     userMessageCount: number;

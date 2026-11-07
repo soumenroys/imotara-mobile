@@ -11,16 +11,20 @@ describe("when the sign-in sheet may appear", () => {
   it("⛔ never on a first open (only Imotara's greeting so far)", () => {
     expect(shouldOfferSignIn({ userMessageCount: 0, lastMessageFrom: "bot", crisisInThread: false })).toBe(false);
   });
-  it("not after one or two messages", () => {
-    expect(shouldOfferSignIn({ userMessageCount: 1, lastMessageFrom: "bot", crisisInThread: false })).toBe(false);
-    expect(shouldOfferSignIn({ userMessageCount: 2, lastMessageFrom: "bot", crisisInThread: false })).toBe(false);
+  it("not before the 5th message — the check-in invite owns the 3rd", () => {
+    for (const n of [1, 2, 3, 4]) expect(shouldOfferSignIn({ userMessageCount: n, lastMessageFrom: "bot", crisisInThread: false })).toBe(false);
   });
   it("after the first real conversation, once the reply is in", () => {
-    expect(SIGN_IN_AFTER_USER_MESSAGES).toBe(3);
-    expect(shouldOfferSignIn({ userMessageCount: 3, lastMessageFrom: "bot", crisisInThread: false })).toBe(true);
+    expect(SIGN_IN_AFTER_USER_MESSAGES).toBe(5);
+    expect(shouldOfferSignIn({ userMessageCount: 5, lastMessageFrom: "bot", crisisInThread: false })).toBe(true);
+  });
+  it("⛔ never on the same message as the check-in invite (3)", () => {
+    const invite = readFileSync(join(__dirname, "../notifications/checkInInvite.ts"), "utf8");
+    expect(invite).toMatch(/args\.userMessageCount >= 3/);
+    expect(SIGN_IN_AFTER_USER_MESSAGES).toBeGreaterThan(3);
   });
   it("⛔ never while a reply is still on its way", () => {
-    expect(shouldOfferSignIn({ userMessageCount: 3, lastMessageFrom: "user", crisisInThread: false })).toBe(false);
+    expect(shouldOfferSignIn({ userMessageCount: 5, lastMessageFrom: "user", crisisInThread: false })).toBe(false);
   });
   it("⛔ never in a thread that touched a crisis", () => {
     expect(shouldOfferSignIn({ userMessageCount: 9, lastMessageFrom: "bot", crisisInThread: true })).toBe(false);
