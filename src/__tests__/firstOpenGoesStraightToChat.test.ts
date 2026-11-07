@@ -41,7 +41,7 @@ describe("wiring", () => {
     const nav = readFileSync("src/navigation/RootNavigator.tsx", "utf8");
     const chat = readFileSync("src/screens/ChatScreen.tsx", "utf8");
     it("first open applies the defaults instead of opening the setup", () => {
-        expect(nav).toMatch(/if \(!val\) \{\s*await handleOnboardingComplete\(FIRST_OPEN_RESULT, DEFERRED\);\s*return;\s*\}/);
+        expect(nav).toMatch(/if \(!val\) \{\s*await handleOnboardingComplete\(FIRST_OPEN_RESULT, DEFERRED, true\);\s*return;\s*\}/);
         expect(nav).not.toMatch(/if \(!val\) setOnboardingVisible\(true\);/);
     });
     it("the questionnaire no longer opens by itself", () => {
