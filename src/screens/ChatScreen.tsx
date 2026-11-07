@@ -56,6 +56,7 @@ import CheckInInviteCard from "../components/imotara/CheckInInviteCard";
 import { isCheckInReminderEnabled, isSnoozed } from "../notifications/checkInReminder";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
+import { shouldOfferSignIn } from "../auth/signInTiming";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import { replyFallbackNotice } from "../lib/network/failureNotice";
 import {
@@ -6819,8 +6820,14 @@ export default function ChatScreen() {
         onCancel={() => setUnsentLetterVisible(false)}
       />
 
-      {/* Non-intrusive sign-in prompt — appears after first message, one-time only */}
-      <SignInPrompt messageCount={messages.length} />
+      {/* Sign-in prompt — after the first real conversation, never over a crisis (#100) */}
+      <SignInPrompt
+        ready={shouldOfferSignIn({
+          userMessageCount: messages.filter((m) => m.from === "user").length,
+          lastMessageFrom: messages.length ? [...messages].sort((a, b) => a.timestamp - b.timestamp)[messages.length - 1].from : undefined,
+          crisisInThread: messages.some((m) => m.from === "user" && detectMobileCrisisTier(m.text ?? "") > 0),
+        })}
+      />
 
       {showUpgradeSheet && (
         <UpgradeSheet
