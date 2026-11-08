@@ -1,5 +1,6 @@
 // src/auth/SignInPrompt.tsx
-// Non-intrusive one-time sign-in prompt shown after the user's first message.
+// Non-intrusive one-time sign-in prompt shown after the person's first real
+// conversation (#100 ⇒ signInTiming.ts — never on the first open, never over a crisis).
 // Appears as a bottom sheet — user can dismiss it permanently.
 // No username or password required: only Google and Apple OAuth.
 
@@ -22,14 +23,15 @@ import { useAuth } from "./AuthContext";
 
 const DISMISSED_KEY = "imotara.auth.prompt.dismissed.v1";
 
-// Number of messages to wait before showing the prompt
-const SHOW_AFTER_MESSAGES = 1;
+/** Pause after the reply lands, so the sheet never covers a reply being read. */
+export const SHOW_DELAY_MS = 6000;
 
 type Props = {
-    messageCount: number;
+    /** shouldOfferSignIn(...) from the chat — see signInTiming.ts. */
+    ready: boolean;
 };
 
-export function SignInPrompt({ messageCount }: Props) {
+export function SignInPrompt({ ready }: Props) {
     const { status, signInWithGoogle, signInWithApple, appleSignInAvailable } =
         useAuth();
     const [visible, setVisible] = useState(false);
@@ -51,17 +53,22 @@ export function SignInPrompt({ messageCount }: Props) {
         if (
             !dismissed &&
             status === "unauthenticated" &&
-            messageCount >= SHOW_AFTER_MESSAGES
+            ready
         ) {
-            setVisible(true);
-            Animated.spring(slideAnim, {
-                toValue: 0,
-                useNativeDriver: true,
-                tension: 65,
-                friction: 11,
-            }).start();
+            // Give the person time to read the reply that just arrived (seen in
+            // the simulator 8 Nov: the sheet covered it the instant it landed).
+            const t = setTimeout(() => {
+                setVisible(true);
+                Animated.spring(slideAnim, {
+                    toValue: 0,
+                    useNativeDriver: true,
+                    tension: 65,
+                    friction: 11,
+                }).start();
+            }, SHOW_DELAY_MS);
+            return () => clearTimeout(t);
         }
-    }, [dismissed, status, messageCount, slideAnim]);
+    }, [dismissed, status, ready, slideAnim]);
 
     const handleDismiss = async () => {
         Animated.timing(slideAnim, {

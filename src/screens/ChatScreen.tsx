@@ -56,6 +56,7 @@ import CheckInInviteCard from "../components/imotara/CheckInInviteCard";
 import { isCheckInReminderEnabled, isSnoozed } from "../notifications/checkInReminder";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
+import { shouldOfferSignIn } from "../auth/signInTiming";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import { replyFallbackNotice } from "../lib/network/failureNotice";
 import {
@@ -126,6 +127,7 @@ import { getCrisisResourcesForCountry } from "../lib/safety/crisisResources";
 import { hydrateCrisisCountry, resolveCrisisCountry } from "../lib/safety/resolveCrisisCountry";
 import { getCrisisCopy } from "../lib/safety/crisisCopy";
 import { crisisCardLangFor } from "../lib/safety/crisisCardLang";
+import { buildCrisisShownReport, crisisCardsToReport, sendCrisisShownReport } from "../lib/safety/reportCrisisShown";
 import { CRISIS_CARD_COLORS } from "../lib/safety/crisisCardColors";
 import { detectCountryCode } from "../lib/safety/detectCountry";
 import { detectAdultContent, buildAdultSafetyRefusal } from "../lib/safety/adultContentGuard";
@@ -2623,6 +2625,28 @@ export default function ChatScreen() {
     orgBillingType,
     billingIssue,
   } = useSettings();
+
+  // #105 (8 Nov 2026): report what each crisis card showed — language, tier,
+  // country, line ids; ⛔ never text — with the token the reply used, so the
+  // server fills in the episode chat-reply logged. Once per card.
+  const reportedCrisisCardsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const minTier = crisisThresholdSetting === "conservative" ? 2 : 1;
+    const due = crisisCardsToReport(messages, minTier, detectMobileCrisisTier, Date.now(), reportedCrisisCardsRef.current);
+    if (due.length === 0) return;
+    // The same language and country the bubble renders with.
+    const lang = crisisCardLangFor(
+      toneContext?.user?.preferredLang,
+      messages.filter((m) => m.from === "user").slice(-4).map((m) => m.text),
+    );
+    const resources = getCrisisResourcesForCountry(resolveCrisisCountry());
+    for (const { messageId, tier } of due) {
+      reportedCrisisCardsRef.current.add(messageId);
+      if (dismissedCrisisCards.has(messageId)) continue;
+      const report = buildCrisisShownReport({ tier, lang, resources });
+      if (report) sendCrisisShownReport(report, guestAccessToken);
+    }
+  }, [messages, crisisThresholdSetting, toneContext?.user?.preferredLang, guestAccessToken, dismissedCrisisCards]);
 
   // Speaks a reply when either switch asks for it, and hands the mic back
   // afterwards in hands-free.
@@ -6819,8 +6843,14 @@ export default function ChatScreen() {
         onCancel={() => setUnsentLetterVisible(false)}
       />
 
-      {/* Non-intrusive sign-in prompt — appears after first message, one-time only */}
-      <SignInPrompt messageCount={messages.length} />
+      {/* Sign-in prompt — after the first real conversation, never over a crisis (#100) */}
+      <SignInPrompt
+        ready={shouldOfferSignIn({
+          userMessageCount: messages.filter((m) => m.from === "user").length,
+          lastMessageFrom: messages.length ? [...messages].sort((a, b) => a.timestamp - b.timestamp)[messages.length - 1].from : undefined,
+          crisisInThread: messages.some((m) => m.from === "user" && detectMobileCrisisTier(m.text ?? "") > 0),
+        })}
+      />
 
       {showUpgradeSheet && (
         <UpgradeSheet

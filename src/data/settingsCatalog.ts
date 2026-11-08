@@ -82,6 +82,22 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
     keywords: ["text size", "font size", "bigger text", "smaller text", "font", "readability", "large text", "टेक्स्ट साइज़", "টেক্সট সাইজ"],
   },
   {
+    id: "restart_onboarding",
+    title: "Restart onboarding",
+    section: "Advanced",
+    sectionKey: "advanced",
+    description: "Show the name and companion-style setup again the next time you open Imotara",
+    keywords: ["restart onboarding", "onboarding", "setup again", "redo setup", "set up again", "start over", "personalise", "personalize", "welcome setup", "फिर से सेटअप", "আবার সেটআপ"],
+  },
+  {
+    id: "feature_discovery_cards",
+    title: "Feature discovery cards",
+    section: "Advanced",
+    sectionKey: "advanced",
+    description: "Show cards that introduce Trends, Offline mode, Companion and more — or reset them to see them again",
+    keywords: ["discovery cards", "feature cards", "reset discovery cards", "tips", "tours", "show tips again", "intro cards", "सुझाव कार्ड", "পরিচিতি কার্ড"],
+  },
+  {
     id: "companion_reactions",
     title: "Companion reactions",
     section: "Advanced",
@@ -235,6 +251,16 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
   },
 
   // ── SYNC & PRIVACY ─────────────────────────────────────────────────────────
+  // #101 (8 Nov 2026): the Settings header says "switch to on-device only below"
+  // but searching "on-device" found nothing.
+  {
+    id: "analysis_mode",
+    title: "Analysis Mode",
+    section: "Privacy & safety",
+    sectionKey: "privacy",
+    description: "Choose how replies are made: Online (our secure servers), Local (on this device only — nothing is sent), or Auto",
+    keywords: ["analysis mode", "on-device", "on device", "device only", "offline replies", "local mode", "local only", "online mode", "cloud replies", "servers", "privacy mode", "auto mode", "keep it on my phone", "ऑन-डिवाइस", "অন-ডিভাইস"],
+  },
   {
     id: "cloud_sync",
     title: "Cloud sync",
