@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors, useTheme } from "../../theme/ThemeContext";
 import IOSTipJar from "./IOSTipJar";
 import UpgradeSheet from "./UpgradeSheet";
-import { DONATION_PRESETS } from "../../payments/donations";
+import { DONATION_PRESETS, fetchDonationPresets } from "../../payments/donations";
 import { normaliseTier, prettyTier, type LicenseTier } from "../../licensing/featureGates";
 import { orgBillingTypeMeta } from "../../lib/imotara/orgBilling";
 
@@ -78,6 +78,20 @@ export function PlanSupportQuickPanel({
   const slideAnim = useRef(new Animated.Value(PANEL_WIDTH)).current;
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [donating, setDonating] = useState(false);
+  // #38 (8 Nov 2026): the amounts for THIS donor's country, as Settings shows
+  // them (fetchDonationPresets, mobile bf43f28). This panel kept India's fixed
+  // ladder, so a donor abroad tapped ₹49 here and the /donate checkout — banded
+  // by country since web c039082 — asked for a different number. Still INR.
+  // ⚠️ iOS never reaches this — donations there are Apple's tip jar.
+  const [donatePresets, setDonatePresets] = useState<readonly DonationItem[]>(DONATE_PRESETS);
+  useEffect(() => {
+    if (Platform.OS === "ios") return;
+    let cancelled = false;
+    fetchDonationPresets(getApiBaseUrl())
+      .then((p) => { if (!cancelled) setDonatePresets(p as readonly DonationItem[]); })
+      .catch(() => {});   // the helper already falls back to the local ladder
+    return () => { cancelled = true; };
+  }, []);
 
   // Snappy animation — 100 ms in, 120 ms out
   useEffect(() => {
@@ -273,7 +287,7 @@ export function PlanSupportQuickPanel({
               <IOSTipJar />
             ) : (
               <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                {DONATE_PRESETS.map((p) => (
+                {donatePresets.map((p) => (
                   <TouchableOpacity
                     key={p.id}
                     onPress={() => handleDonate(p)}
