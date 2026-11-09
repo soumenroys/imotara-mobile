@@ -88,6 +88,28 @@ describe("Settings renders the fetched presets, not the hardcoded ladder", () =>
   });
 });
 
+describe("🔴 8 Nov 2026: the Plan & support quick panel shows the SAME banded amounts", () => {
+  // It kept India's fixed ladder after Settings was fixed — a second entry point
+  // making the promise the checkout does not keep.
+  const PANEL = () => read("src/components/imotara/PlanSupportQuickPanel.tsx");
+
+  it("fetches the presets for this donor's country", () => {
+    expect(PANEL()).toContain("fetchDonationPresets(getApiBaseUrl())");
+  });
+
+  it("maps over the fetched list, not the hardcoded ladder", () => {
+    expect(PANEL()).toContain("donatePresets.map(");
+    expect(PANEL()).not.toContain("DONATE_PRESETS.map(");
+  });
+
+  it("skips the fetch on iOS and seeds from the local ladder", () => {
+    const s = PANEL();
+    const i = s.indexOf("fetchDonationPresets(");
+    expect(s.slice(Math.max(0, i - 220), i)).toMatch(/Platform\.OS === "ios"\)\s*return;/);
+    expect(s).toMatch(/useState<readonly DonationItem\[\]>\(DONATE_PRESETS\)/);
+  });
+});
+
 describe("⛔ it stays INR — this must never become multi-currency", () => {
   it("the mobile module names no currency other than INR", () => {
     const src = read("src/payments/donations.ts");

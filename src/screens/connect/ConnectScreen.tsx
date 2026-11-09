@@ -395,7 +395,9 @@ export default function ConnectScreen() {
 
             {tab === "browse" && <BrowseTab colors={colors} accessToken={accessToken}
                 onSelectConsultant={(c) => setView({ name: "profile", consultant: c })}
-                onOpenWallet={() => setView({ name: "wallet" })} />}
+                onOpenWallet={() => setView({ name: "wallet" })}
+                onOpenChat={() => navigation.navigate("Chat")}
+                onRegister={() => setView({ name: "register" })} />}
             {tab === "sessions" && <SessionsTab colors={colors} accessToken={accessToken}
                 onSelectSession={(s) => setView({ name: "chat", session: s })} />}
             {tab === "wallet" && <WalletTab colors={colors} accessToken={accessToken} />}
@@ -418,10 +420,13 @@ const browseCache: {
 let _browseCache = browseCache;
 
 // ── Browse Tab ─────────────────────────────────────────────────────────────────
-function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
+function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet, onOpenChat, onRegister }: {
     colors: any; accessToken: string | null;
     onSelectConsultant: (c: Consultant) => void;
     onOpenWallet: () => void;
+    /** #108: the honest empty list points somewhere — the chat, or becoming a companion. */
+    onOpenChat: () => void;
+    onRegister: () => void;
 }) {
     const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const [isSigningIn, setIsSigningIn] = useState(false);
@@ -622,10 +627,37 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet }: {
                         <Text style={{ color: colors.accent, fontSize: 13, fontWeight: "600" }}>Retry</Text>
                     </TouchableOpacity>
                 </>
-            ) : (
+            ) : (filterOnline || filterCategory || filterLang || filterGender) ? (
+                // 🔴 These filters are applied ON THE SERVER, so an empty filtered
+                // result used to land here and hide the filter bar — with no way to
+                // undo the filter. Say what happened and give the way back.
                 <>
-                    <Text style={s.emptyText}>No companions online right now.</Text>
-                    <Text style={[s.emptyText, { marginTop: 4, fontSize: 12, opacity: 0.6 }]}>Check back soon.</Text>
+                    <Text style={s.emptyText}>No companions match this filter.</Text>
+                    <TouchableOpacity
+                        onPress={() => { setFilterOnline(false); setFilterCategory(""); setFilterLang(""); setFilterGender(""); }}
+                        style={{ marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 10, backgroundColor: "rgba(139,92,246,0.2)", borderWidth: 1, borderColor: "rgba(139,92,246,0.4)" }}>
+                        <Text style={{ color: colors.accent, fontSize: 13, fontWeight: "600" }}>Clear filters</Text>
+                    </TouchableOpacity>
+                </>
+            ) : (
+                // #108 (owner, 8 Nov 2026): nobody is listed at all — say so plainly,
+                // offer the chat, and keep the door open for new companions. Same
+                // words as the web (imotaraapp src/app/connect/page.tsx).
+                <>
+                    <Text style={[s.emptyText, { fontWeight: "600" }]}>No companions are available right now.</Text>
+                    <Text style={[s.emptyText, { marginTop: 6, fontSize: 13, opacity: 0.75, paddingHorizontal: 24 }]}>
+                        We're welcoming new Wellness Companions — please check back soon. If you'd like to talk now, the chat is here any time.
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
+                        <TouchableOpacity onPress={onOpenChat} accessibilityRole="button"
+                            style={{ paddingHorizontal: 18, paddingVertical: 9, borderRadius: 10, backgroundColor: "rgba(139,92,246,0.85)" }}>
+                            <Text style={{ color: "#ffffff", fontSize: 13, fontWeight: "700" }}>Open the chat</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={onRegister} accessibilityRole="button"
+                            style={{ paddingHorizontal: 18, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: "rgba(139,92,246,0.45)" }}>
+                            <Text style={{ color: colors.accent, fontSize: 13, fontWeight: "600" }}>Join as a companion</Text>
+                        </TouchableOpacity>
+                    </View>
                 </>
             )}
         </View>
