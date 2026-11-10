@@ -55,6 +55,7 @@ function welcomeLang(preferred?: string | null): string {
 import CheckInInviteCard from "../components/imotara/CheckInInviteCard";
 import { shouldShowWelcomeBack, welcomeBackText } from "../lib/welcome/welcomeBackTopic";
 import { noteSession, readDismissed, readLastSession, markDismissed, type PhoneLastSession } from "../lib/welcome/lastSession";
+import { keepTransientCards } from "../lib/chat/keepTransientCards";
 import { isCheckInReminderEnabled, isSnoozed } from "../notifications/checkInReminder";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
@@ -4801,6 +4802,7 @@ export default function ChatScreen() {
   };
 
   // Hydrate from persisted history whenever active thread changes
+  const hydratedThreadRef = useRef<string | null>(null);
   useEffect(() => {
     if (activeHistory.length === 0) {
       // Thread switched or cleared → reset local messages
@@ -4824,7 +4826,14 @@ export default function ChatScreen() {
       moodHint: h.moodHint,
     }));
 
-    setMessages(hydrated);
+    // 🔴 FIX (11 Nov 2026): the check-in invite and the quota notice are CARDS that
+    //    never go into history. Every history change (the reply being saved, a
+    //    sync mark) re-ran this and replaced the list ⇒ the invite was wiped before
+    //    anyone saw it (simulator, fresh install: never shown, state never set).
+    //    Keep those cards while the SAME conversation is open; drop them on a switch.
+    const sameThread = hydratedThreadRef.current === activeThreadId;
+    hydratedThreadRef.current = activeThreadId;
+    setMessages((prev) => keepTransientCards(prev, hydrated, sameThread));
     smoothScrollToBottom(scrollViewRef);
   }, [activeHistory]);
 
