@@ -53,6 +53,8 @@ function welcomeLang(preferred?: string | null): string {
   }
 }
 import CheckInInviteCard from "../components/imotara/CheckInInviteCard";
+import { shouldShowWelcomeBack, welcomeBackText } from "../lib/welcome/welcomeBackTopic";
+import { noteSession, readDismissed, readLastSession, markDismissed, type PhoneLastSession } from "../lib/welcome/lastSession";
 import { isCheckInReminderEnabled, isSnoozed } from "../notifications/checkInReminder";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
@@ -2884,7 +2886,19 @@ export default function ChatScreen() {
   const [quotaCardShown, setQuotaCardShown] = useState(false);
   // Once per app run at most; the stored state makes it once EVER ⇒ checkInInvite.
   const inviteOfferedRef = useRef(false);
-  const [showUpgradeSheet, setShowUpgradeSheet] = useState(false);
+
+  // 🌿 #16 C (owner, 10 Nov 2026): "Welcome back — last time we talked about: <topic>".
+  //    Decided once, on arrival; hidden as soon as they talk again ⇒ lib/welcome.
+  const [welcomeBack, setWelcomeBack] = useState<PhoneLastSession | null>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const last = await readLastSession();
+      const dismissed = await readDismissed();
+      if (alive && shouldShowWelcomeBack(last, Date.now(), dismissed)) setWelcomeBack(last);
+    })().catch(() => {});
+    return () => { alive = false; };
+  }, []);  const [showUpgradeSheet, setShowUpgradeSheet] = useState(false);
   useEffect(() => {
     if (!licenseExpiresAt || cloudSyncAllowed) return;
     const msLeft = new Date(licenseExpiresAt).getTime() - Date.now();
@@ -4583,6 +4597,19 @@ export default function ChatScreen() {
                 });
               }
             } catch { /* never let the invite get in the way of a reply */ }
+          }
+          // 🌿 #16 C: remember what this conversation is about (a topic KEY from a closed
+          //    list, asked separately — the reply is untouched). Crisis ⇒ no card, ever.
+          if (activeThreadId) {
+            const userTexts = [...messages.filter((m) => m.from === "user").map((m) => m.text ?? ""), trimmed];
+            const pref = toneContext?.user?.preferredLang;
+            setWelcomeBack(null);
+            void noteSession({
+              threadId: activeThreadId,
+              userTexts,
+              crisis: userTexts.some((t) => detectMobileCrisisTier(t) > 0),
+              lang: pref && pref !== "auto" ? pref : detectLangFromScript(trimmed),
+            });
           }
           // ⭐ The rating prompt — rare, never near distress, never with the invite
           //    in the same turn, never during hands-free voice ⇒ feedback/ratingPrompt.
@@ -6499,6 +6526,31 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* 🌿 #16 C: "Welcome back" — a card above the message box, never part of a reply */}
+      {welcomeBack && (() => {
+        const pref = toneContext?.user?.preferredLang;
+        const w = welcomeBackText(pref && pref !== "auto" ? pref : (welcomeBack.lang ?? "en"), welcomeBack.topic);
+        const wb = welcomeBack;
+        const close = () => { void markDismissed(wb); setWelcomeBack(null); };
+        return (
+          <View accessibilityRole="summary" style={{ marginHorizontal: 12, marginBottom: 8, borderRadius: 16, borderWidth: 1, borderColor: "rgba(139,92,246,0.35)", backgroundColor: colors.surface, paddingHorizontal: 14, paddingVertical: 12 }}>
+            {w.lines.map((l, i) => (
+              <Text key={i} style={{ fontSize: 13, fontWeight: i === 0 ? "700" : "400", color: colors.textPrimary, marginTop: i === 0 ? 0 : 2 }}>{l}</Text>
+            ))}
+            <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 8 }}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => { if (threads?.some?.((t: { id: string }) => t.id === wb.threadId)) setActiveThreadId(wb.threadId); close(); }}
+                style={{ borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, marginEnd: 8, backgroundColor: "#7c3aed" }}>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#ffffff" }}>{w.pick}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity accessibilityRole="button" onPress={() => { startNewThread(); close(); }}
+                style={{ borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: "rgba(139,92,246,0.35)" }}>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textPrimary }}>{w.fresh}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      })()}
 
       {/* Input */}
       {discoveryCard && (
