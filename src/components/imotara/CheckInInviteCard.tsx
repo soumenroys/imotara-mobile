@@ -7,7 +7,7 @@
 import React, { useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import { isRtlLang } from "../../lib/lang/rtlLangs";
-import { acceptInvite, formatHour, getInviteStrings, INVITE_HOURS, setInviteState } from "../../notifications/checkInInvite";
+import { acceptInvite, formatHour, getInviteStrings, INVITE_HOURS, INVITE_MINUTES, setInviteState } from "../../notifications/checkInInvite";
 
 type Colors = { surface: string; textPrimary: string; textSecondary: string };
 
@@ -21,12 +21,12 @@ export default function CheckInInviteCard(props: {
     const rtl = isRtlLang(props.lang ?? "");
     const [busy, setBusy] = useState(false);
 
-    const pick = async (hour: number) => {
+    const pick = async (hour: number, minute = 0) => {
         if (busy) return;
         setBusy(true);
         try {
-            const r = await acceptInvite(hour);
-            if (r.ok) props.onDone({ text: s.done(formatHour(hour, props.lang)), kind: "info" });
+            const r = await acceptInvite(hour, minute);
+            if (r.ok) props.onDone({ text: s.done(formatHour(hour, props.lang, minute)), kind: "info" });
             else {
                 // ⛔ Declined or unavailable: retire the card rather than ask again.
                 await setInviteState("declined");
@@ -62,8 +62,8 @@ export default function CheckInInviteCard(props: {
                 {s.sub}
             </Text>
             <View style={{ flexDirection: rtl ? "row-reverse" : "row", flexWrap: "wrap" }}>
-                {chip(`🌙 ${formatHour(INVITE_HOURS.evening, props.lang)}`, () => void pick(INVITE_HOURS.evening), true)}
-                {chip(`☀️ ${formatHour(INVITE_HOURS.morning, props.lang)}`, () => void pick(INVITE_HOURS.morning))}
+                {chip(`🌙 ${formatHour(INVITE_HOURS.evening, props.lang, INVITE_MINUTES.evening)}`, () => void pick(INVITE_HOURS.evening, INVITE_MINUTES.evening), true)}
+                {chip(`☀️ ${formatHour(INVITE_HOURS.morning, props.lang, INVITE_MINUTES.morning)}`, () => void pick(INVITE_HOURS.morning, INVITE_MINUTES.morning))}
                 {chip(s.choose, () => { void setInviteState("declined"); props.onChooseTime(); })}
                 {chip(s.later, () => { void setInviteState("declined"); props.onDone({ text: "", kind: "info" }); })}
             </View>

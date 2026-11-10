@@ -36,7 +36,8 @@ async function getSavedCompanionName(): Promise<string | null> {
 }
 
 export const DEFAULT_HOUR = 20;
-export const DEFAULT_MINUTE = 0;
+/** #16 B / #77e (owner, 8 + 10 Nov 2026): 20:30 — the evening/late-night peak, after dinner. */
+export const DEFAULT_MINUTE = 30;
 // 72 h (was 48) — owner approved 25 Oct 2026: one gentle win-back after THREE
 // quiet days. Anyone who picked a value in Settings keeps theirs.
 export const DEFAULT_INACTIVITY_HOURS = 72;
