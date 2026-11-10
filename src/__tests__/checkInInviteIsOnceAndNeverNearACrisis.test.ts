@@ -8,16 +8,26 @@ import { join } from "path";
 
 jest.mock("@react-native-async-storage/async-storage", () => require("@react-native-async-storage/async-storage/jest/async-storage-mock"));
 
-import { INVITE, getInviteStrings, shouldOfferInvite, formatHour } from "../notifications/checkInInvite";
+import { INVITE, getInviteStrings, shouldOfferInvite, formatHour, INVITE_MIN_MESSAGES, INVITE_HOURS, INVITE_MINUTES } from "../notifications/checkInInvite";
+import { DEFAULT_HOUR, DEFAULT_MINUTE } from "../notifications/checkInReminder";
 
 const LANGS = ["en", "hi", "bn", "mr", "ta", "te", "gu", "kn", "ml", "pa", "or", "ur", "ar", "ru", "zh", "ja", "es", "fr", "de", "pt", "id", "he"];
 const src = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
-const base = { state: "unseen" as const, userMessageCount: 3, crisisInThread: false, remindersOn: true, paused: false };
+const base = { state: "unseen" as const, userMessageCount: 2, crisisInThread: false, remindersOn: true, paused: false };
 
 describe("when the card may appear", () => {
-  it("after a real exchange — 3 messages from the person", () => {
+  it("after a real exchange — 2 messages from the person (#16 B, 10 Nov 2026; was 3)", () => {
+    expect(INVITE_MIN_MESSAGES).toBe(2);
     expect(shouldOfferInvite(base)).toBe(true);
-    expect(shouldOfferInvite({ ...base, userMessageCount: 2 })).toBe(false);
+    expect(shouldOfferInvite({ ...base, userMessageCount: 1 })).toBe(false);
+  });
+  it("#16 B / #77e: the evening choice and the default reminder are both 20:30", () => {
+    expect([DEFAULT_HOUR, DEFAULT_MINUTE]).toEqual([20, 30]);
+    expect([INVITE_HOURS.evening, INVITE_MINUTES.evening]).toEqual([20, 30]);
+    expect(formatHour(20, "en-US", 30)).toMatch(/8:30/);
+    const card = src("components/imotara/CheckInInviteCard.tsx");
+    expect(card).toMatch(/pick\(INVITE_HOURS\.evening, INVITE_MINUTES\.evening\)/);
+    expect(card).toMatch(/acceptInvite\(hour, minute\)/);
   });
   it("⛔ never anywhere near a crisis", () => expect(shouldOfferInvite({ ...base, crisisInThread: true })).toBe(false));
   it("⛔ never again once answered — 'Not now' included", () => {

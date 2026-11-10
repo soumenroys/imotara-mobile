@@ -228,18 +228,23 @@ export function getInviteStrings(lang?: string | null): InviteStrings {
     return INVITE[base] ?? INVITE.en;
 }
 
-/** "8 pm" / "20:00" / "下午8点" — the hour in the person's own language's clock. */
-export function formatHour(hour: number, lang?: string | null): string {
+/** "8:30 pm" / "20:30" / "下午8:30" — the time in the person's own language's clock. */
+export function formatHour(hour: number, lang?: string | null, minute = 0): string {
     try {
-        const d = new Date(2000, 0, 1, hour, 0, 0);
+        const d = new Date(2000, 0, 1, hour, minute, 0);
         return new Intl.DateTimeFormat(lang || undefined, { hour: "numeric", minute: "2-digit" }).format(d);
     } catch {
-        return `${String(hour).padStart(2, "0")}:00`;
+        return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
     }
 }
 
-/** The two quick choices on the card. Evening matches the existing default (20:00). */
+/**
+ * The two quick choices on the card. Evening = the reminder's own default
+ * (20:30 since #16 B, 10 Nov 2026), so accepting it and never touching
+ * Settings give the same time.
+ */
 export const INVITE_HOURS = { evening: DEFAULT_HOUR, morning: 9 } as const;
+export const INVITE_MINUTES = { evening: DEFAULT_MINUTE, morning: 0 } as const;
 
 // ── Shown once, ever ──────────────────────────────────────────────────────────
 const INVITE_STATE_KEY = "imotara.checkin.invite.v1";
@@ -258,10 +263,13 @@ export async function setInviteState(s: Exclude<InviteState, "unseen">): Promise
     try { await AsyncStorage.setItem(INVITE_STATE_KEY, s); } catch { /* best effort */ }
 }
 
+/** Messages the person must have sent first (#16 B, 10 Nov 2026: 2, was 3 — 31% stop after one reply). Same as the web. */
+export const INVITE_MIN_MESSAGES = 2;
+
 /**
  * Should the card appear under this reply?
  * ⛔ Never on/after a crisis turn; never once answered; only after a real
- * exchange (3+ messages from the person); never when reminders are off or paused.
+ * exchange (2+ messages from the person); never when reminders are off or paused.
  */
 export function shouldOfferInvite(args: {
     state: InviteState;
@@ -270,7 +278,7 @@ export function shouldOfferInvite(args: {
     remindersOn: boolean;
     paused: boolean;
 }): boolean {
-    return args.state === "unseen" && !args.crisisInThread && args.userMessageCount >= 3 && args.remindersOn && !args.paused;
+    return args.state === "unseen" && !args.crisisInThread && args.userMessageCount >= INVITE_MIN_MESSAGES && args.remindersOn && !args.paused;
 }
 
 /** Accept: ask the OS (only now, after a tap), then schedule at the chosen hour. */

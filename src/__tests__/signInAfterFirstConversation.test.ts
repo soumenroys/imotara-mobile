@@ -18,10 +18,11 @@ describe("when the sign-in sheet may appear", () => {
     expect(SIGN_IN_AFTER_USER_MESSAGES).toBe(5);
     expect(shouldOfferSignIn({ userMessageCount: 5, lastMessageFrom: "bot", crisisInThread: false })).toBe(true);
   });
-  it("⛔ never on the same message as the check-in invite (3)", () => {
+  it("⛔ never on the same message as the check-in invite (2 since #16 B, 10 Nov 2026)", () => {
     const invite = readFileSync(join(__dirname, "../notifications/checkInInvite.ts"), "utf8");
-    expect(invite).toMatch(/args\.userMessageCount >= 3/);
-    expect(SIGN_IN_AFTER_USER_MESSAGES).toBeGreaterThan(3);
+    expect(invite).toMatch(/args\.userMessageCount >= INVITE_MIN_MESSAGES/);
+    expect(invite).toMatch(/export const INVITE_MIN_MESSAGES = 2;/);
+    expect(SIGN_IN_AFTER_USER_MESSAGES).toBeGreaterThan(2);
   });
   it("⛔ never while a reply is still on its way", () => {
     expect(shouldOfferSignIn({ userMessageCount: 5, lastMessageFrom: "user", crisisInThread: false })).toBe(false);
