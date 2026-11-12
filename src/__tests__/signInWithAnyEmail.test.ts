@@ -69,3 +69,16 @@ describe("every sign-in place offers email", () => {
     expect(C.split("onPress={() => openEmailSignIn()}").length - 1).toBe(3);
   });
 });
+
+describe("🔴 found in the 12 Nov simulator test: the companion form only asked for sign-in at the END", () => {
+  it("signed out, 'Become a Companion' asks to sign in first — Google, Apple or email", () => {
+    const C = read("src/screens/connect/ConnectScreen.tsx");
+    const rv = C.slice(C.indexOf("function RegisterView("));
+    const gate = rv.indexOf("if (!accessToken) {\n        return (");
+    expect(gate).toBeGreaterThan(-1);
+    expect(gate).toBeLessThan(rv.indexOf("Step 1 — Profile & Contact"));
+    const card = rv.slice(gate, rv.indexOf("return (\n        <KeyboardAvoidingView", gate));
+    expect(card).toMatch(/Sign in to start your application/);
+    expect(card).toContain("openEmailSignIn()");
+  });
+});

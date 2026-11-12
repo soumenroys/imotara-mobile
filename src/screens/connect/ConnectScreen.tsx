@@ -4556,6 +4556,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
     userEmail: string | null;
     onBack: () => void; onSuccess: () => void;
 }) {
+    const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const TOTAL_STEPS = 5;
     const [step, setStep] = useState(1);
     const s = styles(colors);
@@ -4811,6 +4812,43 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                 >
                     <Text style={s.primaryBtnText}>Go to Dashboard</Text>
                 </TouchableOpacity>
+            </View>
+        );
+    }
+
+    // #134 (12 Nov 2026, simulator test): signed out, this form let a counsellor fill in five steps
+    // and only THEN said "Sign in required" — with no way to sign in from here. Ask first, as the
+    // website does; the form appears the moment they are signed in (accessToken arrives).
+    if (!accessToken) {
+        return (
+            <View style={[s.container, { paddingTop: insets.top }]}>
+                <View style={s.header}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={onBack} style={s.backBtn}>
+                        <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+                    </TouchableOpacity>
+                    <Text style={s.headerTitle}>Become a Companion</Text>
+                    <View style={{ width: 36 }} />
+                </View>
+                <View style={{ padding: 24, alignItems: "center", gap: 10 }}>
+                    <Text style={{ fontSize: 18, fontWeight: "700", color: colors.textPrimary, textAlign: "center" }}>Sign in to start your application</Text>
+                    <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: "center", marginBottom: 6 }}>
+                        Use Google, Apple, or any email address — personal or work.
+                    </Text>
+                    <TouchableOpacity accessibilityRole="button" onPress={() => { signInWithGoogle().catch(() => Alert.alert("Sign in failed", "Please try again.")); }}
+                        style={{ width: "100%", borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingVertical: 12, alignItems: "center" }}>
+                        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary }}>Continue with Google</Text>
+                    </TouchableOpacity>
+                    {Platform.OS === "ios" && appleSignInAvailable ? (
+                        <TouchableOpacity accessibilityRole="button" onPress={() => { signInWithApple().catch(() => Alert.alert("Sign in failed", "Please try again.")); }}
+                            style={{ width: "100%", borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingVertical: 12, alignItems: "center" }}>
+                            <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary }}>Continue with Apple</Text>
+                        </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity accessibilityRole="button" onPress={() => openEmailSignIn()}
+                        style={{ width: "100%", borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingVertical: 12, alignItems: "center" }}>
+                        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary }}>Continue with email</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
         );
     }
