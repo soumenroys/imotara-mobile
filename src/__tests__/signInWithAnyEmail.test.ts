@@ -82,3 +82,12 @@ describe("🔴 found in the 12 Nov simulator test: the companion form only asked
     expect(card).toContain("openEmailSignIn()");
   });
 });
+
+describe("🔴 found in the 12 Nov simulator test: the first tap was swallowed while a field was focused", () => {
+  it("taps always reach the buttons; each action dismisses the keyboard itself", () => {
+    expect(SHEET).toMatch(/<ScrollView keyboardShouldPersistTaps="always"/);
+    for (const fn of ["sendCode", "verifyCode", "savePassword", "withPassword"]) {
+      expect(SHEET).toMatch(new RegExp(`async function ${fn}\\(\\) \\{\\s*Keyboard\\.dismiss\\(\\);`));
+    }
+  });
+});

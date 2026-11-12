@@ -8,7 +8,7 @@
 // The guest's chats on this phone join the account automatically on sign-in (AuthContext, #135).
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView,
+    ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView,
     StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
 import { useAuth } from "./AuthContext";
@@ -49,9 +49,10 @@ export default function EmailSignInSheet() {
         if (visible && status === "authenticated" && !awaitingPasswordRef.current && step.kind !== "set-password") setVisible(false);
     }, [status, visible, step.kind]);
 
-    const close = () => { if (!busy) setVisible(false); };
+    const close = () => { if (!busy) { Keyboard.dismiss(); setVisible(false); } };
 
     async function sendCode() {
+        Keyboard.dismiss();
         if (step.kind !== "code-email") return;
         const em = email.trim().toLowerCase();
         if (!EMAIL_RX.test(em)) { setError("Please enter a valid email address."); return; }
@@ -66,6 +67,7 @@ export default function EmailSignInSheet() {
     }
 
     async function verifyCode() {
+        Keyboard.dismiss();
         if (step.kind !== "code-enter") return;
         const digits = code.replace(/\D/g, "");
         if (digits.length < CODE_MIN || digits.length > CODE_MAX) { setError("Please type the whole code from the email."); return; }
@@ -79,6 +81,7 @@ export default function EmailSignInSheet() {
     }
 
     async function savePassword() {
+        Keyboard.dismiss();
         if (step.kind !== "set-password") return;
         if (password.length < MIN_PASSWORD) { setError(`Please use a password of at least ${MIN_PASSWORD} characters.`); return; }
         setBusy(true); setError("");
@@ -90,6 +93,7 @@ export default function EmailSignInSheet() {
     }
 
     async function withPassword() {
+        Keyboard.dismiss();
         const em = email.trim().toLowerCase();
         if (!EMAIL_RX.test(em)) { setError("Please enter a valid email address."); return; }
         if (!password) { setError("Please enter your password."); return; }
@@ -113,7 +117,10 @@ export default function EmailSignInSheet() {
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
                 <Pressable style={styles.backdrop} onPress={close}>
                     <Pressable style={styles.sheet} accessibilityViewIsModal>
-                        <ScrollView keyboardShouldPersistTaps="handled" bounces={false}>
+                        {/* "always", not "handled": seen in the simulator (12 Nov) — with a field focused, the
+                            FIRST tap on Send / Sign in / Not now was swallowed and only a second tap worked.
+                            Each action dismisses the keyboard itself instead. */}
+                        <ScrollView keyboardShouldPersistTaps="always" bounces={false}>
                             <View style={styles.handle} />
                             <Text style={styles.title} accessibilityRole="header">Sign in with your email</Text>
 
