@@ -91,3 +91,41 @@ describe("🔴 found in the 12 Nov simulator test: the first tap was swallowed w
     }
   });
 });
+
+// 12 Nov simulator: the reset screen said "Sign in", and the password box inherited the code box's
+// letter-spacing (one native field reused across steps). Each field keyed; heading follows the step.
+describe("email sheet: each step looks like itself", () => {
+  const SRC = require("fs").readFileSync(require("path").join(__dirname, "../auth/EmailSignInSheet.tsx"), "utf8");
+  it("every TextInput has its own key", () => {
+    const inputs = SRC.match(/<TextInput[\s\S]*?\/>/g) ?? [];
+    expect(inputs.length).toBeGreaterThanOrEqual(5);
+    const keys = inputs.map((t: string) => (t.match(/key="([^"]+)"/) ?? [])[1]);
+    expect(keys.every(Boolean)).toBe(true);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+  it("the heading names the step", () => {
+    const { sheetTitle } = require("../auth/emailSheetSteps");
+    expect(sheetTitle({ kind: "code-email", intent: "reset" })).toBe("Reset your password");
+    expect(sheetTitle({ kind: "code-enter", email: "a@b.co", intent: "create" })).toBe("Create your account");
+    expect(sheetTitle({ kind: "set-password", intent: "reset" })).toBe("Choose a new password");
+    expect(sheetTitle({ kind: "password" })).toBe("Sign in with your email");
+  });
+});
+
+describe("email sheet: a recycled field never keeps the code box's spacing", () => {
+  it("the plain input style sets letterSpacing 0 and left alignment explicitly", () => {
+    const SRC = require("fs").readFileSync(require("path").join(__dirname, "../auth/EmailSignInSheet.tsx"), "utf8");
+    const input = (SRC.match(/\n\s{4}input: \{[\s\S]*?\n\s{4}\},/) ?? [""])[0];
+    expect(input).toMatch(/letterSpacing: 0/);
+    expect(input).toMatch(/textAlign: "left"/);
+  });
+});
+
+describe("no TextInput style anywhere carries letterSpacing (recycled fields leak it app-wide)", () => {
+  it("the code box is plain", () => {
+    const SRC = require("fs").readFileSync(require("path").join(__dirname, "../auth/EmailSignInSheet.tsx"), "utf8");
+    const code = (SRC.match(/codeInput: \{[^}]*\}/) ?? [""])[0];
+    expect(code).not.toMatch(/letterSpacing: [1-9]/);
+    expect(code).not.toMatch(/textAlign: "center"/);
+  });
+});

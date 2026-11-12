@@ -13,18 +13,13 @@ import {
 } from "react-native";
 import { useAuth } from "./AuthContext";
 import { onOpenEmailSignIn, type EmailIntent } from "./emailSignInBus";
-
-type Step =
-    | { kind: "choose" }
-    | { kind: "code-email"; intent: EmailIntent }
-    | { kind: "code-enter"; email: string; intent: EmailIntent }
-    | { kind: "set-password"; intent: EmailIntent }
-    | { kind: "password" };
+import { sheetTitle, type Step } from "./emailSheetSteps";
 
 const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const CODE_MIN = 6;
 export const CODE_MAX = 10;
 export const MIN_PASSWORD = 8;
+
 
 export default function EmailSignInSheet() {
     const { requestEmailCode, verifyEmailCode, signInWithEmailPassword, setAccountPassword, status } = useAuth();
@@ -122,7 +117,10 @@ export default function EmailSignInSheet() {
                             Each action dismisses the keyboard itself instead. */}
                         <ScrollView keyboardShouldPersistTaps="always" bounces={false}>
                             <View style={styles.handle} />
-                            <Text style={styles.title} accessibilityRole="header">Sign in with your email</Text>
+                            {/* Each field below has its own `key`: without it React reuses ONE native field across steps and
+                                iOS keeps a removed style — the password box inherited the code box's letter-spacing
+                                (simulator, 12 Nov). */}
+                            <Text style={styles.title} accessibilityRole="header">{sheetTitle(step)}</Text>
 
                             {step.kind === "choose" && (
                                 <>
@@ -144,7 +142,7 @@ export default function EmailSignInSheet() {
                                             : "We'll send you a code. No password needed."}
                                     </Text>
                                     <TextInput
-                                        style={styles.input} value={email} onChangeText={setEmail} placeholder="you@example.com"
+                                        key="in-code-email" style={styles.input} value={email} onChangeText={setEmail} placeholder="you@example.com"
                                         placeholderTextColor="rgba(255,255,255,0.35)" keyboardType="email-address" autoCapitalize="none"
                                         autoCorrect={false} autoComplete="email" textContentType="emailAddress" autoFocus
                                         returnKeyType="send" onSubmitEditing={() => void sendCode()} accessibilityLabel="Your email"
@@ -160,7 +158,7 @@ export default function EmailSignInSheet() {
                                 <>
                                     <Text style={styles.subtitle}>We sent a code to {step.email}. It can take a minute — check spam too.</Text>
                                     <TextInput
-                                        style={[styles.input, styles.codeInput]} value={code} onChangeText={setCode} placeholder="12345678"
+                                        key="in-code" style={[styles.input, styles.codeInput]} value={code} onChangeText={setCode} placeholder="12345678"
                                         placeholderTextColor="rgba(255,255,255,0.3)" keyboardType="number-pad" autoComplete="one-time-code"
                                         textContentType="oneTimeCode" maxLength={CODE_MAX + 2} autoFocus
                                         returnKeyType="done" onSubmitEditing={() => void verifyCode()} accessibilityLabel="The code from the email"
@@ -181,7 +179,7 @@ export default function EmailSignInSheet() {
                                 <>
                                     <Text style={styles.subtitle}>{step.intent === "reset" ? "You're in. Choose a new password:" : "Your email is confirmed. Choose a password:"}</Text>
                                     <TextInput
-                                        style={styles.input} value={password} onChangeText={setPassword} placeholder={`At least ${MIN_PASSWORD} characters`}
+                                        key="in-new-password" style={styles.input} value={password} onChangeText={setPassword} placeholder={`At least ${MIN_PASSWORD} characters`}
                                         placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry autoComplete="password-new" textContentType="newPassword"
                                         autoFocus returnKeyType="done" onSubmitEditing={() => void savePassword()} accessibilityLabel="New password"
                                     />
@@ -194,12 +192,12 @@ export default function EmailSignInSheet() {
                             {step.kind === "password" && (
                                 <>
                                     <TextInput
-                                        style={styles.input} value={email} onChangeText={setEmail} placeholder="Email — any address"
+                                        key="in-pw-email" style={styles.input} value={email} onChangeText={setEmail} placeholder="Email — any address"
                                         placeholderTextColor="rgba(255,255,255,0.35)" keyboardType="email-address" autoCapitalize="none"
                                         autoCorrect={false} autoComplete="email" textContentType="emailAddress" autoFocus accessibilityLabel="Email"
                                     />
                                     <TextInput
-                                        style={styles.input} value={password} onChangeText={setPassword} placeholder="Password"
+                                        key="in-pw-password" style={styles.input} value={password} onChangeText={setPassword} placeholder="Password"
                                         placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry autoComplete="password" textContentType="password"
                                         returnKeyType="go" onSubmitEditing={() => void withPassword()} accessibilityLabel="Password"
                                     />
@@ -243,8 +241,14 @@ const styles = StyleSheet.create({
     input: {
         backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderRadius: 12,
         color: "#fff", fontSize: 16, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 12,
+        // ⛔ keep these explicit: iOS reuses native text fields (view recycling) and a style that is merely
+        // ABSENT is not reset — the email/password boxes came back letter-spaced and centred after the
+        // code box (simulator, 12 Nov). Keys alone did not cure it.
+        letterSpacing: 0, textAlign: "left",
     },
-    codeInput: { textAlign: "center", letterSpacing: 6, fontSize: 20 },
+    // ⛔ no letterSpacing / textAlign on ANY TextInput: iOS recycles native text fields across the whole app,
+    // and the code box's spacing turned up in Settings' search box after a sign-in (simulator, 12 Nov).
+    codeInput: { fontSize: 20 },
     primary: { backgroundColor: "#fff", borderRadius: 12, paddingVertical: 14, alignItems: "center", marginBottom: 12, minHeight: 50, justifyContent: "center" },
     primaryText: { color: "#1a1a2e", fontWeight: "600", fontSize: 16 },
     secondary: { borderColor: "rgba(255,255,255,0.3)", borderWidth: 1, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginBottom: 12 },

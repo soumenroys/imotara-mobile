@@ -14,6 +14,7 @@ import React, {
     useCallback,
     useRef,
 } from "react";
+import { isDroppedConnection, onceMoreIfDropped } from "./retryDropped";
 import { Alert, Linking, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session, User } from "@supabase/supabase-js";
@@ -417,12 +418,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // ── #134: sign in with any email ─────────────────────────────────────────
     const requestEmailCode = useCallback(async (email: string, purpose: "signin" | "reset"): Promise<EmailCodeResult> => {
+        const ask = () => fetchWithTimeout(buildApiUrl("/api/auth/email-code"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: email.trim().toLowerCase(), purpose }),
+        }, 20_000);
         try {
-            const r = await fetchWithTimeout(buildApiUrl("/api/auth/email-code"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: email.trim().toLowerCase(), purpose }),
-            }, 20_000);
+            // A dropped idle connection (iOS won't retry a POST itself) ⇒ one more try. ⇒ retryDropped.ts
+            const r = await ask().catch(async (err) => {
+                if (!isDroppedConnection(err)) throw err;
+                await new Promise((res) => setTimeout(res, 400));
+                return ask();
+            });
             if (r.ok) return "sent";
             if (r.status === 429) return "rate_limited";
             if (r.status === 400) return "invalid_email";
@@ -433,20 +440,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const verifyEmailCode = useCallback(async (email: string, code: string): Promise<AuthResult> => {
-        const { data, error } = await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code.replace(/\D/g, ""), type: "email" });
+        const { data, error } = await onceMoreIfDropped(() => supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code.replace(/\D/g, ""), type: "email" }));
         if (error || !data.session) return { ok: false, message: friendlyAuthMessage(error?.message) };
         return { ok: true };
     }, []);
 
     const signInWithEmailPassword = useCallback(async (email: string, password: string): Promise<AuthResult> => {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+        const { data, error } = await onceMoreIfDropped(() => supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password }));
         if (error || !data.session) return { ok: false, message: friendlyAuthMessage(error?.message) };
         return { ok: true };
     }, []);
 
     const setAccountPassword = useCallback(async (password: string): Promise<AuthResult> => {
         if (password.length < 8) return { ok: false, message: "Please use a password of at least 8 characters." };
-        const { error } = await supabase.auth.updateUser({ password });
+        const { error } = await onceMoreIfDropped(() => supabase.auth.updateUser({ password }));
         if (error) return { ok: false, message: friendlyAuthMessage(error.message) };
         return { ok: true };
     }, []);
