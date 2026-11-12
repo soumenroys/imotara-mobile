@@ -64,9 +64,9 @@ describe("every sign-in place offers email", () => {
     const U = read("src/components/imotara/UpgradeSheet.tsx");
     expect(U).toMatch(/text: "Sign in with email", onPress: \(\) => \{ onClose\(\); setTimeout\(\(\) => openEmailSignIn\(\), \d+\); \}/);
   });
-  it("Connect: Browse, Sessions and Wallet all offer email", () => {
+  it("Connect: Browse, Sessions, Wallet and the companion application all offer email", () => {
     const C = read("src/screens/connect/ConnectScreen.tsx");
-    expect(C.split("onPress={() => openEmailSignIn()}").length - 1).toBe(3);
+    expect(C.split("onPress={() => openEmailSignIn()}").length - 1).toBe(4);
   });
 });
 
