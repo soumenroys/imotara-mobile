@@ -2,6 +2,7 @@
 // Imotara Connect — human consultancy marketplace for mobile.
 // All sub-views are managed with local state to avoid a nested stack navigator.
 
+import { openEmailSignIn } from "../../auth/emailSignInBus";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
     View, Text, ScrollView, TouchableOpacity, TextInput, FlatList,
@@ -697,6 +698,14 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet, onOp
                                 <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Apple</Text>
                             </TouchableOpacity>
                         )}
+                        {/* #134: any email address */}
+                        <TouchableOpacity
+                            disabled={isSigningIn}
+                            onPress={() => openEmailSignIn()}
+                            accessibilityRole="button"
+                            style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, opacity: isSigningIn ? 0.5 : 1 }}>
+                            <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>Email</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             )}
@@ -1009,6 +1018,14 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
                     <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Apple</Text>
                 </TouchableOpacity>
             )}
+            {/* #134: any email address — a code, or a password */}
+            <TouchableOpacity
+                disabled={isSigningIn}
+                onPress={() => openEmailSignIn()}
+                accessibilityRole="button"
+                style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10, opacity: isSigningIn ? 0.5 : 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with email</Text>
+            </TouchableOpacity>
         </View>
     );
     if (fetchFailed) return (
@@ -1218,6 +1235,14 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                     <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Apple</Text>
                 </TouchableOpacity>
             )}
+            {/* #134: any email address — a code, or a password */}
+            <TouchableOpacity
+                disabled={isSigningIn}
+                onPress={() => openEmailSignIn()}
+                accessibilityRole="button"
+                style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10, opacity: isSigningIn ? 0.5 : 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with email</Text>
+            </TouchableOpacity>
         </View>
     );
 

@@ -14,6 +14,7 @@ import { ThemeProvider } from "./src/theme/ThemeContext";
 import HistoryProvider from "./src/state/HistoryContext";
 import { SettingsProvider } from "./src/state/SettingsContext";
 import { AuthProvider } from "./src/auth/AuthContext";
+import EmailSignInSheet from "./src/auth/EmailSignInSheet";
 import Constants from "expo-constants";
 import * as Sentry from "@sentry/react-native";
 
@@ -139,6 +140,8 @@ function AppShell() {
               on short-screen devices squeezed the tab bar enough to make its
               icons/labels overlap when the keyboard was open. */}
           <RootNavigator />
+          {/* #134: the one email sign-in sheet every sign-in place opens */}
+          <EmailSignInSheet />
 
           <StatusBar style="auto" />
         </HistoryProvider>
