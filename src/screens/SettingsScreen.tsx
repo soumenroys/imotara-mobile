@@ -2409,7 +2409,7 @@ function SettingsScreenContent() {
                         Upgrade your plan
                     </Text>
                     <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
-                        Unlock unlimited replies, unlimited history, all companion tones, and more.
+                        Unlock unlimited replies, unlimited history, natural-sounding voices, and more.
                     </Text>
                     <TouchableOpacity
                         onPress={() => setShowUpgradeSheet(true)}
