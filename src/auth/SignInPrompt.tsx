@@ -20,6 +20,7 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "./AuthContext";
+import { openEmailSignIn } from "./emailSignInBus";
 
 const DISMISSED_KEY = "imotara.auth.prompt.dismissed.v1";
 
@@ -149,6 +150,16 @@ export function SignInPrompt({ ready }: Props) {
         }
     };
 
+    // #134: any email address. iOS cannot show a second sheet over this one, so slide this away
+    // first (WITHOUT remembering it as "not now" — they chose to sign in), then open the email sheet.
+    const handleEmail = () => {
+        if (signingIn) return;
+        Animated.timing(slideAnim, { toValue: 300, duration: 200, useNativeDriver: true }).start(() => {
+            setVisible(false);
+            setTimeout(() => openEmailSignIn(), 350);
+        });
+    };
+
     const handleApple = async () => {
         if (signingIn) return;
         setSigningInApple(true);
@@ -216,6 +227,18 @@ export function SignInPrompt({ ready }: Props) {
                                 <Text style={styles.appleBtnText}>{signingInApple ? "Signing in…" : "Continue with Apple"}</Text>
                             </TouchableOpacity>
                         )}
+
+                        {/* #134: any email — a code, or a password */}
+                        <TouchableOpacity
+                            style={[styles.emailBtn, signingIn && { opacity: 0.45 }]}
+                            onPress={handleEmail}
+                            disabled={signingIn}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                        >
+                            <MaterialCommunityIcons name="email-outline" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+                            <Text style={styles.emailBtnText}>Continue with email</Text>
+                        </TouchableOpacity>
 
                         {/* Not now */}
                         <TouchableOpacity
@@ -303,6 +326,21 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     appleBtnText: {
+        color: "#fff",
+        fontWeight: "600",
+        fontSize: 16,
+    },
+    emailBtn: {
+        borderColor: "rgba(255,255,255,0.3)",
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingVertical: 14,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 12,
+    },
+    emailBtnText: {
         color: "#fff",
         fontWeight: "600",
         fontSize: 16,

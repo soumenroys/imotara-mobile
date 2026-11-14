@@ -14,6 +14,7 @@ import React, {
     useCallback,
     useRef,
 } from "react";
+import { isDroppedConnection, onceMoreIfDropped } from "./retryDropped";
 import { Alert, Linking, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session, User } from "@supabase/supabase-js";
@@ -59,7 +60,19 @@ export type AuthContextValue = {
     signOut: () => Promise<void>;
     /** True if running on a device where Apple Sign In is available */
     appleSignInAvailable: boolean;
+    /**
+     * #134 (12 Nov 2026): sign in with ANY email — a code made by our server and sent from our own
+     * mailbox (POST /api/auth/email-code), then verified here; or a password. Same as the website.
+     */
+    requestEmailCode: (email: string, purpose: "signin" | "reset") => Promise<EmailCodeResult>;
+    verifyEmailCode: (email: string, code: string) => Promise<AuthResult>;
+    signInWithEmailPassword: (email: string, password: string) => Promise<AuthResult>;
+    /** Only after a code sign-in: choose (or reset) a password for the signed-in account. */
+    setAccountPassword: (password: string) => Promise<AuthResult>;
 };
+
+export type EmailCodeResult = "sent" | "rate_limited" | "invalid_email" | "failed";
+export type AuthResult = { ok: true } | { ok: false; message: string };
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -73,7 +86,23 @@ const AuthContext = createContext<AuthContextValue>({
     signInWithApple: async () => {},
     signOut: async () => {},
     appleSignInAvailable: false,
+    requestEmailCode: async () => "failed",
+    verifyEmailCode: async () => ({ ok: false, message: "" }),
+    signInWithEmailPassword: async () => ({ ok: false, message: "" }),
+    setAccountPassword: async () => ({ ok: false, message: "" }),
 });
+
+/** Supabase's English error text ⇒ a sentence a person can act on (mirrors the website panel). */
+export function friendlyAuthMessage(raw: string | null | undefined): string {
+    const m = (raw ?? "").toLowerCase();
+    if (m.includes("invalid login credentials")) return "That email and password don't match. Try again, or use a code instead.";
+    if (m.includes("email not confirmed")) return "Please confirm your email first — sign in with a code.";
+    if (m.includes("expired") || m.includes("invalid") && m.includes("token")) return "That code didn't work or has expired. Ask for a new one.";
+    if (m.includes("rate limit") || m.includes("too many") || m.includes("security purposes")) return "Too many tries just now. Please wait a little and try again.";
+    if (m.includes("password") && (m.includes("short") || m.includes("at least") || m.includes("weak"))) return "Please use a password of at least 8 characters.";
+    if (m.includes("network") || m.includes("fetch")) return "No connection just now. Please try again.";
+    return "Something went wrong. Please try again.";
+}
 
 export function useAuth(): AuthContextValue {
     return useContext(AuthContext);
@@ -87,6 +116,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [appleAvailable, setAppleAvailable] = useState(false);
     const [anonymousToken, setAnonymousToken] = useState<string | null>(null);
     const anonymousSignInInFlight = useRef(false);
+    // #135 (12 Nov 2026): the guest account's token, kept so that when this person really signs in
+    // (Google, Apple or email) their guest chats can be MOVED into the account — the server only
+    // accepts a guest account it can verify with this token. Found on 12 Nov: the app switched to a
+    // different account at sign-in and nothing joined the two.
+    const lastGuestTokenRef = useRef<string | null>(null);
     // Distinguishes a voluntary signOut() call from an involuntary session
     // loss (e.g. a superadmin banned/suspended this account, so the next
     // token refresh fails) — both fire the identical SIGNED_OUT event, so
@@ -125,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const applySession = (s: Session | null, event?: string) => {
             if (s?.user?.is_anonymous) {
+                lastGuestTokenRef.current = s.access_token;
                 setAnonymousToken(s.access_token);
                 setSession(null);
                 setStatus("unauthenticated");
@@ -206,6 +241,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         method: "POST",
                         headers: { Authorization: `Bearer ${newSession.access_token}` },
                     }, 10_000).catch(() => {});
+
+                    // #135: move this phone's guest chats into the account. A plain fetch — never a
+                    // supabase.auth.* call inside this callback (auth-lock deadlock, see above).
+                    const guestToken = lastGuestTokenRef.current;
+                    if (guestToken && _event === "SIGNED_IN") {
+                        lastGuestTokenRef.current = null;
+                        fetchWithTimeout(buildApiUrl("/api/history/claim"), {
+                            method: "POST",
+                            headers: { Authorization: `Bearer ${newSession.access_token}`, "Content-Type": "application/json" },
+                            body: JSON.stringify({ anonymousToken: guestToken }),
+                        }, 15_000).catch(() => {});
+                    }
                 }
             },
         );
@@ -369,6 +416,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // ── Sign Out ──────────────────────────────────────────────────────────────
 
+    // ── #134: sign in with any email ─────────────────────────────────────────
+    const requestEmailCode = useCallback(async (email: string, purpose: "signin" | "reset"): Promise<EmailCodeResult> => {
+        const ask = () => fetchWithTimeout(buildApiUrl("/api/auth/email-code"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: email.trim().toLowerCase(), purpose }),
+        }, 20_000);
+        try {
+            // A dropped idle connection (iOS won't retry a POST itself) ⇒ one more try. ⇒ retryDropped.ts
+            const r = await ask().catch(async (err) => {
+                if (!isDroppedConnection(err)) throw err;
+                await new Promise((res) => setTimeout(res, 400));
+                return ask();
+            });
+            if (r.ok) return "sent";
+            if (r.status === 429) return "rate_limited";
+            if (r.status === 400) return "invalid_email";
+            return "failed";
+        } catch {
+            return "failed";
+        }
+    }, []);
+
+    const verifyEmailCode = useCallback(async (email: string, code: string): Promise<AuthResult> => {
+        const { data, error } = await onceMoreIfDropped(() => supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code.replace(/\D/g, ""), type: "email" }));
+        if (error || !data.session) return { ok: false, message: friendlyAuthMessage(error?.message) };
+        return { ok: true };
+    }, []);
+
+    const signInWithEmailPassword = useCallback(async (email: string, password: string): Promise<AuthResult> => {
+        const { data, error } = await onceMoreIfDropped(() => supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password }));
+        if (error || !data.session) return { ok: false, message: friendlyAuthMessage(error?.message) };
+        return { ok: true };
+    }, []);
+
+    const setAccountPassword = useCallback(async (password: string): Promise<AuthResult> => {
+        if (password.length < 8) return { ok: false, message: "Please use a password of at least 8 characters." };
+        const { error } = await onceMoreIfDropped(() => supabase.auth.updateUser({ password }));
+        if (error) return { ok: false, message: friendlyAuthMessage(error.message) };
+        return { ok: true };
+    }, []);
+
     const signOut = useCallback(async () => {
         explicitSignOutInFlight.current = true;
         try {
@@ -396,6 +485,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithApple,
         signOut,
         appleSignInAvailable: appleAvailable,
+        requestEmailCode,
+        verifyEmailCode,
+        signInWithEmailPassword,
+        setAccountPassword,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

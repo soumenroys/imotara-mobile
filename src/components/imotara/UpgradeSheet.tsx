@@ -16,6 +16,7 @@
 // ConnectScreen.tsx, covered by App Store rule 3.1.3(d). See
 // `paymentPlatformGating.test.ts`, which fails the build if a call site returns.
 
+import { openEmailSignIn } from "../../auth/emailSignInBus";
 import React, { useEffect, useRef, useState } from "react";
 import { DEBUG_UI_ENABLED } from "../../config/debug";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -583,6 +584,9 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         if (Platform.OS === "ios" && appleSignInAvailable) {
             buttons.push({ text: "Sign in with Apple", onPress: () => doSignIn("apple") });
         }
+        // #134 (12 Nov 2026): any email address. iOS cannot present the email sheet over this one,
+        // so close it first; once signed in, they come back to Upgrade and buy as a real account.
+        buttons.push({ text: "Sign in with email", onPress: () => { onClose(); setTimeout(() => openEmailSignIn(), 450); } });
         Alert.alert(
             "Sign in to upgrade",
             "Sign in so your purchase is linked to your account and can be restored on any device.",

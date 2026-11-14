@@ -1,4 +1,5 @@
 // src/screens/SettingsScreen.tsx
+import { openEmailSignIn } from "../auth/emailSignInBus";
 import React, { useCallback, useRef } from "react";
 import { concreteLang } from "../api/aiClient";
 import { Toast, type ToastHandle } from "../components/ui/Toast";
@@ -355,6 +356,8 @@ export default function SettingsScreen() {
 
 function SettingsScreenContent() {
     const { accessToken, signOut, signInWithGoogle, user } = useAuth();
+    // #134: Apple sits beside Google in the sign-in card (Settings offered Google only).
+    const { signInWithApple, appleSignInAvailable } = useAuth();
     const navigation = useNavigation<any>();
 
     // Keep compatibility with your current store shape, but allow optional newer fields
@@ -2318,6 +2321,7 @@ function SettingsScreenContent() {
                         </Text>
                     ) : null}
                     {!accessToken ? (
+                        <>
                         <TouchableOpacity
                             onPress={async () => { try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
                             style={{ marginTop: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primaryTint, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 6 }}
@@ -2333,6 +2337,28 @@ function SettingsScreenContent() {
                             <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600", flex: 1 }}>Sign in or restore your plan</Text>
                             <Text style={{ fontSize: 13, color: colors.primary }}>→</Text>
                         </TouchableOpacity>
+                        {/* #134 (12 Nov 2026): the button above is Google. Settings offered nothing else —
+                            not even Apple — so anyone without Google (or an NGO member invited with a
+                            work address) could not sign in here. */}
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                            {Platform.OS === "ios" && appleSignInAvailable ? (
+                                <TouchableOpacity
+                                    onPress={async () => { try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
+                                    accessibilityRole="button"
+                                    style={{ borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 8 }}
+                                >
+                                    <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600" }}>Continue with Apple</Text>
+                                </TouchableOpacity>
+                            ) : null}
+                            <TouchableOpacity
+                                onPress={() => openEmailSignIn()}
+                                accessibilityRole="button"
+                                style={{ borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 8 }}
+                            >
+                                <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600" }}>Use email instead</Text>
+                            </TouchableOpacity>
+                        </View>
+                        </>
                     ) : String(licenseTier ?? "FREE").toUpperCase() === "FREE" ? (
                         <TouchableOpacity
                             onPress={async () => {
