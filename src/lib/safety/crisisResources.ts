@@ -234,6 +234,8 @@ export const UK_CRISIS_RESOURCES: CountryCrisisResources = {
     primary: [
         { id: "gb-samaritans-116123", label: "Samaritans", contact: "116 123", note: "24/7 free emotional support — call or email jo@samaritans.org." },
         { id: "gb-crisis-text-line", label: "Shout Crisis Text Line", contact: "Text SHOUT to 85258", note: "24/7 free crisis text support." },
+        // #143 (owner, 14 Nov 2026): Childline for young people — mirrors the web. Wording from childline.org.uk; ⛔ no hours claimed (source states none).
+        { id: "gb-childline-08001111", label: "Childline (under 19)", contact: "0800 1111", note: "Free for young people under 19 in the UK — call from any phone." },
     ],
 };
 
