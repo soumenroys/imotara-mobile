@@ -263,11 +263,11 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
   },
   {
     id: "cloud_sync",
-    title: "Cloud sync",
+    title: "Cloud backup",
     section: "Privacy & safety",
     sectionKey: "privacy",
-    description: "Sync your conversations and data across devices using your account",
-    keywords: ["cloud sync", "sync", "backup", "cross device", "sync data", "क्लाउड सिंक", "ক্লাউড সিঙ্ক", "sync across devices"],
+    description: "Off by default — switch on “Back up my chats” to copy your chats to Imotara’s cloud and see them on other devices (free when signed in)",
+    keywords: ["cloud backup", "back up my chats", "cloud sync", "sync", "backup", "cross device", "sync data", "क्लाउड सिंक", "ক্লাউড সিঙ্ক", "sync across devices"],
   },
   {
     id: "export_data",

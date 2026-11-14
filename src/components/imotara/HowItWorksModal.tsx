@@ -45,7 +45,7 @@ const STEPS: Step[] = [
     iconColor: "rgba(52,211,153,1)",
     title: "Your data, your control",
     // #94 (owner, 7 Nov 2026): replies use our servers by default (onboarding sets "cloud") — say so.
-    body: "Your conversations are saved securely in your Imotara account. To reply, your messages go to our service providers. Nothing is sold. You can export your history, or delete your account and everything in it, anytime in Settings.",
+    body: "Your history stays on your phone, and cloud backup is off unless you switch it on in Settings — free when you are signed in. To reply, your messages go to our service providers. Nothing is sold. You can export your history, or delete your account and everything in it, anytime in Settings.",
   },
 ];
 

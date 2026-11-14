@@ -188,10 +188,10 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "depth_levels",      emoji: "📶", title: "Depth grows over time",    tip: "After 10 messages, Imotara shifts tone. After 30 and 50 messages, it deepens further.", category: "companion" },
 
   // ── Privacy ───────────────────────────────────────────────────────────────
-  { id: "local_first",       emoji: "🔒", title: "Saved in your account",    tip: "Your conversations are saved securely in your Imotara account. To reply, messages go to our service providers. You can delete everything in Settings.", category: "privacy" },
+  { id: "local_first",       emoji: "🔒", title: "Your history, your choice", tip: "Your history stays on your phone, and cloud backup is off unless you switch it on in Settings. To reply, messages go to our service providers. You can delete everything in Settings.", category: "privacy" },
   { id: "no_ads",            emoji: "🚫", title: "No ads, ever",             tip: "Imotara has no ads and never sells your data — your conversations are yours alone.", category: "privacy" },
   { id: "no_tracking",       emoji: "👁️", title: "No tracking tools",        tip: "No ads and no tracking tools in the app. We only count how many replies you use, to apply your daily limit — never what you write.", category: "privacy" },
-  { id: "no_llm_local",      emoji: "🧠", title: "Replies on your phone",    tip: "If you choose replies made on your phone in Settings, your messages are not sent out for replies. Your history is still saved in your account.", category: "privacy" },
+  { id: "no_llm_local",      emoji: "🧠", title: "Replies on your phone",    tip: "If you choose replies made on your phone in Settings, your messages are not sent out for replies. Cloud backup is a separate choice, also in Settings.", category: "privacy" },
   { id: "emotion_consent",   emoji: "✅", title: "Emotion analysis consent", tip: "You choose whether Imotara tracks your emotions — revoke consent anytime in Settings.", category: "privacy" },
   { id: "what_syncs",        emoji: "🔍", title: "What syncs vs what stays", tip: "Account backup only syncs conversation history — not emotions, notes, or journal entries.", category: "privacy" },
   { id: "export_json",       emoji: "📤", title: "Export as JSON",           tip: "Export all conversations as a JSON file from Settings → Privacy & safety.", category: "privacy" },
