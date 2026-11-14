@@ -61,3 +61,13 @@ describe("wiring (pinned — see header)", () => {
         expect(SRC.match(/accountScopeRef\.current !== accountAtStart/g)?.length).toBe(2);
     });
 });
+
+describe("who the person IS does not outlive their session", () => {
+    const SETTINGS = readFileSync("src/state/SettingsContext.tsx", "utf8");
+    it("a real sign-out clears name, age, gender and reply style (the server copy refills them at sign-in)", () => {
+        expect(SETTINGS).toMatch(/if \(event === "SIGNED_OUT" && hadRealSessionRef\.current\) \{[\s\S]{0,200}user: \{ \.\.\.prev\.user, name: "", ageTone: undefined, gender: undefined, responseStyle: undefined \}/);
+    });
+    it("an anonymous session never counts as the real person", () => {
+        expect(SETTINGS).toMatch(/if \(session\?\.user\?\.id\) hadRealSessionRef\.current = !session\.user\.is_anonymous;/);
+    });
+});
