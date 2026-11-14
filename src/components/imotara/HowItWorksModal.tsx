@@ -32,7 +32,7 @@ const STEPS: Step[] = [
     icon: "cloud-outline",
     iconColor: "rgba(56,189,248,1)",
     title: "Works everywhere",
-    body: "When online, Imotara crafts thoughtful, personalised replies. Even without internet, local mode keeps your conversations going — no interruptions, no blank screens.",
+    body: "Imotara crafts thoughtful, personalised replies. If your connection drops, you still get a simpler reply — never a blank screen.",
   },
   {
     icon: "person-circle-outline",
@@ -45,7 +45,7 @@ const STEPS: Step[] = [
     iconColor: "rgba(52,211,153,1)",
     title: "Your data, your control",
     // #94 (owner, 7 Nov 2026): replies use our servers by default (onboarding sets "cloud") — say so.
-    body: "Your history is kept on your device. To reply, your messages go to our secure servers — you can switch to on-device only in Settings. Nothing is sold. You can export or delete your history anytime.",
+    body: "Your conversations are saved securely in your Imotara account. To reply, your messages go to our service providers. Nothing is sold. You can export your history, or delete your account and everything in it, anytime in Settings.",
   },
 ];
 

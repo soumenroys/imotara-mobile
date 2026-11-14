@@ -96,7 +96,7 @@ describe("🔴 sign in / sign out, without inventing a third auth path", () => {
         const row = CODE.slice(CODE.indexOf('accessibilityLabel={user ? "Sign out"'));
         const before = CODE.slice(Math.max(0, CODE.indexOf('accessibilityLabel={user ? "Sign out"') - 1400));
         expect(before).toMatch(/Alert\.alert\(\s*\n?\s*"Sign out\?"/);
-        expect(before).toMatch(/stay on this device/);
+        expect(before).toMatch(/A copy of your conversations stays on this device/);
         expect(row.length).toBeGreaterThan(0);
     });
 

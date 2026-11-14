@@ -258,7 +258,7 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
     title: "Analysis Mode",
     section: "Privacy & safety",
     sectionKey: "privacy",
-    description: "Choose how replies are made: Online (our secure servers), Local (on this device only — nothing is sent), or Auto",
+    description: "Choose how replies are made: Online (our secure servers), Local (replies made on this device), or Auto",
     keywords: ["analysis mode", "on-device", "on device", "device only", "offline replies", "local mode", "local only", "online mode", "cloud replies", "servers", "privacy mode", "auto mode", "keep it on my phone", "ऑन-डिवाइस", "অন-ডিভাইস"],
   },
   {

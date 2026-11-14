@@ -6750,7 +6750,7 @@ export default function ChatScreen() {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: colors.border }}>
               <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: analysisMode === "local" ? "#a78bfa" : "#60a5fa" }} />
               <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-                {analysisMode === "local" ? "On-device mode — replies stay on your phone" : "Cloud mode active"}
+                {analysisMode === "local" ? "On-device replies — made on your phone" : "Cloud mode active"}
               </Text>
             </View>
 
@@ -6769,7 +6769,7 @@ export default function ChatScreen() {
                 if (user) {
                   Alert.alert(
                     "Sign out?",
-                    "Your conversations stay on this device. Sign in again to sync them.",
+                    "A copy of your conversations stays on this device. Sign in again to pick them up everywhere.",
                     [
                       { text: "Cancel", style: "cancel" },
                       { text: "Sign out", style: "destructive", onPress: () => { signOut().catch(() => {}); } },
