@@ -1,5 +1,6 @@
 // src/screens/SettingsScreen.tsx
 import React, { useCallback, useRef } from "react";
+import { useCloudBackup } from "../lib/cloudBackup";
 import { concreteLang } from "../api/aiClient";
 import { Toast, type ToastHandle } from "../components/ui/Toast";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
@@ -443,7 +444,9 @@ function SettingsScreenContent() {
     const cloudGate = gate("CLOUD_SYNC", licenseTier);
 
     // ✅ Keep real gating for production, but allow DEBUG builds to test sync reliability
-    const canCloudSync = cloudGate.enabled || DEBUG_UI_ENABLED;
+    // #94: 'Back up now' needs the opt-in switch on and a real account.
+    const [cloudBackupOn, setCloudBackupOn] = useCloudBackup();
+    const canCloudSync = (cloudBackupOn && !!accessToken) || DEBUG_UI_ENABLED;
 
     // ✅ TS-safe reason: only exists when enabled === false
     const cloudGateReason = !cloudGate.enabled ? cloudGate.reason : undefined;
@@ -1826,8 +1829,10 @@ function SettingsScreenContent() {
         // ✅ Soft gate
         if (!canCloudSync) {
             Alert.alert(
-                "Premium feature",
-                cloudGateReason || "Account backup included with Premium.",
+                "Cloud backup is off",
+                accessToken
+                    ? "Turn on “Back up my chats to Imotara's cloud” above first. It is free."
+                    : "Sign in, then turn on “Back up my chats to Imotara's cloud”. It is free.",
                 [{ text: "OK" }]
             );
             return;
@@ -1880,8 +1885,10 @@ function SettingsScreenContent() {
         // ✅ Soft gate
         if (!canCloudSync) {
             Alert.alert(
-                "Premium feature",
-                cloudGateReason || "Account backup included with Premium.",
+                "Cloud backup is off",
+                accessToken
+                    ? "Turn on “Back up my chats to Imotara's cloud” above first. It is free."
+                    : "Sign in, then turn on “Back up my chats to Imotara's cloud”. It is free.",
                 [{ text: "OK" }]
             );
             return;
@@ -2219,13 +2226,12 @@ function SettingsScreenContent() {
                         marginBottom: 16,
                     }}
                 >
-                    Imotara Mobile. Your history is kept on this device, and replies
-                    come from our secure servers unless you switch to on-device only
-                    below. From here you can try early emotion insights and sync
-                    options — future versions will add full cloud backup controls and
-                    teen safety settings.
-                    {"\n\n"}Your messages are never shared publicly — sync only stores a
-                    private account backup for you.
+                    Imotara Mobile. Your history is kept on this phone, and cloud
+                    backup is off unless you switch it on below (free when you are
+                    signed in). Replies come from our secure servers unless you switch to on-device only
+                    below.
+                    {"\n\n"}Your messages are never shared publicly — a backup is a
+                    private copy for you alone.
                 </Text>
 
                 {/* AI-powered settings search */}
@@ -4595,7 +4601,7 @@ function SettingsScreenContent() {
                             fontWeight: "500",
                         }}
                     >
-                        Remote history
+                        Cloud backup
                     </Text>
                     <Text
                         style={{
@@ -4604,9 +4610,29 @@ function SettingsScreenContent() {
                             marginBottom: 10,
                         }}
                     >
-                        Sync your local history to the Imotara backend and merge any
-                        remote items back into this device.
+                        Off by default. When it is on, your chats are copied to Imotara's
+                        secure cloud so you can restore them or see them on another
+                        device. When it is off, your history stays on this phone. Free
+                        for everyone who is signed in.
                     </Text>
+
+                    {/* #94 (owner, 14 Nov 2026): the opt-in switch — real accounts only */}
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                        <Text style={{ fontSize: 14, color: colors.textPrimary, flex: 1, paddingRight: 12 }}>
+                            Back up my chats to Imotara's cloud
+                        </Text>
+                        <Switch
+                            value={cloudBackupOn && !!accessToken}
+                            onValueChange={(v) => { void setCloudBackupOn(v); }}
+                            disabled={!accessToken}
+                            accessibilityLabel="Back up my chats to Imotara's cloud"
+                        />
+                    </View>
+                    {!accessToken && (
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                            Sign in to turn on cloud backup.
+                        </Text>
+                    )}
 
                     {/* Quick snapshot */}
                     <Text
@@ -4720,8 +4746,9 @@ function SettingsScreenContent() {
                                     marginTop: 6,
                                 }}
                             >
-                                {cloudGateReason ||
-                                    "Account backup included with Premium."}
+                                {accessToken
+                                    ? "Turn on cloud backup above to back up now."
+                                    : "Sign in, then turn on cloud backup above."}
                             </Text>
                         )}
                     </View>

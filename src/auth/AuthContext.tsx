@@ -15,6 +15,7 @@ import React, {
     useRef,
 } from "react";
 import { Alert, Linking, Platform } from "react-native";
+import { setCloudBackupOn } from "../lib/cloudBackup";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session, User } from "@supabase/supabase-js";
 import * as WebBrowser from "expo-web-browser";
@@ -373,6 +374,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         explicitSignOutInFlight.current = true;
         try {
             await supabase.auth.signOut();
+            // #94: backup belongs to the signed-in person — signing out switches it off.
+            await setCloudBackupOn(false);
             // Clear all user-specific local data so a subsequent user on this device starts fresh
             await Promise.allSettled([
                 AsyncStorage.removeItem("imotara.companion.memories.v1"),
