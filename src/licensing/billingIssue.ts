@@ -5,6 +5,9 @@
 // 🔑 OWNER, 6 Nov 2026: tell the person on web, Android AND iOS while their
 // store subscription is in grace, so they can fix the card before Plus stops.
 // ⚠️ PURE ⇒ src/__tests__/billingIssueBanner.test.ts.
+// 🌐 #85 (11 Nov 2026): the words live in graceNoticeText.ts (22 languages, mirrored from the web).
+
+import { graceBanner, graceLang } from "./graceNoticeText";
 
 export type BillingStore = "apple" | "google_play";
 export type BillingIssue = { kind: "grace"; until: string; store: BillingStore };
@@ -26,16 +29,17 @@ export const MANAGE_URL: Record<BillingStore, string> = {
   google_play: "https://play.google.com/store/account/subscriptions?package=com.imotara.imotara",
 };
 
-const ON_STORE: Record<BillingStore, string> = { apple: "in the App Store", google_play: "on Google Play" };
-export const BUTTON: Record<BillingStore, string> = {
-  apple: "Update payment in the App Store",
-  google_play: "Update payment in Google Play",
-};
+/** The banner sentence in the person's language (#85) — English is the owner-approved text of 6 Nov. */
+export function billingBannerText(issue: BillingIssue, lang?: string | null): string {
+  return graceBanner(issue.store, issue.until, lang).text;
+}
 
-/** The same words the website shows (owner approved, 6 Nov 2026). */
-export function billingBannerText(issue: BillingIssue): string {
-  const d = new Date(issue.until);
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const when = `${d.getUTCDate()} ${months[d.getUTCMonth()]}`;
-  return `Your last payment for Imotara Plus didn't go through ${ON_STORE[issue.store]}. Plus stays on until ${when} — update your payment method to keep it.`;
+/** The banner's one button, in the person's language. */
+export function billingButtonText(issue: BillingIssue, lang?: string | null): string {
+  return graceBanner(issue.store, issue.until, lang).button;
+}
+
+/** Arabic, Urdu and Hebrew read right to left. */
+export function billingIsRtl(lang?: string | null): boolean {
+  return ["ar", "ur", "he"].includes(graceLang(lang));
 }

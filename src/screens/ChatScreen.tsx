@@ -6584,6 +6584,7 @@ export default function ChatScreen() {
         onMicPress={handleMicPress}
         firstTimeTip={showFirstTimeTip ? `Just talk — ${effectiveCompanionName} listens without judgment.` : null}
         billingIssue={billingIssue}
+        billingLang={toneContext?.user?.preferredLang && toneContext.user.preferredLang !== "auto" ? toneContext.user.preferredLang : null}
       />
       {renderActionSheet()}
 
