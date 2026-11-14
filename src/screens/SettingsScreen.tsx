@@ -4656,6 +4656,8 @@ function SettingsScreenContent() {
                             onValueChange={(v) => { void setCloudBackupOn(v); }}
                             disabled={!accessToken}
                             accessibilityLabel="Back up my chats to Imotara's cloud"
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
                         />
                     </View>
                     {!accessToken && (
