@@ -4,6 +4,7 @@ import React, {
     useContext,
     useState,
     useEffect,
+    useRef,
     type ReactNode,
 } from "react";
 import { AppState } from "react-native";
@@ -445,9 +446,25 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // ---- LIC-6 + LIC-7: sync real license tier + expiry from Supabase on sign-in ----
     // Fires on: SIGNED_IN, INITIAL_SESSION (app startup with existing session),
     // TOKEN_REFRESHED — all restore the real tier from Supabase including after reinstall.
+    // #94 "keep, but hide" (owner, 14 Nov 2026): who this person IS must not outlive their
+    // session. Found in the simulator: after sign-out the guest's replies still said "Ray" —
+    // signOut() removes the stored settings, but this context saves its in-memory copy
+    // straight back. The server keeps the profile (api/profile/sync) and the Settings pull
+    // refills EMPTY fields at the next sign-in; empty fields are never pushed, so clearing
+    // them here cannot erase the server copy. Language + companion choices stay (device).
+    const hadRealSessionRef = useRef(false);
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (_event, session) => {
+            async (event, session) => {
+                if (event === "SIGNED_OUT" && hadRealSessionRef.current) {
+                    hadRealSessionRef.current = false;
+                    _setToneContext((prev) => ({
+                        ...prev,
+                        user: { ...prev.user, name: "", ageTone: undefined, gender: undefined, responseStyle: undefined },
+                    }));
+                    return;
+                }
+                if (session?.user?.id) hadRealSessionRef.current = !session.user.is_anonymous;
                 if (!session?.user?.id) return;
 
                 // Auto-populate chatLinkKey with the user's auth ID on first sign-in
