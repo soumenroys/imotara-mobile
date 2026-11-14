@@ -10,6 +10,7 @@ import React, {
     type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useCloudBackup } from "../lib/cloudBackup";
 import {
     pushRemoteHistory,
     fetchRemoteHistorySince,
@@ -202,17 +203,10 @@ function scopedKey(base: string, chatLinkKey: unknown, localUserScopeId: unknown
 // ✅ Separate storage key for licensing
 const LICENSE_TIER_KEY = "imotara_license_tier_v1";
 
-// 🚀 Launch Phase Override (temporary: free cloud sync for all users)
-// Single switch, same pattern as featureGates.ts's SOFT_LAUNCH_BYPASS_ALL_GATES:
-// eas.json sets EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL per build profile
-// ("true" for the current soft launch, flip to "false" in ~3-4 months to start
-// real cloud-sync enforcement). Previously this read a different, never-set
-// env var pair (EXPO_PUBLIC_IMOTARA_LAUNCH_DATE/FREE_DAYS) and always fell
-// through to the "no date set" default — silently ignoring whatever eas.json
-// actually set. Defaults to true (free-for-all) only when the var is entirely
-// absent, e.g. local dev with no env configured.
-const LAUNCH_CLOUD_SYNC_FREE_FOR_ALL =
-    process.env.EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL !== "false";
+// ⛔ RETIRED (#94, owner 14 Nov 2026): the launch-wide override
+// EXPO_PUBLIC_LAUNCH_CLOUD_SYNC_FREE_FOR_ALL synced EVERYONE's history. Cloud
+// backup is now opt-in ⇒ `cloudBackupActive` below (lib/cloudBackup). The env
+// var may still be set in eas.json; nothing reads it any more.
 
 // ✅ Validation helper (keeps stored values safe)
 // Delegates to the one list in featureGates.ts — this used to be a hand-written
@@ -452,6 +446,11 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     // session hydrates, so keying display on its absence makes a paying user
     // see the signed-out state FLASH on every cold start.
     const { accessToken, status } = useAuth();
+    // #94 (owner, 14 Nov 2026): cloud backup is OPT-IN — only when the person
+    // switched it on AND has a real (non-anonymous) account. Replaces the old
+    // launch-wide override that synced everyone ⇒ lib/cloudBackup.
+    const [cloudBackupOn] = useCloudBackup();
+    const cloudBackupActive = cloudBackupOn && status === "authenticated";
     // 🔴 D2 STAGE 1 — the tier as it should be DISPLAYED.
     //
     // The defect: after signing out, the cached paid tier kept being shown, so
@@ -910,13 +909,13 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         }
 
         // ✅ Hardening: FREE / gated users must not attempt cloud push (manual or background)
-        if (!cloudSyncAllowed && !LAUNCH_CLOUD_SYNC_FREE_FOR_ALL) {
+        if (!cloudBackupActive) {
             const now = Date.now();
             const result: PushRemoteHistoryResult = {
                 ok: false,
                 pushed: 0,
                 status: -4,
-                errorMessage: "Cloud sync not available on this plan",
+                errorMessage: "Cloud backup is off",
             };
 
             setLastSyncResult(result);
@@ -1030,7 +1029,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         clearAutoSyncTimer,
         setSettingsLastSyncAt,
         setSettingsLastSyncStatus,
-        cloudSyncAllowed,
+        cloudBackupActive,
     ]);
 
 
@@ -1083,7 +1082,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
                 // ✅ Hardening: if cloud is gated off, do not attempt remote pull either
                 // 🚀 Launch Phase Override: allow cloud sync for everyone temporarily
-                if (!cloudSyncAllowed && !LAUNCH_CLOUD_SYNC_FREE_FOR_ALL) {
+                if (!cloudBackupActive) {
                     return pushRes;
                 }
 
@@ -1222,7 +1221,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             clearAutoSyncTimer,
             pushHistoryToRemote,
             setSettingsLastSyncStatus,
-            cloudSyncAllowed,
+            cloudBackupActive,
             hydrated,
             accessToken,
 
@@ -1325,7 +1324,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         if (syncPaused) return;
 
         // ✅ NEW: Respect plan. FREE should not schedule background cloud pushes.
-        if (!cloudSyncAllowed && !LAUNCH_CLOUD_SYNC_FREE_FOR_ALL) return;
+        if (!cloudBackupActive) return;
 
         const delayMs = Math.min(Math.max(autoSyncDelaySeconds, 3), 60) * 1000;
 
@@ -1346,7 +1345,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         autoSyncDelaySeconds,
         pushHistoryToRemote,
         clearAutoSyncTimer,
-        cloudSyncAllowed,
+        cloudBackupActive,
     ]);
 
     const contextValue = useMemo(() => ({
