@@ -173,6 +173,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setStatus(s ? "authenticated" : "unauthenticated");
             wasAuthenticatedRef.current = !!s;
 
+            // #94: backup belongs to the signed-in person. ANY loss of a real session —
+            // our signOut(), Connect's own sign-out link, or the server ending it —
+            // switches backup off, so the next person on this phone starts with it off.
+            // (AsyncStorage only — no supabase.auth call, so safe inside this callback.)
+            if (!s && wasAuthenticated) void setCloudBackupOn(false);
+
             // A real session was lost, this wasn't our own signOut() call, and
             // it happened via a genuine auth-state event (not the initial
             // getSession() resolution on app launch, which passes no event) —

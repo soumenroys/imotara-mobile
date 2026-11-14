@@ -69,6 +69,9 @@ describe("every cloud path asks it", () => {
         expect(settings).toMatch(/const cloudLocked = opt\.id === "cloud" && !canUseCloudReplies;/);
         expect(settings).toMatch(/\{!canUseCloudReplies \? \(\s*<Text[^>]*>\s*Cloud is currently unavailable/);
     });
+    it("losing a real session ANY way (Connect's link, server sign-out) switches backup off", () => {
+        expect(auth).toMatch(/wasAuthenticatedRef\.current = !!s;\s*(\/\/[^\n]*\n\s*)*if \(!s && wasAuthenticated\) void setCloudBackupOn\(false\);/);
+    });
     it("signing out switches backup off", () => {
         expect(auth).toMatch(/await supabase\.auth\.signOut\(\);\s*\/\/[^\n]*\n\s*await setCloudBackupOn\(false\);/);
     });
