@@ -125,12 +125,12 @@ export const PLAN_DEFS: PlanDef[] = [
     {
         id: "plus_monthly", tier: "plus", period: "monthly",
         priceInr: 149, paise: 14_900,
-        features: ["Unlimited replies", "Unlimited history", "Cross-device access", "All companion tones", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
+        features: ["Unlimited replies", "Unlimited history", "Natural-sounding voices", "Search across all your history", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
     },
     {
         id: "plus_annual", tier: "plus", period: "annual",
         priceInr: 1_299, paise: 129_900, monthlyPriceInr: 108, savingsPct: 27,
-        features: ["Unlimited replies", "Unlimited history", "Cross-device access", "All companion tones", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
+        features: ["Unlimited replies", "Unlimited history", "Natural-sounding voices", "Search across all your history", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
     },
     // 🔴 RETIRED for new purchases — filtered out of the upgrade sheet, kept so
     // a restore still recognises them. Same tier, same price; simply not offered.
@@ -138,12 +138,12 @@ export const PLAN_DEFS: PlanDef[] = [
     {
         id: "pro_monthly", tier: "plus", period: "monthly", retired: true,
         priceInr: 149, paise: 14_900,
-        features: ["Unlimited replies", "Unlimited history", "Cross-device access", "All companion tones", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
+        features: ["Unlimited replies", "Unlimited history", "Natural-sounding voices", "Search across all your history", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
     },
     {
         id: "pro_annual", tier: "plus", period: "annual", retired: true,
         priceInr: 1_299, paise: 129_900, monthlyPriceInr: 108, savingsPct: 27,
-        features: ["Unlimited replies", "Unlimited history", "Cross-device access", "All companion tones", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
+        features: ["Unlimited replies", "Unlimited history", "Natural-sounding voices", "Search across all your history", "Mood trends & insights", "Companion letters", "Growth arc", "Export conversations"],
     },
 ];
 

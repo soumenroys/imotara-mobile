@@ -220,7 +220,7 @@ export function PlanSupportQuickPanel({
               </Text>
             ) : isFree ? (
               <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-                Upgrade to unlock unlimited chat, 90-day history, and all companion tones.
+                Upgrade for unlimited replies, unlimited history and natural-sounding voices.
               </Text>
             ) : null}
           </Card>
@@ -234,7 +234,7 @@ export function PlanSupportQuickPanel({
                   Upgrade your plan
                 </Text>
                 <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
-                  Unlock unlimited replies, 90-day history, all companion tones, and more.
+                  Unlock unlimited replies, unlimited history, natural-sounding voices, and more.
                 </Text>
                 <TouchableOpacity
                   onPress={() => setShowUpgrade(true)}

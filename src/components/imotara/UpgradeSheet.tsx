@@ -1038,7 +1038,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                 </View>
                             </View>
                             <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 18, marginBottom: 10 }}>
-                                For organisations, healthcare platforms, schools, and HR teams. Includes admin dashboard, multi-profile management, child-safe mode, SSO, data residency, and dedicated support.
+                                For organisations, healthcare platforms, schools, and HR teams. Includes admin dashboard, multi-profile management, child-safe mode, SSO, and dedicated support.
                             </Text>
                             <TouchableOpacity
                                 onPress={() => Linking.openURL("mailto:info@imotara.com?subject=Enterprise%20inquiry")}
@@ -1095,10 +1095,10 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                     items: [
                                         "Unlimited cloud replies",
                                         "Unlimited history backup",
-                                        "Cross-device access",
-                                        "Companion mode / personas",
-                                        "Response length control",
-                                        "All companion tones",
+                                        // #132 F (12 Nov 2026): cross-device access and all companion tones
+                                        // are free for everyone; companion modes and length control were never
+                                        // built. Owner rule 17 Sep: reply quality + tone are tier-blind.
+                                        // ⇒ plusListIsHonest.test.ts (mirrors the web upgrade page)
                                         "History search across dates",
                                         "Semantic history search",
                                         "Data export (JSON, CSV, PDF)",
@@ -1133,7 +1133,6 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                                         "Admin dashboard & analytics",
                                         "User & bulk provisioning",
                                         "SSO / SAML integration",
-                                        "Data residency control",
                                         "Audit logs",
                                         "API access",
                                         "Custom integrations & webhooks",
