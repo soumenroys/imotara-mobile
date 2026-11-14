@@ -10,6 +10,7 @@ import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import { useAuth } from "../auth/AuthContext";
+import { useCloudBackup } from "../lib/cloudBackup";
 import { fetchRemoteHistory } from "../api/historyClient";
 import { useColors, useTheme } from "../theme/ThemeContext";
 import type { ColorPalette } from "../theme/colors";
@@ -19,7 +20,6 @@ import { Toast, type ToastHandle } from "../components/ui/Toast";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
 // ✅ Licensing gates
-import { gate } from "../licensing/featureGates";
 
 // ✅ Multilingual emotion detection
 import {
@@ -402,15 +402,12 @@ function HistoryScreenContent() {
     const [renamingThreadId, setRenamingThreadId] = React.useState<string | null>(null);
     const [renameText, setRenameText] = React.useState("");
 
-    // ✅ Account backup gate (soft gating)
-    const cloudGate = gate("CLOUD_SYNC", licenseTier);
 
-    // 🚀 Launch Phase Override: Account backup free for all users
-    const canCloudSync = true;
+    // #94 (owner, 14 Nov 2026): backup is OPT-IN — free for every real account, but
+    // only when the person switched it on (lib/cloudBackup). Off ⇒ device-only, no errors.
+    const [cloudBackupOn] = useCloudBackup();
+    const canCloudSync = cloudBackupOn && !!accessToken;
 
-    // ✅ TS-safe: reason exists only when enabled === false
-    const cloudGateReason =
-        !cloudGate.enabled ? cloudGate.reason : undefined;
 
     const {
         lastSyncAt,
@@ -590,10 +587,12 @@ function HistoryScreenContent() {
     const showLatestRef = React.useRef(false);
 
     const hasSyncError = React.useMemo(() => {
+        // Backup off is a choice, not a fault — never show it as a connection error.
+        if (!canCloudSync) return false;
         if (lastSyncResult && !lastSyncResult.ok) return true;
         const lower = (lastSyncStatus || "").toLowerCase();
         return lower.includes("failed") || lower.includes("error");
-    }, [lastSyncResult, lastSyncStatus]);
+    }, [lastSyncResult, lastSyncStatus, canCloudSync]);
 
     const effectiveLastSyncAt = lastSyncAt || historyLastSyncAt || null;
 
@@ -688,10 +687,10 @@ function HistoryScreenContent() {
     );
 
     const topChip = React.useMemo(() => {
-        // ✅ If account backup is not available (Premium-gated), never show scary sync errors
+        // #94: backup off (the default) is a choice — never show it as an error
         if (!canCloudSync) {
             return {
-                label: "Device-only · account backup is off",
+                label: "On this device · cloud backup is off",
                 variant: "neutral" as const,
                 iconName: "phone-portrait-outline",
             };
@@ -734,13 +733,15 @@ function HistoryScreenContent() {
         };
     }, [effectiveLastSyncAt, lastSyncStatus, hasSyncError, canCloudSync]);
 
-    const showPremiumAlert = React.useCallback(() => {
+    const showBackupOffAlert = React.useCallback(() => {
         Alert.alert(
-            "Premium feature",
-            cloudGateReason || "Account backup included with Premium.",
+            "Cloud backup is off",
+            accessToken
+                ? "Your history stays on this phone. To back it up, switch on Cloud backup in Settings."
+                : "Your history stays on this phone. To back it up, sign in and switch on Cloud backup in Settings.",
             [{ text: "OK" }]
         );
-    }, [cloudGateReason]);
+    }, [accessToken]);
 
     const handleLoadRemote = React.useCallback(async () => {
         // debug button is already gated, but keep this safe if called elsewhere
@@ -748,7 +749,7 @@ function HistoryScreenContent() {
 
         // ✅ Soft gate
         if (!canCloudSync) {
-            showPremiumAlert();
+            showBackupOffAlert();
             return;
         }
 
@@ -796,12 +797,12 @@ function HistoryScreenContent() {
         } finally {
             if (mountedRef.current) setIsLoadingRemote(false);
         }
-    }, [isLoadingRemote, mergeRemoteHistory, canCloudSync, showPremiumAlert]);
+    }, [isLoadingRemote, mergeRemoteHistory, canCloudSync, showBackupOffAlert]);
 
     const handleRetrySync = React.useCallback(async () => {
         // ✅ Soft gate
         if (!canCloudSync) {
-            showPremiumAlert();
+            showBackupOffAlert();
             return;
         }
 
@@ -847,7 +848,7 @@ function HistoryScreenContent() {
         runSync,
         syncNow,
         canCloudSync,
-        showPremiumAlert,
+        showBackupOffAlert,
     ]);
 
     const handleGoToChat = React.useCallback(() => {
@@ -1002,7 +1003,7 @@ function HistoryScreenContent() {
     const retryLabel = isSyncing
         ? "Syncing…"
         : !canCloudSync
-            ? "Backup (Premium)"
+            ? "Cloud backup off"
             : !hasUnsyncedChanges && !hasSyncError
                 ? "Up to date"
                 : hasSyncError
@@ -1369,7 +1370,7 @@ function HistoryScreenContent() {
                                         </TouchableOpacity>
                                         {!canCloudSync && (
                                             <Text style={{ marginTop: 6, fontSize: 11, color: colors.textSecondary }}>
-                                                {!cloudGate.enabled ? (cloudGate as any).reason || "Account backup available with Premium." : null}
+                                                Cloud backup is off — switch it on in Settings to back up your history.
                                             </Text>
                                         )}
                                     </View>
@@ -1447,7 +1448,7 @@ function HistoryScreenContent() {
                                 )}
                                 </>}
                                 {DEBUG_UI_ENABLED && historyTab === "messages" && (
-                                    <AppButton title={isLoadingRemote ? "Loading remote…" : !canCloudSync ? "Load Remote (Premium)" : "Load Remote History"}
+                                    <AppButton title={isLoadingRemote ? "Loading remote…" : !canCloudSync ? "Load Remote (backup off)" : "Load Remote History"}
                                         onPress={handleLoadRemote} disabled={isLoadingRemote || !canCloudSync} variant="success" size="sm"
                                         style={{ alignSelf: "flex-start", marginBottom: 16, opacity: isLoadingRemote || !canCloudSync ? 0.7 : 1 }}
                                     />
@@ -1721,7 +1722,7 @@ function HistoryScreenContent() {
                     const moodHaloColor = !isUser
                         ? getMoodHaloColor(moodBaseText)
                         : "transparent";
-                    const itemHasSyncError = !item.isSynced && !item.isPending;
+                    const itemHasSyncError = canCloudSync && !item.isSynced && !item.isPending;
                     const chipVariant = item.isSynced
                         ? ("primary" as const)
                         : itemHasSyncError
@@ -1786,8 +1787,8 @@ function HistoryScreenContent() {
                                     )}
                                     {showSyncBadge && !item.isSynced && (
                                         <AppButton
-                                            title={isLoadingRemote ? "Checking account…" : !canCloudSync ? "Account backup (Premium)" : "Tap to check account backup"}
-                                            onPress={() => { if (!canCloudSync) { showPremiumAlert(); return; } handleLoadRemote(); }}
+                                            title={isLoadingRemote ? "Checking account…" : !canCloudSync ? "Cloud backup is off" : "Tap to check account backup"}
+                                            onPress={() => { if (!canCloudSync) { showBackupOffAlert(); return; } handleLoadRemote(); }}
                                             disabled={isLoadingRemote || !canCloudSync}
                                             variant="ghost"
                                             size="sm"

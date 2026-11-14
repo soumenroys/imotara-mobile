@@ -6800,7 +6800,7 @@ export default function ChatScreen() {
                 if (user) {
                   Alert.alert(
                     "Sign out?",
-                    "A copy of your conversations stays on this device. Sign in again to pick them up everywhere.",
+                    "Cloud backup switches off when you sign out.",
                     [
                       { text: "Cancel", style: "cancel" },
                       { text: "Sign out", style: "destructive", onPress: () => { signOut().catch(() => {}); } },
