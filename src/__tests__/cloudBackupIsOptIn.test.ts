@@ -61,6 +61,9 @@ describe("every cloud path asks it", () => {
         expect(settings).toMatch(/const canCloudSync = \(cloudBackupOn && !!accessToken\) \|\| DEBUG_UI_ENABLED;/);
         expect(settings).not.toMatch(/Account backup included with Premium/);
     });
+    it("the switch looks like every other Settings switch (owner, 14 Nov)", () => {
+        expect(settings).toMatch(/accessibilityLabel="Back up my chats to Imotara's cloud"\s*trackColor=\{\{ false: colors\.border, true: colors\.primary \}\}\s*thumbColor="#ffffff"/);
+    });
     it("⛔ cloud REPLIES do not depend on backup (14 Nov simulator regression)", () => {
         expect(settings).toMatch(/const canUseCloudReplies = cloudGate\.enabled \|\| DEBUG_UI_ENABLED;/);
         expect(settings).toMatch(/const cloudLocked = opt\.id === "cloud" && !canUseCloudReplies;/);
