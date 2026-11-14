@@ -18,6 +18,7 @@ import { publishLicenseTier } from "../licensing/licenseTierStore";
 import type { ToneContextPayload } from "../api/aiClient";
 import { supabase } from "../lib/supabase/client";
 import { buildApiUrl } from "../config/api";
+import { mergeServerProfile } from "../lib/profileMerge";
 import { parseBillingIssue, type BillingIssue } from "../licensing/billingIssue";
 
 /**
@@ -466,6 +467,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 }
                 if (session?.user?.id) hadRealSessionRef.current = !session.user.is_anonymous;
                 if (!session?.user?.id) return;
+
+                // #94: bring the person's profile back at sign-in (and on app start) — not
+                // only when the Settings screen happens to be opened. Same merge rule as
+                // Settings: a non-empty local value wins, the server fills empty fields.
+                // A plain fetch with the token we were handed — no supabase.auth call here.
+                if (!session.user.is_anonymous && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+                    fetch(buildApiUrl("/api/profile/sync"), { headers: { Authorization: `Bearer ${session.access_token}` } })
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then((data) => {
+                            const srv = data?.toneContext;
+                            if (!srv) return;
+                            _setToneContext((prev) => normalizeToneContext(mergeServerProfile(prev, srv) as ToneContextPayload));
+                        })
+                        .catch(() => { /* best effort — Settings retries when opened */ });
+                }
 
                 // Auto-populate chatLinkKey with the user's auth ID on first sign-in
                 // so cloud history pull works cross-device without manual setup.
