@@ -922,7 +922,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             setLastSyncAt(now);
             setSettingsLastSyncAt(now);
             setSettingsLastSyncStatus(
-                "Cloud sync is not available on your plan."
+                "Cloud backup is off — your history stays on this phone."
             );
 
             return result;

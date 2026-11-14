@@ -61,6 +61,11 @@ describe("every cloud path asks it", () => {
         expect(settings).toMatch(/const canCloudSync = \(cloudBackupOn && !!accessToken\) \|\| DEBUG_UI_ENABLED;/);
         expect(settings).not.toMatch(/Account backup included with Premium/);
     });
+    it("⛔ cloud REPLIES do not depend on backup (14 Nov simulator regression)", () => {
+        expect(settings).toMatch(/const canUseCloudReplies = cloudGate\.enabled \|\| DEBUG_UI_ENABLED;/);
+        expect(settings).toMatch(/const cloudLocked = opt\.id === "cloud" && !canUseCloudReplies;/);
+        expect(settings).toMatch(/\{!canUseCloudReplies \? \(\s*<Text[^>]*>\s*Cloud is currently unavailable/);
+    });
     it("signing out switches backup off", () => {
         expect(auth).toMatch(/await supabase\.auth\.signOut\(\);\s*\/\/[^\n]*\n\s*await setCloudBackupOn\(false\);/);
     });

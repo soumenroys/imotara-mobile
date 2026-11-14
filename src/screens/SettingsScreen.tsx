@@ -450,6 +450,10 @@ function SettingsScreenContent() {
     // #94: 'Back up now' needs the opt-in switch on and a real account.
     const [cloudBackupOn, setCloudBackupOn] = useCloudBackup();
     const canCloudSync = (cloudBackupOn && !!accessToken) || DEBUG_UI_ENABLED;
+    // ⛔ Cloud REPLIES are a different thing from cloud BACKUP — they stay on the
+    // plan gate (owner: replies never default to on-device). Found in the
+    // 14 Nov simulator test: tying Analysis Mode to backup locked 'Online' for all.
+    const canUseCloudReplies = cloudGate.enabled || DEBUG_UI_ENABLED;
 
     // ✅ TS-safe reason: only exists when enabled === false
     const cloudGateReason = !cloudGate.enabled ? cloudGate.reason : undefined;
@@ -4225,7 +4229,7 @@ function SettingsScreenContent() {
                             ] as const
                         ).map((opt) => {
                             const active = analysisMode === opt.id;
-                            const cloudLocked = opt.id === "cloud" && !canCloudSync;
+                            const cloudLocked = opt.id === "cloud" && !canUseCloudReplies;
 
                             return (
                                 <TouchableOpacity
@@ -4275,7 +4279,7 @@ function SettingsScreenContent() {
                         When cloud is used, your message text is sent to Imotara's servers to generate a reply. No account info, device ID, or personal data is attached. Local mode keeps everything on-device — nothing is sent externally.
                     </Text>
 
-                    {!canCloudSync ? (
+                    {!canUseCloudReplies ? (
                         <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 8 }}>
                             Cloud is currently unavailable:{" "}
                             {cloudGateReason || "Online mode available with Premium."}
@@ -4544,9 +4548,9 @@ function SettingsScreenContent() {
                             marginBottom: 8,
                         }}
                     >
-                        When new messages are only on this device, Imotara can gently
-                        sync them to your account after a short delay. This keeps your
-                        history backed up without you needing to tap anything.
+                        When cloud backup is on, new messages are copied to your account
+                        after a short delay, so you do not need to tap anything. When it
+                        is off, nothing is copied.
                     </Text>
 
                     <Text
@@ -4669,9 +4673,11 @@ function SettingsScreenContent() {
                         }}
                     >
                         Local messages: {messageCount}
-                        {unsyncedCount > 0
-                            ? ` · Unsynced: ${unsyncedCount}`
-                            : " · All synced"}
+                        {!canCloudSync
+                            ? " · Cloud backup off"
+                            : unsyncedCount > 0
+                                ? ` · Unsynced: ${unsyncedCount}`
+                                : " · All synced"}
                     </Text>
 
                     {/* Debug-only tools */}
