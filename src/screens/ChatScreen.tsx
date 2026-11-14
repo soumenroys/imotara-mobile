@@ -1,5 +1,6 @@
 // src/screens/ChatScreen.tsx
 import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { noteMessageSent } from "../lib/analytics/visitTally";
 import {
   View,
   Text,
@@ -3877,6 +3878,8 @@ export default function ChatScreen() {
 
     // ✅ 80/20: block double taps / overlapping send cycles
     if (isTyping || isSendingRef.current) return;
+    // #77d: anonymous count only (+1 message in this visit) — no text, no id.
+    void noteMessageSent();
 
     // The person has moved on, so stop reading the previous reply aloud.
     //

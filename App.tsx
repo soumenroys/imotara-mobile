@@ -1,5 +1,6 @@
 // App.tsx
 import React, { useEffect } from "react";
+import { noteVisit, reportVisit } from "./src/lib/analytics/visitTally";
 import { startConnectivityWatch } from "./src/lib/network/online";
 import { startDiagnosticsLog } from "./src/lib/diagnostics/fileLog";
 import { sweepAudioCaches } from "./src/lib/audioCacheSweeper";
@@ -187,6 +188,17 @@ export default function App() {
     void rearmAfterSnooze().then(() => ensureDailyReminderScheduled());
     const sub = AppState.addEventListener("change", (next) => {
       if (next === "active") void rearmAfterSnooze();
+    });
+    return () => sub.remove();
+  }, []);
+
+  // #77d: the anonymous visit tally — a visit starts/continues when the app is
+  // in front, and its size (messages, minutes) is reported when it goes away.
+  useEffect(() => {
+    void noteVisit();
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active") void noteVisit();
+      else if (next === "background") void reportVisit();
     });
     return () => sub.remove();
   }, []);
