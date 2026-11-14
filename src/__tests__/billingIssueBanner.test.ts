@@ -43,6 +43,6 @@ describe("grace-period notice", () => {
   it("the licence refresh stores it, and the chat shows it", () => {
     expect(read("src/state/SettingsContext.tsx")).toMatch(/setBillingIssue\(parseBillingIssue\(statusData\?\.billingIssue\)\)/);
     expect(read("src/screens/ChatScreen.tsx")).toMatch(/billingIssue=\{billingIssue\}/);
-    expect(read("src/components/chat/ChatInputBar.tsx")).toMatch(/billingBannerText\(billingIssue\)/);
+    expect(read("src/components/chat/ChatInputBar.tsx")).toMatch(/billingBannerText\(billingIssue, billingLang\)/);
   });
 });

@@ -1,5 +1,9 @@
 // src/screens/SettingsScreen.tsx
+import { onPersonalDataChanged } from "../lib/personalData";
+import { mergeServerProfile } from "../lib/profileMerge";
+import { openEmailSignIn } from "../auth/emailSignInBus";
 import React, { useCallback, useRef } from "react";
+import { useCloudBackup } from "../lib/cloudBackup";
 import { concreteLang } from "../api/aiClient";
 import { Toast, type ToastHandle } from "../components/ui/Toast";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
@@ -355,6 +359,8 @@ export default function SettingsScreen() {
 
 function SettingsScreenContent() {
     const { accessToken, signOut, signInWithGoogle, user } = useAuth();
+    // #134: Apple sits beside Google in the sign-in card (Settings offered Google only).
+    const { signInWithApple, appleSignInAvailable } = useAuth();
     const navigation = useNavigation<any>();
 
     // Keep compatibility with your current store shape, but allow optional newer fields
@@ -443,7 +449,13 @@ function SettingsScreenContent() {
     const cloudGate = gate("CLOUD_SYNC", licenseTier);
 
     // ✅ Keep real gating for production, but allow DEBUG builds to test sync reliability
-    const canCloudSync = cloudGate.enabled || DEBUG_UI_ENABLED;
+    // #94: 'Back up now' needs the opt-in switch on and a real account.
+    const [cloudBackupOn, setCloudBackupOn] = useCloudBackup();
+    const canCloudSync = (cloudBackupOn && !!accessToken) || DEBUG_UI_ENABLED;
+    // ⛔ Cloud REPLIES are a different thing from cloud BACKUP — they stay on the
+    // plan gate (owner: replies never default to on-device). Found in the
+    // 14 Nov simulator test: tying Analysis Mode to backup locked 'Online' for all.
+    const canUseCloudReplies = cloudGate.enabled || DEBUG_UI_ENABLED;
 
     // ✅ TS-safe reason: only exists when enabled === false
     const cloudGateReason = !cloudGate.enabled ? cloudGate.reason : undefined;
@@ -574,24 +586,8 @@ function SettingsScreenContent() {
                 if (!mountedRef.current) return;
                 const srv = data?.toneContext;
                 if (!srv) return;
-                // Merge: local value wins if non-empty, server fills empty fields
-                const local = toneContext ?? {};
-                setToneContext({
-                    user: {
-                        name:          local?.user?.name?.trim()          || srv?.user?.name          || undefined,
-                        preferredLang: local?.user?.preferredLang         || srv?.user?.preferredLang || undefined,
-                        ageTone:       local?.user?.ageTone               || srv?.user?.ageTone       || undefined,
-                        gender:        local?.user?.gender                || srv?.user?.gender        || undefined,
-                        responseStyle: local?.user?.responseStyle         || srv?.user?.responseStyle || undefined,
-                    },
-                    companion: {
-                        enabled:      local?.companion?.enabled !== undefined ? local.companion.enabled : srv?.companion?.enabled,
-                        name:         local?.companion?.name?.trim()      || srv?.companion?.name      || undefined,
-                        relationship: local?.companion?.relationship      || srv?.companion?.relationship || undefined,
-                        ageTone:      local?.companion?.ageTone           || srv?.companion?.ageTone   || undefined,
-                        gender:       local?.companion?.gender            || srv?.companion?.gender    || undefined,
-                    },
-                });
+                // Merge: local value wins if non-empty, server fills empty fields ⇒ lib/profileMerge
+                setToneContext(mergeServerProfile(toneContext, srv) as any);
             })
             .catch(() => {}); // silent — sync is best-effort
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -790,7 +786,10 @@ function SettingsScreenContent() {
     const [editMemoryInputFocused, setEditMemoryInputFocused] = React.useState(false);
     const MEMORY_MAX_LENGTH = 500;
     React.useEffect(() => {
-        loadMemories().then(setMemories).catch(() => {});
+        // #94 "keep, but hide": reload when the person changes (sign-in / sign-out).
+        const load = () => { loadMemories().then(setMemories).catch(() => {}); };
+        load();
+        return onPersonalDataChanged(load);
     }, []);
 
     // Feedback / bug report
@@ -1826,8 +1825,10 @@ function SettingsScreenContent() {
         // ✅ Soft gate
         if (!canCloudSync) {
             Alert.alert(
-                "Premium feature",
-                cloudGateReason || "Account backup included with Premium.",
+                "Cloud backup is off",
+                accessToken
+                    ? "Turn on “Back up my chats to Imotara's cloud” above first. It is free."
+                    : "Sign in, then turn on “Back up my chats to Imotara's cloud”. It is free.",
                 [{ text: "OK" }]
             );
             return;
@@ -1880,8 +1881,10 @@ function SettingsScreenContent() {
         // ✅ Soft gate
         if (!canCloudSync) {
             Alert.alert(
-                "Premium feature",
-                cloudGateReason || "Account backup included with Premium.",
+                "Cloud backup is off",
+                accessToken
+                    ? "Turn on “Back up my chats to Imotara's cloud” above first. It is free."
+                    : "Sign in, then turn on “Back up my chats to Imotara's cloud”. It is free.",
                 [{ text: "OK" }]
             );
             return;
@@ -2219,13 +2222,12 @@ function SettingsScreenContent() {
                         marginBottom: 16,
                     }}
                 >
-                    Imotara Mobile. Your history is kept on this device, and replies
-                    come from our secure servers unless you switch to on-device only
-                    below. From here you can try early emotion insights and sync
-                    options — future versions will add full cloud backup controls and
-                    teen safety settings.
-                    {"\n\n"}Your messages are never shared publicly — sync only stores a
-                    private account backup for you.
+                    Imotara Mobile. Your history is kept on this phone, and cloud
+                    backup is off unless you switch it on below (free when you are
+                    signed in). Replies come from our secure servers unless you switch to on-device only
+                    below.
+                    {"\n\n"}Your messages are never shared publicly — a backup is a
+                    private copy for you alone.
                 </Text>
 
                 {/* AI-powered settings search */}
@@ -2318,6 +2320,7 @@ function SettingsScreenContent() {
                         </Text>
                     ) : null}
                     {!accessToken ? (
+                        <>
                         <TouchableOpacity
                             onPress={async () => { try { await signInWithGoogle(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
                             style={{ marginTop: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primaryTint, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 6 }}
@@ -2333,6 +2336,28 @@ function SettingsScreenContent() {
                             <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600", flex: 1 }}>Sign in or restore your plan</Text>
                             <Text style={{ fontSize: 13, color: colors.primary }}>→</Text>
                         </TouchableOpacity>
+                        {/* #134 (12 Nov 2026): the button above is Google. Settings offered nothing else —
+                            not even Apple — so anyone without Google (or an NGO member invited with a
+                            work address) could not sign in here. */}
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                            {Platform.OS === "ios" && appleSignInAvailable ? (
+                                <TouchableOpacity
+                                    onPress={async () => { try { await signInWithApple(); } catch { Alert.alert("Sign in failed", "Please try again."); } }}
+                                    accessibilityRole="button"
+                                    style={{ borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 8 }}
+                                >
+                                    <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600" }}>Continue with Apple</Text>
+                                </TouchableOpacity>
+                            ) : null}
+                            <TouchableOpacity
+                                onPress={() => openEmailSignIn()}
+                                accessibilityRole="button"
+                                style={{ borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 8 }}
+                            >
+                                <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600" }}>Use email instead</Text>
+                            </TouchableOpacity>
+                        </View>
+                        </>
                     ) : String(licenseTier ?? "FREE").toUpperCase() === "FREE" ? (
                         <TouchableOpacity
                             onPress={async () => {
@@ -2409,7 +2434,7 @@ function SettingsScreenContent() {
                         Upgrade your plan
                     </Text>
                     <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
-                        Unlock unlimited replies, unlimited history, all companion tones, and more.
+                        Unlock unlimited replies, unlimited history, natural-sounding voices, and more.
                     </Text>
                     <TouchableOpacity
                         onPress={() => setShowUpgradeSheet(true)}
@@ -4193,7 +4218,7 @@ function SettingsScreenContent() {
                             ] as const
                         ).map((opt) => {
                             const active = analysisMode === opt.id;
-                            const cloudLocked = opt.id === "cloud" && !canCloudSync;
+                            const cloudLocked = opt.id === "cloud" && !canUseCloudReplies;
 
                             return (
                                 <TouchableOpacity
@@ -4243,7 +4268,7 @@ function SettingsScreenContent() {
                         When cloud is used, your message text is sent to Imotara's servers to generate a reply. No account info, device ID, or personal data is attached. Local mode keeps everything on-device — nothing is sent externally.
                     </Text>
 
-                    {!canCloudSync ? (
+                    {!canUseCloudReplies ? (
                         <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 8 }}>
                             Cloud is currently unavailable:{" "}
                             {cloudGateReason || "Online mode available with Premium."}
@@ -4512,9 +4537,9 @@ function SettingsScreenContent() {
                             marginBottom: 8,
                         }}
                     >
-                        When new messages are only on this device, Imotara can gently
-                        sync them to your account after a short delay. This keeps your
-                        history backed up without you needing to tap anything.
+                        When cloud backup is on, new messages are copied to your account
+                        after a short delay, so you do not need to tap anything. When it
+                        is off, nothing is copied.
                     </Text>
 
                     <Text
@@ -4595,7 +4620,7 @@ function SettingsScreenContent() {
                             fontWeight: "500",
                         }}
                     >
-                        Remote history
+                        Cloud backup
                     </Text>
                     <Text
                         style={{
@@ -4604,9 +4629,31 @@ function SettingsScreenContent() {
                             marginBottom: 10,
                         }}
                     >
-                        Sync your local history to the Imotara backend and merge any
-                        remote items back into this device.
+                        Off by default. When it is on, your chats are copied to Imotara's
+                        secure cloud so you can restore them or see them on another
+                        device. When it is off, your history stays on this phone. Free
+                        for everyone who is signed in.
                     </Text>
+
+                    {/* #94 (owner, 14 Nov 2026): the opt-in switch — real accounts only */}
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                        <Text style={{ fontSize: 14, color: colors.textPrimary, flex: 1, paddingRight: 12 }}>
+                            Back up my chats to Imotara's cloud
+                        </Text>
+                        <Switch
+                            value={cloudBackupOn && !!accessToken}
+                            onValueChange={(v) => { void setCloudBackupOn(v); }}
+                            disabled={!accessToken}
+                            accessibilityLabel="Back up my chats to Imotara's cloud"
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+                    {!accessToken && (
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                            Sign in to turn on cloud backup.
+                        </Text>
+                    )}
 
                     {/* Quick snapshot */}
                     <Text
@@ -4617,9 +4664,11 @@ function SettingsScreenContent() {
                         }}
                     >
                         Local messages: {messageCount}
-                        {unsyncedCount > 0
-                            ? ` · Unsynced: ${unsyncedCount}`
-                            : " · All synced"}
+                        {!canCloudSync
+                            ? " · Cloud backup off"
+                            : unsyncedCount > 0
+                                ? ` · Unsynced: ${unsyncedCount}`
+                                : " · All synced"}
                     </Text>
 
                     {/* Debug-only tools */}
@@ -4720,8 +4769,9 @@ function SettingsScreenContent() {
                                     marginTop: 6,
                                 }}
                             >
-                                {cloudGateReason ||
-                                    "Account backup included with Premium."}
+                                {accessToken
+                                    ? "Turn on cloud backup above to back up now."
+                                    : "Sign in, then turn on cloud backup above."}
                             </Text>
                         )}
                     </View>

@@ -96,7 +96,9 @@ describe("🔴 sign in / sign out, without inventing a third auth path", () => {
         const row = CODE.slice(CODE.indexOf('accessibilityLabel={user ? "Sign out"'));
         const before = CODE.slice(Math.max(0, CODE.indexOf('accessibilityLabel={user ? "Sign out"') - 1400));
         expect(before).toMatch(/Alert\.alert\(\s*\n?\s*"Sign out\?"/);
-        expect(before).toMatch(/stay on this device/);
+        // #94 (14 Nov 2026): backup is opt-in and sign-out switches it off — say that, and
+        // promise nothing about local copies until the owner decides what sign-out keeps.
+        expect(before).toMatch(/Cloud backup switches off when you sign out\./);
         expect(row.length).toBeGreaterThan(0);
     });
 

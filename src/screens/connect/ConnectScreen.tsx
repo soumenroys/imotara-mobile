@@ -2,6 +2,7 @@
 // Imotara Connect — human consultancy marketplace for mobile.
 // All sub-views are managed with local state to avoid a nested stack navigator.
 
+import { openEmailSignIn } from "../../auth/emailSignInBus";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
     View, Text, ScrollView, TouchableOpacity, TextInput, FlatList,
@@ -697,6 +698,14 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet, onOp
                                 <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Apple</Text>
                             </TouchableOpacity>
                         )}
+                        {/* #134: any email address */}
+                        <TouchableOpacity
+                            disabled={isSigningIn}
+                            onPress={() => openEmailSignIn()}
+                            accessibilityRole="button"
+                            style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, opacity: isSigningIn ? 0.5 : 1 }}>
+                            <Text style={{ fontSize: 12, fontWeight: "700", color: colors.textPrimary }}>Email</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             )}
@@ -1009,6 +1018,14 @@ function SessionsTab({ colors, accessToken, onSelectSession }: {
                     <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Apple</Text>
                 </TouchableOpacity>
             )}
+            {/* #134: any email address — a code, or a password */}
+            <TouchableOpacity
+                disabled={isSigningIn}
+                onPress={() => openEmailSignIn()}
+                accessibilityRole="button"
+                style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10, opacity: isSigningIn ? 0.5 : 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with email</Text>
+            </TouchableOpacity>
         </View>
     );
     if (fetchFailed) return (
@@ -1218,6 +1235,14 @@ function WalletTab({ colors, accessToken }: { colors: any; accessToken: string |
                     <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with Apple</Text>
                 </TouchableOpacity>
             )}
+            {/* #134: any email address — a code, or a password */}
+            <TouchableOpacity
+                disabled={isSigningIn}
+                onPress={() => openEmailSignIn()}
+                accessibilityRole="button"
+                style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingHorizontal: 20, paddingVertical: 12, width: "100%", marginTop: 10, opacity: isSigningIn ? 0.5 : 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, textAlign: "center" }}>Continue with email</Text>
+            </TouchableOpacity>
         </View>
     );
 
@@ -4531,6 +4556,7 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
     userEmail: string | null;
     onBack: () => void; onSuccess: () => void;
 }) {
+    const { signInWithGoogle, signInWithApple, appleSignInAvailable } = useAuth();
     const TOTAL_STEPS = 5;
     const [step, setStep] = useState(1);
     const s = styles(colors);
@@ -4786,6 +4812,43 @@ function RegisterView({ colors, insets, accessToken, userEmail, onBack, onSucces
                 >
                     <Text style={s.primaryBtnText}>Go to Dashboard</Text>
                 </TouchableOpacity>
+            </View>
+        );
+    }
+
+    // #134 (12 Nov 2026, simulator test): signed out, this form let a counsellor fill in five steps
+    // and only THEN said "Sign in required" — with no way to sign in from here. Ask first, as the
+    // website does; the form appears the moment they are signed in (accessToken arrives).
+    if (!accessToken) {
+        return (
+            <View style={[s.container, { paddingTop: insets.top }]}>
+                <View style={s.header}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={onBack} style={s.backBtn}>
+                        <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+                    </TouchableOpacity>
+                    <Text style={s.headerTitle}>Become a Companion</Text>
+                    <View style={{ width: 36 }} />
+                </View>
+                <View style={{ padding: 24, alignItems: "center", gap: 10 }}>
+                    <Text style={{ fontSize: 18, fontWeight: "700", color: colors.textPrimary, textAlign: "center" }}>Sign in to start your application</Text>
+                    <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: "center", marginBottom: 6 }}>
+                        Use Google, Apple, or any email address — personal or work.
+                    </Text>
+                    <TouchableOpacity accessibilityRole="button" onPress={() => { signInWithGoogle().catch(() => Alert.alert("Sign in failed", "Please try again.")); }}
+                        style={{ width: "100%", borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingVertical: 12, alignItems: "center" }}>
+                        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary }}>Continue with Google</Text>
+                    </TouchableOpacity>
+                    {Platform.OS === "ios" && appleSignInAvailable ? (
+                        <TouchableOpacity accessibilityRole="button" onPress={() => { signInWithApple().catch(() => Alert.alert("Sign in failed", "Please try again.")); }}
+                            style={{ width: "100%", borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingVertical: 12, alignItems: "center" }}>
+                            <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary }}>Continue with Apple</Text>
+                        </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity accessibilityRole="button" onPress={() => openEmailSignIn()}
+                        style={{ width: "100%", borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft, paddingVertical: 12, alignItems: "center" }}>
+                        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary }}>Continue with email</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
         );
     }

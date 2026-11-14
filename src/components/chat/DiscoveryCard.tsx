@@ -31,7 +31,7 @@ const CARD_CONTENT: Record<DiscoveryCardId, { icon: string; message: string; act
   },
   offline: {
     icon: "cloud-offline-outline",
-    message: "Imotara replies even without internet — local mode is always on",
+    message: "No signal? You still get a simpler reply — full replies return when you are back online",
     action: "Got it",
   },
   unsent_letter: {

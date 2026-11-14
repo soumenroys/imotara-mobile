@@ -1,5 +1,6 @@
 // App.tsx
 import React, { useEffect } from "react";
+import { noteVisit, reportVisit } from "./src/lib/analytics/visitTally";
 import { startConnectivityWatch } from "./src/lib/network/online";
 import { startDiagnosticsLog } from "./src/lib/diagnostics/fileLog";
 import { sweepAudioCaches } from "./src/lib/audioCacheSweeper";
@@ -14,6 +15,7 @@ import { ThemeProvider } from "./src/theme/ThemeContext";
 import HistoryProvider from "./src/state/HistoryContext";
 import { SettingsProvider } from "./src/state/SettingsContext";
 import { AuthProvider } from "./src/auth/AuthContext";
+import EmailSignInSheet from "./src/auth/EmailSignInSheet";
 import Constants from "expo-constants";
 import * as Sentry from "@sentry/react-native";
 
@@ -139,6 +141,8 @@ function AppShell() {
               on short-screen devices squeezed the tab bar enough to make its
               icons/labels overlap when the keyboard was open. */}
           <RootNavigator />
+          {/* #134: the one email sign-in sheet every sign-in place opens */}
+          <EmailSignInSheet />
 
           <StatusBar style="auto" />
         </HistoryProvider>
@@ -187,6 +191,17 @@ export default function App() {
     void rearmAfterSnooze().then(() => ensureDailyReminderScheduled());
     const sub = AppState.addEventListener("change", (next) => {
       if (next === "active") void rearmAfterSnooze();
+    });
+    return () => sub.remove();
+  }, []);
+
+  // #77d: the anonymous visit tally — a visit starts/continues when the app is
+  // in front, and its size (messages, minutes) is reported when it goes away.
+  useEffect(() => {
+    void noteVisit();
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active") void noteVisit();
+      else if (next === "background") void reportVisit();
     });
     return () => sub.remove();
   }, []);

@@ -5,7 +5,7 @@ import React from "react";
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Platform, Linking } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { ColorPalette } from "../../theme/colors";
-import { billingBannerText, BUTTON, MANAGE_URL, type BillingIssue } from "../../licensing/billingIssue";
+import { billingBannerText, billingButtonText, billingIsRtl, MANAGE_URL, type BillingIssue } from "../../licensing/billingIssue";
 
 export type VoiceInputState = "idle" | "recording" | "transcribing";
 
@@ -23,6 +23,8 @@ type Props = {
   firstTimeTip?: string | null;
   /** "Your last payment didn't go through" — store subscription in its grace period (6 Nov 2026). */
   billingIssue?: BillingIssue | null;
+  /** The person's chosen language for that notice (#85: 22 languages). */
+  billingLang?: string | null;
 };
 
 export function ChatInputBar({
@@ -38,6 +40,7 @@ export function ChatInputBar({
   onMicPress,
   firstTimeTip,
   billingIssue,
+  billingLang,
 }: Props) {
   const paddingBottom = 8;
   const isPad = Platform.OS === "ios" && Platform.isPad;
@@ -72,16 +75,16 @@ export function ChatInputBar({
             backgroundColor: "rgba(245, 158, 11, 0.12)",
           }}
         >
-          <Text style={{ fontSize: 12, lineHeight: 17, color: colors.textPrimary }}>
-            {billingBannerText(billingIssue)}
+          <Text style={{ fontSize: 12, lineHeight: 17, color: colors.textPrimary, writingDirection: billingIsRtl(billingLang) ? "rtl" : "ltr", textAlign: billingIsRtl(billingLang) ? "right" : "left" }}>
+            {billingBannerText(billingIssue, billingLang)}
           </Text>
           <TouchableOpacity
             accessibilityRole="link"
             onPress={() => { void Linking.openURL(MANAGE_URL[billingIssue.store]); }}
-            style={{ marginTop: 6, alignSelf: "flex-start" }}
+            style={{ marginTop: 6, alignSelf: billingIsRtl(billingLang) ? "flex-end" : "flex-start" }}
           >
             <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textPrimary, textDecorationLine: "underline" }}>
-              {BUTTON[billingIssue.store]}
+              {billingButtonText(billingIssue, billingLang)}
             </Text>
           </TouchableOpacity>
         </View>

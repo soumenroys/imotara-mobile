@@ -23,7 +23,7 @@ export const FEATURE_TIPS: FeatureTip[] = [
   // ── Chat — Core messaging ───────────────────────────────────────────────────
   { id: "mic",               emoji: "🎤", title: "Voice input",             tip: "Tap the mic to speak — Imotara listens and replies without any typing.", category: "chat" },
   { id: "new_thread",        emoji: "✏️", title: "Start fresh",              tip: "Tap the pencil icon in the top bar to begin a new conversation thread anytime.", category: "chat" },
-  { id: "offline",           emoji: "📱", title: "Works offline",            tip: "On-device replies work even without internet — conversations stay on your phone.", category: "chat" },
+  { id: "offline",           emoji: "📱", title: "No signal?",                tip: "Without a connection you still get a simpler reply; full replies return when you are back online.", category: "chat" },
   { id: "undo_send",         emoji: "↩️", title: "Undo send",                tip: "A 5-second window after sending lets you undo and edit your message before it's processed.", category: "chat" },
   { id: "copy",              emoji: "📋", title: "Copy a message",           tip: "Tap the copy icon under any reply to save it to your clipboard.", category: "chat" },
   { id: "star",              emoji: "⭐", title: "Bookmark messages",        tip: "Bookmark a reply from its ⋯ menu — find everything you starred in the History tab.", category: "chat" },
@@ -188,10 +188,10 @@ export const FEATURE_TIPS: FeatureTip[] = [
   { id: "depth_levels",      emoji: "📶", title: "Depth grows over time",    tip: "After 10 messages, Imotara shifts tone. After 30 and 50 messages, it deepens further.", category: "companion" },
 
   // ── Privacy ───────────────────────────────────────────────────────────────
-  { id: "local_first",       emoji: "🔒", title: "Local-first architecture", tip: "Your conversation history is kept on your device. Replies come from our secure servers by default — switch to on-device only in Settings if you prefer.", category: "privacy" },
+  { id: "local_first",       emoji: "🔒", title: "Your history, your choice", tip: "Your history stays on your phone, and cloud backup is off unless you switch it on in Settings. To reply, messages go to our service providers. You can delete everything in Settings.", category: "privacy" },
   { id: "no_ads",            emoji: "🚫", title: "No ads, ever",             tip: "Imotara has no ads and never sells your data — your conversations are yours alone.", category: "privacy" },
   { id: "no_tracking",       emoji: "👁️", title: "No tracking tools",        tip: "No ads and no tracking tools in the app. We only count how many replies you use, to apply your daily limit — never what you write.", category: "privacy" },
-  { id: "no_llm_local",      emoji: "🧠", title: "On-device = no server",    tip: "On-device mode never sends your messages anywhere — everything stays on your phone.", category: "privacy" },
+  { id: "no_llm_local",      emoji: "🧠", title: "Replies on your phone",    tip: "If you choose replies made on your phone in Settings, your messages are not sent out for replies. Cloud backup is a separate choice, also in Settings.", category: "privacy" },
   { id: "emotion_consent",   emoji: "✅", title: "Emotion analysis consent", tip: "You choose whether Imotara tracks your emotions — revoke consent anytime in Settings.", category: "privacy" },
   { id: "what_syncs",        emoji: "🔍", title: "What syncs vs what stays", tip: "Account backup only syncs conversation history — not emotions, notes, or journal entries.", category: "privacy" },
   { id: "export_json",       emoji: "📤", title: "Export as JSON",           tip: "Export all conversations as a JSON file from Settings → Privacy & safety.", category: "privacy" },

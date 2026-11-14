@@ -1,5 +1,7 @@
 // src/screens/ChatScreen.tsx
+import { onPersonalDataChanged } from "../lib/personalData";
 import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { noteMessageSent } from "../lib/analytics/visitTally";
 import {
   View,
   Text,
@@ -56,6 +58,8 @@ import CheckInInviteCard from "../components/imotara/CheckInInviteCard";
 import { shouldShowWelcomeBack, welcomeBackText } from "../lib/welcome/welcomeBackTopic";
 import { noteSession, readDismissed, readLastSession, markDismissed, type PhoneLastSession } from "../lib/welcome/lastSession";
 import { keepTransientCards } from "../lib/chat/keepTransientCards";
+import { syncDotState } from "../lib/chat/syncDot";
+import { chatSurfaceLang, moodGlimpseDisplay } from "../lib/chat/moodGlimpseText";
 import { isCheckInReminderEnabled, isSnoozed } from "../notifications/checkInReminder";
 import { useAuth } from "../auth/AuthContext";
 import { SignInPrompt } from "../auth/SignInPrompt";
@@ -165,6 +169,14 @@ const SENTIMENT_SEEDS_BY_LANG: Record<string, [string, string, string]> = {
   ar: ["أشعر بثقل", "أحتاج للتعبير", "أفكر بصوت عالٍ"],
   de: ["Fühle mich schwer", "Muss mal reden", "Denke laut nach"],
   ja: ["気持ちが重い", "話を聞いてほしい", "ただ考えを整理したい"],
+  // #121b (11 Nov 2026): the 7 languages that had no chips
+  ur: ["دل بھاری ہے", "دل کی بات کہنی ہے", "بس سوچ رہا/رہی ہوں"],
+  ru: ["На душе тяжело", "Хочу выговориться", "Просто думаю вслух"],
+  zh: ["心里很沉重", "想倾诉一下", "只是随便想想"],
+  es: ["Me siento con un peso", "Necesito desahogarme", "Solo pienso en voz alta"],
+  fr: ["J'ai le cœur lourd", "J'ai besoin de vider mon sac", "Je pense à voix haute"],
+  pt: ["Estou com o coração pesado", "Preciso desabafar", "Só pensando alto"],
+  id: ["Hati terasa berat", "Perlu curhat", "Sekadar menuangkan pikiran"],
 };
 
 // ── Weekly mood recap text ─────────────────────────────────────────────────────
@@ -2377,13 +2389,19 @@ export default function ChatScreen() {
   const REACTIONS_KEY = "imotara.reactions.v1";
   const [reactions, setReactions] = useState<Map<string, string>>(new Map());
   useEffect(() => {
-    AsyncStorage.getItem(REACTIONS_KEY).then((raw) => {
-      if (!raw) return;
-      try {
-        const obj = JSON.parse(raw) as Record<string, string>;
-        setReactions(new Map(Object.entries(obj)));
-      } catch {}
-    }).catch(() => {});
+    // #94 "keep, but hide": reload when the person changes (sign-in / sign-out), so one
+    // person's reactions are never shown to — or saved back for — the next.
+    const load = () => {
+      AsyncStorage.getItem(REACTIONS_KEY).then((raw) => {
+        if (!raw) { setReactions(new Map()); return; }
+        try {
+          const obj = JSON.parse(raw) as Record<string, string>;
+          setReactions(new Map(Object.entries(obj)));
+        } catch {}
+      }).catch(() => {});
+    };
+    load();
+    return onPersonalDataChanged(load);
   }, []);
 
   const pendingConsentSendRef = useRef<string | null>(null);
@@ -3092,8 +3110,11 @@ export default function ChatScreen() {
   }, [analysisMode, cloudSyncAllowed, chatLinkKey, runSync, syncNow]);
 
   // ✅ Web parity: load companion memories once on mount into a ref (zero per-send I/O)
+  // #94 "keep, but hide": and again whenever the person changes (sign-in / sign-out).
   useEffect(() => {
-    loadMemories().then((items) => { memoriesRef.current = items; }).catch(() => {});
+    const load = () => { loadMemories().then((items) => { memoriesRef.current = items; }).catch(() => {}); };
+    load();
+    return onPersonalDataChanged(load);
   }, []);
 
   const scrollViewRef = useRef<FlatList | null>(null);
@@ -3281,6 +3302,16 @@ export default function ChatScreen() {
     () => history.some((h: any) => !h.isSynced),
     [history],
   );
+
+  // 🟡 #121a: the header dot goes amber only when a message is REALLY behind ⇒ lib/chat/syncDot.
+  //    A 30 s tick re-checks while anything is waiting, so a stuck message still shows.
+  const [syncDotNow, setSyncDotNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!hasUnsynced) return;
+    const id = setInterval(() => setSyncDotNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [hasUnsynced]);
+  const syncDot = useMemo(() => syncDotState(history, lastSyncStatus, Math.max(syncDotNow, Date.now())), [history, lastSyncStatus, syncDotNow]);
 
   const showRecentlySyncedPulse = useMemo(() => {
     if (recentlySyncedAt == null) return false;
@@ -3877,6 +3908,8 @@ export default function ChatScreen() {
 
     // ✅ 80/20: block double taps / overlapping send cycles
     if (isTyping || isSendingRef.current) return;
+    // #77d: anonymous count only (+1 message in this visit) — no text, no id.
+    void noteMessageSent();
 
     // The person has moved on, so stop reading the previous reply aloud.
     //
@@ -5246,6 +5279,13 @@ export default function ChatScreen() {
     return getLocalMoodHint(latestUserMessage.text, effectiveCompanionName);
   }, [emotionInsightsEnabled, latestUserMessage, effectiveCompanionName]);
 
+  // 🌐 #121b: the chips and the mood card follow the conversation's language —
+  //    the chosen one, else the script of the last message (never concreteLang('auto') ⇒ 'en').
+  const chatSurface = useMemo(
+    () => chatSurfaceLang(toneContext?.user?.preferredLang, detectLangFromScript(latestUserMessage?.text ?? "")),
+    [toneContext?.user?.preferredLang, latestUserMessage],
+  );
+
   const typingStatusText = useMemo(() => {
     if (!isTyping) return "";
     if (typingStatus === "thinking") {
@@ -5411,9 +5451,9 @@ export default function ChatScreen() {
                 height: 8,
                 borderRadius: 999,
                 marginRight: 6,
-                backgroundColor: hasUnsynced
+                backgroundColor: syncDot === "behind"
                   ? "#fbbf24"
-                  : (lastSyncStatus || "").toLowerCase().includes("failed")
+                  : syncDot === "failed"
                     ? "#f87171"
                     : colors.primary,
               }}
@@ -5952,7 +5992,7 @@ export default function ChatScreen() {
               }}
             >
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                <Text style={{ fontSize: 11, color: colors.textSecondary }}>Mood glimpse</Text>
+                <Text style={{ fontSize: 11, color: colors.textSecondary }}>{moodGlimpseDisplay(latestMoodHint, chatSurface, effectiveCompanionName).label}</Text>
                 <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for mood glimpse" onPress={() => showCapsuleMenu("Mood glimpse", () => { setMoodGlimpseEnabled(false); AsyncStorage.setItem(MOOD_GLIMPSE_ENABLED_KEY, "0").catch(() => {}); }, () => setMoodGlimpseDismissedSession(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
@@ -5964,7 +6004,7 @@ export default function ChatScreen() {
                   marginTop: 2,
                 }}
               >
-                {latestMoodHint}
+                {moodGlimpseDisplay(latestMoodHint, chatSurface, effectiveCompanionName).text}
               </Text>
 
               {DEBUG_UI_ENABLED && (
@@ -6515,7 +6555,7 @@ export default function ChatScreen() {
       {sentimentChipsEnabled && !sentimentChipsDismissedSession && messages.length > 0 && input.trim() === "" && (
         <View style={{ flexDirection: "row", paddingHorizontal: 12, paddingBottom: 6, alignItems: "flex-start" }}>
           <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            {(SENTIMENT_SEEDS_BY_LANG[concreteLang(toneContext?.user?.preferredLang)] ?? SENTIMENT_SEEDS_BY_LANG.en).map((seed) => (
+            {(SENTIMENT_SEEDS_BY_LANG[chatSurface] ?? SENTIMENT_SEEDS_BY_LANG.en).map((seed) => (
               <TouchableOpacity
                 key={seed}
                 onPress={() => handleInputChange(seed)}
@@ -6584,6 +6624,7 @@ export default function ChatScreen() {
         onMicPress={handleMicPress}
         firstTimeTip={showFirstTimeTip ? `Just talk — ${effectiveCompanionName} listens without judgment.` : null}
         billingIssue={billingIssue}
+        billingLang={toneContext?.user?.preferredLang && toneContext.user.preferredLang !== "auto" ? toneContext.user.preferredLang : null}
       />
       {renderActionSheet()}
 
@@ -6750,7 +6791,7 @@ export default function ChatScreen() {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: colors.border }}>
               <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: analysisMode === "local" ? "#a78bfa" : "#60a5fa" }} />
               <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-                {analysisMode === "local" ? "On-device mode — replies stay on your phone" : "Cloud mode active"}
+                {analysisMode === "local" ? "On-device replies — made on your phone" : "Cloud mode active"}
               </Text>
             </View>
 
@@ -6769,7 +6810,7 @@ export default function ChatScreen() {
                 if (user) {
                   Alert.alert(
                     "Sign out?",
-                    "Your conversations stay on this device. Sign in again to sync them.",
+                    "Cloud backup switches off when you sign out.",
                     [
                       { text: "Cancel", style: "cancel" },
                       { text: "Sign out", style: "destructive", onPress: () => { signOut().catch(() => {}); } },

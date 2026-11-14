@@ -11,6 +11,7 @@
 // - Never throw outward; callers expect safe fallbacks ([], ok=false).
 
 import { buildApiUrl } from "../config/api";
+import { isCloudBackupOn } from "../lib/cloudBackup";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 import type { HistoryItem } from "../state/HistoryContext";
 import { fetchWithTimeout as sharedFetchWithTimeout } from "../lib/network/fetchWithTimeout";
@@ -239,6 +240,10 @@ export async function fetchRemoteHistorySince(
     since: number = 0,
     options?: FetchRemoteHistoryOptions
 ): Promise<FetchRemoteHistoryResult> {
+    // #94: with cloud backup off there is no cloud copy of this person's to pull.
+    if (!(await isCloudBackupOn())) {
+        return { items: [], nextSince: Number.isFinite(since) && since > 0 ? since : 0 };
+    }
 
     try {
         const safeSince = Number.isFinite(since) && since > 0 ? since : 0;
@@ -350,6 +355,10 @@ export async function pushRemoteHistory(
     items: HistoryItem[],
     opts?: { accessToken?: string; userScope?: string }
 ): Promise<PushRemoteHistoryResult> {
+    // #94: nothing leaves the phone unless the person switched cloud backup on.
+    if (!(await isCloudBackupOn())) {
+        return { ok: false, pushed: 0, status: -4, errorMessage: "Cloud backup is off" } as PushRemoteHistoryResult;
+    }
     try {
         const url = buildApiUrl("/api/history");
 
