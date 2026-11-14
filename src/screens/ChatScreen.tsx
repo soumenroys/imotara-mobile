@@ -1,4 +1,5 @@
 // src/screens/ChatScreen.tsx
+import { onPersonalDataChanged } from "../lib/personalData";
 import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { noteMessageSent } from "../lib/analytics/visitTally";
 import {
@@ -2388,13 +2389,19 @@ export default function ChatScreen() {
   const REACTIONS_KEY = "imotara.reactions.v1";
   const [reactions, setReactions] = useState<Map<string, string>>(new Map());
   useEffect(() => {
-    AsyncStorage.getItem(REACTIONS_KEY).then((raw) => {
-      if (!raw) return;
-      try {
-        const obj = JSON.parse(raw) as Record<string, string>;
-        setReactions(new Map(Object.entries(obj)));
-      } catch {}
-    }).catch(() => {});
+    // #94 "keep, but hide": reload when the person changes (sign-in / sign-out), so one
+    // person's reactions are never shown to — or saved back for — the next.
+    const load = () => {
+      AsyncStorage.getItem(REACTIONS_KEY).then((raw) => {
+        if (!raw) { setReactions(new Map()); return; }
+        try {
+          const obj = JSON.parse(raw) as Record<string, string>;
+          setReactions(new Map(Object.entries(obj)));
+        } catch {}
+      }).catch(() => {});
+    };
+    load();
+    return onPersonalDataChanged(load);
   }, []);
 
   const pendingConsentSendRef = useRef<string | null>(null);
@@ -3103,8 +3110,11 @@ export default function ChatScreen() {
   }, [analysisMode, cloudSyncAllowed, chatLinkKey, runSync, syncNow]);
 
   // ✅ Web parity: load companion memories once on mount into a ref (zero per-send I/O)
+  // #94 "keep, but hide": and again whenever the person changes (sign-in / sign-out).
   useEffect(() => {
-    loadMemories().then((items) => { memoriesRef.current = items; }).catch(() => {});
+    const load = () => { loadMemories().then((items) => { memoriesRef.current = items; }).catch(() => {}); };
+    load();
+    return onPersonalDataChanged(load);
   }, []);
 
   const scrollViewRef = useRef<FlatList | null>(null);

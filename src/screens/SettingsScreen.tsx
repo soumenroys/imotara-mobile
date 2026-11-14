@@ -1,4 +1,6 @@
 // src/screens/SettingsScreen.tsx
+import { onPersonalDataChanged } from "../lib/personalData";
+import { mergeServerProfile } from "../lib/profileMerge";
 import { openEmailSignIn } from "../auth/emailSignInBus";
 import React, { useCallback, useRef } from "react";
 import { useCloudBackup } from "../lib/cloudBackup";
@@ -584,24 +586,8 @@ function SettingsScreenContent() {
                 if (!mountedRef.current) return;
                 const srv = data?.toneContext;
                 if (!srv) return;
-                // Merge: local value wins if non-empty, server fills empty fields
-                const local = toneContext ?? {};
-                setToneContext({
-                    user: {
-                        name:          local?.user?.name?.trim()          || srv?.user?.name          || undefined,
-                        preferredLang: local?.user?.preferredLang         || srv?.user?.preferredLang || undefined,
-                        ageTone:       local?.user?.ageTone               || srv?.user?.ageTone       || undefined,
-                        gender:        local?.user?.gender                || srv?.user?.gender        || undefined,
-                        responseStyle: local?.user?.responseStyle         || srv?.user?.responseStyle || undefined,
-                    },
-                    companion: {
-                        enabled:      local?.companion?.enabled !== undefined ? local.companion.enabled : srv?.companion?.enabled,
-                        name:         local?.companion?.name?.trim()      || srv?.companion?.name      || undefined,
-                        relationship: local?.companion?.relationship      || srv?.companion?.relationship || undefined,
-                        ageTone:      local?.companion?.ageTone           || srv?.companion?.ageTone   || undefined,
-                        gender:       local?.companion?.gender            || srv?.companion?.gender    || undefined,
-                    },
-                });
+                // Merge: local value wins if non-empty, server fills empty fields ⇒ lib/profileMerge
+                setToneContext(mergeServerProfile(toneContext, srv) as any);
             })
             .catch(() => {}); // silent — sync is best-effort
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -800,7 +786,10 @@ function SettingsScreenContent() {
     const [editMemoryInputFocused, setEditMemoryInputFocused] = React.useState(false);
     const MEMORY_MAX_LENGTH = 500;
     React.useEffect(() => {
-        loadMemories().then(setMemories).catch(() => {});
+        // #94 "keep, but hide": reload when the person changes (sign-in / sign-out).
+        const load = () => { loadMemories().then(setMemories).catch(() => {}); };
+        load();
+        return onPersonalDataChanged(load);
     }, []);
 
     // Feedback / bug report

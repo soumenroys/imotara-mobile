@@ -6,6 +6,7 @@
 //   3. Once signed in the session is kept alive via Supabase autoRefreshToken.
 //   4. The access_token is exposed via useAuth() for API calls.
 
+import { announcePersonalDataChanged, hidePersonalData, showPersonalData } from "../lib/personalData";
 import React, {
     createContext,
     useContext,
@@ -131,6 +132,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // this change — used to only show the "signed out" notice when a real
     // session was actually lost, never on fresh install / already-signed-out.
     const wasAuthenticatedRef = useRef(false);
+    // #94 "keep, but hide": whose personal data is out on the phone right now.
+    const shownUserIdRef = useRef<string | null>(null);
 
     // Epoch ms until which an incoming auth/callback deep link is expected —
     // set right before opening the sign-in browser, cleared once consumed.
@@ -168,6 +171,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return;
             }
             const wasAuthenticated = wasAuthenticatedRef.current;
+
+            // #94 "keep, but hide" (owner, 14 Nov 2026) ⇒ lib/personalData. Storage only,
+            // no supabase.auth call ⇒ safe inside this callback.
+            const realId = s?.user?.id ? String(s.user.id) : null;
+            if (realId && shownUserIdRef.current !== realId) {
+                const previous = shownUserIdRef.current;
+                shownUserIdRef.current = realId;
+                void (async () => {
+                    if (previous) await hidePersonalData(previous);
+                    await showPersonalData(realId);
+                    announcePersonalDataChanged();
+                })();
+            } else if (!s && shownUserIdRef.current) {
+                const leaving = shownUserIdRef.current;
+                shownUserIdRef.current = null;
+                void hidePersonalData(leaving).then(announcePersonalDataChanged);
+            }
+
             setAnonymousToken(null);
             setSession(s);
             setStatus(s ? "authenticated" : "unauthenticated");
