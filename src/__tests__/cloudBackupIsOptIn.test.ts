@@ -72,6 +72,19 @@ describe("every cloud path asks it", () => {
     it("losing a real session ANY way (Connect's link, server sign-out) switches backup off", () => {
         expect(auth).toMatch(/wasAuthenticatedRef\.current = !!s;\s*(\/\/[^\n]*\n\s*)*if \(!s && wasAuthenticated\) void setCloudBackupOn\(false\);/);
     });
+    it("History screen: asks the switch, shows backup-off as a choice not an error, no 'Premium'", () => {
+        const hist = read("src/screens/HistoryScreen.tsx");
+        expect(hist).toMatch(/const canCloudSync = cloudBackupOn && !!accessToken;/);
+        expect(hist).not.toMatch(/const canCloudSync = true;/);
+        expect(hist).toMatch(/const hasSyncError = React\.useMemo\(\(\) => \{\s*\/\/[^\n]*\n\s*if \(!canCloudSync\) return false;/);
+        expect(hist).toMatch(/const itemHasSyncError = canCloudSync && !item\.isSynced/);
+        expect(hist).not.toMatch(/Premium/);
+    });
+    it("the sign-out question promises nothing backup-dependent", () => {
+        const chat = read("src/screens/ChatScreen.tsx");
+        expect(chat).not.toMatch(/pick them up everywhere/);
+        expect(chat).toMatch(/"Cloud backup switches off when you sign out\.",/);
+    });
     it("signing out switches backup off", () => {
         expect(auth).toMatch(/await supabase\.auth\.signOut\(\);\s*\/\/[^\n]*\n\s*await setCloudBackupOn\(false\);/);
     });
