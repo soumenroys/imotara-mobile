@@ -36,6 +36,7 @@ function mergeSorted<T extends { timestamp?: number }>(a: T[], b: T[]): T[] {
 
 import { useSettings } from "./SettingsContext";
 import { useAuth } from "../auth/AuthContext";
+import { storageKeyFor, mergeGuestIntoAccount } from "./historyScope";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
 // ✅ Licensing gates (foundation)
@@ -193,12 +194,10 @@ function legacyLocalKey(base: string) {
 }
 
 function scopedKey(base: string, chatLinkKey: unknown, localUserScopeId: unknown) {
-    const scope = String(chatLinkKey ?? "").trim();
-    if (scope) return `${base}:${scope}`;
-
-    const local = String(localUserScopeId ?? "").trim();
-    return local ? `${base}:local:${local}` : legacyLocalKey(base);
+    // The guest layout — ONE definition, shared with the account-aware key (./historyScope).
+    return storageKeyFor(base, "", chatLinkKey, localUserScopeId);
 }
+
 
 // ✅ Separate storage key for licensing
 const LICENSE_TIER_KEY = "imotara_license_tier_v1";
@@ -445,7 +444,13 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
     // ⛔ `status`, NOT `!accessToken`. The token is briefly null while the
     // session hydrates, so keying display on its absence makes a paying user
     // see the signed-out state FLASH on every cold start.
-    const { accessToken, status } = useAuth();
+    const { accessToken, status, user } = useAuth();
+    // #94 "keep, but hide": whose history this is. null = auth not known yet (do not load).
+    const authUserId = status === "authenticated" ? String(user?.id ?? "").trim() : "";
+    const accountScope: string | null =
+        status === "loading" ? null : authUserId ? `acct:${authUserId}` : "";
+    const accountScopeRef = useRef<string | null>(accountScope);
+    accountScopeRef.current = accountScope;
     // #94 (owner, 14 Nov 2026): cloud backup is OPT-IN — only when the person
     // switched it on AND has a real (non-anonymous) account. Replaces the old
     // launch-wide override that synced everyone ⇒ lib/cloudBackup.
@@ -584,6 +589,10 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
     // ✅ Hydrate from AsyncStorage whenever Chat Link Key changes (prevents cross-scope leakage)
     useEffect(() => {
+        // 🔴 A load for an OLD scope must never finish into the NEW one: it would set
+        // hydrated and let the save effect write the old person's history (or nothing)
+        // under the new person's key. Each run is cancelled when the scope changes.
+        let cancelled = false;
         const load = async () => {
             // IMPORTANT: switching scope must clear in-memory history immediately
             setHydrated(false);
@@ -591,7 +600,13 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             historyRef.current = [];
             remoteSinceRef.current = 0;
 
+            // #94: until we know WHOSE history this is, load nothing (never show one
+            // person's chats to another, even for a moment).
+            if (accountScope === null) return;
+
             try {
+                // Guest keys (the pre-#94 layout). In account mode they are only read to
+                // MOVE guest chats into the account, then removed.
                 const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey, localUserScopeId);
                 const remoteSinceKey = scopedKey(
                     HISTORY_REMOTE_SINCE_KEY_BASE,
@@ -620,6 +635,17 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
                 const threadsKey = scopedKey(THREADS_KEY_BASE, chatLinkKey, localUserScopeId);
 
+                if (cancelled) return;
+                const acctHistoryKey = accountScope ? `${STORAGE_KEY_BASE}:${accountScope}` : null;
+                const acctThreadsKey = accountScope ? `${THREADS_KEY_BASE}:${accountScope}` : null;
+                const acctRemoteSinceKey = accountScope ? `${HISTORY_REMOTE_SINCE_KEY_BASE}:${accountScope}` : null;
+                const [rawAcctHistory, rawAcctThreads, rawAcctRemoteSince] = await Promise.all([
+                    acctHistoryKey ? AsyncStorage.getItem(acctHistoryKey) : Promise.resolve(null),
+                    acctThreadsKey ? AsyncStorage.getItem(acctThreadsKey) : Promise.resolve(null),
+                    acctRemoteSinceKey ? AsyncStorage.getItem(acctRemoteSinceKey) : Promise.resolve(null),
+                ]);
+                if (cancelled) return;
+
                 const [
                     rawHistoryNew,
                     rawTier,
@@ -646,27 +672,32 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                 const rawHistory = rawHistoryNew ?? rawHistoryPreLink ?? rawHistoryLegacy;
                 const rawRemoteSince = rawRemoteSinceNew ?? rawRemoteSincePreLink ?? rawRemoteSinceLegacy;
 
-                // 0) Remote cursor (since)
-                if (rawRemoteSince) {
+                // 0) Remote cursor (since) — the account's own cursor in account mode
+                if (accountScope) {
+                    const n = Number(rawAcctRemoteSince);
+                    if (rawAcctRemoteSince && Number.isFinite(n) && n >= 0) remoteSinceRef.current = n;
+                } else if (rawRemoteSince) {
                     const n = Number(rawRemoteSince);
                     if (Number.isFinite(n) && n >= 0) {
                         remoteSinceRef.current = n;
                     }
                 }
 
-                if (!rawRemoteSinceNew && rawRemoteSincePreLink && preLinkRemoteSinceKey) {
+                if (accountScope) {
+                    // no guest-cursor migrations in account mode
+                } else if (!rawRemoteSinceNew && rawRemoteSincePreLink && preLinkRemoteSinceKey) {
                     AsyncStorage.setItem(remoteSinceKey, rawRemoteSincePreLink).catch(() => { });
                 } else if (!rawRemoteSinceNew && rawRemoteSinceLegacy && legacyRemoteSinceKey) {
                     AsyncStorage.setItem(remoteSinceKey, rawRemoteSinceLegacy).catch(() => { });
                 }
 
                 // 1) History
-                if (rawHistory) {
+                const parseStored = (raw: string | null): HistoryItem[] => {
+                    if (!raw) return [];
                     try {
-                        const parsed = JSON.parse(rawHistory);
-
-                        if (Array.isArray(parsed)) {
-                        const cleaned: HistoryItem[] = parsed
+                        const parsed = JSON.parse(raw);
+                        if (!Array.isArray(parsed)) return [];
+                        return parsed
                             .filter((item) => item && typeof item === "object")
                             .map((item) => {
                                 const id = String((item as any).id ?? "").trim();
@@ -711,40 +742,66 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                                 } as HistoryItem;
                             })
                             .filter(Boolean) as HistoryItem[];
-
-                        setHistory(cleaned);
-                        // Migrate pre-link local history into the new chatLinkKey-scoped key
-                        if (!rawHistoryNew && rawHistoryPreLink && preLinkHistoryKey) {
-                            AsyncStorage.setItem(historyKey, rawHistoryPreLink).catch(() => { });
-                        } else if (!rawHistoryNew && rawHistoryLegacy && legacyHistoryKey) {
-                            // Migrate legacy local key (older installs)
-                            AsyncStorage.setItem(historyKey, rawHistoryLegacy).catch(() => { });
-                        }
-                        }
                     } catch {
                         debugWarn("Failed to parse stored history — treating as empty");
+                        return [];
+                    }
+                };
+
+                if (accountScope && acctHistoryKey) {
+                    // #94 / #135: the account's own chats + anything written as a guest,
+                    // which MOVES into the account (and leaves the guest space).
+                    const guestItems = parseStored(rawHistory);
+                    const merged = mergeGuestIntoAccount(parseStored(rawAcctHistory), guestItems);
+                    if (cancelled) return;
+                    setHistory(merged);
+                    if (guestItems.length > 0) {
+                        // Write the account copy FIRST; remove guest copies only once it is saved.
+                        await AsyncStorage.setItem(acctHistoryKey, JSON.stringify(merged));
+                        await AsyncStorage.multiRemove(
+                            [historyKey, preLinkHistoryKey, legacyHistoryKey].filter((k): k is string => !!k)
+                        );
+                    }
+                } else if (rawHistory) {
+                    if (cancelled) return;
+                    setHistory(parseStored(rawHistory));
+                    // Migrate pre-link local history into the new chatLinkKey-scoped key
+                    if (!rawHistoryNew && rawHistoryPreLink && preLinkHistoryKey) {
+                        AsyncStorage.setItem(historyKey, rawHistoryPreLink).catch(() => { });
+                    } else if (!rawHistoryNew && rawHistoryLegacy && legacyHistoryKey) {
+                        // Migrate legacy local key (older installs)
+                        AsyncStorage.setItem(historyKey, rawHistoryLegacy).catch(() => { });
                     }
                 }
 
                 // 2) License tier
                 // 🔴 normaliseTier, NOT a validity check — "PREMIUM" is stored on
                 // every device installed before the rename and must map to PLUS.
-                if (rawTier) {
+                if (rawTier && !cancelled) {
                     _setLicenseTier(normaliseTier(rawTier));
                 }
 
                 // 3) Threads — hydrate or create default
                 {
-                    let loadedThreads: ConversationThread[] = [];
-                    if (rawThreads) {
+                    const parseThreads = (raw: string | null): ConversationThread[] => {
+                        if (!raw) return [];
                         try {
-                            const parsed = JSON.parse(rawThreads);
-                            if (Array.isArray(parsed)) {
-                                loadedThreads = parsed.filter(
-                                    (t: any) => t && typeof t.id === "string" && typeof t.title === "string"
-                                );
-                            }
-                        } catch { /* ignore parse errors */ }
+                            const parsed = JSON.parse(raw);
+                            return Array.isArray(parsed)
+                                ? parsed.filter((t: any) => t && typeof t.id === "string" && typeof t.title === "string")
+                                : [];
+                        } catch { return []; /* ignore parse errors */ }
+                    };
+                    // #94: in account mode the account's threads + the guest's (which move in).
+                    const ownThreadsKey = acctThreadsKey ?? threadsKey;
+                    let loadedThreads: ConversationThread[] = acctThreadsKey
+                        ? parseThreads(rawAcctThreads)
+                        : parseThreads(rawThreads);
+                    let changed = false;
+                    if (acctThreadsKey) {
+                        const known = new Set(loadedThreads.map((t) => t.id));
+                        const guestThreads = parseThreads(rawThreads).filter((t) => !known.has(t.id));
+                        if (guestThreads.length > 0) { loadedThreads = [...loadedThreads, ...guestThreads]; changed = true; }
                     }
                     // Ensure default thread always exists
                     if (!loadedThreads.find((t) => t.id === DEFAULT_THREAD_ID)) {
@@ -752,7 +809,14 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                             { id: DEFAULT_THREAD_ID, title: "My conversations", createdAt: Date.now() },
                             ...loadedThreads,
                         ];
-                        AsyncStorage.setItem(threadsKey, JSON.stringify(loadedThreads)).catch(() => {});
+                        changed = true;
+                    }
+                    if (cancelled) return;
+                    if (changed) {
+                        await AsyncStorage.setItem(ownThreadsKey, JSON.stringify(loadedThreads)).catch(() => {});
+                    }
+                    if (acctThreadsKey && rawThreads) {
+                        AsyncStorage.removeItem(threadsKey).catch(() => {});
                     }
                     setThreads(loadedThreads);
                     setActiveThreadIdState(DEFAULT_THREAD_ID);
@@ -760,12 +824,13 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
             } catch (error) {
                 debugWarn("Failed to load history/license from storage:", error);
             } finally {
-                setHydrated(true);
+                if (!cancelled) setHydrated(true);
             }
         };
 
         load();
-    }, [chatLinkKey, localUserScopeId]);
+        return () => { cancelled = true; };
+    }, [chatLinkKey, localUserScopeId, accountScope]);
 
     // ✅ Apply local history retention on FREE (but never delete unsynced items)
     useEffect(() => {
@@ -815,7 +880,8 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
         const save = async () => {
             try {
-                const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey, localUserScopeId);
+                if (accountScope === null) return;
+                const historyKey = storageKeyFor(STORAGE_KEY_BASE, accountScope, chatLinkKey, localUserScopeId);
                 await AsyncStorage.setItem(historyKey, JSON.stringify(history));
             } catch (error) {
                 debugWarn("Failed to save history to storage:", error);
@@ -842,11 +908,12 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
         setLastSyncResult(null);
         setLastSyncAt(null);
 
-        const historyKey = scopedKey(STORAGE_KEY_BASE, chatLinkKey, localUserScopeId);
+        if (accountScope === null) return;
+        const historyKey = storageKeyFor(STORAGE_KEY_BASE, accountScope, chatLinkKey, localUserScopeId);
         AsyncStorage.removeItem(historyKey).catch((err) =>
             debugWarn("Failed to clear history storage:", err)
         );
-    }, [chatLinkKey, localUserScopeId]);
+    }, [chatLinkKey, localUserScopeId, accountScope]);
 
     const deleteFromHistory = useCallback((id: string) => {
         setHistory((prev) => prev.filter((item) => item.id !== id));
@@ -854,11 +921,12 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
     // ── Thread persistence helper ─────────────────────────────────────────────
     const saveThreads = useCallback((updated: ConversationThread[]) => {
-        const threadsKey = scopedKey(THREADS_KEY_BASE, chatLinkKey, localUserScopeId);
+        if (accountScope === null) return;
+        const threadsKey = storageKeyFor(THREADS_KEY_BASE, accountScope, chatLinkKey, localUserScopeId);
         AsyncStorage.setItem(threadsKey, JSON.stringify(updated)).catch((err) =>
             debugWarn("Failed to save threads:", err)
         );
-    }, [chatLinkKey, localUserScopeId]);
+    }, [chatLinkKey, localUserScopeId, accountScope]);
 
     const startNewThread = useCallback((title?: string): string => {
         const id = `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -1095,6 +1163,7 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
                 try {
                     const since = remoteSinceRef.current || 0;
+                    const accountAtStart = accountScopeRef.current;
                     const pulled: FetchRemoteHistoryResult = await fetchRemoteHistorySince(since, {
                         userScope: historyScope,
                         accessToken: accessToken ?? undefined,
@@ -1102,8 +1171,9 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
 
 
 
-                    // 🔒 scope guard: if chatLinkKey changed while request was in-flight, discard results
-                    if (chatLinkKeyRef.current !== historyScope) {
+                    // 🔒 scope guard: if chatLinkKey OR the signed-in account changed while the
+                    // request was in flight (#94: sign-out), discard results
+                    if (chatLinkKeyRef.current !== historyScope || accountScopeRef.current !== accountAtStart) {
                         return pushRes;
                     }
 
@@ -1149,11 +1219,12 @@ export default function HistoryProvider({ children }: { children: ReactNode }) {
                         if (userScope) {
                             // Capture the scope used for this request
                             const requestedScope = userScope;
+                            const accountAtStart = accountScopeRef.current;
 
                             const res = await fetchRemoteChatMessages({ userScope: requestedScope, accessToken: accessToken ?? undefined });
 
                             // ✅ If scope changed while request was in-flight, ignore these results
-                            if (chatLinkKeyRef.current !== requestedScope) {
+                            if (chatLinkKeyRef.current !== requestedScope || accountScopeRef.current !== accountAtStart) {
                                 return {
                                     ok: false,
                                     skipped: true,

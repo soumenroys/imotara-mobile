@@ -107,7 +107,8 @@ describe("stage 2 — history is never pruned off a default tier", () => {
     // 2026-10-02 bug pruned a Plus user's history to the free window.
     // ⚠️ Anchor on the hydration BRANCH, not the destructuring list above it.
     const s = CTX();
-    const i = s.indexOf("if (rawTier) {");
+    // (14 Nov 2026: the branch also waits for its load not to be cancelled — #94.)
+    const i = s.indexOf("if (rawTier && !cancelled) {");
     expect(i).toBeGreaterThan(-1);
     const hydration = s.slice(i, i + 220);
     expect(hydration).toContain("_setLicenseTier");
