@@ -144,7 +144,7 @@ export default function RootNavigator() {
 
     // --- Lifecycle-driven "resume" sync (deduped) ---
     const history = useHistoryStore();
-    const { toneContext, setToneContext, setAnalysisMode } = useSettings() as any;
+    const { toneContext, setToneContext, setAnalysisMode, showConnect } = useSettings() as any;
     const { accessToken } = useAuth();
 
     const fgSyncInFlightRef = useRef(false);
@@ -364,7 +364,14 @@ export default function RootNavigator() {
                     <Tab.Screen
                         name="Connect"
                         component={ConnectScreen}
-                        options={{ headerShown: false, title: "Connect" }}
+                        // #108 (owner 22 Nov 2026): the tab shows only when "Show Connect" is on (Settings → Advanced).
+                        // OFF by default. The screen stays registered, so "Join as a Wellness Companion" in Settings
+                        // and imotara://connect links still open it — only the tab button is hidden.
+                        options={{
+                            headerShown: false,
+                            title: "Connect",
+                            ...(showConnect ? {} : { tabBarButton: () => null, tabBarItemStyle: { display: "none" as const } }),
+                        }}
                     />
                     <Tab.Screen
                         name="Settings"

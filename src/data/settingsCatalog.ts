@@ -106,6 +106,14 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
     keywords: ["companion reactions", "emoji reactions", "imotara emoji", "reaction", "thumbs up", "heart", "disable reactions", "प्रतिक्रिया", "প্রতিক্রিয়া"],
   },
   {
+    id: "show_connect",
+    title: "Show Connect",
+    section: "Advanced",
+    sectionKey: "advanced",
+    description: "Show or hide the Connect tab (book a session with a human wellness companion). Off by default",
+    keywords: ["connect", "show connect", "connect tab", "wellness companion", "book a companion", "human companion", "peer support", "कनेक्ट", "কানেক্ট"],
+  },
+  {
     id: "show_sync_badge",
     title: "Show sync status badge",
     section: "Experience",

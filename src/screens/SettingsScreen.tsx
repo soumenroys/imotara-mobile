@@ -395,6 +395,8 @@ function SettingsScreenContent() {
         setChildSafeMode,
         showSyncBadge,
         setShowSyncBadge,
+        showConnect,
+        setShowConnect,
         companionReactionsEnabled,
         setCompanionReactionsEnabled,
         featureTipsEnabled,
@@ -5348,6 +5350,23 @@ function SettingsScreenContent() {
                         <Switch
                             value={companionReactionsEnabled}
                             onValueChange={setCompanionReactionsEnabled}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+                </AppSurface>
+
+                {/* #108 (owner 22 Nov 2026): Connect tab — OFF by default, shown only when switched on */}
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Show Connect</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Adds the Connect tab — for booking a session with a human wellness companion. Off by default.</Text>
+                        </View>
+                        <Switch
+                            value={!!showConnect}
+                            onValueChange={setShowConnect}
+                            accessibilityLabel="Show Connect"
                             trackColor={{ false: colors.border, true: colors.primary }}
                             thumbColor="#ffffff"
                         />
