@@ -1,4 +1,4 @@
-const { withAppBuildGradle } = require('@expo/config-plugins');
+const { withAppBuildGradle } = require('expo/config-plugins');
 
 const MARKER = '// R8_MAPPING_BUNDLE_INJECTED_V2';
 
