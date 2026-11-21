@@ -158,3 +158,16 @@ describe("⚡ replies stream word by word on a phone", () => {
     expect(s).toMatch(/catch \{\s*return null;\s*\}/);
   });
 });
+
+describe("⚡ a streamed reply does not change its punctuation when it finishes", () => {
+  const chat = require("fs").readFileSync(require("path").join(__dirname, "..", "screens", "ChatScreen.tsx"), "utf8") as string;
+  const { normalizeReplyPunctuation } = require("../lib/chat/replyPunctuation");
+  it("the same helper shapes the streamed text and the final text", () => {
+    expect(chat).toMatch(/text: normalizeReplyPunctuation\(accumulated\),/);
+    expect(chat).toMatch(/\{ \.\.\.m, text: normalizeReplyPunctuation\(accumulated\) \}/);
+    expect(chat).toMatch(/const remoteReply = normalizeReplyPunctuation\(String\(remote\.replyText \|\| ""\)\.trim\(\)\);/);
+  });
+  it("…and it is the house style it always was", () => {
+    expect(normalizeReplyPunctuation("anything—you ‘hi’ “ok” 1–2")).toBe(`anything - you 'hi' "ok" 1-2`);
+  });
+});
