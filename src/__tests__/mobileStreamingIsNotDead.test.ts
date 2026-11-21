@@ -59,7 +59,7 @@ describe("🔴 the React Native path must not be treated as a failure", () => {
 
     it("🔑 when there is no stream, the already-downloaded body is READ, not discarded", () => {
         const s = read(AI);
-        expect(s).toMatch(/if \(!res\.body\) \{/);
+        expect(s).toMatch(/if \(!res\.body \|\| typeof TextDecoder === "undefined"\) \{/);
         expect(s).toMatch(/parseSseText\(await res\.text\(\)\)/);
     });
 
@@ -67,7 +67,7 @@ describe("🔴 the React Native path must not be treated as a failure", () => {
         // Without this the reply would be parsed and then silently dropped —
         // the same class of bug, one layer down.
         const s = read(AI);
-        const branch = s.slice(s.indexOf("if (!res.body) {"), s.indexOf("const reader = res.body.getReader()"));
+        const branch = s.slice(s.indexOf("if (!res.body || typeof TextDecoder === \"undefined\") {"), s.indexOf("const reader = res.body.getReader()"));
         expect(branch).toMatch(/onToken\(accumulated\)/);
         expect(branch).toMatch(/return \{ ok: isUsableReply\(accumulated\), text: accumulated \}/);
     });
@@ -76,7 +76,7 @@ describe("🔴 the React Native path must not be treated as a failure", () => {
         // A leaked abort timer would fire mid-conversation and abort an
         // unrelated later request.
         const s = read(AI);
-        const branch = s.slice(s.indexOf("if (!res.body) {"), s.indexOf("const reader = res.body.getReader()"));
+        const branch = s.slice(s.indexOf("if (!res.body || typeof TextDecoder === \"undefined\") {"), s.indexOf("const reader = res.body.getReader()"));
         expect(branch).toMatch(/clearTimeout\(rafHandle\)/);
         expect(branch).toMatch(/clearTimeout\(timer\)/);
     });
@@ -145,3 +145,16 @@ describe("the SSE parser matches the wire format the reader path handles", () =>
 });
 
 function reply_len(s: string): number { return s.length; }
+
+// ⚡ #164 (owner, 21 Nov 2026): the reply now streams word by word on phones.
+describe("⚡ replies stream word by word on a phone", () => {
+  const s = require("fs").readFileSync(require("path").join(__dirname, "..", "api", "aiClient.ts"), "utf8") as string;
+  it("the reply request uses Expo's streaming fetch when it exists", () => {
+    expect(s).toMatch(/const doFetch: typeof fetch = streamingFetch\(\) \?\? fetch;/);
+    expect(s).toMatch(/const res = await doFetch\(url, \{/);
+  });
+  it("…loaded lazily, and a missing module falls back to the whole-reply path", () => {
+    expect(s).toMatch(/function streamingFetch\(\): typeof fetch \| null \{\s*try \{[\s\S]{0,200}require\("expo\/fetch"\)/);
+    expect(s).toMatch(/catch \{\s*return null;\s*\}/);
+  });
+});
