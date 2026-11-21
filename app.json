@@ -200,7 +200,13 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.425826097896-aou5koggrjsdj9pqlpvom6ph3mddmj5i"
+        }
+      ]
     ],
     "scheme": "imotara",
     "runtimeVersion": {

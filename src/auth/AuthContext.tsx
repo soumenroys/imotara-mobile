@@ -26,6 +26,7 @@ try { AppleAuthentication = require("expo-apple-authentication"); } catch { /* n
 import { supabase } from "../lib/supabase/client";
 import { buildApiUrl } from "../config/api";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
+import { getGoogleIdToken, signOutNativeGoogle } from "./nativeGoogle";
 
 // Required so the auth redirect can close the browser tab on iOS.
 // Guarded: native module may not be available in bare Expo Go dev environment.
@@ -338,6 +339,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const MOBILE_AUTH_REDIRECT = "https://imotara.com/auth/callback-mobile";
 
     const signInWithGoogle = useCallback(async (): Promise<{ success: boolean }> => {
+        // #169: native Google first — no web page naming our database host.
+        // Only "unavailable" falls through to the web flow below; a cancel stops here.
+        const native = await getGoogleIdToken();
+        if (native.kind === "cancelled") return { success: false };
+        if (native.kind === "token") {
+            const { error } = await supabase.auth.signInWithIdToken({ provider: "google", token: native.idToken });
+            if (!error) return { success: true };
+            // e.g. a nonce/audience mismatch — the web flow below still works.
+            console.warn("[Auth] native Google token refused, using web sign-in:", error.message);
+        } else {
+            console.warn("[Auth] native Google unavailable, using web sign-in:", native.reason);
+        }
         try {
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: "google",
@@ -495,6 +508,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         explicitSignOutInFlight.current = true;
         try {
             await supabase.auth.signOut();
+            // #169: forget the Google account on this device too, so the next
+            // sign-in shows the account picker instead of silently reusing it.
+            await signOutNativeGoogle();
             // #94: backup belongs to the signed-in person — signing out switches it off.
             await setCloudBackupOn(false);
             // Clear all user-specific local data so a subsequent user on this device starts fresh
