@@ -1,6 +1,6 @@
 // src/screens/HistoryScreen.tsx
 import React from "react";
-import { View, Text, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, RefreshControl, Animated, PanResponder, Share, ActivityIndicator, InteractionManager } from "react-native";
+import { View, Text, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, RefreshControl, Animated, PanResponder, Share, ActivityIndicator } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { buildApiUrl } from "../config/api";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
@@ -870,7 +870,7 @@ function HistoryScreenContent() {
     const [showSearch, setShowSearch] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState("");
     const [debouncedSearch, setDebouncedSearch] = React.useState("");
-    const searchInputRef = React.useRef<TextInput>(null);
+    const searchInputRef = React.useRef<import("react-native").TextInputInstance>(null);
 
     React.useEffect(() => {
         const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
@@ -1147,7 +1147,7 @@ function HistoryScreenContent() {
                             Start chatting and your history will appear here.
                         </Text>
                     </View>
-                ) : null}
+                ) : undefined}
                 renderItem={({ item: fi }) => {
                     if (fi.kind === "list-header") {
                         return (

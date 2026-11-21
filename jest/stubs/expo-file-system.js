@@ -2,6 +2,7 @@
 class File {
   constructor(...parts) { this.uri = parts.join("/"); }
   async write() {}
+  writeSync() {}
   async delete() {}
   get exists() { return false; }
 }

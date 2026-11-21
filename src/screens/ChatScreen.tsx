@@ -6310,7 +6310,7 @@ export default function ChatScreen() {
           </View>}
           ListFooterComponent={(() => {
             const showIntake = intakeStep > 0 && intakeStep <= 3 && messages.filter((m) => m.from === "user").length === 0;
-            if (!isTyping && !showIntake) return null;
+            if (!isTyping && !showIntake) return undefined; // RN 0.88 types: list slots take undefined, not null (same: nothing shown)
             return (
               <View>
                 {isTyping && (

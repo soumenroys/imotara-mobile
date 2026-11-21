@@ -24,13 +24,14 @@ import path from "path";
 const app = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "app.json"), "utf8"));
 const bp = (app.expo.plugins as unknown[]).find(
     (p) => Array.isArray(p) && p[0] === "expo-build-properties",
-) as [string, { android?: { extraProguardRules?: string; enableProguardInReleaseBuilds?: boolean } }] | undefined;
+) as [string, { android?: { extraProguardRules?: string; enableMinifyInReleaseBuilds?: boolean } }] | undefined;
 
 describe("the keep rules R8 needs are owned by the app", () => {
     it("R8 is on for release builds — which is why the rules matter", () => {
         // If this ever flips to false the rules become moot but harmless; if it
         // stays true and the rules vanish, reminders silently die again.
-        expect(bp?.[1].android?.enableProguardInReleaseBuilds).toBe(true);
+        // SDK 58 name; the old enableProguardInReleaseBuilds is deprecated.
+        expect(bp?.[1].android?.enableMinifyInReleaseBuilds).toBe(true);
     });
 
     it("keeps every expo.modules.notifications class and member", () => {

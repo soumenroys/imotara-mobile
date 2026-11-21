@@ -36,7 +36,6 @@ import {
     Share,
     Modal,
     ActivityIndicator,
-    InteractionManager,
 } from "react-native";
 
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -913,9 +912,9 @@ function SettingsScreenContent() {
     const [sectionAdvancedMobile, setSectionAdvancedMobile] = React.useState(false);
     const [sectionMindset, setSectionMindset] = React.useState(false);
 
-    const settingsScrollRef = React.useRef<import("react-native").ScrollView>(null);
+    const settingsScrollRef = React.useRef<import("react-native").ScrollViewInstance>(null);
     // Refs for each section header View — used with measure() for absolute positioning.
-    const sectionRefs = React.useRef<Record<string, import("react-native").View | null>>({});
+    const sectionRefs = React.useRef<Record<string, import("react-native").HostInstance | null>>({});
     // Current scroll offset — needed to compute target scroll Y from screen coordinates.
     const scrollOffsetY = React.useRef(0);
 
