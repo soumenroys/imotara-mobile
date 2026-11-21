@@ -112,7 +112,6 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -192,7 +191,9 @@
         {
           "microphonePermission": "Imotara uses the microphone so you can share how you feel by speaking instead of typing."
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-sharing"
     ],
     "scheme": "imotara",
     "runtimeVersion": {

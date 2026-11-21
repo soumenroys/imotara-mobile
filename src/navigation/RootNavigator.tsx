@@ -131,8 +131,15 @@ export default function RootNavigator() {
     // instead use the outer View backgroundColor to fill behind the nav bar.
     useEffect(() => {
         if (Platform.OS !== "android") return;
-        const style = isDark ? "light" : "dark";
-        NavigationBar?.setButtonStyleAsync(style).catch(() => {});
+        // ⚠️ SDK 55: setButtonStyleAsync is deprecated for setStyle, whose names are
+        // the OTHER WAY ROUND — setStyle names the BAR ("dark" = dark bar, light
+        // buttons), setButtonStyleAsync named the BUTTONS. Dark theme ⇒ light buttons.
+        const nb = NavigationBar as any;
+        if (typeof nb?.setStyle === "function") {
+            try { nb.setStyle(isDark ? "dark" : "light"); } catch {}
+        } else {
+            nb?.setButtonStyleAsync?.(isDark ? "light" : "dark").catch(() => {});
+        }
     }, [isDark]);
 
     // --- Lifecycle-driven "resume" sync (deduped) ---

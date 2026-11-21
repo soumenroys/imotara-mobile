@@ -54,8 +54,8 @@ describe("appearanceOverride", () => {
         expect(appearanceOverride("light")).toBe("light");
     });
 
-    it("returns null for system, so the OS keeps control", () => {
-        expect(appearanceOverride("system")).toBeNull();
+    it("clears the override for system ('unspecified' since RN 0.83), so the OS keeps control", () => {
+        expect(appearanceOverride("system")).toBe("unspecified");
     });
 
     it("never returns a resolved mode for system, whatever the OS says", () => {

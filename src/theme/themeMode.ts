@@ -15,7 +15,7 @@ export type ThemeMode = "dark" | "light";
  */
 export function resolveThemeMode(
   pref: ThemePref,
-  systemScheme: "light" | "dark" | null | undefined,
+  systemScheme: "light" | "dark" | "unspecified" | null | undefined,
 ): ThemeMode {
   if (pref === "system") return systemScheme === "light" ? "light" : "dark";
   return pref;
@@ -46,6 +46,8 @@ export function initialThemePref(existingKeys: readonly string[]): ThemePref {
  * later "follow my phone" would be stuck on whatever was set last. null hands
  * control back to the OS.
  */
-export function appearanceOverride(pref: ThemePref): ThemeMode | null {
-    return pref === "system" ? null : pref;
+export function appearanceOverride(pref: ThemePref): ThemeMode | "unspecified" {
+    // ⚠️ React Native 0.83 (Expo SDK 55): "unspecified" is how the override is
+    // cleared — the API no longer takes null. Same meaning: the OS keeps control.
+    return pref === "system" ? "unspecified" : pref;
 }
