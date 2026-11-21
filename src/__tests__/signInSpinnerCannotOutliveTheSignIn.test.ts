@@ -99,3 +99,25 @@ describe("🔴 the spinner is owned by auth state, not by the OAuth promise", ()
         expect(CODE.slice(i, i + 400)).toMatch(/catch\s*\{[\s\S]{0,80}setSigningInApple\(false\)/);
     });
 });
+
+describe("🔴 15 Nov 2026: a CANCEL unlocks the prompt at once (Google and Apple)", () => {
+    it("a returned failure clears the Google spinner (no 90 s wait)", () => {
+        const i = CODE.indexOf("const handleGoogle");
+        expect(CODE.slice(i, i + 700)).toMatch(/const r = await signInWithGoogle\(\);[\s\S]{0,300}if \(!r\.success\) setSigningInGoogle\(false\);/);
+    });
+
+    it("Apple reports its result, and a cancel clears its spinner", () => {
+        const i = CODE.indexOf("const handleApple");
+        expect(CODE.slice(i, i + 500)).toMatch(/const r = await signInWithApple\(\);\s*if \(!r\.success\) setSigningInApple\(false\);/);
+        const ctx = fs.readFileSync(path.join(__dirname, "..", "auth", "AuthContext.tsx"), "utf8");
+        expect(ctx).toMatch(/signInWithApple: \(\) => Promise<\{ success: boolean \}>/);
+        const apple = ctx.slice(ctx.indexOf("const signInWithApple = useCallback"), ctx.indexOf("// ── Sign Out"));
+        expect(apple).toMatch(/if \(err\?\.code !== "ERR_CANCELED"\)[\s\S]{0,300}return \{ success: false \};/);
+        expect(apple).toMatch(/return \{ success: true \};/);
+    });
+
+    it("🔑 a session that lands AFTER a cancel-looking return (Android) still dismisses the prompt", () => {
+        expect(CODE).toMatch(/if \(status !== "authenticated" \|\| awaitingAuthUntil\.current < Date\.now\(\)\) return;/);
+        expect(CODE).toMatch(/awaitingAuthUntil\.current = Date\.now\(\) \+ 120_000;/);
+    });
+});
