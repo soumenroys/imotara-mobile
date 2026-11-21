@@ -16,7 +16,9 @@
   "jest": {
     "preset": "jest-expo",
     "moduleNameMapper": {
-      "^expo-av$": "<rootDir>/jest/stubs/expo-av.js",
+      "^expo-audio$": "<rootDir>/jest/stubs/expo-audio.js",
+      "^expo-audio/build/AudioModule$": "<rootDir>/jest/stubs/expo-audio-module.js",
+      "^expo-audio/build/utils/options$": "<rootDir>/jest/stubs/expo-audio-options.js",
       "^expo-speech$": "<rootDir>/jest/stubs/expo-speech.js",
       "^expo-file-system$": "<rootDir>/jest/stubs/expo-file-system.js",
       "^@react-native-async-storage/async-storage$": "<rootDir>/jest/stubs/async-storage.js"
@@ -42,8 +44,8 @@
     "expo": "54.0.37",
     "expo-apple-authentication": "~8.0.8",
     "expo-application": "^7.0.8",
+    "expo-audio": "~1.1.1",
     "expo-auth-session": "~7.0.10",
-    "expo-av": "~16.0.8",
     "expo-build-properties": "~1.0.10",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.14",
@@ -87,11 +89,6 @@
           "react-native-razorpay"
         ]
       }
-    },
-    "autolinking": {
-      "buildFromSource": [
-        "expo-av"
-      ]
     },
     "install": {
       "exclude": [

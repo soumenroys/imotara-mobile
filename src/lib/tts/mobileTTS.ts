@@ -21,7 +21,7 @@
 //      so the device voice is the safety net rather than the default.
 
 import * as Speech        from "expo-speech";
-import { Audio }          from "expo-av";
+import { Audio }          from "../audio/av";
 import { File, Paths }    from "expo-file-system";
 import { fetchWithTimeout } from "../fetchWithTimeout";
 import { MARATHI_HINT } from "../lang/devanagariHint";

@@ -12,7 +12,7 @@ import {
   Pressable,
   AppState,
 } from "react-native";
-import { Audio } from "expo-av";
+import { Audio } from "../../lib/audio/av";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
