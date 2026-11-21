@@ -11,7 +11,7 @@ import { rearmAfterSnooze } from "./src/notifications/checkInReminder";
 import { ensureDailyReminderScheduled } from "./src/notifications/checkInInvite";
 import ConsentGateMount from "./src/components/legal/ConsentGateMount";
 import AppThemeProvider from "./src/theme/AppThemeProvider";
-import { ThemeProvider } from "./src/theme/ThemeContext";
+import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
 import HistoryProvider from "./src/state/HistoryContext";
 import { SettingsProvider } from "./src/state/SettingsContext";
 import { AuthProvider } from "./src/auth/AuthContext";
@@ -144,7 +144,7 @@ function AppShell() {
           {/* #134: the one email sign-in sheet every sign-in place opens */}
           <EmailSignInSheet />
 
-          <StatusBar style="auto" />
+          <ThemedStatusBar />
         </HistoryProvider>
       </SettingsProvider>
       </AuthProvider>
@@ -152,6 +152,17 @@ function AppShell() {
       </ThemeProvider>
     </AppThemeProvider>
   );
+}
+
+/**
+ * Status bar text follows the APP's theme, not "auto".
+ * ⚠️ SDK 58 (#125): style="auto" stopped following our in-app Appearance override on
+ * iOS — dark theme showed dark clock/battery on the dark background (seen on the
+ * simulator, 21 Nov 2026). Our theme knows the truth, so it decides.
+ */
+function ThemedStatusBar() {
+  const { isDark } = useTheme();
+  return <StatusBar style={isDark ? "light" : "dark"} />;
 }
 
 export default function App() {

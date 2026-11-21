@@ -41,7 +41,8 @@
           "de",
           "pt",
           "id"
-        ]
+        ],
+        "UIViewControllerBasedStatusBarAppearance": false
       },
       "usesAppleSignIn": true,
       "privacyManifests": {
