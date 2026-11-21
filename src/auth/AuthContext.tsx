@@ -58,7 +58,7 @@ export type AuthContextValue = {
     /** Returns {success:true} if a session was established synchronously, {success:false} otherwise.
      *  On Android the session may still arrive async via onAuthStateChange after success:false. */
     signInWithGoogle: () => Promise<{ success: boolean }>;
-    signInWithApple: () => Promise<void>;
+    signInWithApple: () => Promise<{ success: boolean }>;
     signOut: () => Promise<void>;
     /** True if running on a device where Apple Sign In is available */
     appleSignInAvailable: boolean;
@@ -85,7 +85,7 @@ const AuthContext = createContext<AuthContextValue>({
     accessToken: null,
     anonymousAccessToken: null,
     signInWithGoogle: async () => ({ success: false }),
-    signInWithApple: async () => {},
+    signInWithApple: async () => ({ success: false }),
     signOut: async () => {},
     appleSignInAvailable: false,
     requestEmailCode: async () => "failed",
@@ -407,8 +407,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Uses the native Apple authentication sheet (iOS only).
     // The identity token is exchanged for a Supabase session.
 
-    const signInWithApple = useCallback(async () => {
-        if (!AppleAuthentication) return; // not available in dev builds
+    // 15 Nov 2026: returns whether it signed in — a CANCEL used to return nothing, and the sign-in
+    // prompt kept "Signing in…" (every button disabled) for 90 s waiting for a session that never came.
+    const signInWithApple = useCallback(async (): Promise<{ success: boolean }> => {
+        if (!AppleAuthentication) return { success: false }; // not available in dev builds
         try {
             const credential = await AppleAuthentication.signInAsync({
                 requestedScopes: [
@@ -419,7 +421,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             if (!credential.identityToken) {
                 console.warn("[Auth] Apple: no identity token returned");
-                return;
+                return { success: false };
             }
 
             const { error } = await supabase.auth.signInWithIdToken({
@@ -432,13 +434,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (error) {
                 console.warn("[Auth] Apple sign-in Supabase error:", error.message);
                 Alert.alert("Sign-in failed", "Apple sign-in could not be completed. Please try again.");
+                return { success: false };
             }
+            return { success: true };
         } catch (err: any) {
             // ERR_CANCELED = user dismissed the sheet — not a real error
             if (err?.code !== "ERR_CANCELED") {
                 console.warn("[Auth] Apple sign-in error:", err);
                 Alert.alert("Sign-in failed", "An unexpected error occurred during Apple sign-in. Please try again.");
             }
+            return { success: false };
         }
     }, []);
 

@@ -84,6 +84,7 @@ import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { getConversationDepth } from "../lib/imotara/companionLetter";
 import { useIsOnline, setConnectivityCheckInterval } from "../lib/network/online";
 import { localSourceLabel, type LocalReason } from "../lib/chat/localSourceLabel";
+import { normalizeReplyPunctuation } from "../lib/chat/replyPunctuation";
 import { isRtlLang } from "../lib/lang/rtlLangs";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
@@ -1244,7 +1245,16 @@ function MessageBubble({
         statusTextColor = colors.textPrimary;
       } else if (!isUser && message.cloudAttempted) {
         bubbleBorderColor = "#fbbf24";
-        statusLabel = "Offline mode";
+        // 🔑 #163 (owner, 21 Nov 2026): say WHY this reply is simpler. "Offline
+        // mode" was shown for EVERY on-device reply after a cloud attempt — the
+        // owner saw it on a perfect network after his free replies ran out.
+        // The reason is stamped where it is known (localReason), never guessed.
+        statusLabel =
+          message.localReason === "quota"
+            ? "Simpler reply · daily limit reached"
+            : message.localReason === "offline"
+              ? "Offline mode"
+              : "Connection issue · simpler reply";
         statusBg = "rgba(251, 191, 36, 0.18)";
         statusTextColor = "#fde68a";
       } else {
@@ -2903,6 +2913,9 @@ export default function ChatScreen() {
   const TRIAL_BANNER_DISMISSED_KEY = "imotara.trial.bannerDismissed.v1";
   const [showTrialBanner, setShowTrialBanner] = useState(false);
   const [quotaCardShown, setQuotaCardShown] = useState(false);
+  // #163: true while replies are simpler because today's free replies are used.
+  // Cleared by the next cloud reply (credits bought, Plus, or the daily reset).
+  const [quotaLimited, setQuotaLimited] = useState(false);
   // Once per app run at most; the stored state makes it once EVER ⇒ checkInInvite.
   const inviteOfferedRef = useRef(false);
 
@@ -4215,7 +4228,7 @@ export default function ChatScreen() {
                   const newId = `b-stream-${Date.now()}`;
                   streamingMsgIdRef.current = newId;
                   const streamMsg: ChatMessage = {
-                    id: newId, from: "bot", text: accumulated,
+                    id: newId, from: "bot", text: normalizeReplyPunctuation(accumulated),
                     timestamp: Date.now(), isSynced: false, source: "cloud",
                   };
                   setIsTyping(false);
@@ -4225,7 +4238,7 @@ export default function ChatScreen() {
                   // Update streaming message in place
                   streamedText = accumulated;
                   setMessages((prev) => prev.map((m) =>
-                    m.id === streamingMsgIdRef.current ? { ...m, text: accumulated } : m,
+                    m.id === streamingMsgIdRef.current ? { ...m, text: normalizeReplyPunctuation(accumulated) } : m,
                   ));
                 }
               },
@@ -4241,7 +4254,7 @@ export default function ChatScreen() {
               streamedText = streamResult.text;
               if (streamingMsgIdRef.current) {
                 setMessages((prev) => prev.map((m) =>
-                  m.id === streamingMsgIdRef.current ? { ...m, text: streamResult.text } : m,
+                  m.id === streamingMsgIdRef.current ? { ...m, text: normalizeReplyPunctuation(streamResult.text) } : m,
                 ));
               }
               remote = { ok: true, replyText: streamResult.text, analysisSource: "cloud" };
@@ -4344,11 +4357,7 @@ export default function ChatScreen() {
           let compatibility: any | undefined;
 
           // 2) If cloud succeeded, respect it
-          const remoteReply = String(remote.replyText || "").trim()
-              .replace(/\u2018|\u2019/g, "'")
-              .replace(/\u201C|\u201D/g, '"')
-              .replace(/\u2014/g, ' - ')
-              .replace(/\u2013/g, '-');
+          const remoteReply = normalizeReplyPunctuation(String(remote.replyText || "").trim());
           if (remote.ok && remoteReply.length > 0) {
             replyText = remoteReply;
             source = "cloud";
@@ -4667,6 +4676,9 @@ export default function ChatScreen() {
             } catch { /* never let the prompt get in the way of a reply */ }
           }
           const extraMessages: ChatMessage[] = [];
+          // #163: keep the strip in step with what actually happened this turn.
+          if (cloudQuotaHit) setQuotaLimited(true);
+          else if (source === "cloud") setQuotaLimited(false);
           if (cloudQuotaHit && !quotaCardShown) {
             setQuotaCardShown(true);
             extraMessages.push({
@@ -5743,18 +5755,29 @@ export default function ChatScreen() {
             <View style={{ marginHorizontal: 16, marginVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: "rgba(139,92,246,0.30)", backgroundColor: colors.surface, padding: 16 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Text style={{ fontSize: 16 }}>✨</Text>
-                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textPrimary }}>I've used my 20 replies for today</Text>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.textPrimary }}>You've used today's 20 free replies</Text>
               </View>
               <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 18, marginBottom: 12 }}>
-                I'm still here. My responses now come from on-device mode — a little simpler, but present.
+                I'm still here, but until your free replies reset, my replies come from your phone and will be simpler. For full replies now, top up or try Plus.
               </Text>
               {!orgId && (
-                <TouchableOpacity
-                  onPress={() => setShowUpgradeSheet(true)}
-                  style={{ alignSelf: "flex-start", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: "#7c3aed" }}
-                >
-                  <Text style={{ fontSize: 12, fontWeight: "600", color: "#ffffff" }}>Upgrade for unlimited replies →</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                  {/* Both open the upgrade sheet: it holds the credit packs AND Plus. */}
+                  <TouchableOpacity
+                    onPress={() => setShowUpgradeSheet(true)}
+                    accessibilityRole="button"
+                    style={{ borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: "rgba(139,92,246,0.55)" }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textPrimary }}>Top up credits</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setShowUpgradeSheet(true)}
+                    accessibilityRole="button"
+                    style={{ borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: "#7c3aed" }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: "#ffffff" }}>Get Plus</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           ) : (
@@ -6424,6 +6447,30 @@ export default function ChatScreen() {
           </Text>
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Options for Grief and Loss mode" onPress={() => showCapsuleMenu("Grief & Loss mode", () => setGriefMode(false), () => setGriefMode(false))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "rgba(253,164,175,0.6)" : "rgba(159,18,57,0.5)"} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* #163 (owner, 21 Nov 2026): while today's free replies are used up, say so
+          plainly where the person is typing — not "Offline mode" on every bubble. */}
+      {quotaLimited && !orgId && (
+        <View style={{
+          marginHorizontal: 12, marginBottom: 6,
+          flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap",
+          borderRadius: 14, borderWidth: 1,
+          borderColor: "rgba(139,92,246,0.30)",
+          backgroundColor: isDark ? "rgba(139,92,246,0.10)" : "rgba(245,243,255,0.95)",
+          paddingHorizontal: 12, paddingVertical: 8,
+        }}>
+          <Text style={{ flexShrink: 1, fontSize: 12, color: colors.textSecondary }}>
+            Simpler replies until your free replies reset
+          </Text>
+          <TouchableOpacity onPress={() => setShowUpgradeSheet(true)} accessibilityRole="button" hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+            <Text style={{ fontSize: 12, fontWeight: "700", color: "#8b5cf6" }}>Top up</Text>
+          </TouchableOpacity>
+          <Text style={{ fontSize: 12, color: colors.textSecondary }}>·</Text>
+          <TouchableOpacity onPress={() => setShowUpgradeSheet(true)} accessibilityRole="button" hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+            <Text style={{ fontSize: 12, fontWeight: "700", color: "#8b5cf6" }}>Get Plus</Text>
           </TouchableOpacity>
         </View>
       )}

@@ -4,7 +4,7 @@
 // Appears as a bottom sheet — user can dismiss it permanently.
 // No username or password required: only Google and Apple OAuth.
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
     View,
     Text,
@@ -135,16 +135,33 @@ export function SignInPrompt({ ready }: Props) {
         return () => clearTimeout(t);
     }, [signingIn]);
 
+    /**
+     * 15 Nov 2026 (owner: "check all sign-ins for the stuck screen"): a CANCEL — closing Google's
+     * browser sheet, or Apple's sheet — returns { success: false } without a session, and nothing
+     * cleared the spinner: "Signing in…", every button disabled, for the 90 s last-resort timer.
+     * ⇒ a returned failure clears it at once. ⚠️ But Android's Google flow can report "dismiss"
+     * BEFORE the session lands (the 2 Oct case above), so for 2 minutes a late session still
+     * dismisses the prompt even though the spinner already stopped.
+     */
+    const awaitingAuthUntil = useRef(0);
+    useEffect(() => {
+        if (status !== "authenticated" || awaitingAuthUntil.current < Date.now()) return;
+        awaitingAuthUntil.current = 0;
+        void handleDismiss();
+    }, [status]);   // eslint-disable-line react-hooks/exhaustive-deps
+
     const handleGoogle = async () => {
         if (signingIn) return;
         setSigningInGoogle(true);
+        awaitingAuthUntil.current = Date.now() + 120_000;
         // ⚠️ No `finally` that clears the spinner: on Android this promise may
         // never settle. The effects above own the spinner's lifetime now.
         try {
-            await signInWithGoogle();
+            const r = await signInWithGoogle();
             // Resolved cleanly (iOS, and Android when the browser returns
             // normally). If the session is already live the effect has dismissed
             // us; otherwise it will the moment auth state flips.
+            if (!r.success) setSigningInGoogle(false);   // cancelled / no session (yet) — never leave it spinning
         } catch {
             setSigningInGoogle(false);
         }
@@ -163,8 +180,10 @@ export function SignInPrompt({ ready }: Props) {
     const handleApple = async () => {
         if (signingIn) return;
         setSigningInApple(true);
+        awaitingAuthUntil.current = Date.now() + 120_000;
         try {
-            await signInWithApple();
+            const r = await signInWithApple();
+            if (!r.success) setSigningInApple(false);   // cancelled the Apple sheet — unlock now, not in 90 s
         } catch {
             setSigningInApple(false);
         }
