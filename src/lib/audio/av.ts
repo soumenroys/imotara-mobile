@@ -122,9 +122,13 @@ class Recording {
     private intervalMs = 500; // expo-av default progressUpdateIntervalMillis
     private listener: ((s: AvRecordingStatus) => void) | null = null;
     private done = false;
+    // ⚠️ expo-audio's `uri` is a read-only getter on the native object, and the object is
+    // released on unload — so the file location is copied here, where callers read it.
+    private fileUri: string | null = null;
 
     private constructor(rec: RecorderLike) {
         this.rec = rec;
+        this.fileUri = rec.uri ?? null;
     }
 
     private static make(options: Record<string, any>): RecorderLike {
@@ -184,7 +188,9 @@ class Recording {
     }
 
     getURI(): string | null {
-        return this.rec.uri ?? null;
+        if (this.done) return this.fileUri;
+        try { this.fileUri = this.rec.uri ?? this.fileUri; } catch {}
+        return this.fileUri;
     }
 
     /** expo-av: stops, releases the recorder; the file stays at getURI(). */
@@ -199,11 +205,8 @@ class Recording {
             this.done = true;
             last = { canRecord: false, isRecording: false, isDoneRecording: true, durationMillis: 0 };
             try { last.durationMillis = this.rec.getStatus().durationMillis; } catch {}
-            // ⚠️ Keep the native object until after uri is read by callers? expo-audio keeps
-            // `uri` on the JS object after release, so releasing now is safe.
-            const uri = this.rec.uri;
+            try { this.fileUri = this.rec.uri ?? this.fileUri; } catch {}
             try { this.rec.release(); } catch {}
-            (this.rec as any).uri = uri;
         }
         return last;
     }

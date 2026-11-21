@@ -4,10 +4,13 @@
 const controls = { refuseSources: new Set(), lastRecorderOptions: [], modes: [] };
 
 class AudioRecorder {
-  constructor(options) { this.options = options; this.uri = null; this.isRecording = false; this.released = false; controls.lastRecorderOptions.push(options); }
+  constructor(options) { this.options = options; this._uri = null; this.isRecording = false; this.released = false; controls.lastRecorderOptions.push(options); }
+  // ⚠️ Read-only like the real native object — assigning to it must throw in tests too
+  // (21 Nov 2026: the adapter did, and only a real device caught it).
+  get uri() { if (this.released) throw new Error("native object released"); return this._uri; }
   async prepareToRecordAsync() {
     if (controls.refuseSources.has(this.options.audioSource)) throw new Error("source refused");
-    this.uri = "file:///tmp/rec-" + controls.lastRecorderOptions.length + ".m4a";
+    this._uri = "file:///tmp/rec-" + controls.lastRecorderOptions.length + ".m4a";
   }
   record() { this.isRecording = true; }
   async stop() { this.isRecording = false; }
