@@ -508,11 +508,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         explicitSignOutInFlight.current = true;
         try {
             await supabase.auth.signOut();
+            // #94: backup belongs to the signed-in person — signing out switches it off.
+            await setCloudBackupOn(false);
             // #169: forget the Google account on this device too, so the next
             // sign-in shows the account picker instead of silently reusing it.
             await signOutNativeGoogle();
-            // #94: backup belongs to the signed-in person — signing out switches it off.
-            await setCloudBackupOn(false);
             // Clear all user-specific local data so a subsequent user on this device starts fresh
             await Promise.allSettled([
                 AsyncStorage.removeItem("imotara.companion.memories.v1"),
