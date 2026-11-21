@@ -669,6 +669,23 @@ function parseSseText(raw: string): string {
   return accumulated;
 }
 
+/**
+ * 🔑 Expo's WinterCG fetch (SDK 52+) exposes a streaming `res.body` on iOS and
+ * Android; React Native's built-in fetch (whatwg-fetch over XHR) does not, so a
+ * reply could never appear word by word on a phone. Loaded lazily and guarded:
+ * if the module is unavailable (tests, an old runtime) we get `null` and the
+ * caller uses the global fetch — the reply still arrives, all at once.
+ */
+function streamingFetch(): typeof fetch | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require("expo/fetch") as { fetch?: unknown };
+    return typeof mod?.fetch === "function" ? (mod.fetch as typeof fetch) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function streamChatReply(
   payload: Record<string, unknown>,
   accessToken: string | undefined,
@@ -692,7 +709,13 @@ export async function streamChatReply(
   };
 
   try {
-    const res = await fetch(url, {
+    // ⚡ #164 (owner, 21 Nov 2026): stream the reply WORD BY WORD on phones.
+    // expo/fetch gives a readable `res.body`, so the reader loop below — which
+    // has always been here but never ran on a device — finally runs. If the
+    // streaming fetch is missing or throws before a response, fall back to the
+    // global fetch and the whole-reply path below: same words, just all at once.
+    const doFetch: typeof fetch = streamingFetch() ?? fetch;
+    const res = await doFetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -738,7 +761,8 @@ export async function streamChatReply(
      * away a reply we already have and paying to generate it again. The user
      * sees the reply appear at once instead of twice as slowly.
      */
-    if (!res.body) {
+    // Whole-reply path: no stream to read, or no TextDecoder to read it with.
+    if (!res.body || typeof TextDecoder === "undefined") {
       const accumulated = parseSseText(await res.text());
       if (rafHandle) clearTimeout(rafHandle);
       clearTimeout(timer);

@@ -84,6 +84,7 @@ import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { getConversationDepth } from "../lib/imotara/companionLetter";
 import { useIsOnline, setConnectivityCheckInterval } from "../lib/network/online";
 import { localSourceLabel, type LocalReason } from "../lib/chat/localSourceLabel";
+import { normalizeReplyPunctuation } from "../lib/chat/replyPunctuation";
 import { isRtlLang } from "../lib/lang/rtlLangs";
 import { getReflectionSeedCard } from "../lib/reflectionSeedContract";
 import { BreathingModal } from "../components/imotara/BreathingModal";
@@ -4227,7 +4228,7 @@ export default function ChatScreen() {
                   const newId = `b-stream-${Date.now()}`;
                   streamingMsgIdRef.current = newId;
                   const streamMsg: ChatMessage = {
-                    id: newId, from: "bot", text: accumulated,
+                    id: newId, from: "bot", text: normalizeReplyPunctuation(accumulated),
                     timestamp: Date.now(), isSynced: false, source: "cloud",
                   };
                   setIsTyping(false);
@@ -4237,7 +4238,7 @@ export default function ChatScreen() {
                   // Update streaming message in place
                   streamedText = accumulated;
                   setMessages((prev) => prev.map((m) =>
-                    m.id === streamingMsgIdRef.current ? { ...m, text: accumulated } : m,
+                    m.id === streamingMsgIdRef.current ? { ...m, text: normalizeReplyPunctuation(accumulated) } : m,
                   ));
                 }
               },
@@ -4253,7 +4254,7 @@ export default function ChatScreen() {
               streamedText = streamResult.text;
               if (streamingMsgIdRef.current) {
                 setMessages((prev) => prev.map((m) =>
-                  m.id === streamingMsgIdRef.current ? { ...m, text: streamResult.text } : m,
+                  m.id === streamingMsgIdRef.current ? { ...m, text: normalizeReplyPunctuation(streamResult.text) } : m,
                 ));
               }
               remote = { ok: true, replyText: streamResult.text, analysisSource: "cloud" };
@@ -4356,11 +4357,7 @@ export default function ChatScreen() {
           let compatibility: any | undefined;
 
           // 2) If cloud succeeded, respect it
-          const remoteReply = String(remote.replyText || "").trim()
-              .replace(/\u2018|\u2019/g, "'")
-              .replace(/\u201C|\u201D/g, '"')
-              .replace(/\u2014/g, ' - ')
-              .replace(/\u2013/g, '-');
+          const remoteReply = normalizeReplyPunctuation(String(remote.replyText || "").trim());
           if (remote.ok && remoteReply.length > 0) {
             replyText = remoteReply;
             source = "cloud";
