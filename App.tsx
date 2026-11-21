@@ -10,6 +10,8 @@ import RootNavigator from "./src/navigation/RootNavigator";
 import { rearmAfterSnooze } from "./src/notifications/checkInReminder";
 import { ensureDailyReminderScheduled } from "./src/notifications/checkInInvite";
 import ConsentGateMount from "./src/components/legal/ConsentGateMount";
+import AgeSignalGate from "./src/components/age/AgeSignalGate";
+import AgeSignalTeenSync from "./src/components/age/AgeSignalTeenSync";
 import AppThemeProvider from "./src/theme/AppThemeProvider";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
 import HistoryProvider from "./src/state/HistoryContext";
@@ -131,6 +133,9 @@ function AppShell() {
           can always be raced by another overlay; a gate the app mounts BEHIND
           cannot. It sits inside ThemeProvider because the gate uses useColors. */}
       <ConsentGateMount>
+      {/* #159: the OS age signal. Inside the consent gate, outside everything
+          else — an under-13 stop screen must be mounted INSTEAD of the app. */}
+      <AgeSignalGate>
       {/* Settings MUST wrap HistoryProvider because HistoryProvider calls useSettings() */}
       <AuthProvider>
       <SettingsProvider>
@@ -145,9 +150,11 @@ function AppShell() {
           <EmailSignInSheet />
 
           <ThemedStatusBar />
+          <AgeSignalTeenSync />
         </HistoryProvider>
       </SettingsProvider>
       </AuthProvider>
+      </AgeSignalGate>
       </ConsentGateMount>
       </ThemeProvider>
     </AppThemeProvider>

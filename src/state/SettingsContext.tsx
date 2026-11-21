@@ -117,6 +117,9 @@ type SettingsContextValue = {
     toneContext: ToneContextPayload;
     setToneContext: (value: ToneContextPayload) => void;
 
+    /** True once saved settings have loaded. Writers that must not be overwritten by the load wait for it (#159 age signal). */
+    settingsHydrated: boolean;
+
     /**
      * Local device-only identity scope.
      * Used to prevent different “users” on the same device from seeing each other's local history
@@ -935,6 +938,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setAnalysisMode,
                 toneContext,
                 setToneContext,
+                settingsHydrated: hydrated,
                 localUserScopeId,
                 resetLocalUserScopeId,
                 chatLinkKey,

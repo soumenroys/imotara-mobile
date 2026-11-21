@@ -98,7 +98,10 @@
       },
       "associatedDomains": [
         "applinks:www.imotara.com"
-      ]
+      ],
+      "entitlements": {
+        "com.apple.developer.declared-age-range": true
+      }
     },
     "android": {
       "package": "com.imotara.imotara",
