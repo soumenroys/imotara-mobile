@@ -24,6 +24,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { IMOTARA_API_BASE_URL } from "../../config/api";
+import { BUILD_HEADER_VALUE } from "../../config/buildChannel";
 
 export type TallyKind = "visit_age" | "session_messages" | "session_minutes" | "funnel";
 
@@ -132,6 +133,8 @@ export let sendEvents = (events: TallyEvent[]): void => {
             headers: {
                 "content-type": "application/json",
                 "x-imotara-platform": Platform.OS === "ios" ? "ios" : "android",
+                // #170: the server drops counts from test builds (simulators, emulators, dev clients).
+                "x-imotara-build": BUILD_HEADER_VALUE,
             },
             body: JSON.stringify({ events }),
         }).catch(() => {});
