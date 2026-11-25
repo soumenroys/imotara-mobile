@@ -3,7 +3,7 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { FUNNEL_STEPS, funnelOncePerDay, tallyFunnel, __setSender, type TallyEvent } from "../lib/analytics/visitTally";
+import { FUNNEL_STEPS, funnelOncePerDay, tallyFunnel, noteVisit, __setSender, type TallyEvent } from "../lib/analytics/visitTally";
 
 const src = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
 
@@ -69,5 +69,24 @@ describe("wiring — the same moments as the website", () => {
     expect(nav).toMatch(/type !== "checkin"\) return;/);
     expect(nav).toMatch(/=== id\) return;/);
     expect(nav).toContain('void tallyFunnel("checkin_opened")');
+  });
+});
+
+describe("⚠️ simultaneous calls on launch count once (seen 25 Nov 2026: 4 for one install)", () => {
+  beforeEach(async () => { await AsyncStorage.clear(); });
+  it("two noteVisit calls in the same instant report 'day 0' once", async () => {
+    const sent: TallyEvent[][] = [];
+    __setSender((e) => { sent.push(e); });
+    const t = new Date(2026, 10, 25, 10).getTime();
+    await Promise.all([noteVisit(t), noteVisit(t), noteVisit(t + 1000)]);
+    const ages = sent.flat().filter((e) => e.kind === "visit_age");
+    expect(ages).toEqual([{ kind: "visit_age", bucket: 0, delta: 1 }]);
+  });
+  it("two tallyFunnel calls in the same instant count once", async () => {
+    const sent: TallyEvent[][] = [];
+    __setSender((e) => { sent.push(e); });
+    const t = new Date(2026, 10, 25, 10).getTime();
+    await Promise.all([tallyFunnel("invite_shown", t), tallyFunnel("invite_shown", t)]);
+    expect(sent.flat()).toEqual([{ kind: "funnel", bucket: 1, delta: 1 }]);
   });
 });

@@ -104,6 +104,18 @@ export function visitEvents(v: Visit, end: number): { events: TallyEvent[]; sent
     return { events, sent: { m, t } };
 }
 
+/**
+ * ⚠️ One at a time. On launch the mount effect AND the "back to the front" event can both call
+ * noteVisit in the same instant; each loaded the state before the other saved it, so one device
+ * reported "day N" several times (seen 25 Nov 2026 on the emulator: 4 for one fresh install).
+ */
+let queue: Promise<unknown> = Promise.resolve();
+function serial<T>(fn: () => Promise<T>): Promise<T> {
+    const run = queue.then(fn, fn);
+    queue = run.catch(() => undefined);
+    return run;
+}
+
 async function load(): Promise<State> {
     try { return JSON.parse((await AsyncStorage.getItem(KEY)) ?? "{}") as State; } catch { return {}; }
 }
@@ -140,8 +152,8 @@ function touch(s: State, now: number): Visit {
 }
 
 /** App opened or back in the foreground: once per day, report "day N since first visit". */
-export async function noteVisit(now = Date.now()): Promise<void> {
-    try {
+export function noteVisit(now = Date.now()): Promise<void> {
+    return serial(async () => { try {
         const s = await load();
         const today = localDay(now);
         if (!s.firstDay) s.firstDay = today;
@@ -151,21 +163,21 @@ export async function noteVisit(now = Date.now()): Promise<void> {
         }
         touch(s, now);
         await save(s);
-    } catch { /* never in the way */ }
+    } catch { /* never in the way */ } });
 }
 
 /** Each message the person sends. */
-export async function noteMessageSent(now = Date.now()): Promise<void> {
-    try {
+export function noteMessageSent(now = Date.now()): Promise<void> {
+    return serial(async () => { try {
         const s = await load();
         touch(s, now).messages += 1;
         await save(s);
-    } catch { /* never in the way */ }
+    } catch { /* never in the way */ } });
 }
 
 /** App going to the background: report (or correct) this visit's size. */
-export async function reportVisit(now = Date.now()): Promise<void> {
-    try {
+export function reportVisit(now = Date.now()): Promise<void> {
+    return serial(async () => { try {
         const s = await load();
         const v = s.visit;
         if (!v || now - v.last > GAP_MS) return;
@@ -174,7 +186,7 @@ export async function reportVisit(now = Date.now()): Promise<void> {
         sendEvents(events);
         v.sent = sent;
         await save(s);
-    } catch { /* never in the way */ }
+    } catch { /* never in the way */ } });
 }
 
 /** True when this step has not yet been counted today on this device. Pure — tested. */
@@ -183,8 +195,8 @@ export function funnelOncePerDay(seen: Record<string, string>, step: FunnelStep,
 }
 
 /** One anonymous step count, at most once a day per step (same rule as the web). */
-export async function tallyFunnel(step: FunnelStep, now = Date.now()): Promise<void> {
-    try {
+export function tallyFunnel(step: FunnelStep, now = Date.now()): Promise<void> {
+    return serial(async () => { try {
         const today = localDay(now);
         let seen: Record<string, string> = {};
         try { seen = JSON.parse((await AsyncStorage.getItem(FUNNEL_KEY)) ?? "{}") as Record<string, string>; } catch { seen = {}; }
@@ -192,5 +204,5 @@ export async function tallyFunnel(step: FunnelStep, now = Date.now()): Promise<v
         seen[step] = today;
         try { await AsyncStorage.setItem(FUNNEL_KEY, JSON.stringify(seen)); } catch { /* best effort */ }
         sendEvents([{ kind: "funnel", bucket: FUNNEL_STEPS[step], delta: 1 }]);
-    } catch { /* never in the way */ }
+    } catch { /* never in the way */ } });
 }
