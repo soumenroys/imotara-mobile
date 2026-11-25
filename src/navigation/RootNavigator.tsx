@@ -15,6 +15,8 @@ import TrendsScreen from "../screens/TrendsScreen";
 import ConnectScreen from "../screens/connect/ConnectScreen";
 // lifecycle hook + history store
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
+import { noteVisit, reportVisit, tallyFunnel } from "../lib/analytics/visitTally";
+import * as Notifications from "expo-notifications";
 import { useHistoryStore } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
 import { useAuth } from "../auth/AuthContext";
@@ -29,6 +31,9 @@ import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import { APP_VERSION } from "../config/appVersion";
 import { RECHECK_AFTER_MS, deviceLocale, shouldOfferUpdate, updateStrings } from "../lib/update/updatePrompt";
 import UpdateAvailableBanner, { STORE_PLATFORM, openStorePage } from "../components/imotara/UpdateAvailableBanner";
+
+/** #16: the check-in reminder tap already counted (the OS can hand the same "last response" back on later launches). */
+const CHECKIN_TAP_KEY = "imotara.funnel.lastCheckinTap.v1";
 let NavigationBar: typeof import("expo-navigation-bar") | null = null;
 try { NavigationBar = require("expo-navigation-bar"); } catch { /* not available in dev builds */ }
 
@@ -165,8 +170,29 @@ export default function RootNavigator() {
 
     useAppLifecycle({
         debounceMs: 400,
-        onForeground: () => { void runResumeSync(); void checkForUpdate(); },
+        onForeground: () => { void runResumeSync(); void checkForUpdate(); void noteVisit(); },
+        // #16 (25 Nov 2026): the anonymous visit size (messages, minutes) — counts only ⇒ lib/analytics/visitTally.
+        onBackground: () => { void reportVisit(); },
     });
+
+    // #16 (25 Nov 2026): anonymous counts the website already keeps — "day N since first visit" on open,
+    // and "the daily check-in reminder was tapped". Nothing about the person ⇒ lib/analytics/visitTally.
+    useEffect(() => {
+        void noteVisit();
+        // ⚠️ The "last response" can be an OLD tap handed back on every cold start — count each tap once.
+        const countCheckInTap = async (r: Notifications.NotificationResponse | null | undefined) => {
+            try {
+                if ((r?.notification?.request?.content?.data as { type?: string } | undefined)?.type !== "checkin") return;
+                const id = `${r!.notification.request.identifier}@${r!.notification.date}`;
+                if ((await AsyncStorage.getItem(CHECKIN_TAP_KEY)) === id) return;
+                await AsyncStorage.setItem(CHECKIN_TAP_KEY, id);
+                void tallyFunnel("checkin_opened");
+            } catch { /* never in the way */ }
+        };
+        Notifications.getLastNotificationResponseAsync().then((r) => countCheckInTap(r)).catch(() => {});
+        const sub = Notifications.addNotificationResponseReceivedListener((r) => { void countCheckInTap(r); });
+        return () => sub.remove();
+    }, []);
 
     // --- Onboarding ---
     const [onboardingVisible, setOnboardingVisible] = useState(false);

@@ -25,7 +25,30 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { IMOTARA_API_BASE_URL } from "../../config/api";
 
-export type TallyKind = "visit_age" | "session_messages" | "session_minutes";
+export type TallyKind = "visit_age" | "session_messages" | "session_minutes" | "funnel";
+
+/**
+ * #16 (owner, 25 Nov 2026): the app's anonymous STEP counts — the same daily counts the
+ * website keeps (imotaraapp src/lib/analytics/visitTally.ts FUNNEL_STEPS). Measured that
+ * day: ~70% of new chatters are on the app and only ~5–8% ever come back, but the app
+ * recorded none of these steps, so nobody could see where people stop.
+ * ⛔ SAME NUMBERS AS THE WEB — never renumber (stored rows would change meaning).
+ * ⛔ Once per device per day per step; nothing about the person, the device or the words.
+ * Store forms already declare it (25 Nov 2026 checked): Play "App interactions →
+ * App functionality, Analytics"; Apple "Usage Data → Product Interaction → Analytics".
+ */
+export const FUNNEL_STEPS = {
+    invite_shown: 1,
+    invite_accepted: 2,
+    invite_declined: 3,
+    welcome_shown: 4,
+    welcome_pick: 5,
+    welcome_fresh: 6,
+    checkin_opened: 7,
+    quota_hit: 12,
+} as const;
+export type FunnelStep = keyof typeof FUNNEL_STEPS;
+const FUNNEL_KEY = "imotara.funnelTally.v1";
 export type TallyEvent = { kind: TallyKind; bucket: number; delta: 1 | -1 };
 type Visit = { start: number; last: number; messages: number; sent: { m: number; t: number } | null };
 type State = { firstDay?: string; lastReportedDay?: string; visit?: Visit };
@@ -151,5 +174,23 @@ export async function reportVisit(now = Date.now()): Promise<void> {
         sendEvents(events);
         v.sent = sent;
         await save(s);
+    } catch { /* never in the way */ }
+}
+
+/** True when this step has not yet been counted today on this device. Pure — tested. */
+export function funnelOncePerDay(seen: Record<string, string>, step: FunnelStep, today: string): boolean {
+    return seen[step] !== today;
+}
+
+/** One anonymous step count, at most once a day per step (same rule as the web). */
+export async function tallyFunnel(step: FunnelStep, now = Date.now()): Promise<void> {
+    try {
+        const today = localDay(now);
+        let seen: Record<string, string> = {};
+        try { seen = JSON.parse((await AsyncStorage.getItem(FUNNEL_KEY)) ?? "{}") as Record<string, string>; } catch { seen = {}; }
+        if (!funnelOncePerDay(seen, step, today)) return;
+        seen[step] = today;
+        try { await AsyncStorage.setItem(FUNNEL_KEY, JSON.stringify(seen)); } catch { /* best effort */ }
+        sendEvents([{ kind: "funnel", bucket: FUNNEL_STEPS[step], delta: 1 }]);
     } catch { /* never in the way */ }
 }

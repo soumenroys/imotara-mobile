@@ -263,8 +263,12 @@ export async function setInviteState(s: Exclude<InviteState, "unseen">): Promise
     try { await AsyncStorage.setItem(INVITE_STATE_KEY, s); } catch { /* best effort */ }
 }
 
-/** Messages the person must have sent first (#16 B, 10 Nov 2026: 2, was 3 — 31% stop after one reply). Same as the web. */
-export const INVITE_MIN_MESSAGES = 2;
+/**
+ * Messages the person must have sent first. History: 3 → 2 (#16 B, 10 Nov 2026: 31% stop after one reply)
+ * → 1 (owner, 25 Nov 2026: 21–40% still leave after ONE reply, so they never saw the invite). Now offered
+ * under the first reply — still once ever, never near a crisis, never when reminders are off. Same as the web.
+ */
+export const INVITE_MIN_MESSAGES = 1;
 
 /**
  * Should the card appear under this reply?
