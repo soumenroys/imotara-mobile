@@ -27,7 +27,8 @@ import {
 import { getUnderAgeCopy } from "../../lib/age/underAgeCopy";
 import { getConsentCopy } from "../../lib/legal/consentCopy";
 import { getCrisisResourcesForCountry } from "../../lib/safety/crisisResources";
-import { hydrateCrisisCountry, resolveCrisisCountry } from "../../lib/safety/resolveCrisisCountry";
+import { useCrisisCountry } from "../../lib/safety/useCrisisCountry";
+import { emergencyLabel } from "../../lib/safety/emergencyLabel";
 import { isRtlLang } from "../../lib/lang/rtlLangs";
 import { useColors } from "../../theme/ThemeContext";
 
@@ -111,10 +112,7 @@ export default function AgeSignalGate({ children }: { children: React.ReactNode 
 function UnderAgeScreen({ lang }: { lang?: string }) {
     const c = useColors();
     const s = makeStyles(c);
-    const [country, setCountry] = useState<string | null>(resolveCrisisCountry());
-    useEffect(() => {
-        void hydrateCrisisCountry().then(() => setCountry(resolveCrisisCountry()));
-    }, []);
+    const country = useCrisisCountry();
 
     const copy = getUnderAgeCopy(lang);
     const help = getConsentCopy(lang);
@@ -124,7 +122,7 @@ function UnderAgeScreen({ lang }: { lang?: string }) {
 
     const resources = getCrisisResourcesForCountry(country);
     const lines: { label: string; contact: string; url?: string }[] = [];
-    if (resources.emergency) lines.push(resources.emergency);
+    if (resources.emergency) lines.push({ ...resources.emergency, label: emergencyLabel(lang) });
     resources.primary.slice(0, 2).forEach((r) => lines.push(r));
 
     return (
@@ -142,7 +140,7 @@ function UnderAgeScreen({ lang }: { lang?: string }) {
                         <Text style={s.body}>{copy.body}</Text>
 
                         <View style={[s.help, rtl ? s.helpRtl : s.helpLtr]}>
-                            <Text style={[s.helpLead, { textAlign: align, writingDirection: dir }]}>{help.emergencyLead}</Text>
+                            <Text style={[s.helpLead, { textAlign: align, writingDirection: dir }]}>{copy.emergencyLead ?? help.emergencyLead}</Text>
                             {lines.map((l) => (
                                 <Pressable
                                     key={`${l.label}-${l.contact}`}

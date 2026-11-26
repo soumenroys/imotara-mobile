@@ -10,7 +10,11 @@
 // ⚠️ Only en / hi / bn are written so far; other languages fall back to English
 // for these two lines until a native reader checks them (board #159 follow-up).
 
-export type UnderAgeCopy = { title: string; body: string };
+// `emergencyLead` (optional): the help line in the SAME register as `body`. The consent
+// gate's line is written for adults (Bengali আপনি) — on a child's screen it read cold
+// next to the তুমি body (Dec release check, 26 Nov 2026). Hindi uses आप in both, so it
+// needs none.
+export type UnderAgeCopy = { title: string; body: string; emergencyLead?: string };
 
 const COPY: Record<string, UnderAgeCopy> = {
     en: {
@@ -24,6 +28,7 @@ const COPY: Record<string, UnderAgeCopy> = {
     bn: {
         title: "ইমোতারা ১৩ বছর বা তার বেশি বয়সীদের জন্য",
         body: "এখনও এটা তোমার জন্য ঠিক জায়গা নয়। যদি কিছু নিয়ে চিন্তা হয়, তাহলে এমন একজন বড় মানুষের সঙ্গে কথা বলো যাকে তুমি বিশ্বাস করো — মা-বাবা, শিক্ষক বা পরিবারের কেউ। নিচের নম্বরগুলোতেও যোগাযোগ করতে পারো।",
+        emergencyLead: "তুমি যদি বিপদে থাকো, বা নিজের ক্ষতি করার কথা ভাবছ, এখনই সাহায্য নাও।",
     },
 };
 

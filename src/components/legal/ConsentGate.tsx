@@ -31,6 +31,8 @@ import {
     type TermsAcceptance,
 } from "../../lib/legal/termsVersion";
 import { getCrisisResourcesForCountry } from "../../lib/safety/crisisResources";
+import { emergencyLabel } from "../../lib/safety/emergencyLabel";
+import { useCrisisCountry } from "../../lib/safety/useCrisisCountry";
 import { isRtlLang } from "../../lib/lang/rtlLangs";
 import { useColors } from "../../theme/ThemeContext";
 
@@ -47,6 +49,9 @@ type Props = {
 };
 
 export default function ConsentGate({ lang, countryCode, onAccepted, surface }: Props) {
+    // No reply has happened yet on this screen, so ask our server for the country
+    // (useCrisisCountry); a caller-supplied code still wins.
+    const askedCountry = useCrisisCountry();
     // ⛔ Colours come from the theme, never hard-coded hex. src/__tests__/
     // semanticColors.test.ts forbids literals that fail contrast on the light
     // surface — and it caught this component doing exactly that: the first
@@ -94,7 +99,7 @@ export default function ConsentGate({ lang, countryCode, onAccepted, surface }: 
     const styles = makeStyles(c);
     const copy = getConsentCopy(lang);
     const rtl = isRtlLang(lang);
-    const resources = getCrisisResourcesForCountry(countryCode);
+    const resources = getCrisisResourcesForCountry(countryCode ?? askedCountry);
     const emergency = resources?.emergency;
     const firstLine = resources?.primary?.[0];
 
@@ -158,7 +163,7 @@ export default function ConsentGate({ lang, countryCode, onAccepted, surface }: 
                                     <Text
                                         style={[styles.emergencyNums, { textAlign: align, writingDirection: dir }]}
                                     >
-                                        {emergency ? `${emergency.label} ${emergency.contact}` : ""}
+                                        {emergency ? `${emergencyLabel(lang)} ${emergency.contact}` : ""}
                                         {emergency && firstLine ? "  ·  " : ""}
                                         {firstLine ? `${firstLine.label} ${firstLine.contact}` : ""}
                                     </Text>

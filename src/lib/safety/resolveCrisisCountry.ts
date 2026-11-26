@@ -34,6 +34,8 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { detectCountryCode } from "./detectCountry";
+import { buildApiUrl } from "../../config/api";
+import { fetchWithTimeout } from "../fetchWithTimeout";
 
 /** ⛔ Must match SettingsScreen's CRISIS_COUNTRY_KEY and the web's localStorage key. */
 export const CRISIS_COUNTRY_KEY = "imotara.crisis.country.v1";
@@ -92,6 +94,30 @@ export async function rememberServerCountry(code: unknown): Promise<void> {
         await AsyncStorage.setItem(SERVER_COUNTRY_KEY, c);
     } catch {
         // In-memory is enough for this session.
+    }
+}
+
+/**
+ * Asks our server which country this request comes from (GET /api/geo/country —
+ * the same edge header every reply already carries; nothing stored or logged there)
+ * and remembers it like a reply's `resolvedCountry`.
+ *
+ * 🔑 Dec release check (26 Nov 2026): a child stopped by the under-13 screen never
+ * sends a message, so no reply ever told us the country — the screen fell back to
+ * the phone's LOCALE (an India-locale phone in London ⇒ Tele-MANAS, which does not
+ * dial from the UK). The welcome screen showed no country at all. Both screens now
+ * ask once. ⛔ Never awaited before rendering: the locale guess shows first.
+ */
+export async function refreshServerCountry(timeoutMs = 4_000): Promise<string | null> {
+    try {
+        const res = await fetchWithTimeout(buildApiUrl("/api/geo/country"), { method: "GET" }, timeoutMs);
+        if (!res.ok) return null;
+        const data = (await res.json()) as { country?: unknown };
+        const c = clean(data?.country);
+        if (c) await rememberServerCountry(c);
+        return c;
+    } catch {
+        return null; // offline / timeout — the stored or locale answer stands
     }
 }
 
