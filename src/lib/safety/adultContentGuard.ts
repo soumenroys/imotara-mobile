@@ -21,8 +21,13 @@ const ADULT_CONTENT_PATTERNS_EN = [
   /\b(?:nude(?:s)?|naked\s+(?:photo|pic|image|video)|sexting|sex\s+(?:video|photo|pic|image|tape))\b/i,
   /\b(?:strip(?:per|club|tease)|lap\s+dance|escort\s+service|prostitut(?:e|ion)|sex\s+worker)\b/i,
   /\b(?:dildo|vibrator|butt\s+plug|sex\s+toy)\b/i,
-  /\b(?:rape|molest(?:ation)?|sexual\s+assault|groping)\b/i,
-  /\b(?:pedophil(?:ia|e)|child\s+porn(?:ography)?|cp\s+link|underage\s+(?:sex|nude|naked|porn))\b/i,
+  // ⛔ 27 Nov 2026: "rape", "molestation", "sexual assault", "groping" and "pedophile" REMOVED
+  // from this block list. They are how a SURVIVOR tells us what happened — and this gate
+  // runs before the reply, so "I survived sexual assault" / "he tried to rape me" got
+  // "That's not something I can help with here". Disclosures go to the reply, which follows
+  // the crisis rules (CRISIS_HINT_REGEX). Requests stay blocked: "rape porn" via "porn",
+  // CSAM via the line below. ⇒ adultGuardNeverRefusesASurvivor.test.ts
+  /\b(?:child\s+porn(?:ography)?|cp\s+link|underage\s+(?:sex|nude|naked|porn))\b/i,
   // Explicit body parts in explicit context (not medical)
   /\b(?:send\s+(?:me\s+)?(?:your\s+)?(?:nudes?|naked\s+pic|dick\s+pic|boob\s+pic))\b/i,
   /\b(?:dick\s+(?:pic|photo|image)|cock\s+(?:pic|photo))\b/i,
@@ -133,7 +138,26 @@ const ADULT_CONTENT_PATTERNS_ID = [
   /\b(?:ngentot|memek|kontol|bokep|janda\s+(?:foto|video))\b/i,
 ];
 
+// ─── German · Hebrew · Japanese ──────────────────────────────────────────────
+// #48 (27 Nov 2026): these three had NO patterns and NO refusal text, so explicit content
+// in them reached the reply unchecked and the refusal came in English. Same conservative
+// rule as above: clearly explicit terms only — no medical, education or ambiguous words
+// ("Schwanz" = tail, "blasen" = blow, "סקס" alone and "セックス" alone stay out, as bare "sex"
+// does in English).
+const ADULT_CONTENT_PATTERNS_DE = [
+  /\b(?:pornos?|pornografie|pornografisch|kinderporno(?:grafie)?|nacktbilder?|nacktfotos?|nacktvideos?|ficken|fickt|gefickt|wichsen|wichst|titten|prostituierte|nutte|sexvideos?)\b/i,
+];
+const ADULT_CONTENT_PATTERNS_HE = [
+  /(?:פורנו|פורנוגרפיה|תמונות\s*עירום|סרטון\s*עירום|תמונת\s*עירום|לזיין|זיון|אוננות|זונה)/,
+];
+const ADULT_CONTENT_PATTERNS_JA = [
+  /(?:ポルノ|アダルト動画|エロ動画|エロ画像|裸の写真|ヌード写真|オナニー|自慰|児童ポルノ|売春)/,
+];
+
 const ALL_PATTERNS = [
+  ...ADULT_CONTENT_PATTERNS_DE,
+  ...ADULT_CONTENT_PATTERNS_HE,
+  ...ADULT_CONTENT_PATTERNS_JA,
   ...ADULT_CONTENT_PATTERNS_EN,
   ...ADULT_CONTENT_PATTERNS_HI,
   ...ADULT_CONTENT_PATTERNS_BN,
@@ -273,6 +297,24 @@ const REFUSALS: Record<string, Record<AgeGroup, string>> = {
       "Я не могу говорить на эту тему. Если у тебя есть вопросы о здоровье или взрослении, поговори с доверенным взрослым, родителями или школьным психологом. Я здесь, если хочешь поговорить о чём-то другом! 💙",
     general:
       "Это не то, с чем я могу помочь здесь — я сосредоточен на эмоциональном благополучии. Есть что-то ещё, о чём ты хотел бы поговорить?",
+  },
+  de: {
+    minor:
+      "Über dieses Thema kann ich nicht sprechen. Wenn du Fragen zu deinem Körper, deiner Gesundheit oder zum Erwachsenwerden hast, kann dir ein Erwachsener, dem du vertraust, deine Eltern oder eine Vertrauenslehrkraft helfen. Ich bin da, wenn du über etwas anderes reden möchtest! 💙",
+    general:
+      "Dabei kann ich hier nicht helfen — ich bin für dein emotionales Wohlbefinden da. Gibt es etwas anderes, das dich gerade beschäftigt?",
+  },
+  he: {
+    minor:
+      "אני לא יכול לדבר על הנושא הזה. אם יש לך שאלות על הגוף, הבריאות או ההתבגרות, מבוגר שאתה סומך עליו, ההורים או יועץ בית הספר יכולים לעזור. אני כאן אם תרצה לדבר על משהו אחר! 💙",
+    general:
+      "בזה אני לא יכול לעזור כאן — אני כאן בשביל הרווחה הרגשית שלך. יש משהו אחר שמעסיק אותך?",
+  },
+  ja: {
+    minor:
+      "その話題についてはお話しできません。体や健康、成長について気になることがあれば、信頼できる大人や保護者、学校のカウンセラーに相談してみてね。ほかのことなら、いつでも話を聞くよ！ 💙",
+    general:
+      "それについてはここではお手伝いできません。わたしは気持ちのサポートのためにいます。ほかに話したいことはありますか？",
   },
   id: {
     minor:
