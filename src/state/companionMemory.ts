@@ -11,6 +11,7 @@
 
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { occupationFrom, occupationFact, placeFact, repairLegacyFact } from "./memoryFacts";
 
 const KEY         = "imotara.companion.memories.v2";
 const LEGACY_KEY  = "imotara.companion.memories.v1";
@@ -53,15 +54,31 @@ async function migrateFromAsyncStorage(): Promise<MemoryItem[]> {
     }
 }
 
+// Facts saved before 26 Nov 2026 can hold a feeling saved as a JOB ("User is a/an stressed and
+// overwhelmed") — shown in Settings and handed to the reply. Repair the wording or drop it, once.
+export function repairItems(items: MemoryItem[]): MemoryItem[] {
+    let changed = false;
+    const out: MemoryItem[] = [];
+    for (const it of items) {
+        const text = typeof it?.text === "string" ? repairLegacyFact(it.text) : it?.text;
+        if (text === null) { changed = true; continue; }
+        if (text !== it.text) { changed = true; out.push({ ...it, text }); } else out.push(it);
+    }
+    return changed ? out : items;
+}
+
 export async function loadMemories(): Promise<MemoryItem[]> {
     try {
         const raw = await SecureStore.getItemAsync(KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
-            return Array.isArray(parsed) ? parsed : [];
+            const items: MemoryItem[] = Array.isArray(parsed) ? parsed : [];
+            const repaired = repairItems(items);
+            if (repaired !== items) await SecureStore.setItemAsync(KEY, JSON.stringify(repaired));
+            return repaired;
         }
         // First run after upgrade — check legacy key
-        return await migrateFromAsyncStorage();
+        return repairItems(await migrateFromAsyncStorage());
     } catch {
         return [];
     }
@@ -106,8 +123,7 @@ export async function addMemory(item: Omit<MemoryItem, "id" | "createdAt">): Pro
 // Returns an array of plain-language fact strings (empty if nothing detected).
 
 const NAME_RE = /\bmy name is ([A-Z][a-z]{1,20})\b/i;
-const WORK_RE = /\b(?:i(?:'m| am) (?:a |an )?|i work as (?:a |an )?)([a-z][a-z ]{2,30})\b/i;
-const LOCATION_RE = /\b(?:i(?:'m| am) from|i live in|i(?:'m| am) based in) ([A-Z][a-zA-Z ]{2,30})\b/i;
+// Job and place: see ./memoryFacts — "I'm stressed" was saved as a JOB (26 Nov 2026).
 const FEELING_ABOUT_RE = /\b(?:my|i have a?) ([\w ]{2,20}) (?:is|are|has been|have been) ([\w ,]{2,40})\b/i;
 const EVENT_RE = /\b(?:i have|i've got|i have a) ([\w ]{2,25}) (?:(?:coming )?up|on (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|next week))\b/i;
 const RELATIONSHIP_RE = /\bmy (wife|husband|partner|boyfriend|girlfriend|mom|dad|mother|father|sister|brother|son|daughter|friend)\b(?:'s| is| are| has| have)? ?(\w[^.!?]{0,40})?/i;
@@ -119,11 +135,11 @@ export function detectMemories(userText: string): string[] {
     const nameMatch = t.match(NAME_RE);
     if (nameMatch) facts.push(`User's name is ${nameMatch[1]}`);
 
-    const workMatch = t.match(WORK_RE);
-    if (workMatch) facts.push(`User is a/an ${workMatch[1]}`);
+    const job = occupationFrom(t);
+    if (job) facts.push(occupationFact(job));
 
-    const locationMatch = t.match(LOCATION_RE);
-    if (locationMatch) facts.push(`User is from/lives in ${locationMatch[1].trim()}`);
+    const place = placeFact(t);
+    if (place) facts.push(place);
 
     const eventMatch = t.match(EVENT_RE);
     if (eventMatch) facts.push(`User has an upcoming ${eventMatch[1].trim()}`);
