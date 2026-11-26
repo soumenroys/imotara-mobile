@@ -115,12 +115,10 @@ describe("⛔ a stated choice still wins — they asked for it", () => {
 });
 
 describe("⚖️ the honest limits", () => {
-    it("⚠️ es/fr/de/pt/id get English — no detector exists for them", () => {
-        // ⛔ NOT an assertion that this is fine. Latin script, no roman hints.
-        for (const p of ["quiero morir", "je veux mourir", "ich will sterben",
-                         "quero morrer", "saya ingin mati"]) {
-            expect(resolve(null, p)).toBe("en");
-        }
+    it("✅ es/fr/de/pt/id now get their own card (#48, 27 Nov 2026 — was English)", () => {
+        const cases: Array<[string, string]> = [["quiero morir", "es"], ["je veux mourir", "fr"],
+            ["ich will sterben", "de"], ["quero morrer", "pt"], ["saya ingin mati", "id"]];
+        for (const [p, l] of cases) expect(resolve(null, p)).toBe(l);
     });
 
     it("…but if they HAVE set it, those five work", () => {
