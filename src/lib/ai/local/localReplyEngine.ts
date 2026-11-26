@@ -213,6 +213,65 @@ function phraseLanguage(trimmedLower: string): LocalLanguage | null {
     return null;
 }
 
+/**
+ * #48 (27 Nov 2026): "how are you?" in the 21 other languages. Recognition was English-only and
+ * the reply was a fixed English list. Whole-message match only (optional ? ! . at the end), so a
+ * longer sentence that merely contains the words is never answered as small talk.
+ * Indian languages: native script + Roman, replies in Roman letters like the greeting pools.
+ */
+// Regex LITERALS on purpose: localReplyScriptConsistency.test.ts treats every backticked
+// string as reply text, and native-script INPUT patterns must stay out of that scan.
+const HOW_ARE_YOU_BY_LANG: Array<[RegExp, LocalLanguage]> = [
+    [/^(kaise ho|kaisi ho|aap kaise hain|aap kaise ho|kya haal hai|kaisa chal raha hai|कैसे हो|कैसी हो|आप कैसे हैं|क्या हाल है)[\s?!.？！。]*$/i, "hi" as LocalLanguage],
+    [/^(kemon acho|kemon achho|tumi kemon acho|apni kemon achen|কেমন আছো|কেমন আছেন|তুমি কেমন আছো)[\s?!.？！。]*$/i, "bn" as LocalLanguage],
+    [/^(kasa aahes|kashi aahes|kase aahat|कसा आहेस|कशी आहेस|कसे आहात)[\s?!.？！。]*$/i, "mr" as LocalLanguage],
+    [/^(eppadi irukka|eppadi irukkeenga|epdi irukka|epdi irukkeenga|எப்படி இருக்க|எப்படி இருக்கீங்க|எப்படி இருக்கிறீர்கள்)[\s?!.？！。]*$/i, "ta" as LocalLanguage],
+    [/^(ela unnav|ela unnavu|ela unnaru|ఎలా ఉన్నావు|ఎలా ఉన్నారు)[\s?!.？！。]*$/i, "te" as LocalLanguage],
+    [/^(kem cho|majama|કેમ છો|મજામાં)[\s?!.？！。]*$/i, "gu" as LocalLanguage],
+    [/^(ki haal aa|ki haal hai|tusi kiven ho|ਕੀ ਹਾਲ ਹੈ|ਤੁਸੀਂ ਕਿਵੇਂ ਹੋ)[\s?!.？！。]*$/i, "pa" as LocalLanguage],
+    [/^(hegiddira|hegiddiya|hegiddeera|ಹೇಗಿದ್ದೀರಾ|ಹೇಗಿದ್ದೀಯ)[\s?!.？！。]*$/i, "kn" as LocalLanguage],
+    [/^(sukhamano|sughamano|engane und|സുഖമാണോ|എങ്ങനെയുണ്ട്)[\s?!.？！。]*$/i, "ml" as LocalLanguage],
+    [/^(kemiti achha|kemiti acha|kemiti achhanti|କେମିତି ଅଛ|କେମିତି ଅଛନ୍ତି)[\s?!.？！。]*$/i, "or" as LocalLanguage],
+    [/^(آپ کیسے ہیں|کیا حال ہے|کیسے ہو|آپ کیسی ہیں)[\s?!.？！。]*$/i, "ur" as LocalLanguage],
+    [/^(كيف حالك|كيفك|شلونك|كيف الحال)[\s?!.？！。]*$/i, "ar" as LocalLanguage],
+    [/^(מה שלומך|מה נשמע|מה המצב)[\s?!.？！。]*$/i, "he" as LocalLanguage],
+    [/^(как дела|как ты|как поживаешь|как ты сегодня)[\s?!.？！。]*$/i, "ru" as LocalLanguage],
+    [/^(你好吗|你怎么样|最近怎么样|最近好吗)[\s?!.？！。]*$/i, "zh" as LocalLanguage],
+    [/^(元気|元気ですか|元気？|調子はどう|お元気ですか)[\s?!.？！。]*$/i, "ja" as LocalLanguage],
+    [/^(¿?cómo estás|¿?como estas|¿?qué tal|¿?que tal)[\s?!.？！。]*$/i, "es" as LocalLanguage],
+    [/^(ça va|ca va|comment ça va|comment ca va|comment vas-tu|comment tu vas)[\s?!.？！。]*$/i, "fr" as LocalLanguage],
+    [/^(wie geht's|wie gehts|wie geht es dir|wie geht's dir)[\s?!.？！。]*$/i, "de" as LocalLanguage],
+    [/^(como você está|como voce esta|como vai|como vai você|tudo bem)[\s?!.？！。]*$/i, "pt" as LocalLanguage],
+    [/^(apa kabar|gimana kabarnya|gimana kabar|kamu apa kabar)[\s?!.？！。]*$/i, "id" as LocalLanguage],
+];
+function howAreYouLanguage(trimmedLower: string): LocalLanguage | null {
+    for (const [re, lang] of HOW_ARE_YOU_BY_LANG) if (re.test(trimmedLower)) return lang;
+    return null;
+}
+const HOW_ARE_YOU_REPLIES: Partial<Record<string, string[]>> = {
+    hi: [`Main theek hoon  -  poochhne ke liye shukriya! Par sabse zaroori, tum aaj kaise ho?`, `Main yahaan hoon aur achha lag raha hai. Tumhare saath kya chal raha hai?`, `Sach kahun toh aisi baatein karke achha lagta hai. Tum batao, kaisa chal raha hai?`],
+    bn: [`Ami bhalo achi  -  jiggesh korar jonno dhonnobad! Kintu asol kotha, tumi aaj kemon acho?`, `Ami ekhane achi, bhalo lagche. Tomar dike ki cholche?`, `Sotti bolte, emon kotha bolte bhalo lage. Tumi bolo, kemon jachhe?`],
+    mr: [`Mi theek aahe  -  vicharalyabaddal dhanyavaad! Pan tujha aajcha divas kasa chaalla aahe?`, `Mi ithe aahe ani chhan vaatatay. Tujhya baajula kaay chaalu aahe?`, `Khara sangu tar ashya gappa maraylach chhan vaatata. Tu sang, kasa chaalu aahe?`],
+    ta: [`Naan nalla irukken  -  kettadhukku nandri! Aana mukkiyama, neenga innikku epdi irukeenga?`, `Naan inga irukken, nalla irukku. Unga pakkam enna nadakkudhu?`, `Unmaiya sonna, ippadi pesuradhu enakku romba pidikkum. Neenga sollunga, epdi pogudhu?`],
+    te: [`Nenu baagunnaanu  -  adiginanduku dhanyavaadaalu! Kaani mukhyanga, meeru ivaala ela unnaru?`, `Nenu ikkade unnaanu, baagundi. Mee vaipu emi jarugutondi?`, `Nijam cheppaalante, ilaa maatladadam naaku chaala istam. Meeru cheppandi, ela saagutondi?`],
+    gu: [`Hu majama chhu  -  puchhva maate aabhar! Pan sauthi mahatvanu, tame aaje kem cho?`, `Hu ahiya chhu ane saaru lage chhe. Tamari baju shu chaale chhe?`, `Saachu kahu to, aavi vaato karvi mane game chhe. Tame kaho, kem chaale chhe?`],
+    pa: [`Main theek haan  -  puchhan layi shukriya! Par sab ton zaroori, tusi aaj kiven ho?`, `Main ithe haan te changa lag reha hai. Tuhade val ki chal reha hai?`, `Sach dassan taan, ehojiyan gallan karke changa lagda hai. Tusi dasso, kiven chal reha hai?`],
+    kn: [`Naanu chennaagiddeeni  -  kelidakke dhanyavaadagalu! Aadre mukhya, neevu ivattu hegiddeera?`, `Naanu ikkade iddeeni, chennaagide. Nimma kade enu nadeetide?`, `Nija helbekandre, heege maatadodu nange tumba ishta. Neevu heli, hege nadeetide?`],
+    ml: [`Njaan sukhamaayirikkunnu  -  chodichathinu nanni! Pakshe pradhaanam, ningal innu engane undu?`, `Njaan ivide undu, nallathaanu. Ningalude bhaagathu enthaanu nadakkunnathu?`, `Sathyam paranjaal, ingane samsaarikkunnathu enikku ishtamaanu. Ningal parayoo, engane pokunnu?`],
+    or: [`Mu bhala achhi  -  pacharibaa paain dhanyabaad! Kintu mukhya katha, tume aaji kemiti achha?`, `Mu ethi achhi, bhala laguchhi. Tuma pakhare kana chaaluchhi?`, `Sata kahile, emiti katha heba mote bhala lage. Tume kuha, kemiti chaaluchhi?`],
+    ur: [`Main theek hoon  -  poochhne ka shukriya! Magar sab se zaroori, aap aaj kaise hain?`, `Main yahaan hoon aur achha lag raha hai. Aapki taraf kya chal raha hai?`, `Sach kahun to aisi baatein kar ke achha lagta hai. Aap bataiye, kaisa chal raha hai?`],
+    ar: [`أنا بخير  -  شكرًا لسؤالك! لكن الأهم، كيف حالك أنت اليوم؟`, `أنا هنا، وهذا شعور جميل. ما الذي يحدث معك الآن؟`, `بصراحة، أحب أحاديث كهذه. أخبرني أنت، كيف تسير أمورك؟`],
+    he: [`אני בסדר  -  תודה ששאלת! אבל יותר חשוב, מה שלומך היום?`, `אני כאן, וזה מרגיש טוב. מה קורה אצלך עכשיו?`, `האמת, שיחות כאלה עושות לי טוב. איך הולך אצלך?`],
+    ru: [`Спасибо, что спрашиваешь, у меня всё хорошо! Но важнее: как ты сегодня?`, `Я здесь, и это приятно. Что у тебя сейчас происходит?`, `Честно говоря, такие разговоры мне очень нравятся. Расскажи, как у тебя дела?`],
+    zh: [`我很好  -  谢谢你问！不过更重要的是，你今天感觉怎么样？`, `我在这里，感觉挺好的。你那边最近怎么样？`, `说实话，我很喜欢这样聊天。你呢，最近过得如何？`],
+    ja: [`元気だよ  -  聞いてくれてありがとう！それより、今日のあなたはどんな気分？`, `ここにいるよ、いい感じ。そっちは最近どう？`, `正直、こうやって話せるのがうれしい。あなたはどう過ごしてる？`],
+    es: [`Estoy bien  -  ¡gracias por preguntar! Pero lo más importante, ¿cómo te sientes hoy?`, `Aquí estoy, y se siente bien. ¿Qué está pasando en tu mundo ahora?`, `La verdad, me encantan las conversaciones así. ¿Y tú, cómo vas?`],
+    fr: [`Ça va bien  -  merci de demander ! Mais surtout, comment tu te sens aujourd'hui ?`, `Je suis là, et ça fait du bien. Qu'est-ce qui se passe de ton côté ?`, `Honnêtement, j'aime beaucoup ce genre de conversation. Et toi, comment ça va ?`],
+    de: [`Mir geht's gut  -  danke der Nachfrage! Aber viel wichtiger: Wie fühlst du dich heute?`, `Ich bin da, und das fühlt sich gut an. Was ist gerade bei dir los?`, `Ehrlich gesagt mag ich solche Gespräche sehr. Und du, wie läuft's bei dir?`],
+    pt: [`Estou bem  -  obrigada por perguntar! Mas o mais importante: como você está se sentindo hoje?`, `Estou aqui, e isso é bom. O que está acontecendo do seu lado?`, `Sinceramente, adoro conversas assim. E você, como vai?`],
+    id: [`Aku baik  -  makasih sudah nanya! Tapi yang lebih penting, gimana perasaanmu hari ini?`, `Aku di sini, dan rasanya menyenangkan. Lagi ada apa di sisimu?`, `Jujur, aku suka ngobrol kayak gini. Kamu sendiri gimana?`],
+};
+
 function detectLanguage(text: string, recentContext?: LocalRecentContext): LocalLanguage {
     const raw = text || "";
     const t = raw.toLowerCase();
@@ -939,7 +998,8 @@ export function buildLocalReply(
         /^(tume kie|tuma naa kana)$/.test(trimmedLower);
 
     const isGreeting = isGreetingEn || isGreetingMulti;
-    const isHowAreYou = isHowAreYouEn;
+    const howAreYouLang = isHowAreYouEn ? null : howAreYouLanguage(trimmedLower);
+    const isHowAreYou = isHowAreYouEn || howAreYouLang !== null;
     const isAboutImotara = isAboutImotaraEn || isAboutImotaraMulti;
 
     // Per-language greeting reply pools
@@ -1006,7 +1066,8 @@ export function buildLocalReply(
         if (isAboutImotara) {
             pool = aboutImotaraPoolsByLang[phraseLanguage(trimmedLower) ?? language] ?? aboutImotaraPoolsByLang["en"]!;
         } else if (isHowAreYou) {
-            pool = howAreYouReplies;
+            // #48: their language when they asked in it; English otherwise.
+            pool = (howAreYouLang && HOW_ARE_YOU_REPLIES[howAreYouLang]) || howAreYouReplies;
         } else {
             pool = greetingPoolsByLang[phraseLanguage(trimmedLower) ?? language] ?? greetingPoolsByLang["en"]!;
         }
