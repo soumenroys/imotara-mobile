@@ -51,3 +51,26 @@ describe("accented phrases are recognised (JS \\b ignores é ó à ê)", () => {
     expect(reply("quién eres")).toMatch(/Soy/);
   });
 });
+
+describe("'how are you?' is answered in the language it was asked in (was English for everyone)", () => {
+  const ROMAN = /^(Main|Ami|Mi|Naan|Nenu|Hu|Naanu|Njaan|Mu|Sach|Sotti|Khara|Unmaiya|Nijam|Saachu|Nija|Sathyam|Sata)\b/;
+  it.each([
+    ["hi", "kaise ho", ROMAN], ["hi", "आप कैसे हैं?", ROMAN], ["bn", "কেমন আছো", ROMAN], ["bn", "kemon acho", ROMAN],
+    ["mr", "kasa aahes", ROMAN], ["ta", "எப்படி இருக்கீங்க", ROMAN], ["te", "ela unnaru", ROMAN], ["gu", "kem cho", ROMAN],
+    ["pa", "ਕੀ ਹਾਲ ਹੈ", ROMAN], ["kn", "hegiddira", ROMAN], ["ml", "sukhamano", ROMAN], ["or", "kemiti achha", ROMAN],
+    ["ur", "آپ کیسے ہیں", ROMAN], ["ar", "كيف حالك", /[؀-ۿ]/], ["he", "מה שלומך", /[֐-׿]/],
+    ["ru", "как дела?", /[Ѐ-ӿ]/], ["zh", "你好吗", /[一-鿿]/], ["ja", "元気ですか", /[぀-ヿ]/],
+    ["es", "¿cómo estás?", /Estoy|Aquí|La verdad/], ["fr", "ça va ?", /Ça va bien|Je suis là|Honnêtement/],
+    ["de", "wie geht's?", /Mir geht's|Ich bin da|Ehrlich/], ["pt", "como vai", /Estou|Sinceramente/], ["id", "apa kabar", /Aku|Jujur/],
+  ])("[%s] %s", (_l, m, expected) => {
+    const r = reply(m);
+    expect(r).toMatch(expected as RegExp);
+    expect(r).not.toMatch(/^I'm (doing well|here and present|good)|^Honestly, I feel/);
+  });
+  it("English is unchanged", () => {
+    expect(reply("how are you")).toMatch(/^(I'm doing well|I'm here and present|I'm good|Honestly, I feel)/);
+  });
+  it("⚖️ a longer sentence that merely contains the words is not small talk", () => {
+    expect(reply("kaise ho sakta hai ki sab kuch itna bura ho gaya")).not.toMatch(/poochhne ke liye shukriya|achha lag raha hai\. Tumhare saath/);
+  });
+});
