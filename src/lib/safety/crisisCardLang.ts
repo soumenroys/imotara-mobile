@@ -20,11 +20,14 @@
  * romanised Indic hints, then English. ⛔ Do not reorder — someone who CHOSE
  * English while typing Bengali script gets English, because they asked for it.
  *
- * ⚖️ es/fr/de/pt/id still fall back to English: they share the Latin script and
- * there is no detector for them. A known gap, recorded rather than hidden.
+ * ✅ #48 (27 Nov 2026): es/fr/de/pt/id used to fall back to English (Latin script, no
+ * detector). Now: detectLatinLang (cautious — clear evidence or null), then the phone's
+ * own language, then English.
  */
 import { detectLangFromScript, detectLangFromRomanHints } from "../../api/aiClient";
 import { CRISIS_COPY_LANGS } from "./crisisCopy";
+import { detectLatinLang, looksEnglish } from "../lang/latinLang";
+import { deviceLocale } from "../update/updatePrompt";
 
 const HAS_COPY = new Set(CRISIS_COPY_LANGS);
 
@@ -41,6 +44,7 @@ export function hasCrisisCopy(lang: string | undefined | null): boolean {
 export function crisisCardLangFor(
     preferredLang: string | undefined | null,
     recentTexts: readonly string[] = [],
+    deviceLang: string | null = safeDeviceLocale(),
 ): string {
     // 1. A stated choice wins — they picked it.
     //    ⛔ "auto" is NOT a choice. Treating it as one is the whole bug:
@@ -64,6 +68,28 @@ export function crisisCardLangFor(
         if (fromRoman && fromRoman !== "en" && hasCrisisCopy(fromRoman)) return fromRoman;
     }
 
-    // 4. Nothing to go on — the same answer as before this function existed.
+    // 4. Spanish / French / German / Portuguese / Indonesian — Latin script, so step 2
+    //    cannot see them. Cautious: clear evidence or null.
+    for (let i = recentTexts.length - 1; i >= 0; i--) {
+        const latin = detectLatinLang(recentTexts[i] ?? "");
+        if (latin && hasCrisisCopy(latin)) return latin;
+    }
+
+    // 5. The phone's own language — the person set it, even if not in Imotara.
+    const device = (deviceLang ?? "").trim().toLowerCase().split(/[-_]/)[0];
+    //    ⛔ Not when they are clearly writing English — then English is what they read.
+    const wroteEnglish = recentTexts.some((t) => looksEnglish(t ?? ""));
+    if (device && !wroteEnglish && hasCrisisCopy(device)) return device;
+
+    // 6. Nothing to go on — the same answer as before this function existed.
     return "en";
+}
+
+/** The phone's language, or null if it cannot be read (never throws). */
+function safeDeviceLocale(): string | null {
+    try {
+        return deviceLocale() || null;
+    } catch {
+        return null;
+    }
 }
