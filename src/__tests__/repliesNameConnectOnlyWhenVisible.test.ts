@@ -30,3 +30,10 @@ describe("the app sends the Show Connect switch with every reply request", () =>
     expect(client).not.toMatch(/connectVisible: opts\?\.connectVisible\s*,/);
   });
 });
+
+describe("#17 B (26 Nov 2026): a cut reply's clean ending replaces the streamed text", () => {
+  it("the stream reader applies the server's replace event", () => {
+    expect(client).toContain('if (typeof parsed.replace === "string" && parsed.replace.trim()) {');
+    expect(client).toMatch(/accumulated = parsed\.replace;\s*\n\s*pendingAccumulated = accumulated;\s*\n\s*flush\(\);/);
+  });
+});

@@ -805,6 +805,13 @@ export async function streamChatReply(
             pendingAccumulated = accumulated;
             flush();
           }
+          // #17 B (26 Nov 2026): the server cut this reply at the length limit and sends the
+          // same reply ending on its last full sentence — show and keep that instead.
+          if (typeof parsed.replace === "string" && parsed.replace.trim()) {
+            accumulated = parsed.replace;
+            pendingAccumulated = accumulated;
+            flush();
+          }
         } catch { /* malformed SSE chunk — skip */ }
       }
     }
