@@ -122,7 +122,9 @@ describe("⚠️ THE UNION — neither platform may lose what it already caught"
         // If this ever fails, CRISIS_HINT_REGEX has grown to cover them and
         // the legacy sets may finally be redundant. Check before deleting.
         const covered = WEB_ONLY.filter((p) => CRISIS_HINT_REGEX.test(p));
-        expect(covered).toEqual([]);
+        // #48 (27 Nov 2026): the natural-phrasings list added the bare word "suicide"
+        // (it is also French), so that one is now covered by the shared regex too.
+        expect(covered).toEqual(["suicide"]);
     });
 
     it("⛔ …and the union catches every one", () => {
