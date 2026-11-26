@@ -5747,7 +5747,7 @@ export default function ChatScreen() {
                   lang={message.inviteLang}
                   colors={colors}
                   onDone={({ text, kind }) => { retire(); if (text) toastRef.current?.show(text, kind); }}
-                  onChooseTime={() => { retire(); navigation.navigate("Settings"); }}
+                  onChooseTime={() => { retire(); navigation.navigate("Settings", { focus: "checkin_reminder" }); }}
                 />
               );
             }
