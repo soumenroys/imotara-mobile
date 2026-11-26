@@ -4,10 +4,11 @@
 // ⛔ The OS permission prompt appears ONLY when a time is tapped — never by
 //    itself. "Not now" and "Choose a time" both retire the card for good.
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import { isRtlLang } from "../../lib/lang/rtlLangs";
 import { acceptInvite, formatHour, getInviteStrings, INVITE_HOURS, INVITE_MINUTES, setInviteState } from "../../notifications/checkInInvite";
+import { tallyFunnel } from "../../lib/analytics/visitTally";
 
 type Colors = { surface: string; textPrimary: string; textSecondary: string };
 
@@ -20,16 +21,19 @@ export default function CheckInInviteCard(props: {
     const s = getInviteStrings(props.lang);
     const rtl = isRtlLang(props.lang ?? "");
     const [busy, setBusy] = useState(false);
+    // #16 (25 Nov 2026): anonymous step counts, same moments as the web card.
+    useEffect(() => { void tallyFunnel("invite_shown"); }, []);
 
     const pick = async (hour: number, minute = 0) => {
         if (busy) return;
         setBusy(true);
         try {
             const r = await acceptInvite(hour, minute);
-            if (r.ok) props.onDone({ text: s.done(formatHour(hour, props.lang, minute)), kind: "info" });
+            if (r.ok) { void tallyFunnel("invite_accepted"); props.onDone({ text: s.done(formatHour(hour, props.lang, minute)), kind: "info" }); }
             else {
                 // ⛔ Declined or unavailable: retire the card rather than ask again.
                 await setInviteState("declined");
+                void tallyFunnel("invite_declined");
                 props.onDone({ text: s.blocked, kind: "error" });
             }
         } finally {
@@ -65,7 +69,7 @@ export default function CheckInInviteCard(props: {
                 {chip(`🌙 ${formatHour(INVITE_HOURS.evening, props.lang, INVITE_MINUTES.evening)}`, () => void pick(INVITE_HOURS.evening, INVITE_MINUTES.evening), true)}
                 {chip(`☀️ ${formatHour(INVITE_HOURS.morning, props.lang, INVITE_MINUTES.morning)}`, () => void pick(INVITE_HOURS.morning, INVITE_MINUTES.morning))}
                 {chip(s.choose, () => { void setInviteState("declined"); props.onChooseTime(); })}
-                {chip(s.later, () => { void setInviteState("declined"); props.onDone({ text: "", kind: "info" }); })}
+                {chip(s.later, () => { void setInviteState("declined"); void tallyFunnel("invite_declined"); props.onDone({ text: "", kind: "info" }); })}
             </View>
         </View>
     );

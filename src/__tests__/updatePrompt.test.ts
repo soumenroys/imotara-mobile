@@ -44,7 +44,7 @@ describe("⛔ never on the first open", () => {
     expect(nav).toMatch(/if \(!usedBefore \|\| !STORE_PLATFORM\) return;/);
   });
   it("the check also runs when the app comes back to the front", () => {
-    expect(nav).toMatch(/onForeground: \(\) => \{ void runResumeSync\(\); void checkForUpdate\(\); \}/);
+    expect(nav).toMatch(/onForeground: \(\) => \{ void runResumeSync\(\); void checkForUpdate\(\);/);
   });
 });
 

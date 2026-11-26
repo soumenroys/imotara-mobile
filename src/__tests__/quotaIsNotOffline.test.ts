@@ -29,6 +29,6 @@ describe("a used-up daily limit is never shown as offline", () => {
   it("a strip stays above the composer while replies are simpler, and clears on the next cloud reply", () => {
     expect(chat).toMatch(/\{quotaLimited && !orgId && \(/);
     expect(chat).toMatch(/Simpler replies until your free replies reset/);
-    expect(chat).toMatch(/if \(cloudQuotaHit\) setQuotaLimited\(true\);\s*else if \(source === "cloud"\) setQuotaLimited\(false\);/);
+    expect(chat).toMatch(/if \(cloudQuotaHit\) \{ setQuotaLimited\(true\);[^}]*\}\s*else if \(source === "cloud"\) setQuotaLimited\(false\);/);
   });
 });

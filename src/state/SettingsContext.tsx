@@ -117,6 +117,9 @@ type SettingsContextValue = {
     toneContext: ToneContextPayload;
     setToneContext: (value: ToneContextPayload) => void;
 
+    /** True once saved settings have loaded. Writers that must not be overwritten by the load wait for it (#159 age signal). */
+    settingsHydrated: boolean;
+
     /**
      * Local device-only identity scope.
      * Used to prevent different “users” on the same device from seeing each other's local history
@@ -148,6 +151,10 @@ type SettingsContextValue = {
     /** Show "Synced to cloud" / "On this device only" badges on messages. Default false. */
     showSyncBadge: boolean;
     setShowSyncBadge: (value: boolean) => void;
+
+    /** #108 (owner 22 Nov 2026): show the Connect tab. Default FALSE — Connect appears only when switched on. */
+    showConnect: boolean;
+    setShowConnect: (value: boolean) => void;
 
     /** Companion reacts to user messages with mood-relevant emoji. Default true. */
     companionReactionsEnabled: boolean;
@@ -259,6 +266,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const [teenMode, _setTeenMode] = useState(false);
     const [childSafeMode, _setChildSafeMode] = useState(false);
     const [showSyncBadge, _setShowSyncBadge] = useState(false); // default: hidden
+    const [showConnect, _setShowConnect] = useState(false); // #108: default OFF (owner 22 Nov 2026)
     const [companionReactionsEnabled, _setCompanionReactionsEnabled] = useState(true); // default: on
     const [featureTipsEnabled, _setFeatureTipsEnabled] = useState(true); // default: visible
 
@@ -573,6 +581,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             _setShowSyncBadge(safeBool((parsed as any).showSyncBadge, false));
                         }
 
+                        if ("showConnect" in parsed) {
+                            _setShowConnect(safeBool((parsed as any).showConnect, false));
+                        }
+
                         if ("companionReactionsEnabled" in parsed) {
                             _setCompanionReactionsEnabled(safeBool((parsed as any).companionReactionsEnabled, true));
                         }
@@ -761,6 +773,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             teenMode,
             childSafeMode,
             showSyncBadge,
+            showConnect,
             companionReactionsEnabled,
             featureTipsEnabled,
             showAssistantRepliesInHistory,
@@ -789,6 +802,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         planPanelEnabled,
         teenMode,
         showSyncBadge,
+        showConnect,
         companionReactionsEnabled,
         featureTipsEnabled,
         showAssistantRepliesInHistory,
@@ -824,6 +838,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     const setShowSyncBadge = (value: boolean) => {
         _setShowSyncBadge(!!value);
+    };
+
+    const setShowConnect = (value: boolean) => {
+        _setShowConnect(!!value);
     };
 
     const setCompanionReactionsEnabled = (value: boolean) => {
@@ -935,6 +953,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setAnalysisMode,
                 toneContext,
                 setToneContext,
+                settingsHydrated: hydrated,
                 localUserScopeId,
                 resetLocalUserScopeId,
                 chatLinkKey,
@@ -945,6 +964,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setChildSafeMode,
                 showSyncBadge,
                 setShowSyncBadge,
+                showConnect,
+                setShowConnect,
                 companionReactionsEnabled,
                 setCompanionReactionsEnabled,
                 featureTipsEnabled,

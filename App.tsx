@@ -10,8 +10,10 @@ import RootNavigator from "./src/navigation/RootNavigator";
 import { rearmAfterSnooze } from "./src/notifications/checkInReminder";
 import { ensureDailyReminderScheduled } from "./src/notifications/checkInInvite";
 import ConsentGateMount from "./src/components/legal/ConsentGateMount";
+import AgeSignalGate from "./src/components/age/AgeSignalGate";
+import AgeSignalTeenSync from "./src/components/age/AgeSignalTeenSync";
 import AppThemeProvider from "./src/theme/AppThemeProvider";
-import { ThemeProvider } from "./src/theme/ThemeContext";
+import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
 import HistoryProvider from "./src/state/HistoryContext";
 import { SettingsProvider } from "./src/state/SettingsContext";
 import { AuthProvider } from "./src/auth/AuthContext";
@@ -131,6 +133,9 @@ function AppShell() {
           can always be raced by another overlay; a gate the app mounts BEHIND
           cannot. It sits inside ThemeProvider because the gate uses useColors. */}
       <ConsentGateMount>
+      {/* #159: the OS age signal. Inside the consent gate, outside everything
+          else — an under-13 stop screen must be mounted INSTEAD of the app. */}
+      <AgeSignalGate>
       {/* Settings MUST wrap HistoryProvider because HistoryProvider calls useSettings() */}
       <AuthProvider>
       <SettingsProvider>
@@ -144,14 +149,27 @@ function AppShell() {
           {/* #134: the one email sign-in sheet every sign-in place opens */}
           <EmailSignInSheet />
 
-          <StatusBar style="auto" />
+          <ThemedStatusBar />
+          <AgeSignalTeenSync />
         </HistoryProvider>
       </SettingsProvider>
       </AuthProvider>
+      </AgeSignalGate>
       </ConsentGateMount>
       </ThemeProvider>
     </AppThemeProvider>
   );
+}
+
+/**
+ * Status bar text follows the APP's theme, not "auto".
+ * ⚠️ SDK 58 (#125): style="auto" stopped following our in-app Appearance override on
+ * iOS — dark theme showed dark clock/battery on the dark background (seen on the
+ * simulator, 21 Nov 2026). Our theme knows the truth, so it decides.
+ */
+function ThemedStatusBar() {
+  const { isDark } = useTheme();
+  return <StatusBar style={isDark ? "light" : "dark"} />;
 }
 
 export default function App() {

@@ -36,10 +36,10 @@ import {
     Share,
     Modal,
     ActivityIndicator,
-    InteractionManager,
 } from "react-native";
 
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import { SETTINGS_CATALOG } from "../data/settingsCatalog";
 import { useHistoryStore } from "../state/HistoryContext";
 import type { HistoryItem as HistoryRecord } from "../state/HistoryContext";
 import { useSettings } from "../state/SettingsContext";
@@ -362,6 +362,7 @@ function SettingsScreenContent() {
     // #134: Apple sits beside Google in the sign-in card (Settings offered Google only).
     const { signInWithApple, appleSignInAvailable } = useAuth();
     const navigation = useNavigation<any>();
+    const route = useRoute<any>();
 
     // Keep compatibility with your current store shape, but allow optional newer fields
     const store = useHistoryStore() as any;
@@ -396,6 +397,8 @@ function SettingsScreenContent() {
         setChildSafeMode,
         showSyncBadge,
         setShowSyncBadge,
+        showConnect,
+        setShowConnect,
         companionReactionsEnabled,
         setCompanionReactionsEnabled,
         featureTipsEnabled,
@@ -913,13 +916,20 @@ function SettingsScreenContent() {
     const [sectionAdvancedMobile, setSectionAdvancedMobile] = React.useState(false);
     const [sectionMindset, setSectionMindset] = React.useState(false);
 
-    const settingsScrollRef = React.useRef<import("react-native").ScrollView>(null);
+    const settingsScrollRef = React.useRef<import("react-native").ScrollViewInstance>(null);
     // Refs for each section header View — used with measure() for absolute positioning.
-    const sectionRefs = React.useRef<Record<string, import("react-native").View | null>>({});
+    const sectionRefs = React.useRef<Record<string, import("react-native").HostInstance | null>>({});
     // Current scroll offset — needed to compute target scroll Y from screen coordinates.
     const scrollOffsetY = React.useRef(0);
 
-    const handleSearchSelect = React.useCallback((sectionKey: string) => {
+    // Single settings that can be scrolled to exactly (not just their section) — the
+    // chat's "Choose a time" and Settings search land ON the reminder, not on the
+    // top of Experience (Dec release check, 26 Nov 2026). Add an id here by wrapping
+    // the card in <View ref={itemRef("<catalog id>")} collapsable={false}>.
+    const itemRefs = React.useRef<Record<string, import("react-native").HostInstance | null>>({});
+    const itemRef = React.useCallback((id: string) => (el: import("react-native").HostInstance | null) => { itemRefs.current[id] = el; }, []);
+
+    const handleSearchSelect = React.useCallback((sectionKey: string, settingId?: string) => {
         const sectionMap: Record<string, React.Dispatch<React.SetStateAction<boolean>>> = {
             companion: setSectionCompanion,
             experience: setSectionAppearance,
@@ -937,7 +947,7 @@ function SettingsScreenContent() {
         // Formula: targetY = scrollOffset + (sectionScreenY - scrollViewScreenY) - padding
         // measure() gives absolute screen coords and works on both Old and New Architecture.
         setTimeout(() => {
-            const sectionRef = sectionRefs.current[sectionKey];
+            const sectionRef = (settingId ? itemRefs.current[settingId] : null) ?? sectionRefs.current[sectionKey];
             const scrollView = settingsScrollRef.current;
             if (!sectionRef || !scrollView) return;
 
@@ -951,6 +961,15 @@ function SettingsScreenContent() {
             });
         }, 350);
     }, []);
+
+    // navigation.navigate("Settings", { focus: "<catalog id>" }) opens that setting.
+    const focusId: string | undefined = route?.params?.focus;
+    React.useEffect(() => {
+        if (!focusId) return;
+        const entry = SETTINGS_CATALOG.find((e) => e.id === focusId);
+        if (entry) handleSearchSelect(entry.sectionKey, entry.id);
+        navigation.setParams?.({ focus: undefined }); // once — a later tab tap opens at the top
+    }, [focusId, handleSearchSelect, navigation]);
 
     // ── Mindset Analysis Toggles ─────────────────────────────────────────────
     const MOOD_CHART_KEY = "imotara.mood.chart.show.v1";
@@ -2628,6 +2647,7 @@ function SettingsScreenContent() {
                 </AppSurface>
 
                 {/* Daily check-in reminder */}
+                <View ref={itemRef("checkin_reminder")} collapsable={false}>
                 <AppSurface style={{ marginBottom: 16 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: reminderEnabled ? 12 : 0 }}>
                         <View style={{ flex: 1, marginRight: 12 }}>
@@ -2804,6 +2824,7 @@ function SettingsScreenContent() {
                         </View>
                     )}
                 </AppSurface>
+                </View>
 
 
                 {/* V-1 + V-2 + V-3 + M-1 + M-3: Voice & memory settings */}
@@ -5354,6 +5375,25 @@ function SettingsScreenContent() {
                         />
                     </View>
                 </AppSurface>
+
+                {/* #108 (owner 22 Nov 2026): Connect tab — OFF by default, shown only when switched on */}
+                <View ref={itemRef("show_connect")} collapsable={false}>
+                <AppSurface style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: "500" }}>Show Connect</Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Adds the Connect tab — for booking a session with a human wellness companion. Off by default.</Text>
+                        </View>
+                        <Switch
+                            value={!!showConnect}
+                            onValueChange={setShowConnect}
+                            accessibilityLabel="Show Connect"
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor="#ffffff"
+                        />
+                    </View>
+                </AppSurface>
+                </View>
 
                 {/* Sync status badge toggle */}
                 <AppSurface style={{ marginBottom: 16 }}>

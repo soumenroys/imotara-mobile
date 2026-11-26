@@ -47,8 +47,12 @@ describe("Android IME inset fix — the plugin", () => {
         // If edge-to-edge is ever turned off, adjustResize resizes on its own
         // and this plugin would double-subtract. Fail loudly so whoever flips
         // it reads plugins/withAndroidImeInsets.js first.
+        // ⚠️ Since Expo SDK 55 edge-to-edge is MANDATORY and the app.json key
+        // `edgeToEdgeEnabled` no longer exists (the schema rejects it) — so the
+        // guard is now that nobody re-adds it as false.
         const app = JSON.parse(read("app.json"));
-        expect(app.expo.android.edgeToEdgeEnabled).toBe(true);
+        expect(app.expo.android.edgeToEdgeEnabled).not.toBe(false);
+        expect(Number(JSON.parse(read("package.json")).dependencies.expo.replace(/[^0-9.]/g, "").split(".")[0])).toBeGreaterThanOrEqual(55);
         expect(app.expo.android.softwareKeyboardLayoutMode).toBe("resize");
     });
 

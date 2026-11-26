@@ -1,4 +1,4 @@
-const { withMainActivity } = require('@expo/config-plugins');
+const { withMainActivity } = require('expo/config-plugins');
 
 const MARKER = '// IMOTARA_IME_INSETS_V1';
 const END_MARKER = '// IMOTARA_IME_INSETS_END';

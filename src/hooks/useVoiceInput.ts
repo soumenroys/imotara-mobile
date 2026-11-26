@@ -5,7 +5,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Alert, Linking, Platform } from "react-native";
-import { Audio, InterruptionModeAndroid } from "expo-av";
+import { Audio, InterruptionModeAndroid } from "../lib/audio/av";
 import * as FileSystem from "expo-file-system/legacy";
 import { looksLikeSpeech, MAX_METERING_SAMPLES } from "../lib/voiceActivity";
 

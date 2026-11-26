@@ -1,6 +1,6 @@
-const { withAppBuildGradle } = require('@expo/config-plugins');
+const { withAppBuildGradle } = require('expo/config-plugins');
 
-const MARKER = '// R8_MAPPING_BUNDLE_INJECTED_V2';
+const MARKER = '// R8_MAPPING_BUNDLE_INJECTED_V3';
 
 // Embeds the R8/ProGuard mapping file into the AAB so Play Console can
 // auto-extract it for crash symbolication.
@@ -39,14 +39,18 @@ afterEvaluate {
 
             if (mappingFile != null && mappingFile.exists() && aabFile != null && aabFile.exists()) {
                 println "Embedding R8 mapping (\${mappingFile}) into AAB (\${aabFile})..."
-                project.exec {
-                    commandLine 'sh', '-c',
-                        'TMP=$(mktemp -d) && ' +
+                // ⚠️ Gradle 9 (Expo SDK 58) removed project.exec — the Dec 1.7.3 EAS build
+                // failed on it at :app:bundleRelease (local APK builds never run this task).
+                // ProcessBuilder works on every Gradle; a non-zero exit still fails the build.
+                def embedCmd = 'TMP=$(mktemp -d) && ' +
                         'mkdir -p "$TMP/BUNDLE-METADATA/com.android.tools.build.obfuscation" && ' +
                         'cp "' + mappingFile.absolutePath + '" "$TMP/BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map" && ' +
                         'cd "$TMP" && zip -u "' + aabFile.absolutePath + '" "BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map" && ' +
                         'rm -rf "$TMP"'
-                }
+                def proc = new ProcessBuilder('sh', '-c', embedCmd).redirectErrorStream(true).start()
+                proc.inputStream.eachLine { line -> println line }
+                def code = proc.waitFor()
+                if (code != 0) throw new GradleException("Embedding the R8 mapping failed (exit " + code + ")")
                 println "Done: mapping embedded."
             } else {
                 println "Skipping mapping embed — mappingFile=\${mappingFile} aab=\${aabFile}"

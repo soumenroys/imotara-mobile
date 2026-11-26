@@ -24,8 +24,32 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { IMOTARA_API_BASE_URL } from "../../config/api";
+import { BUILD_HEADER_VALUE } from "../../config/buildChannel";
 
-export type TallyKind = "visit_age" | "session_messages" | "session_minutes";
+export type TallyKind = "visit_age" | "session_messages" | "session_minutes" | "funnel";
+
+/**
+ * #16 (owner, 25 Nov 2026): the app's anonymous STEP counts — the same daily counts the
+ * website keeps (imotaraapp src/lib/analytics/visitTally.ts FUNNEL_STEPS). Measured that
+ * day: ~70% of new chatters are on the app and only ~5–8% ever come back, but the app
+ * recorded none of these steps, so nobody could see where people stop.
+ * ⛔ SAME NUMBERS AS THE WEB — never renumber (stored rows would change meaning).
+ * ⛔ Once per device per day per step; nothing about the person, the device or the words.
+ * Store forms already declare it (25 Nov 2026 checked): Play "App interactions →
+ * App functionality, Analytics"; Apple "Usage Data → Product Interaction → Analytics".
+ */
+export const FUNNEL_STEPS = {
+    invite_shown: 1,
+    invite_accepted: 2,
+    invite_declined: 3,
+    welcome_shown: 4,
+    welcome_pick: 5,
+    welcome_fresh: 6,
+    checkin_opened: 7,
+    quota_hit: 12,
+} as const;
+export type FunnelStep = keyof typeof FUNNEL_STEPS;
+const FUNNEL_KEY = "imotara.funnelTally.v1";
 export type TallyEvent = { kind: TallyKind; bucket: number; delta: 1 | -1 };
 type Visit = { start: number; last: number; messages: number; sent: { m: number; t: number } | null };
 type State = { firstDay?: string; lastReportedDay?: string; visit?: Visit };
@@ -81,6 +105,18 @@ export function visitEvents(v: Visit, end: number): { events: TallyEvent[]; sent
     return { events, sent: { m, t } };
 }
 
+/**
+ * ⚠️ One at a time. On launch the mount effect AND the "back to the front" event can both call
+ * noteVisit in the same instant; each loaded the state before the other saved it, so one device
+ * reported "day N" several times (seen 25 Nov 2026 on the emulator: 4 for one fresh install).
+ */
+let queue: Promise<unknown> = Promise.resolve();
+function serial<T>(fn: () => Promise<T>): Promise<T> {
+    const run = queue.then(fn, fn);
+    queue = run.catch(() => undefined);
+    return run;
+}
+
 async function load(): Promise<State> {
     try { return JSON.parse((await AsyncStorage.getItem(KEY)) ?? "{}") as State; } catch { return {}; }
 }
@@ -97,6 +133,8 @@ export let sendEvents = (events: TallyEvent[]): void => {
             headers: {
                 "content-type": "application/json",
                 "x-imotara-platform": Platform.OS === "ios" ? "ios" : "android",
+                // #170: the server drops counts from test builds (simulators, emulators, dev clients).
+                "x-imotara-build": BUILD_HEADER_VALUE,
             },
             body: JSON.stringify({ events }),
         }).catch(() => {});
@@ -117,8 +155,8 @@ function touch(s: State, now: number): Visit {
 }
 
 /** App opened or back in the foreground: once per day, report "day N since first visit". */
-export async function noteVisit(now = Date.now()): Promise<void> {
-    try {
+export function noteVisit(now = Date.now()): Promise<void> {
+    return serial(async () => { try {
         const s = await load();
         const today = localDay(now);
         if (!s.firstDay) s.firstDay = today;
@@ -128,21 +166,21 @@ export async function noteVisit(now = Date.now()): Promise<void> {
         }
         touch(s, now);
         await save(s);
-    } catch { /* never in the way */ }
+    } catch { /* never in the way */ } });
 }
 
 /** Each message the person sends. */
-export async function noteMessageSent(now = Date.now()): Promise<void> {
-    try {
+export function noteMessageSent(now = Date.now()): Promise<void> {
+    return serial(async () => { try {
         const s = await load();
         touch(s, now).messages += 1;
         await save(s);
-    } catch { /* never in the way */ }
+    } catch { /* never in the way */ } });
 }
 
 /** App going to the background: report (or correct) this visit's size. */
-export async function reportVisit(now = Date.now()): Promise<void> {
-    try {
+export function reportVisit(now = Date.now()): Promise<void> {
+    return serial(async () => { try {
         const s = await load();
         const v = s.visit;
         if (!v || now - v.last > GAP_MS) return;
@@ -151,5 +189,23 @@ export async function reportVisit(now = Date.now()): Promise<void> {
         sendEvents(events);
         v.sent = sent;
         await save(s);
-    } catch { /* never in the way */ }
+    } catch { /* never in the way */ } });
+}
+
+/** True when this step has not yet been counted today on this device. Pure — tested. */
+export function funnelOncePerDay(seen: Record<string, string>, step: FunnelStep, today: string): boolean {
+    return seen[step] !== today;
+}
+
+/** One anonymous step count, at most once a day per step (same rule as the web). */
+export function tallyFunnel(step: FunnelStep, now = Date.now()): Promise<void> {
+    return serial(async () => { try {
+        const today = localDay(now);
+        let seen: Record<string, string> = {};
+        try { seen = JSON.parse((await AsyncStorage.getItem(FUNNEL_KEY)) ?? "{}") as Record<string, string>; } catch { seen = {}; }
+        if (!funnelOncePerDay(seen, step, today)) return;
+        seen[step] = today;
+        try { await AsyncStorage.setItem(FUNNEL_KEY, JSON.stringify(seen)); } catch { /* best effort */ }
+        sendEvents([{ kind: "funnel", bucket: FUNNEL_STEPS[step], delta: 1 }]);
+    } catch { /* never in the way */ } });
 }

@@ -35,9 +35,9 @@ export function useAppLifecycle(options: AppLifecycleOptions = {}) {
         treatInactiveAsBackground = true,
     } = options;
 
-    const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
+    const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState as AppStateStatus);
 
-    const lastStateRef = useRef<AppStateStatus>(AppState.currentState);
+    const lastStateRef = useRef<AppStateStatus>(AppState.currentState as AppStateStatus);
     const lastEventAtRef = useRef<number>(0);
 
     // Store callbacks in refs so the AppState listener never needs to be

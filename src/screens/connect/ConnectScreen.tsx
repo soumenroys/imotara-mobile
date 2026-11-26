@@ -820,7 +820,7 @@ function BrowseTab({ colors, accessToken, onSelectConsultant, onOpenWallet, onOp
                             <Text style={s.emptyText}>No companions match this filter.</Text>
                             <Text style={[s.emptyText, { marginTop: 4, fontSize: 12, opacity: 0.6 }]}>Try another language, specialty, or remove filters.</Text>
                         </View>
-                    ) : null
+                    ) : undefined
                 }
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setRefreshKey((k) => k + 1); }} tintColor={colors.primary} />}
                 renderItem={({ item: c }) => (

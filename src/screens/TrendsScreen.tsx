@@ -5,7 +5,7 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { concreteLang } from "../api/aiClient";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
-import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, ActivityIndicator, InteractionManager } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, Share, Alert, TextInput, RefreshControl, useWindowDimensions, Modal, ActivityIndicator } from "react-native";
 import { haptic } from "../lib/haptics";
 import CompanionLetterCard from "../components/imotara/CompanionLetterCard";
 import FeatureDiscoveryCard from "../components/imotara/FeatureDiscoveryCard";

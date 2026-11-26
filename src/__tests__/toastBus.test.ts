@@ -8,7 +8,12 @@
 // tested first.
 
 const mockAlert = jest.fn();
-jest.mock("react-native", () => ({ Alert: { alert: (...a: unknown[]) => mockAlert(...a) } }));
+// ⚠️ SDK 56: jest-expo's setup now touches expo-modules-core, which reads Platform.select
+// at import — so the stub carries a minimal Platform too.
+jest.mock("react-native", () => ({
+  Alert: { alert: (...a: unknown[]) => mockAlert(...a) },
+  Platform: { OS: "ios", select: (o: Record<string, unknown>) => o.ios ?? o.default },
+}));
 
 import { showToast, registerToast, __resetToastBus } from "../components/ui/toastBus";
 

@@ -67,7 +67,7 @@ describe("wired in the chat screen — beside the reply, never in it", () => {
     expect(screen).toMatch(/void noteSession\(\{\s*threadId: activeThreadId,\s*userTexts,\s*crisis: userTexts\.some\(\(t\) => detectMobileCrisisTier\(t\) > 0\)/);
   });
   it("decided once on arrival; Pick up / Start fresh", () => {
-    expect(screen).toMatch(/if \(alive && shouldShowWelcomeBack\(last, Date\.now\(\), dismissed\)\) setWelcomeBack\(last\);/);
+    expect(screen).toMatch(/if \(alive && shouldShowWelcomeBack\(last, Date\.now\(\), dismissed\)\) \{ setWelcomeBack\(last\);/);
     expect(screen).toMatch(/startNewThread\(\); close\(\);/);
   });
 });

@@ -21,7 +21,7 @@
 //      so the device voice is the safety net rather than the default.
 
 import * as Speech        from "expo-speech";
-import { Audio }          from "expo-av";
+import { Audio }          from "../audio/av";
 import { File, Paths }    from "expo-file-system";
 import { fetchWithTimeout } from "../fetchWithTimeout";
 import { MARATHI_HINT } from "../lang/devanagariHint";
@@ -558,7 +558,8 @@ async function synthesizeViaAzure(text: string, lang: string, gender: string | u
     if (!res.ok) throw new Error(`TTS API ${res.status}`);
     const arrayBuf = await res.arrayBuffer();
     const file     = new File(Paths.cache, "imotara_tts_preview.mp3");
-    file.write(new Uint8Array(arrayBuf));
+    // ⚠️ SDK 58: File.write() became async — writeSync keeps "file complete before playback".
+    file.writeSync(new Uint8Array(arrayBuf));
     await playSound(file.uri, () => { try { file.delete(); } catch {} onDone?.(); }, rate);
 }
 
@@ -905,7 +906,8 @@ export async function speakMessage(
             // Alternate filenames so writing the prefetched next chunk never
             // clobbers the file the previous chunk might still be playing.
             const file = new File(Paths.cache, `imotara_tts_${i % 2}.mp3`);
-            file.write(new Uint8Array(buf));
+            // ⚠️ SDK 58: File.write() became async — writeSync keeps "file complete before playback".
+            file.writeSync(new Uint8Array(buf));
             if (i === 0) {
                 // The number the complaint is actually about: how long the
                 // person waited between the reply landing and hearing anything.

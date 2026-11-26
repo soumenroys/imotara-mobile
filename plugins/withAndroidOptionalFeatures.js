@@ -1,4 +1,4 @@
-const { withAndroidManifest } = require('@expo/config-plugins');
+const { withAndroidManifest } = require('expo/config-plugins');
 
 // Marks hardware features Imotara does NOT need as optional (required="false").
 //

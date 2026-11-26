@@ -106,6 +106,14 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
     keywords: ["companion reactions", "emoji reactions", "imotara emoji", "reaction", "thumbs up", "heart", "disable reactions", "प्रतिक्रिया", "প্রতিক্রিয়া"],
   },
   {
+    id: "show_connect",
+    title: "Show Connect",
+    section: "Advanced",
+    sectionKey: "advanced",
+    description: "Show or hide the Connect tab (book a session with a human wellness companion). Off by default",
+    keywords: ["connect", "show connect", "connect tab", "wellness companion", "book a companion", "human companion", "peer support", "कनेक्ट", "কানেক্ট"],
+  },
+  {
     id: "show_sync_badge",
     title: "Show sync status badge",
     section: "Experience",
@@ -471,6 +479,16 @@ export const SETTINGS_CATALOG: SettingEntry[] = [
     sectionKey: "experience",
     description: "Show the once-a-day check-in prompt in chat",
     keywords: ["daily check-in", "check in", "daily prompt", "everyday question", "दैनिक", "দৈনিক"],
+  },
+  {
+    // Found on the Dec release pass (25 Nov 2026): typing "reminder" found only
+    // "Reminder sound" — the reminder itself had no entry at all.
+    id: "checkin_reminder",
+    title: "Daily check-in reminder",
+    section: "Experience",
+    sectionKey: "experience",
+    description: "A gentle daily reminder at a time you choose",
+    keywords: ["reminder", "remind me", "daily reminder", "reminder time", "check-in time", "notification time", "notification", "alarm", "रिमाइंडर", "अनुस्मारक", "রিমাইন্ডার", "অনুস্মারক"],
   },
   {
     id: "collective_pulse",

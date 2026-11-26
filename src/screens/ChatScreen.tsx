@@ -1,7 +1,7 @@
 // src/screens/ChatScreen.tsx
 import { onPersonalDataChanged } from "../lib/personalData";
 import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
-import { noteMessageSent } from "../lib/analytics/visitTally";
+import { noteMessageSent, tallyFunnel } from "../lib/analytics/visitTally";
 import {
   View,
   Text,
@@ -2927,7 +2927,7 @@ export default function ChatScreen() {
     (async () => {
       const last = await readLastSession();
       const dismissed = await readDismissed();
-      if (alive && shouldShowWelcomeBack(last, Date.now(), dismissed)) setWelcomeBack(last);
+      if (alive && shouldShowWelcomeBack(last, Date.now(), dismissed)) { setWelcomeBack(last); void tallyFunnel("welcome_shown"); }
     })().catch(() => {});
     return () => { alive = false; };
   }, []);  const [showUpgradeSheet, setShowUpgradeSheet] = useState(false);
@@ -4677,7 +4677,7 @@ export default function ChatScreen() {
           }
           const extraMessages: ChatMessage[] = [];
           // #163: keep the strip in step with what actually happened this turn.
-          if (cloudQuotaHit) setQuotaLimited(true);
+          if (cloudQuotaHit) { setQuotaLimited(true); void tallyFunnel("quota_hit"); }
           else if (source === "cloud") setQuotaLimited(false);
           if (cloudQuotaHit && !quotaCardShown) {
             setQuotaCardShown(true);
@@ -5747,7 +5747,7 @@ export default function ChatScreen() {
                   lang={message.inviteLang}
                   colors={colors}
                   onDone={({ text, kind }) => { retire(); if (text) toastRef.current?.show(text, kind); }}
-                  onChooseTime={() => { retire(); navigation.navigate("Settings"); }}
+                  onChooseTime={() => { retire(); navigation.navigate("Settings", { focus: "checkin_reminder" }); }}
                 />
               );
             }
@@ -6310,7 +6310,7 @@ export default function ChatScreen() {
           </View>}
           ListFooterComponent={(() => {
             const showIntake = intakeStep > 0 && intakeStep <= 3 && messages.filter((m) => m.from === "user").length === 0;
-            if (!isTyping && !showIntake) return null;
+            if (!isTyping && !showIntake) return undefined; // RN 0.88 types: list slots take undefined, not null (same: nothing shown)
             return (
               <View>
                 {isTyping && (
@@ -6635,11 +6635,11 @@ export default function ChatScreen() {
               <Text key={i} style={{ fontSize: 13, fontWeight: i === 0 ? "700" : "400", color: colors.textPrimary, marginTop: i === 0 ? 0 : 2 }}>{l}</Text>
             ))}
             <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 8 }}>
-              <TouchableOpacity accessibilityRole="button" onPress={() => { if (threads?.some?.((t: { id: string }) => t.id === wb.threadId)) setActiveThreadId(wb.threadId); close(); }}
+              <TouchableOpacity accessibilityRole="button" onPress={() => { void tallyFunnel("welcome_pick"); if (threads?.some?.((t: { id: string }) => t.id === wb.threadId)) setActiveThreadId(wb.threadId); close(); }}
                 style={{ borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, marginEnd: 8, backgroundColor: "#7c3aed" }}>
                 <Text style={{ fontSize: 12, fontWeight: "600", color: "#ffffff" }}>{w.pick}</Text>
               </TouchableOpacity>
-              <TouchableOpacity accessibilityRole="button" onPress={() => { startNewThread(); close(); }}
+              <TouchableOpacity accessibilityRole="button" onPress={() => { void tallyFunnel("welcome_fresh"); startNewThread(); close(); }}
                 style={{ borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: "rgba(139,92,246,0.35)" }}>
                 <Text style={{ fontSize: 12, fontWeight: "600", color: colors.textPrimary }}>{w.fresh}</Text>
               </TouchableOpacity>
