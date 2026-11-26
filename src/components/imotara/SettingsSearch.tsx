@@ -17,6 +17,7 @@ import {
 import { buildApiUrl } from "../../config/api";
 import { fetchWithTimeout } from "../../lib/fetchWithTimeout";
 import { useAuth } from "../../auth/AuthContext";
+import { createLatestOnly } from "../../lib/latestOnly";
 
 type Props = {
   onResultSelect: (sectionKey: string, settingId: string) => void;
@@ -31,9 +32,13 @@ export default function SettingsSearch({ onResultSelect }: Props) {
   const [loading, setLoading] = useState(false);
   const [aiUsed, setAiUsed] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Only the latest search may change the list — a slow server answer for an older,
+  // half-typed query must not replace a newer result (see src/lib/latestOnly.ts).
+  const latestRef = useRef(createLatestOnly());
 
   const runSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setResults([]); setAiUsed(false); return; }
+    const token = latestRef.current.begin();
+    if (!q.trim()) { setResults([]); setAiUsed(false); setLoading(false); return; }
 
     // Local search first — instant
     const local = searchSettingsLocally(q, 5);
@@ -43,6 +48,7 @@ export default function SettingsSearch({ onResultSelect }: Props) {
     if (local.length > 0 && topScore >= AI_FALLBACK_THRESHOLD && !looksLikeSentence) {
       setResults(local);
       setAiUsed(false);
+      setLoading(false); // an older server search may still be in flight; it is now stale
       return;
     }
 
@@ -63,8 +69,10 @@ export default function SettingsSearch({ onResultSelect }: Props) {
         },
         6_000,
       );
+      if (!latestRef.current.isCurrent(token)) return;
       if (res.ok) {
         const data = await res.json();
+        if (!latestRef.current.isCurrent(token)) return;
         const ids: string[] = Array.isArray(data.ids) ? data.ids : [];
         if (ids.length > 0) {
           const aiResults = ids
@@ -77,7 +85,7 @@ export default function SettingsSearch({ onResultSelect }: Props) {
     } catch {
       // Keep local results on AI failure
     } finally {
-      setLoading(false);
+      if (latestRef.current.isCurrent(token)) setLoading(false);
     }
   }, [guestAccessToken]);
 
@@ -88,6 +96,8 @@ export default function SettingsSearch({ onResultSelect }: Props) {
   }, [runSearch]);
 
   const handleClear = useCallback(() => {
+    latestRef.current.cancel();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     setQuery("");
     setResults([]);
     setAiUsed(false);
