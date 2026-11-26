@@ -535,9 +535,50 @@ export const CRISIS_NATURAL_PHRASES_REGEX = new RegExp(
   "i",
 );
 
-// 🔑 Every consumer (crisis card, reply safety, fallback replies, crisis logging) gets both lists.
+
+/**
+ * #48 (27 Nov 2026): SEXUAL-ABUSE DISCLOSURES, in all 22 languages.
+ *
+ * 🔴 Measured that day: "he forced himself on me", "I was sexually abused as a child",
+ * "my uncle molested me", "मेरे साथ बलात्कार हुआ", "আমাকে ধর্ষণ করা হয়েছে", "ich wurde
+ * vergewaltigt", "レイプされた" — none switched on the crisis rules or the card. (And the
+ * adult-content guard REFUSED some English ones; fixed in adultContentGuard.ts.)
+ * ⚖️ Disclosure wording only — "violent"/"violette"/"violin" stay out (French needs "violé").
+ * ⛔ Identical in imotaraapp and imotara-mobile. ⇒ adultGuardNeverRefusesASurvivor.test.ts
+ */
+export const ABUSE_DISCLOSURE_REGEX = new RegExp(
+  [
+    // English
+    "rap(?:ed|ing)\\s+me", "tried\\s+to\\s+rape", "molest(?:ed|ing)", "sexually\\s+(?:abused|assaulted|harassed)",
+    "sexual\\s+(?:abuse|assault|harassment)", "forced\\s+(?:him|her)self\\s+on\\s+me", "grop(?:ed|ing)\\s+me",
+    "touched\\s+me\\s+(?:inappropriately|without)", "assaulted\\s+me",
+    // Hindi (+ romanised) · Marathi
+    "बलात्कार", "यौन\\s*शोषण", "यौन\\s*उत्पीड़न", "छेड़छाड़", "balatkar", "yaun\\s*shoshan", "लैंगिक\\s*अत्याचार", "विनयभंग",
+    // Bengali
+    "ধর্ষণ", "ধর্ষিত", "যৌন\\s*নির্যাতন", "যৌন\\s*হয়রানি", "শ্লীলতাহানি",
+    // Tamil · Telugu · Kannada · Malayalam
+    "பாலியல்\\s*வன்கொடுமை", "கற்பழி", "பாலியல்\\s*துன்புறுத்த", "అత్యాచార", "లైంగిక\\s*వేధింపు",
+    "ಅತ್ಯಾಚಾರ", "ಲೈಂಗಿಕ\\s*ದೌರ್ಜನ್ಯ", "ಲೈಂಗಿಕ\\s*ಕಿರುಕುಳ", "ബലാത്സംഗ", "ലൈംഗിക\\s*പീഡന",
+    // Gujarati · Punjabi · Odia
+    "બળાત્કાર", "જાતીય\\s*શોષણ", "ਬਲਾਤਕਾਰ", "ਜਿਨਸੀ\\s*ਸ਼ੋਸ਼ਣ", "ବଳାତ୍କାର", "ଯୌନ\\s*ନିର୍ଯାତନା",
+    // Urdu · Arabic · Hebrew
+    "جنسی\\s*زیادتی", "جنسی\\s*ہراسانی", "زیادتی\\s*کی", "اغتصاب", "اغتصبني", "تحرش\\s*بي", "اعتداء\\s*جنسي",
+    "אונס", "אנס\\s*אותי", "הטרדה\\s*מינית", "פגיעה\\s*מינית", "התעללות\\s*מינית",
+    // Russian · Chinese · Japanese
+    "изнасил", "домогал", "сексуальн\\w*\\s*насили", "强奸", "性侵", "猥亵", "性骚扰",
+    "レイプされ", "強姦", "性被害", "性的暴行", "痴漢",
+    // Spanish · French · German · Portuguese · Indonesian
+    "me\\s*violaron", "me\\s*viol[oó]", "violaci[oó]n", "abuso\\s*sexual", "abusaron\\s*de\\s*m[ií]",
+    "(?:j'ai\\s*été|m'a)\\s*viol[ée]e?", "agression\\s*sexuelle", "abus\\s*sexuel",
+    "vergewaltig", "sexuell\\s*missbraucht", "sexuelle[rn]?\\s*(?:missbrauch|übergriff|belästigung)",
+    "estupr", "abuso\\s*sexual", "abusaram\\s*de\\s*mim", "diperkosa", "pemerkosaan", "pelecehan\\s*seksual", "dilecehkan",
+  ].join("|"),
+  "i",
+);
+
+// 🔑 Every consumer (crisis card, reply safety, fallback replies, crisis logging) gets all three lists.
 export const CRISIS_HINT_REGEX = new RegExp(
-  `${CRISIS_HINT_BASE_REGEX.source}|${CRISIS_NATURAL_PHRASES_REGEX.source}`,
+  `${CRISIS_HINT_BASE_REGEX.source}|${CRISIS_NATURAL_PHRASES_REGEX.source}|${ABUSE_DISCLOSURE_REGEX.source}`,
   "i",
 );
 
