@@ -187,6 +187,10 @@ type CallAIOptions = {
   // When present, sent as "Authorization: Bearer <token>" so the server can
   // resolve the real Supabase user and unlock pinnedRecall quality.
   accessToken?: string;
+
+  // #17 (26 Nov 2026): the person's Show Connect switch (#108, off by default).
+  // The server names Imotara Connect only when this is true AND a companion exists.
+  connectVisible?: boolean;
 };
 
 function normalizeToneContext(
@@ -801,6 +805,13 @@ export async function streamChatReply(
             pendingAccumulated = accumulated;
             flush();
           }
+          // #17 B (26 Nov 2026): the server cut this reply at the length limit and sends the
+          // same reply ending on its last full sentence — show and keep that instead.
+          if (typeof parsed.replace === "string" && parsed.replace.trim()) {
+            accumulated = parsed.replace;
+            pendingAccumulated = accumulated;
+            flush();
+          }
         } catch { /* malformed SSE chunk — skip */ }
       }
     }
@@ -934,6 +945,8 @@ export async function callImotaraAI(
         ...(toneContext?.companion?.name?.trim() ? { companionName: toneContext.companion.name.trim() } : {}),
         // response style — how the user wants Imotara to respond (comfort / reflect / motivate / advise)
         ...(toneContext?.user?.responseStyle ? { responseStyle: toneContext.user.responseStyle } : {}),
+        // #17 (26 Nov 2026): see CallAIOptions.connectVisible
+        connectVisible: opts?.connectVisible === true,
       };
 
       const chatRes = await fetchWithTimeout(

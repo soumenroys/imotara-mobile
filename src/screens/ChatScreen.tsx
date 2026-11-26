@@ -2655,6 +2655,8 @@ export default function ChatScreen() {
     orgRole,
     orgBillingType,
     billingIssue,
+    // #17 (26 Nov 2026): replies may name Imotara Connect only when this is on
+    showConnect,
   } = useSettings();
 
   // #105 (8 Nov 2026): report what each crisis card showed — language, tier,
@@ -4174,6 +4176,8 @@ export default function ChatScreen() {
             ...(emotionMemory ? { emotionMemory } : {}),
             threadId: localUserScopeId || undefined,
             userId: localUserScopeId || undefined,
+            // #17 (26 Nov 2026): the reply may name Imotara Connect only when this person can see it
+            connectVisible: showConnect === true,
           };
 
           let remote: any = { ok: false, replyText: "" };
@@ -4288,6 +4292,7 @@ export default function ChatScreen() {
                 userId: localUserScopeId || undefined,
                 accessToken: guestAccessToken, // same reason as the stream above
                 timeoutMs: apiTimeoutMs,
+                connectVisible: showConnect === true,
               });
             }
           }
