@@ -26,7 +26,7 @@
 import { Platform } from "react-native";
 
 export type NativeGoogleResult =
-    | { kind: "token"; idToken: string }
+    | { kind: "token"; idToken: string; accessToken?: string }
     | { kind: "cancelled" }
     | { kind: "unavailable"; reason: string };
 
@@ -83,7 +83,16 @@ export async function getGoogleIdToken(): Promise<NativeGoogleResult> {
         if (res.type === "cancelled") return { kind: "cancelled" };
         const idToken = res.data?.idToken;
         if (!idToken) return { kind: "unavailable", reason: "no id token" };
-        return { kind: "token", idToken };
+        // 1.7.4 (27 Nov 2026): Supabase warned the Google access token will become mandatory
+        // with an ID token (it checks the token's at_hash against it). Best-effort: if the
+        // SDK cannot give one, sign in exactly as 1.7.3 did — never worse than before.
+        let accessToken: string | undefined;
+        try {
+            accessToken = (await GoogleSignin.getTokens()).accessToken || undefined;
+        } catch {
+            accessToken = undefined;
+        }
+        return { kind: "token", idToken, accessToken };
     } catch (e) {
         if (isErrorWithCode(e) && e.code === statusCodes.SIGN_IN_CANCELLED) return { kind: "cancelled" };
         if (isErrorWithCode(e) && e.code === statusCodes.IN_PROGRESS) return { kind: "cancelled" };

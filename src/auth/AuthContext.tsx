@@ -344,7 +344,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const native = await getGoogleIdToken();
         if (native.kind === "cancelled") return { success: false };
         if (native.kind === "token") {
-            const { error } = await supabase.auth.signInWithIdToken({ provider: "google", token: native.idToken });
+            const { error } = await supabase.auth.signInWithIdToken({
+                provider: "google",
+                token: native.idToken,
+                // 1.7.4: sent when Google gave one (Supabase will require it); omitted otherwise.
+                ...(native.accessToken ? { access_token: native.accessToken } : {}),
+            });
             if (!error) return { success: true };
             // e.g. a nonce/audience mismatch — the web flow below still works.
             console.warn("[Auth] native Google token refused, using web sign-in:", error.message);
