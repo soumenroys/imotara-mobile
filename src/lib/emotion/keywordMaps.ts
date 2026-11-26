@@ -459,8 +459,88 @@ export function detectPositiveText(raw: string): "joy" | "hopeful" | undefined {
 // NOTE: bare "die", "death", "kill" alone are intentionally excluded — too noisy without context.
 // --------------------------------------------------
 
-export const CRISIS_HINT_REGEX =
+// #48 (27 Nov 2026): the original list. CRISIS_HINT_REGEX below = this ∪ CRISIS_NATURAL_PHRASES_REGEX.
+const CRISIS_HINT_BASE_REGEX =
   /(i\s+want\s+to\s+die|want\s+to\s+die|kill\s+myself|killing\s+myself|going\s+to\s+kill\s+myself|plan\s+(to\s+)?kill\s+myself|end\s+my\s+life|ending\s+my\s+life|plan\s+(to\s+)?end\s+my\s+life|end\s+it\s+all|ending\s+everything|end\s+everything|i\s+feel\s+like\s+ending\s+everything|don'?t\s+want\s+to\s+live|do\s+not\s+want\s+to\s+live|don'?t\s+want\s+to\s+be\s+here(\s+anymore)?|cannot\s+go\s+on|can'?t\s+go\s+on|can'?t\s+take\s+it\s+anymore|cannot\s+take\s+it\s+anymore|life\s+has\s+no\s+meaning|life\s+feels\s+meaningless|no\s+point\s+in\s+(living|life)|no\s+reason\s+to\s+(live|keep\s+going|be\s+alive)|suicidal|feeling\s+suicidal|i('?m|\s+am)\s+suicidal|thinking\s+(about|of)\s+suicide|thoughts?\s+of\s+suicide|better\s+off\s+dead|better\s+off\s+without\s+me|everyone\s+(would\s+be\s+)?better\s+off\s+without\s+me|i\s+wish\s+i\s+(was|were)\s+dead|wish\s+i\s+was\s+dead|hurt\s+myself|hurting\s+myself|harm\s+myself|harming\s+myself|self.?harm(ing)?|cut\s+myself|cutting\s+myself|want\s+to\s+(hurt|cut|harm)\s+myself|think(ing)?\s+about\s+(hurting|cutting|harming)\s+myself|overdos(e|ing|ed)|took\s+too\s+many\s+(pills|tablets)|being\s+raped?|was\s+raped?|he\s+raped?\s+me|she\s+raped?\s+me|someone\s+raped?\s+me|sexual\s+assault(ed)?|sexually\s+assault(ed)?|being\s+(physically\s+)?abused|he('?s|\s+is)\s+hurting\s+me|she('?s|\s+is)\s+hurting\s+me|domestic\s+violence|not\s+safe\s+right\s+now|i('?m|\s+am)\s+not\s+safe|in\s+immediate\s+danger|ami\s+marte\s+chai|marte\s+chai|ami\s+morte\s+chai|morte\s+chai|ami\s+ar\s+parchi\s+na|ar\s+parchi\s+na|amar\s+bachte\s+ichcha\s+korch?e\s+na|bachte\s+ichhe\s+korch?e\s+na|bachte\s+icche\s+korch?e\s+na|more\s+jete\s+ichhe\s+korch?e|morte\s+ichhe\s+korch?e|bachbo\s+na|banchte\s+chai\s+na|mar\s+jana\s+hai|mar\s+jaana\s+chahta|mar\s+jaana\s+chahti|jeene\s+ka\s+mann\s+nahi|jeene\s+ka\s+man\s+nahi|jeena\s+nahi\s+hai|life\s+ka\s+koi\s+matlab\s+nahi(\s+lag\s+raha)?|main\s+marna\s+chahta\s+hu|main\s+marna\s+chahti\s+hu|main\s+marna\s+chahta\s+hoon|main\s+marna\s+chahti\s+hoon|marna\s+chahta\s+hu|marna\s+chahti\s+hu|marna\s+chahta\s+hoon|marna\s+chahti\s+hoon|main\s+jeena\s+nahi\s+chahta|main\s+jeena\s+nahi\s+chahti|hu\s+marva\s+mangu\s+chu|jivvu\s+nathi|nanage\s+badukalu\s+ishtavilla|khud\s+ko\s+hurt\s+karna|khud\s+ko\s+nuqsan|apne\s+aap\s+ko\s+hurt|আমি\s+মরতে\s+চাই|আমার\s+মরতে\s+ইচ্ছে\s+করছে|বাঁচতে\s+ইচ্ছে\s+করছে\s+না|আমি\s+বাঁচতে\s+চাই\s+না|আমি\s+আর\s+পারছি\s+না|আমার\s+বাঁচতে\s+ইচ্ছা\s+করছে\s+না|নিজেকে\s+কষ্ট\s+দিতে\s+চাই|আত্মহত্যা|मुझे\s+मर\s+जाना\s+है|मैं\s+मरना\s+चाहता\s+हूँ|मैं\s+मरना\s+चाहती\s+हूँ|जीने\s+का\s+मन\s+नहीं|जीने\s+की\s+इच्छा\s+नहीं|जीना\s+नहीं\s+है|ज़िंदगी\s+का\s+कोई\s+मतलब\s+नहीं|आत्महत्या|खुद\s+को\s+नुकसान|जिंदगी\s+खत्म\s+करना|मरायचंय|जगायचं\s+नाही|आत्महत्या\s+करायची|મારે\s+મરી\s+જવું\s+છે|મને\s+જીવવું\s+નથી|હું\s+મરવા\s+માગું\s+છું|ನನಗೆ\s+ಸಾಯಬೇಕು\s+ಅನಿಸುತ್ತಿದೆ|ನನಗೆ\s+ಬದುಕಲು\s+ಇಷ್ಟವಿಲ್ಲ|ನಾನು\s+ಸಾಯಬೇಕು|வாழ\s+வேண்டாம்|தற்கொலை|இறந்துவிட|சாக\s+வேண்டும்|చనిపోవాలి|ఆత్మహత్య|బతకాలని\s+లేదు|മരിക്കണം|ആത്മഹത്യ|ജീവിക്കണ്ട|ജീവിതം\s+വേണ്ട|אני\s+רוצה\s+למות|לא\s+רוצה\s+לחיות|התאבדות|רוצה\s+למות|לפגוע\s+בעצמי|أريد\s+أن\s+أموت|لا\s+أريد\s+أن\s+أعيش|انتحار|أريد\s+إيذاء\s+نفسي|أفكر\s+في\s+الانتحار|ich\s+will\s+sterben|ich\s+will\s+nicht\s+mehr\s+leben|Selbstmord|ich\s+will\s+mir\s+selbst\s+schaden|ich\s+denke\s+an\s+Suizid|死にたい|消えたい|自殺|自分を傷つけたい|死んでしまいたい|quiero\s+morir|no\s+quiero\s+vivir|quiero\s+matarme|quiero\s+acabar\s+con\s+mi\s+vida|acabar\s+con\s+mi\s+vida|quiero\s+terminar\s+con\s+todo|terminar\s+con\s+todo|no\s+puedo\s+m[aá]s|ya\s+no\s+aguanto\s+m[aá]s|la\s+vida\s+no\s+tiene\s+sentido|no\s+tiene\s+sentido\s+vivir|pensamientos\s+suicidas|pienso\s+en\s+el\s+suicidio|suicida|estar[ií]an\s+mejor\s+sin\s+m[ií]|mejor\s+sin\s+m[ií]|ojal[aá]\s+estuviera\s+muert[oa]|quiero\s+hacerme\s+da[ñn]o|hacerme\s+da[ñn]o|me\s+quiero\s+cortar|autolesi[oó]n|tom[eé]\s+demasiadas\s+pastillas|me\s+violaron|fui\s+violad[oa]|abuso\s+sexual|violencia\s+dom[eé]stica|no\s+estoy\s+a\s+salvo|estoy\s+en\s+peligro|je\s+veux\s+mourir|je\s+ne\s+veux\s+plus\s+vivre|je\s+veux\s+me\s+tuer|je\s+veux\s+mettre\s+fin\s+[àa]\s+ma\s+vie|mettre\s+fin\s+[àa]\s+mes\s+jours|je\s+veux\s+en\s+finir|en\s+finir\s+avec\s+tout|je\s+n'?en\s+peux\s+plus|je\s+ne\s+peux\s+plus\s+continuer|la\s+vie\s+n'?a\s+plus\s+de\s+sens|[çc]a\s+ne\s+sert\s+[àa]\s+rien\s+de\s+vivre|pens[eé]es\s+suicidaires|je\s+pense\s+au\s+suicide|suicidaire|ils\s+seraient\s+mieux\s+sans\s+moi|mieux\s+sans\s+moi|j'?aimerais\s+[êe]tre\s+mort(e)?|je\s+veux\s+me\s+faire\s+du\s+mal|je\s+veux\s+me\s+couper|je\s+veux\s+me\s+scarifier|j'?ai\s+pris\s+trop\s+de\s+m[eé]dicaments|j'?ai\s+pris\s+trop\s+de\s+pilules|j'?ai\s+[eé]t[eé]\s+violée?|on\s+m'?a\s+viol[eé]e?|agression\s+sexuelle|violence\s+domestique|violence\s+conjugale|je\s+ne\s+suis\s+pas\s+en\s+s[eé]curit[eé]|je\s+suis\s+en\s+danger|quero\s+morrer|n[ãa]o\s+quero\s+mais\s+viver|quero\s+me\s+matar|quero\s+acabar\s+com\s+minha\s+vida|quero\s+acabar\s+com\s+tudo|n[ãa]o\s+aguento\s+mais|n[ãa]o\s+consigo\s+mais\s+continuar|a\s+vida\s+n[ãa]o\s+tem\s+sentido|n[ãa]o\s+tem\s+sentido\s+viver|pensamentos\s+suicidas|penso\s+em\s+suic[ií]dio|suicida|ficariam\s+melhor\s+sem\s+mim|queria\s+estar\s+mort[oa]|quero\s+me\s+machucar|quero\s+me\s+cortar|automutila[çc][ãa]o|tomei\s+muitos\s+comprimidos|fui\s+estuprad[oa]|abusad[oa]\s+sexualmente|viol[êe]ncia\s+dom[eé]stica|n[ãa]o\s+estou\s+segur[oa]|estou\s+em\s+perigo|я\s+хочу\s+умереть|я\s+не\s+хочу\s+жить|я\s+хочу\s+убить\s+себя|я\s+хочу\s+покончить\s+с\s+собой|я\s+хочу\s+покончить\s+со\s+всем|я\s+больше\s+не\s+могу|жизнь\s+не\s+имеет\s+смысла|нет\s+смысла\s+жить|суицидальные\s+мысли|думаю\s+о\s+суициде|без\s+меня\s+было\s+бы\s+лучше|хотел\s+бы\s+я\s+умереть|хотела\s+бы\s+я\s+умереть|хочу\s+навредить\s+себе|хочу\s+порезать\s+себя|самоповреждение|выпил(а)?\s+слишком\s+много\s+таблеток|меня\s+изнасиловали|сексуальное\s+насилие|домашнее\s+насилие|я\s+в\s+опасности|мне\s+небезопасно|我想死|我不想活了|我想自杀|我想结束自己的生命|我想结束这一切|我受不了了|我撑不下去了|生活没有意义|活着没有意义|想自杀|自杀的想法|没有我他们会更好|希望自己死了|我想伤害自己|我想割伤自己|自残|吃了太多药|我被强奸了|性侵犯|家庭暴力|我不安全|我有危险|saya\s+ingin\s+mati|aku\s+ingin\s+mati|saya\s+tidak\s+ingin\s+hidup\s+lagi|saya\s+ingin\s+bunuh\s+diri|ingin\s+bunuh\s+diri|saya\s+ingin\s+mengakhiri\s+hidup\s+saya|saya\s+ingin\s+mengakhiri\s+semuanya|saya\s+tidak\s+tahan\s+lagi|saya\s+tidak\s+bisa\s+melanjutkan|hidup\s+tidak\s+ada\s+artinya|tidak\s+ada\s+gunanya\s+hidup|pikiran\s+untuk\s+bunuh\s+diri|berpikir\s+untuk\s+bunuh\s+diri|lebih\s+baik\s+tanpa\s+saya|berharap\s+saya\s+mati|saya\s+ingin\s+menyakiti\s+diri\s+sendiri|melukai\s+diri\s+sendiri|minum\s+terlalu\s+banyak\s+obat|saya\s+diperkosa|pelecehan\s+seksual|kekerasan\s+dalam\s+rumah\s+tangga|saya\s+tidak\s+aman|saya\s+dalam\s+bahaya|khud\s+ko\s+khatam\s+karna\s+chahta\s+hoon|zindagi\s+khatam\s+karna\s+chahta\s+hoon|main\s+aur\s+bardasht\s+nahi\s+kar\s+sakta|main\s+aur\s+bardasht\s+nahi\s+kar\s+sakti|khudkushi\s+ka\s+khayal|khudkushi|mere\s+baghair\s+sab\s+behtar\s+honge|khud\s+ko\s+nuksan\s+pohunchana\s+chahta\s+hoon|khud\s+ko\s+zakhmi\s+karna|میں\s+مرنا\s+چاہتا\s+ہوں|میں\s+مرنا\s+چاہتی\s+ہوں|میں\s+جینا\s+نہیں\s+چاہتا|میں\s+جینا\s+نہیں\s+چاہتی|خودکشی|خود\s+کو\s+نقصان\s+پہنچانا|زندگی\s+کا\s+کوئی\s+مطلب\s+نہیں|میرا\s+ریپ\s+ہوا|میرے\s+ساتھ\s+زیادتی\s+ہوئی|گھریلو\s+تشدد|میں\s+محفوظ\s+نہیں\s+ہوں|main\s+marna\s+chahunda\s+haan|main\s+marna\s+chahundi\s+haan|main\s+jeena\s+nahi\s+chahunda|main\s+jeena\s+nahi\s+chahundi|khud\s+nu\s+khatam\s+karna|meri\s+zindagi\s+da\s+koi\s+matlab\s+nahi|khudkushi\s+de\s+khayal|khud\s+nu\s+nuksan\s+pahunchauna|ਮੈਂ\s+ਮਰਨਾ\s+ਚਾਹੁੰਦਾ\s+ਹਾਂ|ਮੈਂ\s+ਮਰਨਾ\s+ਚਾਹੁੰਦੀ\s+ਹਾਂ|ਮੈਂ\s+ਜਿਊਣਾ\s+ਨਹੀਂ\s+ਚਾਹੁੰਦਾ|ਮੈਂ\s+ਜਿਊਣਾ\s+ਨਹੀਂ\s+ਚਾਹੁੰਦੀ|ਖੁਦਕੁਸ਼ੀ|ਆਪਣੇ\s+ਆਪ\s+ਨੂੰ\s+ਨੁਕਸਾਨ\s+ਪਹੁੰਚਾਉਣਾ|ਜ਼ਿੰਦਗੀ\s+ਦਾ\s+ਕੋਈ\s+ਮਤਲਬ\s+ਨਹੀਂ|ਮੈਂ\s+ਸੁਰੱਖਿਅਤ\s+ਨਹੀਂ\s+ਹਾਂ|ਘਰੇਲੂ\s+ਹਿੰਸਾ|mate\s+marijiba\s+mana\s+heuchi|mu\s+bachiba\s+chahenti\s+nahi|atma\s+hatya|ମୋତେ\s+ମରିଯିବାକୁ\s+ମନ\s+ହେଉଛି|ମୁଁ\s+ବଞ୍ଚିବାକୁ\s+ଚାହୁଁନାହିଁ|ଆତ୍ମହତ୍ୟା|ନିଜକୁ\s+କ୍ଷତି\s+ପହଞ୍ଚାଇବା|ଜୀବନର\s+କୌଣସି\s+ଅର୍ଥ\s+ନାହିଁ|ମୁଁ\s+ସୁରକ୍ଷିତ\s+ନୁହେଁ|ଘରୋଇ\s+ହିଂସା)/i;
+
+/**
+ * #48 (27 Nov 2026): NATURAL phrasings of suicidal ideation, in all 22 languages.
+ *
+ * 🔴 MEASURED that day: 59 ordinary ways of saying it — not taken from the detector's own
+ * word list — and 21 showed NO crisis card (web and app alike), 26 did not switch on the
+ * reply's crisis-safety rules. Missed outright, e.g.: "думаю о самоубийстве",
+ * "もう生きていたくない", "quiero quitarme la vida", "ich will mich umbringen",
+ * "मैं खुद को मार डालूँगा", "নিজেকে শেষ করে দিতে ইচ্ছে করছে", "aku tidak ingin hidup lagi".
+ *
+ * ⚖️ Idioms stay out: "me matar"/"matarme"/"me tuer" count only after a wanting/going verb,
+ * because "essa prova vai me matar" / "ça me tue" are ordinary speech. Bare "die"/"kill"
+ * stay out, as in CRISIS_HINT_REGEX. ⇒ crisisNaturalPhrasings.test.ts (both repos, same list).
+ *
+ * ⛔ Do not narrow. Identical text in imotaraapp and imotara-mobile.
+ */
+export const CRISIS_NATURAL_PHRASES_REGEX = new RegExp(
+  [
+    // English
+    "better\\s+off\\s+without\\s+me", "don'?t\\s+want\\s+to\\s+live", "do\\s+not\\s+want\\s+to\\s+live",
+    "(?:thinking|thought)\\s+(?:about|of)\\s+(?:ending|taking)\\s+my\\s+(?:own\\s+)?life", "take\\s+my\\s+(?:own\\s+)?life",
+    "cut(?:ting)?\\s+myself", "no\\s+point\\s+(?:in\\s+)?living",
+    // Hindi (+ romanised)
+    "ख़?ुद\\s*को\\s*मार", "ज़?िंदगी\\s*ख़?त्म\\s*कर", "जीना\\s*नहीं\\s*चाहत", "आत्महत्या",
+    "khud\\s*ko\\s*maar", "zindagi\\s*khatam\\s*kar", "jeena\\s*nahi\\s*chaht",
+    // Bengali
+    "নিজেকে\\s*শেষ\\s*করে", "মরে\\s*গেলেই\\s*ভালো", "বাঁচতে\\s*চাই\\s*না", "আত্মহত্যা",
+    // Marathi
+    "जीव\\s*द्याव", "जगायचं\\s*नाही",
+    // Tamil
+    "வாழ\\s*விருப்பமில்லை", "வாழ\\s*பிடிக்கல", "செத்துப்\\s*போயிடலாம்", "செத்துடலாம்", "சாகலாம்னு", "தற்கொலை",
+    // Telugu
+    "చచ్చిపోవాల", "బతకాలని\\s*లేదు", "ఆత్మహత్య",
+    // Gujarati
+    "જીવવું\\s*નથી", "આત્મહત્યા",
+    // Punjabi
+    "ਜੀਣਾ\\s*ਨਹੀਂ\\s*ਚਾਹੁੰਦ", "ਖੁਦਕੁਸ਼ੀ", "ਖ਼ੁਦਕੁਸ਼ੀ",
+    // Kannada
+    "ಆತ್ಮಹತ್ಯೆ", "ಬದುಕಲು\\s*ಇಷ್ಟವಿಲ್ಲ",
+    // Malayalam
+    "ജീവിക്കണ്ട", "ആത്മഹത്യ",
+    // Odia
+    "ମରିଯିବାକୁ\\s*ଇଚ୍ଛା", "ଆତ୍ମହତ୍ୟା",
+    // Urdu
+    "جینا\\s*نہیں\\s*چاہت", "خودکشی", "مرنا\\s*چاہت",
+    // Arabic
+    "لا\\s*أريد\\s*أن\\s*أعيش", "انتحار", "أنهي\\s*حياتي",
+    // Hebrew
+    "לא\\s*רוצה\\s*לחיות", "התאבדות", "להתאבד",
+    // Russian
+    "не\\s*хочу\\s*(?:больше\\s*)?жить", "больше\\s*не\\s*хочу\\s*жить", "самоубийств", "покончить\\s*с\\s*собой", "убить\\s*себя", "хочу\\s*умереть",
+    // Chinese
+    "不想活", "自杀", "自殺",
+    // "想死你了" = "I miss you so much" — a common phrase, not a crisis. Excluded by the lookahead.
+    "想死(?![你您他她它])",
+    // Japanese
+    "生きていたくない", "生きたくない", "死にたい", "消えたい",
+    // Spanish
+    "no\\s*quiero\\s*vivir", "quitarme\\s*la\\s*vida", "suicidarme",
+    "(?:quiero|voy\\s*a|pienso\\s*en|pensando\\s*en)\\s*matarme", "me\\s*(?:quiero|voy\\s*a)\\s*matar",
+    // French
+    "ne\\s*veux\\s*plus\\s*vivre", "(?:envie\\s*de|veux|vais)\\s*me\\s*tuer", "me\\s*suicider", "suicide",
+    // German
+    "will\\s*nicht\\s*mehr\\s*leben", "mich\\s*umbringen", "bring\\s*mich\\s*um", "selbstmord", "suizid",
+    // Portuguese
+    "n[ãa]o\\s*quero\\s*mais\\s*viver", "(?:quero|vou|pensando\\s*em|penso\\s*em)\\s*me\\s*matar",
+    "tirar\\s*(?:a\\s*)?minha\\s*(?:pr[óo]pria\\s*)?vida", "suic[ií]dio",
+    // Indonesian
+    "tidak\\s*ingin\\s*hidup", "(?:ga|gak|nggak|tidak)\\s*mau\\s*hidup", "bunuh\\s*diri", "ingin\\s*mati", "pengen\\s*mati",
+  ].join("|"),
+  "i",
+);
+
+// 🔑 Every consumer (crisis card, reply safety, fallback replies, crisis logging) gets both lists.
+export const CRISIS_HINT_REGEX = new RegExp(
+  `${CRISIS_HINT_BASE_REGEX.source}|${CRISIS_NATURAL_PHRASES_REGEX.source}`,
+  "i",
+);
+
 
 // --------------------------------------------------
 // TIER 2 CRISIS — kept in lockstep with the web repo's copy of this file.
