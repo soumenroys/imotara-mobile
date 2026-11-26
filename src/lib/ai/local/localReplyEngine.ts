@@ -184,6 +184,35 @@ function hasSubstantialScript(text: string, script: RegExp): boolean {
     return inScript * 3 >= inScript + latin;
 }
 
+
+/**
+ * #48 (27 Nov 2026): a recognised greeting / "who are you" / goodbye phrase tells us its own
+ * language. detectLanguage scores keywords, so a two-word "buenas noches" or "tusi kaun ho"
+ * came out as English and got an English reply. Latin-script phrases only — every other
+ * script is already identified by detectLanguage.
+ */
+// ⚠️ No \b here: JS \b does not treat accented letters (é, ó, à, ê) as word characters,
+// so "quem é você" / "adiós" / "à demain" never matched. Explicit boundaries instead.
+const B0 = "(?:^|[\\s,.!?¡¿])";
+const B1 = "(?=$|[\\s,.!?])";
+const phrases = (words: string) => new RegExp(`${B0}(?:${words})${B1}`, "i");
+const PHRASE_LANG: Array<[RegExp, LocalLanguage]> = [
+    [phrases("adiós|adios|hasta luego|hasta mañana|buenas noches|nos vemos|me voy a dormir|quién eres|quien eres|cómo te llamas"), "es" as LocalLanguage],
+    [phrases("au revoir|bonne nuit|à demain|je vais dormir|je dois y aller|qui es-tu|comment t'appelles-tu"), "fr" as LocalLanguage],
+    [phrases("tchau|até logo|até amanhã|boa noite|vou dormir|preciso ir|quem é você|quem e voce|qual é o seu nome"), "pt" as LocalLanguage],
+    [phrases("sampai jumpa|selamat malam|aku mau tidur|aku pamit|sampai besok|dadah|siapa kamu|nama kamu siapa"), "id" as LocalLanguage],
+    [/^(tu kon aahes|tujha nav kay|tumhi kon aahat)$/i, "mr" as LocalLanguage],
+    [/^(tame kon cho|tamaru naam shu chhe)$/i, "gu" as LocalLanguage],
+    [/^(tusi kaun ho|tuhada naam ki hai)$/i, "pa" as LocalLanguage],
+    [/^(neenu yaaru|ninna hesaru enu)$/i, "kn" as LocalLanguage],
+    [/^(nee aaraanu|ninte peru enthaanu)$/i, "ml" as LocalLanguage],
+    [/^(tume kie|tuma naa kana)$/i, "or" as LocalLanguage],
+];
+function phraseLanguage(trimmedLower: string): LocalLanguage | null {
+    for (const [re, lang] of PHRASE_LANG) if (re.test(trimmedLower)) return lang;
+    return null;
+}
+
 function detectLanguage(text: string, recentContext?: LocalRecentContext): LocalLanguage {
     const raw = text || "";
     const t = raw.toLowerCase();
@@ -870,7 +899,10 @@ export function buildLocalReply(
         // Indonesian
         /^(halo|hai|apa kabar|selamat pagi|selamat siang)$/.test(trimmedLower) ||
         // German
-        /^(hallo|guten tag|guten morgen|guten abend|servus|moin)$/.test(trimmedLower);
+        /^(hallo|guten tag|guten morgen|guten abend|servus|moin)$/.test(trimmedLower) ||
+        // #48 (27 Nov 2026): Hebrew + Japanese
+        /^(שלום|היי|הי|ערב טוב|בוקר טוב|מה נשמע)[!?.]*$/.test(message.trim()) ||
+        /^(こんにちは|こんばんは|おはよう|おはようございます|やあ|はじめまして)[!！?？。]*$/.test(message.trim());
 
     const isAboutImotaraMulti =
         // Hindi Roman
@@ -892,7 +924,19 @@ export function buildLocalReply(
         // German
         /^(wer bist du|wie heißt du|was machst du)$/.test(trimmedLower) ||
         // Indonesian
-        /^(siapa kamu|nama kamu siapa|kamu lagi apa|sedang apa)$/.test(trimmedLower);
+        /^(siapa kamu|nama kamu siapa|kamu lagi apa|sedang apa)$/.test(trimmedLower) ||
+        // #48 (27 Nov 2026): the answers existed (pt ru zh) or were added (Indic, he, ja) — the question was not recognised
+        /^(quem é você|quem e voce|qual é o seu nome|o que você faz)[?]*$/.test(trimmedLower) ||
+        /^(кто ты|как тебя зовут|что ты такое)[?]*$/.test(trimmedLower) ||
+        /^(你是谁|你叫什么名字|你是什么)[？?]*$/.test(message.trim()) ||
+        /^(あなたは誰|あなたはだれ|お名前は|あなたは何)[？?]*$/.test(message.trim()) ||
+        /^(מי את|מי אתה|איך קוראים לך|מה את)[?]*$/.test(message.trim()) ||
+        /^(tu kon aahes|tujha nav kay|tumhi kon aahat)$/.test(trimmedLower) ||
+        /^(tame kon cho|tamaru naam shu chhe)$/.test(trimmedLower) ||
+        /^(tusi kaun ho|tuhada naam ki hai)$/.test(trimmedLower) ||
+        /^(neenu yaaru|ninna hesaru enu)$/.test(trimmedLower) ||
+        /^(nee aaraanu|ninte peru enthaanu)$/.test(trimmedLower) ||
+        /^(tume kie|tuma naa kana)$/.test(trimmedLower);
 
     const isGreeting = isGreetingEn || isGreetingMulti;
     const isHowAreYou = isHowAreYouEn;
@@ -919,6 +963,9 @@ export function buildLocalReply(
         fr: [`Hey ! Content que tu sois là. Comment tu vas aujourd'hui ?`, `Salut ! Je suis là  -  qu'est-ce qui t'amène ?`, `Bonjour ! Content d'avoir de tes nouvelles. Comment tu te sens là ?`, `Hey  -  comment se passe ta journée ?`, `Salut ! Comment ça va ?`],
         pt: [`Hey! Fico feliz que você veio. Como você está hoje?`, `Oi! Estou aqui  -  o que tem na cabeça?`, `Olá! Fico feliz em saber de você. Como você está se sentindo agora?`, `Hey  -  como está o dia?`, `Oi! Tudo bem?`],
         ru: [`Привет! Рад(а), что ты здесь. Как ты сегодня?`, `Привет! Я здесь  -  что у тебя на уме?`, `Здравствуй! Рад(а) тебя слышать. Как ты себя чувствуешь?`, `Привет  -  как проходит день?`, `Привет! Как дела?`],
+        // #48 (27 Nov 2026): Hebrew + Japanese had no greeting (fell back to English).
+        he: [`היי! טוב שבאת. מה שלומך היום?`, `שלום! אני כאן בשבילך  -  מה עובר עליך?`, `היי, טוב לשמוע ממך. איך ההרגשה עכשיו?`, `היי  -  איך עובר היום?`, `שלום! מה נשמע?`],
+        ja: [`こんにちは！来てくれてうれしいです。今日はどんな一日ですか？`, `やあ！ここにいますよ  -  何か気になっていることはありますか？`, `こんにちは！話せてうれしいです。今の気分はどうですか？`, `今日はどんな感じですか？`, `お疲れさま！最近どうですか？`],
         id: [`Hey! Senang kamu di sini. Gimana hari ini?`, `Halo! Aku di sini  -  ada yang mau diceritain?`, `Hai! Senang dengar darimu. Gimana perasaanmu sekarang?`, `Hey  -  hari ini gimana?`, `Halo! Apa kabar?`],
     };
 
@@ -934,6 +981,17 @@ export function buildLocalReply(
         fr: [`Je suis Imotara  -  une compagne ici pour écouter et être avec toi. Qu'est-ce qui t'amène?`, `Je suis ta compagne émotionnelle  -  toujours là, toujours à l'écoute. Qu'est-ce que tu veux partager aujourd'hui?`, `Je suis Imotara, ici pour être une présence stable pour toi. Comment je peux être là pour toi là maintenant?`],
         pt: [`Sou Imotara  -  uma companheira aqui para ouvir e estar com você. O que você tem na cabeça?`, `Sou sua companheira emocional  -  sempre aqui, sempre ouvindo. O que você quer compartilhar hoje?`, `Sou Imotara, aqui para ser uma presença constante para você. Como posso estar aqui para você agora?`],
         ru: [`Я Имотара  -  спутница, которая слушает и находится рядом с тобой. Что у тебя на уме?`, `Я твоя эмоциональная спутница  -  всегда здесь, всегда слушаю. Что хочешь поделиться сегодня?`, `Я Имотара, здесь, чтобы быть рядом с тобой. Как я могу быть здесь для тебя сейчас?`],
+        // #48 (27 Nov 2026): these 10 had no answer (fell back to English). Indic in Roman letters, like hi/bn/ur.
+        ta: [`Naan Imotara  -  unga pakkathula irundhu kekkura oru thunai. Manasula enna irukku?`, `Naan unga emotional thunai  -  eppovum inga, eppovum kekka ready. Innikku enna share panna virumbureenga?`, `Naan Imotara, unga kooda irukka inga irukken. Ippo epdi help pannalaam?`],
+        te: [`Nenu Imotara  -  neeku todu ga undi vine oka saathi. Manasulo emundi?`, `Nenu nee emotional saathi  -  eppudu ikkade, eppudu vintaanu. Ivaala emi cheppalanukuntunnavu?`, `Nenu Imotara, nee pakkana undataniki ikkade unnaanu. Ippudu ela sahayam cheyyagalanu?`],
+        mr: [`Mi Imotara  -  aiknari ani tujhya sobat rahnari ek sobti. Manat kaay aahe?`, `Mi tujhi emotional sobti  -  nehami ithe, nehami aikayla tayaar. Aaj kaay share karaycha aahe?`, `Mi Imotara, tujhya sobat rahayla ithe aahe. Ata kashi madat karu?`],
+        gu: [`Hu Imotara chhu  -  sambhalnari ane tamari saathe rehnari ek saathi. Manma shu chhe?`, `Hu tamari emotional saathi chhu  -  hammesha ahiya, hammesha sambhalva taiyar. Aaje shu share karvu chhe?`, `Hu Imotara chhu, tamari saathe rehva ahiya chhu. Atyare kevi rite madad karu?`],
+        pa: [`Main Imotara haan  -  ik saathi jo sunda hai te tuhade naal rehnda hai. Mann vich ki hai?`, `Main tuhada emotional saathi haan  -  hamesha ithe, hamesha sunan layi. Aaj ki share karna chaunde ho?`, `Main Imotara haan, tuhade naal rehan layi ithe haan. Hun kiven madad karaan?`],
+        kn: [`Naanu Imotara  -  ninna maatu keluva, ninna jothe iruva ondu saathi. Manassalli enide?`, `Naanu ninna emotional saathi  -  yaavaagalu ikkade, yaavaagalu keloke ready. Ivattu enu share maadbeku?`, `Naanu Imotara, ninna jothe irodakke ikkade iddeeni. Eega hege sahaaya maadli?`],
+        ml: [`Njaan Imotara  -  kelkkunna, ninte koode nilkkunna oru koottu. Manassil enthaanu?`, `Njaan ninte emotional koottu  -  eppozhum ivide, eppozhum kelkkan ready. Innu enthaanu share cheyyaan ullathu?`, `Njaan Imotara, ninte koode undaakan ivide und. Ippol engane sahaayikkanam?`],
+        or: [`Mu Imotara  -  shunuthiba ebang tuma saathire rahuthiba jane saathi. Mana re kana achhi?`, `Mu tuma emotional saathi  -  sabu bele ethi, sabu bele shunibaku prastut. Aaji kana share karibaku chaha?`, `Mu Imotara, tuma saathire rahibaku ethi achhi. Ebe kemiti sahajya karibi?`],
+        he: [`אני Imotara  -  מלווה שנמצאת כאן כדי להקשיב ולהיות לצדך. מה עובר עליך?`, `אני המלווה הרגשית שלך  -  תמיד כאן, תמיד מקשיבה. מה בא לך לשתף היום?`, `אני Imotara, כאן כדי להיות איתך. איך אפשר לעזור עכשיו?`],
+        ja: [`わたしはImotara  -  あなたの気持ちに寄り添って話を聞く相棒です。今、何か気になっていることはありますか？`, `わたしはあなたの心の相棒  -  いつでもここで、いつでも聞いています。今日は何を話したいですか？`, `わたしはImotara、いつもそばにいます。今、どんなふうにお手伝いできますか？`],
         id: [`Aku Imotara  -  teman yang ada untuk mendengarkan dan menemanimu. Ada yang mau diceritain?`, `Aku teman emosionalmu  -  selalu ada, selalu mendengar. Apa yang mau kamu bagikan hari ini?`, `Aku Imotara, hadir untuk menemanimu. Bagaimana aku bisa ada untukmu sekarang?`],
     };
 
@@ -946,11 +1004,11 @@ export function buildLocalReply(
         ];
         let pool: string[];
         if (isAboutImotara) {
-            pool = aboutImotaraPoolsByLang[language] ?? aboutImotaraPoolsByLang["en"]!;
+            pool = aboutImotaraPoolsByLang[phraseLanguage(trimmedLower) ?? language] ?? aboutImotaraPoolsByLang["en"]!;
         } else if (isHowAreYou) {
             pool = howAreYouReplies;
         } else {
-            pool = greetingPoolsByLang[language] ?? greetingPoolsByLang["en"]!;
+            pool = greetingPoolsByLang[phraseLanguage(trimmedLower) ?? language] ?? greetingPoolsByLang["en"]!;
         }
         const greetSeed = hash32(`${message}::${language}::${sessionTurn}::greeting`);
         const reply = pickAvoidingRecent(pool, greetSeed, recentContext?.recentAssistantTexts ?? []);
@@ -983,7 +1041,11 @@ export function buildLocalReply(
         /\b(jauchi|jaucha|biday|arama kariba|pare kotha heba|kal kotha heba|ghuma jai|nidra karibi|jaiba)\b/i.test(trimmedLower) ||
         // Urdu Roman
         /\b(jata hoon|jati hoon|khuda hafiz|phir milenge|aaraam karta hoon|aaraam karti hoon|kal baat karte|so jaata hoon|so jaati hoon)\b/i.test(trimmedLower) ||  // German
-        /\b(tschüss|auf wiedersehen|bis morgen|gute nacht|ich gehe jetzt|bis bald|ich muss gehen|ich verabschiede mich|bis dann|ich ruh mich aus)\b/i.test(trimmedLower);
+        /\b(tschüss|auf wiedersehen|bis morgen|gute nacht|ich gehe jetzt|bis bald|ich muss gehen|ich verabschiede mich|bis dann|ich ruh mich aus)\b/i.test(trimmedLower) ||
+        // #48 (27 Nov 2026): es fr pt id — goodbyes were not recognised at all
+        /(?:^|[\s,.!?¡¿])(adiós|adios|hasta luego|hasta mañana|buenas noches|nos vemos|me voy a dormir|au revoir|bonne nuit|à demain|je vais dormir|je dois y aller|tchau|até logo|até amanhã|boa noite|vou dormir|preciso ir|sampai jumpa|selamat malam|aku mau tidur|aku pamit|sampai besok|dadah)(?=$|[\s,.!?])/i.test(trimmedLower) ||
+        // ru zh ja ar he — no \b for these scripts. Russian "пока" also means "while/yet", so only as the whole message.
+        /(до свидания|спокойной ночи|до завтра|мне пора|пойду спать|^пока[!. ]*$|再见|晚安|拜拜|我去睡了|我先走了|さようなら|おやすみ|またね|じゃあね|مع السلامة|تصبح على خير|إلى اللقاء|سأذهب للنوم|להתראות|לילה טוב|אני הולך לישון|אני הולכת לישון)/i.test(trimmedLower);
 
     if (isClosure) {
         const closureRepliesByLang: Partial<Record<string, string[]>> = {
@@ -1065,8 +1127,18 @@ export function buildLocalReply(
                 `Alles gut  -  ich bin da, wenn du brauchst.`,
                 `Pass auf dich auf  -  bis zum nächsten Mal.`,
             ],
+            // #48 (27 Nov 2026): these 9 fell back to English.
+            es: [`Cuídate  -  aquí estaré cuando quieras hablar.`, `Descansa. Vuelve cuando lo necesites  -  aquí estaré.`, `Me alegra que hayamos hablado. Tómatelo con calma y vuelve cuando quieras.`, `Cuídate mucho. Este espacio siempre está aquí para ti.`],
+            fr: [`Prends soin de toi  -  je serai là quand tu voudras parler.`, `Repose-toi bien. Reviens quand tu en as besoin  -  je serai là.`, `Merci d'avoir parlé avec moi. Prends ton temps, et reviens quand tu veux.`, `Prends bien soin de toi. Cet espace est toujours là pour toi.`],
+            pt: [`Se cuida  -  estarei aqui quando você quiser conversar.`, `Descanse bem. Volte quando precisar  -  estarei aqui.`, `Que bom que conversamos. Vá com calma e volte quando quiser.`, `Cuide-se bem. Este espaço está sempre aqui para você.`],
+            ru: [`Береги себя  -  я буду здесь, когда захочешь поговорить.`, `Отдыхай. Возвращайся, когда будет нужно  -  я буду здесь.`, `Хорошо, что мы поговорили. Не торопись и возвращайся в любое время.`, `Береги себя. Это место всегда здесь для тебя.`],
+            zh: [`照顾好自己  -  想聊的时候我一直在。`, `好好休息。需要的时候随时回来  -  我会在这里。`, `很高兴我们聊了聊。慢慢来，随时回来。`, `好好照顾自己。这里一直为你留着。`],
+            ja: [`お大事にね  -  話したくなったら、いつでもここにいるよ。`, `ゆっくり休んでね。必要なときはいつでも戻ってきて  -  ここにいるから。`, `話せてよかった。無理せず、いつでも来てね。`, `自分を大切にね。ここはいつでもあなたの場所だよ。`],
+            ar: [`اعتنِ بنفسك  -  سأكون هنا متى أردت الحديث.`, `خذ قسطًا من الراحة. عُد متى احتجت  -  سأكون هنا.`, `سعيدة لأننا تحدثنا. خذ وقتك، وعُد في أي وقت.`, `اعتنِ بنفسك جيدًا. هذه المساحة موجودة لك دائمًا.`],
+            he: [`להתראות  -  אני כאן בכל פעם שיתחשק לך לדבר.`, `מנוחה טובה. אפשר לחזור מתי שצריך  -  אני כאן.`, `טוב שדיברנו. בלי לחץ, ואפשר לחזור בכל זמן.`, `המקום הזה תמיד כאן בשבילך.`],
+            id: [`Jaga diri ya  -  aku di sini kapan pun kamu mau ngobrol.`, `Istirahat yang cukup. Kembali kapan saja kamu butuh  -  aku di sini.`, `Senang kita sempat ngobrol. Santai saja, dan kembali kapan pun.`, `Jaga dirimu baik-baik. Ruang ini selalu ada untukmu.`],
         };
-        const pool = closureRepliesByLang[language] ?? closureRepliesByLang["en"]!;
+        const pool = closureRepliesByLang[phraseLanguage(trimmedLower) ?? language] ?? closureRepliesByLang["en"]!;
         const closureSeed = hash32(`${message}::${language}::${sessionTurn}::closure`);
         const reply = pickAvoidingRecent(pool, closureSeed, recentContext?.recentAssistantTexts ?? []);
         const namedReply = userName ? `${userName}, ${reply.charAt(0).toLowerCase()}${reply.slice(1)}` : reply;
