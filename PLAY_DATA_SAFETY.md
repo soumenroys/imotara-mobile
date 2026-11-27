@@ -117,9 +117,9 @@ Google asks these for every ticked type:
 
 | Data Type | Collected | Shared | Required or Optional | Purpose |
 |-----------|-----------|--------|----------------------|---------|
-| Name | Optional | No | Optional | AI personalization via companion memory |
-| Age range | Optional | No | Optional | Tone adjustment for AI responses |
-| Gender | Optional | No | Optional | Tone adjustment for AI responses |
+| Name | Optional | No | Optional | Companion personalization (companion memory) |
+| Age range | Optional | No | Optional | Tone adjustment for generated replies |
+| Gender | Optional | No | Optional | Tone adjustment for generated replies |
 
 ---
 
@@ -149,9 +149,9 @@ Google asks these for every ticked type:
 | Data Type | Collected | Shared | Required or Optional | Purpose |
 |-----------|-----------|--------|----------------------|---------|
 | Emails or text messages | No | No | — | — |
-| In-app messages (chat) | Yes | No (shared only with our own server) | Required | AI emotional companion response & history sync |
+| In-app messages (chat) | Yes | No (shared only with our own server) | Required | Emotional companion replies & history sync |
 
-> Chat messages are sent to imotaraapp.vercel.app (owned by the developer) for AI response generation and optional cross-device sync. Data is NOT shared with any third party.
+> Chat messages are sent to imotaraapp.vercel.app (owned by the developer) for generating replies and optional cross-device sync. Data is NOT shared with any third party.
 
 ---
 
@@ -347,7 +347,7 @@ other — deriving one from the other is the mistake, in either direction.
 | Shared With | What | Why |
 |-------------|------|-----|
 | Razorpay | Payment amount, order ID (via native SDK) | Process optional donation payment |
-| imotaraapp.vercel.app (developer's own server) | Chat messages, voice audio, user scope ID | AI responses, history sync, transcription |
+| imotaraapp.vercel.app (developer's own server) | Chat messages, voice audio, user scope ID | Generating replies, history sync, transcription |
 
 **No data is sold. No data is shared with advertisers or data brokers.**
 
@@ -372,4 +372,4 @@ Suggested URL: https://imotaraapp.vercel.app/privacy
 
 ## Summary Statement (for your reference)
 
-> Imotara collects chat messages and optional voice input to provide AI-powered emotional support. Data is stored locally on the device or optionally synced to the developer's own server. No analytics SDKs, advertising networks, or third-party trackers are used. Payment is handled by Razorpay for optional donations. No user data is sold or shared with third parties.
+> Imotara collects chat messages and optional voice input to provide a private emotional support companion. Data is stored locally on the device or optionally synced to the developer's own server. No analytics SDKs, advertising networks, or third-party trackers are used. Payment is handled by Razorpay for optional donations. No user data is sold or shared with third parties.
