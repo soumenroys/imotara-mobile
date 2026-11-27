@@ -123,10 +123,18 @@ describe("⚖️ everyday idioms are not made into crises by the new list", () =
   it.each(IDIOMS)("[%s] %s", (_l, p) => {
     expect(CRISIS_NATURAL_PHRASES_REGEX.test(p)).toBe(false);
   });
-  it("the new list does not flag 'I miss you so much' in Chinese; 'I want to die' stays caught", () => {
-    // ⚠️ The ORIGINAL list (before 27 Nov) already matches "我想死你了" — a known false alarm,
-    // kept because the rule is never to narrow the detector without the owner's decision.
-    expect(CRISIS_NATURAL_PHRASES_REGEX.test("我想死你了")).toBe(false);
-    expect(isCrisisTier2("我想死")).toBe(true);
+  it("'I miss you so much' in Chinese is not a crisis — on ANY list; 'I want to die' stays caught", () => {
+    // 27 Nov 2026 (owner OK): the ORIGINAL list matched "我想死你了" (= I miss you so much) and showed
+    // the crisis card. Narrowed to the same guard as the new list: 想死 followed by 你/您/他/她/它 is
+    // "miss someone". Nothing else about the Chinese crisis phrases changed.
+    for (const miss of ["我想死你了", "我想死您了", "我好想死你啊", "我想死他了", "我想死她了"]) {
+      expect(CRISIS_NATURAL_PHRASES_REGEX.test(miss)).toBe(false);
+      expect(CRISIS_HINT_REGEX.test(miss)).toBe(false);
+      expect(isCrisisTier2(miss)).toBe(false);
+    }
+    for (const die of ["我想死", "我想死了", "我真的想死", "我不想活了", "我想自杀", "想死，活不下去了"]) {
+      expect(isCrisisTier2(die)).toBe(true);
+      expect(CRISIS_HINT_REGEX.test(die)).toBe(true);
+    }
   });
 });
