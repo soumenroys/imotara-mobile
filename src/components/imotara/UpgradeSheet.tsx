@@ -32,7 +32,7 @@ import {
     Linking,
 } from "react-native";
 import type { Purchase, Product, ProductSubscription } from "expo-iap";
-import { readStorePricing, introNote } from "../../payments/storePricing";
+import { readStorePricing, introNote, storePaidPrice } from "../../payments/storePricing";
 import { storeSkuFor } from "../../payments/upgradePlans";
 import {
     classifyAndroidVerifyResponse,
@@ -102,6 +102,8 @@ async function verifyAndroidPurchase(
     productId: ProductId,
     purchaseToken: string,
     accessToken: string,
+    // #44: the store price, for the payment RECORD only (Play's server API has none).
+    paid: { paidMicros: number; paidCurrency: string } | null = null,
 ): Promise<{ ok: boolean; pending?: boolean; error?: string }> {
     const headers = {
         "Content-Type": "application/json",
@@ -111,7 +113,7 @@ async function verifyAndroidPurchase(
     try {
         const res = await fetchWithTimeout(
             buildApiUrl("/api/payments/google-play/verify"),
-            { method: "POST", headers, body: JSON.stringify({ productId, purchaseToken }) },
+            { method: "POST", headers, body: JSON.stringify({ productId, purchaseToken, ...(paid ?? {}) }) },
             30_000,
         );
         const data = await res.json().catch(() => ({}));
@@ -205,6 +207,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     // hot path — Supabase's lock manager blocks concurrent getSession/refreshSession
     // calls, which would cause the spinner to hang indefinitely.
     const accessTokenRef = useRef<string | null>(null);
+    // #44: the latest store-product lookup, for onPurchaseSuccess (captured inside useIAP).
+    const storeProductRef = useRef<(sku: string) => unknown>(() => undefined);
     const purchaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Single gate: once any purchase outcome is handled, all further events are ignored
     const purchaseOutcomeHandledRef = useRef(false);
@@ -379,6 +383,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                         productId as ProductId,
                         purchaseToken,
                         accessToken,
+                        storePaidPrice(storeProductRef.current(productId as string)),
                     );
                     if (androidResult.pending) {
                         Alert.alert(PENDING_PAYMENT_TITLE, pendingPaymentMessage(isTokenPack));
@@ -503,6 +508,8 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     // Both platforms populate these — the effect above fetches for Android too.
     const storeProduct = (sku: string): Product | ProductSubscription | undefined =>
         products.find((p) => p.id === sku) ?? subscriptions.find((s) => s.id === sku);
+    // Keep ref current so onPurchaseSuccess can read the price (same pattern as handleRestoreRef).
+    storeProductRef.current = storeProduct;
 
     /**
      * 💰 Prices come from the STORE on both platforms — see
