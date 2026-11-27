@@ -7,7 +7,7 @@ import React, {
     useRef,
     type ReactNode,
 } from "react";
-import { AppState } from "react-native";
+import { Alert, AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEBUG_UI_ENABLED } from "../config/debug";
 
@@ -20,6 +20,7 @@ import { supabase } from "../lib/supabase/client";
 import { buildApiUrl } from "../config/api";
 import { mergeServerProfile } from "../lib/profileMerge";
 import { parseBillingIssue, type BillingIssue } from "../licensing/billingIssue";
+import { recoverAndroidPurchasesOncePerLaunch } from "../payments/androidPurchaseSafety";
 
 /**
  * Minimum gap between AUTOMATIC licence re-reads on foreground.
@@ -518,6 +519,27 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 // inside this very callback, which deadlocks — see the comment
                 // on refreshLicense.
                 await refreshLicense(session);
+
+                // 🔴 ANDROID: GRANT WHAT WAS PAID WHILE NOBODY WAS LISTENING (27 Nov 2026).
+                // The purchase listener lives only inside UpgradeSheet, so a pending payment
+                // that completed later — or a purchase whose verify failed — was never sent to
+                // the server again. Once per launch, for a real (non-guest) account, sweep
+                // Play's unfinished purchases (androidPurchaseSafety.ts). Fire-and-forget:
+                // never awaited here, no supabase.auth call (we pass the token we were handed —
+                // see the deadlock note on refreshLicense), silent unless something was granted.
+                if (!session.user.is_anonymous && session.access_token && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+                    const sweep = recoverAndroidPurchasesOncePerLaunch(session.access_token);
+                    sweep?.then(async (r) => {
+                        if (r.grantedPlans + r.grantedCredits === 0) return;
+                        await refreshLicense(session);
+                        Alert.alert(
+                            r.grantedPlans > 0 ? "You're all set!" : "Credits added!",
+                            r.grantedPlans > 0
+                                ? "Your payment has gone through and Plus is now on. Thank you."
+                                : "Your payment has gone through and your credits have been added to your account.",
+                        );
+                    }).catch(() => { /* fail-open: the next launch tries again */ });
+                }
             }
         );
         return () => subscription.unsubscribe();

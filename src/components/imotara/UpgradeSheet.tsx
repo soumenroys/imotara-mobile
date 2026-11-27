@@ -16,7 +16,7 @@
 // ConnectScreen.tsx, covered by App Store rule 3.1.3(d). See
 // `paymentPlatformGating.test.ts`, which fails the build if a call site returns.
 
-import { openEmailSignIn } from "../../auth/emailSignInBus";
+import { openEmailSignIn, onEmailSignInClosed } from "../../auth/emailSignInBus";
 import React, { useEffect, useRef, useState } from "react";
 import { DEBUG_UI_ENABLED } from "../../config/debug";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -34,6 +34,13 @@ import {
 import type { Purchase, Product, ProductSubscription } from "expo-iap";
 import { readStorePricing, introNote } from "../../payments/storePricing";
 import { storeSkuFor } from "../../payments/upgradePlans";
+import {
+    classifyAndroidVerifyResponse,
+    isPendingPurchase,
+    pendingPaymentMessage,
+    PENDING_PAYMENT_TITLE,
+    recoverAndroidPurchases,
+} from "../../payments/androidPurchaseSafety";
 let _iapMod: typeof import("expo-iap") | null = null;
 try { _iapMod = require("expo-iap"); } catch { /* not available in dev builds */ }
 const useIAP: typeof import("expo-iap")["useIAP"] = _iapMod?.useIAP ?? (() => ({ connected: false, products: [], subscriptions: [], availablePurchases: [], currentPurchase: undefined, currentPurchaseError: undefined, finishTransaction: async () => {}, getProducts: async () => {}, getSubscriptions: async () => {}, requestPurchase: async () => {}, requestSubscription: async () => {} } as any));
@@ -95,7 +102,7 @@ async function verifyAndroidPurchase(
     productId: ProductId,
     purchaseToken: string,
     accessToken: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; pending?: boolean; error?: string }> {
     const headers = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
@@ -107,9 +114,12 @@ async function verifyAndroidPurchase(
             { method: "POST", headers, body: JSON.stringify({ productId, purchaseToken }) },
             30_000,
         );
-        const data = await res.json();
-        if (data.ok) return { ok: true };
-        return { ok: false, error: data.error ?? "Google Play verification failed" };
+        const data = await res.json().catch(() => ({}));
+        // 🔴 27 Nov 2026: a PENDING payment answers 202 { pending: true } — it is not a failure.
+        const outcome = classifyAndroidVerifyResponse(res.status, data);
+        if (outcome.status === "ok") return { ok: true };
+        if (outcome.status === "pending") return { ok: false, pending: true };
+        return { ok: false, error: outcome.error };
     } catch {
         const polled = await pollLicenseStatus(headers, productId);
         if (polled) return { ok: true };
@@ -220,6 +230,19 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
      */
     const PURCHASE_TIMEOUT_MS = 300_000;
     const isRestoringRef = useRef(false);
+    // Email sign-in hides the Modal instead of unmounting the sheet — see signInWithEmailThenResume.
+    const [hiddenForEmail, setHiddenForEmail] = useState(false);
+    const emailResumeCleanupRef = useRef<(() => void) | null>(null);
+    useEffect(() => () => { emailResumeCleanupRef.current?.(); }, []);
+    // A tap while the signed-in answer is still loading waits for it (iOS guest race, 27 Nov 2026).
+    const checkingSignInRef = useRef(false);
+    // Polls the ref only — never supabase.auth here (its lock can hang while checkSession refreshes).
+    const waitForSignedInAnswer = async (timeoutMs = 5_000) => {
+        const until = Date.now() + timeoutMs;
+        while (isSignedInRef.current === null && Date.now() < until) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+    };
     const handleRestoreRef = useRef<() => Promise<void>>(async () => {});
 
     useEffect(() => {
@@ -318,10 +341,15 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                 }
 
                 if (!accessToken) {
-                    if (DEBUG_UI_ENABLED) console.log("[IAP] no session — finishing transaction then showing sign in required");
-                    // Finish the transaction BEFORE returning so the purchase doesn't stay
-                    // stuck in a pending state. The user can restore it after signing in.
-                    try { await finishTransaction({ purchase, isConsumable: isTokenPack }); } catch { /* ignore */ }
+                    if (DEBUG_UI_ENABLED) console.log("[IAP] no session — showing sign in required");
+                    // iOS: finish so StoreKit stops re-delivering; restore re-reads it after sign-in.
+                    // 🔴 Android (27 Nov 2026): NOT finished. An acknowledged Play purchase is never
+                    // listed as unfinished again, so the launch sweep (androidPurchaseSafety.ts)
+                    // could not grant it after sign-in. Unfinished, it is retried; unconfirmed for
+                    // 3 days, Play refunds it by itself.
+                    if (Platform.OS !== "android") {
+                        try { await finishTransaction({ purchase, isConsumable: isTokenPack }); } catch { /* ignore */ }
+                    }
                     Alert.alert(
                         "Sign in required",
                         "Please sign in and re-open the app to activate your purchase. Your payment is safe — tap 'Restore purchases' after signing in.",
@@ -333,12 +361,17 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
 
                 if (Platform.OS === "android") {
                     // ── Android: Google Play Billing verification ──────────────────
+                    // 🔴 27 Nov 2026: a PENDING payment (UPI collect, cash, slow bank) is not
+                    // paid yet. Nothing to verify, nothing to finish — say so calmly. When Google
+                    // completes it, the launch sweep / Restore grants it (androidPurchaseSafety.ts).
+                    if (isPendingPurchase(purchase)) {
+                        Alert.alert(PENDING_PAYMENT_TITLE, pendingPaymentMessage(isTokenPack));
+                        return;
+                    }
                     const purchaseToken = (purchase as any).purchaseToken ?? (purchase as any).transactionReceipt ?? "";
                     if (!purchaseToken) {
-                        // Still finish the transaction — we can't verify it server-side
-                        // without a token, but leaving it unacknowledged risks Play
-                        // auto-refunding it after 3 days.
-                        try { await finishTransaction({ purchase, isConsumable: isTokenPack }); } catch { /* ignore */ }
+                        // ⛔ Not finished: expo-iap cannot acknowledge without a token anyway, and
+                        // an unverified purchase must stay retryable (27 Nov 2026).
                         Alert.alert("Purchase error", "No purchase token received. Please try again.");
                         return;
                     }
@@ -347,11 +380,18 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                         purchaseToken,
                         accessToken,
                     );
+                    if (androidResult.pending) {
+                        Alert.alert(PENDING_PAYMENT_TITLE, pendingPaymentMessage(isTokenPack));
+                        return;
+                    }
                     if (!androidResult.ok) {
-                        // Finish the transaction even on failure so Play doesn't auto-refund
-                        // unacknowledged purchases after 3 days.
-                        try { await finishTransaction({ purchase, isConsumable: isTokenPack }); } catch { /* ignore */ }
-                        Alert.alert("Verification failed", androidResult.error ?? "Try again or tap Restore purchases.");
+                        // 🔴 NEVER finish an unconfirmed purchase (27 Nov 2026). This used to
+                        // acknowledge it "so Play doesn't auto-refund" — which made the failure
+                        // permanent: an acknowledged purchase is never offered for retry, so the
+                        // person paid and Plus never came. Left unfinished, the launch sweep and
+                        // 'Restore previous plan' retry it; if it truly cannot be confirmed in
+                        // 3 days, Play refunds it — the honest outcome.
+                        Alert.alert("Verification failed", androidResult.error ?? "Your payment is safe. Tap 'Restore previous plan' to try again.");
                         return;
                     }
                     serverVerified = true;
@@ -505,6 +545,30 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     // OAuth redirect fires as a system deep-link intent. The session arrives async
     // via onAuthStateChange, not synchronously after signInWithGoogle() resolves.
     // We subscribe to onAuthStateChange BEFORE opening OAuth so we catch both paths.
+    /**
+     * 🔴 EMAIL SIGN-IN RESUMES THE PURCHASE, LIKE GOOGLE AND APPLE DO (27 Nov 2026).
+     *
+     * iOS cannot present the email sheet over this one, so it used to call onClose() — which
+     * UNMOUNTS this sheet in every host, losing the purchase the person had tapped (and the
+     * purchase listener with it). Now the sheet only HIDES its Modal, stays mounted, and when
+     * the email sheet closes it comes back: signed in with a real account ⇒ the purchase (or
+     * restore) carries on; closed without signing in ⇒ the sheet is simply back.
+     */
+    const signInWithEmailThenResume = (onSuccess: () => void) => {
+        setHiddenForEmail(true);
+        const unsubscribe = onEmailSignInClosed(() => {
+            unsubscribe();
+            emailResumeCleanupRef.current = null;
+            // Give the email Modal its dismiss animation before the sheet presents again (iOS).
+            setTimeout(() => {
+                setHiddenForEmail(false);
+                if (isSignedInRef.current === true && accessTokenRef.current) setTimeout(() => onSuccess(), 450);
+            }, 450);
+        });
+        emailResumeCleanupRef.current = unsubscribe;
+        setTimeout(() => openEmailSignIn(), 450);
+    };
+
     const promptSignIn = (onSuccess: () => void) => {
         const doSignIn = async (method: "google" | "apple") => {
             setSigningIn(true);
@@ -586,7 +650,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         }
         // #134 (12 Nov 2026): any email address. iOS cannot present the email sheet over this one,
         // so close it first; once signed in, they come back to Upgrade and buy as a real account.
-        buttons.push({ text: "Sign in with email", onPress: () => { onClose(); setTimeout(() => openEmailSignIn(), 450); } });
+        buttons.push({ text: "Sign in with email", onPress: () => signInWithEmailThenResume(onSuccess) });
         Alert.alert(
             "Sign in to upgrade",
             "Sign in so your purchase is linked to your account and can be restored on any device.",
@@ -596,8 +660,16 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
 
     const handleIosPurchase = async (sku: string, type: "subs" | "in-app") => {
         if (DEBUG_UI_ENABLED) console.log("[IAP] handleIosPurchase:", sku, "purchasing=", purchasing, "signingIn=", signingIn, "signedIn=", isSignedInRef.current);
-        if (purchasing || signingIn) return;
-        if (isSignedInRef.current === false) {
+        if (purchasing || signingIn || checkingSignInRef.current) return;
+        // 🔴 27 Nov 2026: this only blocked `=== false`, so a tap while the answer was still
+        // `null` (sheet just opened) went straight to Apple — a guest could pay onto an identity
+        // that vanishes on reinstall. Wait for the answer, then require a REAL account — the
+        // same rule as Android (signed in AND a real-account token).
+        if (isSignedInRef.current === null) {
+            checkingSignInRef.current = true;
+            try { await waitForSignedInAnswer(); } finally { checkingSignInRef.current = false; }
+        }
+        if (isSignedInRef.current !== true || !accessTokenRef.current) {
             promptSignIn(() => handleIosPurchase(sku, type));
             return;
         }
@@ -770,6 +842,48 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
         }
     };
 
+    // ── Android: Restore previous plan ─────────────────────────────────────────
+    // 🔴 27 Nov 2026: this only READ /api/license/status, so a purchase our server had never
+    // confirmed (verify failed, pending payment that has since completed, sheet closed at the
+    // time) could never be recovered from here. It now first sends every unfinished Play
+    // purchase to the server (recoverAndroidPurchases — finishes only what the server confirms),
+    // then reads the status as before.
+    const handleAndroidRestore = async () => {
+        if (isRestoringRef.current) return;
+        isRestoringRef.current = true;
+        setRestoring(true);
+        try {
+            const token = accessTokenRef.current;
+            if (!token) return;
+            const recovered = await recoverAndroidPurchases(token);
+            const res = await fetchWithTimeout(
+                buildApiUrl("/api/license/status"),
+                { method: "GET", headers: { Authorization: `Bearer ${token}` } },
+                12_000,
+            );
+            if (res.ok) {
+                const data = await res.json();
+                const tier = String(data?.license?.tier ?? data?.tier ?? "free").toLowerCase();
+                if (tier === "plus" || tier === "pro") {
+                    Alert.alert("Plan restored", `Your ${prettyTier(fromWebTier(tier))} plan has been restored.`);
+                    try { await onPurchaseComplete(); } catch { }
+                } else if (recovered.grantedCredits > 0) {
+                    Alert.alert("Credits added!", "Your credits have been added to your account.");
+                    try { await onPurchaseComplete(); } catch { }
+                } else if (recovered.pending > 0) {
+                    Alert.alert(PENDING_PAYMENT_TITLE, pendingPaymentMessage(false));
+                } else {
+                    Alert.alert("No active plan found", "No active Imotara Plus subscription was found for this account.");
+                }
+            }
+        } catch {
+            Alert.alert("Restore failed", "Could not reach the server. Please check your connection and try again.");
+        } finally {
+            isRestoringRef.current = false;
+            setRestoring(false);
+        }
+    };
+
     // Keep ref current so onPurchaseError (captured inside useIAP) can call it
     handleRestoreRef.current = handleRestore;
 
@@ -780,7 +894,7 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
     const iosLoading = Platform.OS === "ios" && !connected;
 
     return (
-        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+        <Modal visible={visible && !hiddenForEmail} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={{ flex: 1, backgroundColor: colors.background }}>
                 {/* Header */}
                 <View style={{
@@ -1193,63 +1307,13 @@ export default function UpgradeSheet({ visible, onClose, onPurchaseComplete, cur
                             <TouchableOpacity
                                 disabled={restoring}
                                 style={{ alignItems: "center", paddingVertical: 8 }}
-                                onPress={async () => {
+                                onPress={() => {
                                     if (!isSignedIn) {
-                                        // Prompt sign-in; once signed in the license
-                                        // is auto-fetched via onAuthStateChange
-                                        promptSignIn(async () => {
-                                            setRestoring(true);
-                                            try {
-                                                const token = accessTokenRef.current;
-                                                if (!token) return;
-                                                const res = await fetchWithTimeout(
-                                                    buildApiUrl("/api/license/status"),
-                                                    { method: "GET", headers: { Authorization: `Bearer ${token}` } },
-                                                    12_000,
-                                                );
-                                                if (res.ok) {
-                                                    const data = await res.json();
-                                                    const tier = String(data?.license?.tier ?? data?.tier ?? "free").toLowerCase();
-                                                    if (tier === "plus" || tier === "pro") {
-                                                        Alert.alert("Plan restored", `Your ${prettyTier(fromWebTier(tier))} plan has been restored.`);
-                                                        try { await onPurchaseComplete(); } catch { }
-                                                    } else {
-                                                        Alert.alert("No active plan found", "No active Imotara Plus subscription was found for this account.");
-                                                    }
-                                                }
-                                            } catch {
-                                                Alert.alert("Restore failed", "Could not reach the server. Please check your connection and try again.");
-                                            } finally {
-                                                setRestoring(false);
-                                            }
-                                        });
+                                        // Prompt sign-in; once signed in, run the same restore.
+                                        promptSignIn(() => { void handleAndroidRestore(); });
                                         return;
                                     }
-                                    // Already signed in — directly check Supabase
-                                    setRestoring(true);
-                                    try {
-                                        const token = accessTokenRef.current;
-                                        if (!token) { setRestoring(false); return; }
-                                        const res = await fetchWithTimeout(
-                                            buildApiUrl("/api/license/status"),
-                                            { method: "GET", headers: { Authorization: `Bearer ${token}` } },
-                                            12_000,
-                                        );
-                                        if (res.ok) {
-                                            const data = await res.json();
-                                            const tier = String(data?.license?.tier ?? data?.tier ?? "free").toLowerCase();
-                                            if (tier === "plus" || tier === "pro") {
-                                                Alert.alert("Plan restored", `Your ${prettyTier(fromWebTier(tier))} plan has been restored.`);
-                                                try { await onPurchaseComplete(); } catch { }
-                                            } else {
-                                                Alert.alert("No active plan found", "No active Imotara Plus subscription was found for this account.");
-                                            }
-                                        }
-                                    } catch {
-                                        Alert.alert("Restore failed", "Could not reach the server. Please check your connection and try again.");
-                                    } finally {
-                                        setRestoring(false);
-                                    }
+                                    void handleAndroidRestore();
                                 }}
                             >
                                 {restoring
