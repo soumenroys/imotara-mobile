@@ -28,6 +28,9 @@ import { buildApiUrl } from "../config/api";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import { getGoogleIdToken, signOutNativeGoogle } from "./nativeGoogle";
 
+/** (owner, 27 Nov 2026) false: the guest identity is made on first use (ensureGuestToken), not on app open. */
+export const CREATE_GUEST_ON_OPEN = false;
+
 // Required so the auth redirect can close the browser tab on iOS.
 // Guarded: native module may not be available in bare Expo Go dev environment.
 try { WebBrowser.maybeCompleteAuthSession(); } catch { /* no-op in Expo Go */ }
@@ -56,6 +59,14 @@ export type AuthContextValue = {
      * accessToken for everything else.
      */
     anonymousAccessToken: string | null;
+    /**
+     * (owner, 27 Nov 2026) The guest identity is made on FIRST USE — first message, mic, read-aloud —
+     * not on app open. Opening the app used to create one every time (fresh installs that never typed,
+     * store test robots), which filled Admin ⇒ Licenses with accounts that never said a word.
+     * Resolves to the guest token (null when signed in for real, or if it could not be made).
+     * Safe to call any number of times: one sign-in at a time, and never over an existing session.
+     */
+    ensureGuestToken: () => Promise<string | null>;
     /** Returns {success:true} if a session was established synchronously, {success:false} otherwise.
      *  On Android the session may still arrive async via onAuthStateChange after success:false. */
     signInWithGoogle: () => Promise<{ success: boolean }>;
@@ -85,6 +96,7 @@ const AuthContext = createContext<AuthContextValue>({
     session: null,
     accessToken: null,
     anonymousAccessToken: null,
+    ensureGuestToken: async () => null,
     signInWithGoogle: async () => ({ success: false }),
     signInWithApple: async () => ({ success: false }),
     signOut: async () => {},
@@ -118,6 +130,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [status, setStatus] = useState<AuthStatus>("loading");
     const [appleAvailable, setAppleAvailable] = useState(false);
     const [anonymousToken, setAnonymousToken] = useState<string | null>(null);
+    const anonymousTokenRef = useRef<string | null>(null);
+    useEffect(() => { anonymousTokenRef.current = anonymousToken; }, [anonymousToken]);
     const anonymousSignInInFlight = useRef(false);
     // #135 (12 Nov 2026): the guest account's token, kept so that when this person really signs in
     // (Google, Apple or email) their guest chats can be MOVED into the account — the server only
@@ -214,7 +228,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 );
             }
 
-            if (!s && !anonymousSignInInFlight.current) {
+            // (owner, 27 Nov 2026) No session ⇒ NO guest identity yet. It is made on first use by
+            // ensureGuestToken() (first message, mic, read-aloud) — never from here. The old
+            // auto-create (kept below, switched off) also explains its auth-lock deadlock, which
+            // ensureGuestToken avoids by never running inside this callback.
+            if (CREATE_GUEST_ON_OPEN && !s && !anonymousSignInInFlight.current) {
                 // No real session (fresh install, explicit sign-out, or an
                 // anonymous session that expired) — establish a fresh
                 // anonymous identity so guest features like TTS keep
@@ -529,6 +547,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
+    // ── Guest identity on first use (owner, 27 Nov 2026) ─────────────────────
+    const guestSignInRef = useRef<Promise<string | null> | null>(null);
+    const ensureGuestToken = useCallback(async (): Promise<string | null> => {
+        if (anonymousTokenRef.current) return anonymousTokenRef.current;
+        if (guestSignInRef.current) return guestSignInRef.current;
+        const attempt = (async () => {
+            try {
+                // ⛔ Never over an existing session: at app start the stored session may not have
+                // been read yet — a real account must never be replaced by a guest.
+                const { data } = await supabase.auth.getSession();
+                const existing = data.session;
+                if (existing) return existing.user?.is_anonymous ? existing.access_token : null;
+                anonymousSignInInFlight.current = true;
+                const { data: made, error } = await supabase.auth.signInAnonymously();
+                if (error) { console.warn("[Auth] Anonymous sign-in failed:", error.message); return null; }
+                return made.session?.access_token ?? null;
+            } catch (err) {
+                console.warn("[Auth] Anonymous sign-in failed:", err);
+                return null;
+            } finally {
+                anonymousSignInInFlight.current = false;
+                guestSignInRef.current = null;
+            }
+        })();
+        guestSignInRef.current = attempt;
+        return attempt;
+    }, []);
+
     // ── Context value ─────────────────────────────────────────────────────────
 
     const value: AuthContextValue = {
@@ -537,6 +583,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         accessToken: session?.access_token ?? null,
         anonymousAccessToken: anonymousToken,
+        ensureGuestToken,
         signInWithGoogle,
         signInWithApple,
         signOut,

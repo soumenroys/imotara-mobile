@@ -82,7 +82,7 @@ import { DEBUG_UI_ENABLED, debugLog, debugWarn } from "../config/debug";
 // NEW: lifecycle hook (additive)
 import { useAppLifecycle } from "../hooks/useAppLifecycle";
 import { getConversationDepth } from "../lib/imotara/companionLetter";
-import { useIsOnline, setConnectivityCheckInterval } from "../lib/network/online";
+import { useIsOnline, setConnectivityCheckInterval, isDefinitelyOffline } from "../lib/network/online";
 import { localSourceLabel, type LocalReason } from "../lib/chat/localSourceLabel";
 import { normalizeReplyPunctuation } from "../lib/chat/replyPunctuation";
 import { isRtlLang } from "../lib/lang/rtlLangs";
@@ -1037,6 +1037,9 @@ function stripReflectionPromptFromMessage(
   return out || text;
 }
 
+/** (27 Nov 2026) Longest a first message waits for the guest identity to be made (it is normally ready
+ *  already — started while typing). After this the message goes without it, exactly as before. */
+const GUEST_TOKEN_WAIT_MS = 2500;
 const USER_BUBBLE_BG = "rgba(56, 189, 248, 0.35)";
 
 // How long after "New messages ↓" the list keeps re-pinning itself to the
@@ -1783,12 +1786,35 @@ export default function ChatScreen() {
   // ── Auth: get Supabase session token for mobile API calls ──────────────────
   // Declared early — used by useVoiceInput below, which is set up before the
   // rest of the component's hooks.
-  const { accessToken, anonymousAccessToken, user, signOut } = useAuth();
+  const { accessToken, anonymousAccessToken, ensureGuestToken, user, signOut } = useAuth();
   // Real accessToken wins when signed in; anonymousAccessToken covers guests
   // (TTS + voice-input only — see anonymousAccessToken's doc comment in
   // AuthContext.tsx for why this must not be used for anything beyond these
   // narrow, free-to-everyone purposes).
   const guestAccessToken = accessToken ?? anonymousAccessToken ?? undefined;
+  // (owner, 27 Nov 2026) The guest identity is made on FIRST USE, not on app open ⇒ AuthContext
+  // ensureGuestToken. guestTokenRef holds one made during this render's lifetime, so a closure from
+  // the render before it existed (handleSend, auto-read) still uses it.
+  const guestTokenRef = useRef<string | null>(null);
+  useEffect(() => { guestTokenRef.current = null; }, [accessToken]);
+  const currentGuestToken = (): string | undefined => guestAccessToken ?? guestTokenRef.current ?? undefined;
+  /** The token now, making the guest identity first if needed — never waits longer than GUEST_TOKEN_WAIT_MS. */
+  const guestTokenNow = async (): Promise<string | undefined> => {
+    const have = currentGuestToken();
+    if (have) return have;
+    const made = await Promise.race([
+      ensureGuestToken(),
+      new Promise<null>((r) => setTimeout(() => r(null), GUEST_TOKEN_WAIT_MS)),
+    ]);
+    if (made) guestTokenRef.current = made;
+    return made ?? undefined;
+  };
+  /** Start making the guest identity in the background (composer typing, mic) so it is ready on send. */
+  const warmGuestTokenRef = useRef<() => void>(() => {});
+  warmGuestTokenRef.current = () => {
+    if (currentGuestToken()) return;
+    void ensureGuestToken().then((t) => { if (t) guestTokenRef.current = t; });
+  };
 
   // Companion quick panel — opened by swiping right from the left edge strip
   const [companionPanelVisible, setCompanionPanelVisible] = useState(false);
@@ -2324,6 +2350,7 @@ export default function ChatScreen() {
   // (setDurationMs ticks would otherwise produce a new onMicPress each render).
   const handleMicPress = useCallback(async () => {
     if (voiceStateRef.current === "idle") {
+      warmGuestTokenRef.current(); // (27 Nov 2026) guest identity on first use — ready before the transcript is sent
       // Stop any active TTS before recording — on Android, TTS audio bleeds
       // into the mic if it's still playing when recording begins.
       stopSpeaking();
@@ -2677,7 +2704,7 @@ export default function ChatScreen() {
       reportedCrisisCardsRef.current.add(messageId);
       if (dismissedCrisisCards.has(messageId)) continue;
       const report = buildCrisisShownReport({ tier, lang, resources });
-      if (report) sendCrisisShownReport(report, guestAccessToken);
+      if (report) sendCrisisShownReport(report, guestAccessToken ?? guestTokenRef.current ?? undefined);
     }
   }, [messages, crisisThresholdSetting, toneContext?.user?.preferredLang, guestAccessToken, dismissedCrisisCards]);
 
@@ -2734,7 +2761,7 @@ export default function ChatScreen() {
       speakMessage(
         botMessage.id, botMessage.text, g, l,
         () => { /* 🔴 clear BOTH: a terminal path that never fired onStart (no device voice for this language, a failed fetch) would otherwise leave the speaker spinning forever. */ setPreparingSpeechId(null); setSpeakingMessageId(null); reopenMicIfHandsfree(); },
-        ttsRate, ttsPitch, guestAccessToken,
+        ttsRate, ttsPitch, currentGuestToken(),
         () => { setPreparingSpeechId(null); setSpeakingMessageId(botMessage.id); },
         VOICE_QUALITY_IS_TIER_BLIND,
         () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
@@ -4143,6 +4170,12 @@ export default function ChatScreen() {
           //    word-by-word within ~500ms instead of waiting 4-6s for the full reply.
           //    Falls back to non-streaming callImotaraAI() if stream fails.
 
+          // (owner, 27 Nov 2026) a guest's identity is made on first use — at the latest, here.
+          // Usually already made while they typed (warmGuestTokenRef); bounded wait otherwise.
+          // ⛔ never when DEFINITELY offline (the same no-wait signal fetchWithTimeout uses) — the
+          // on-device reply must stay instant.
+          const sendToken = wantsCloud && !isDefinitelyOffline() ? await guestTokenNow() : currentGuestToken();
+
           // Build shared payload for both streaming and non-streaming paths
           const cloudPayload: Record<string, unknown> = {
             messages: [
@@ -4222,7 +4255,7 @@ export default function ChatScreen() {
             //    guest retention was unmeasurable and guest cost uncapped.
             const streamResult = await streamChatReply(
               cloudPayload,
-              guestAccessToken,
+              sendToken,
               (accumulated) => {
                 if (!mountedRef.current) return;
                 if (!streamingMsgIdRef.current) {
@@ -4290,7 +4323,7 @@ export default function ChatScreen() {
                 preferredLanguage: toneContext?.user?.preferredLang || undefined,
                 threadId: localUserScopeId || undefined,
                 userId: localUserScopeId || undefined,
-                accessToken: guestAccessToken, // same reason as the stream above
+                accessToken: sendToken, // same reason as the stream above
                 timeoutMs: apiTimeoutMs,
                 connectVisible: showConnect === true,
               });
@@ -5008,6 +5041,7 @@ export default function ChatScreen() {
   }, [history.length]);
 
   const handleInputChange = (text: string) => {
+    if (text.trim()) warmGuestTokenRef.current(); // (27 Nov 2026) guest identity on first use
     latestInputRef.current = text;
     setInput(text);
   };
@@ -5135,7 +5169,7 @@ export default function ChatScreen() {
           </View>
 
           <TouchableOpacity
-            onPress={() => {
+            onPress={async () => {
               const id = actionMessage.id;
               const text = actionMessage.text;
               const gender = toneContext?.companion?.enabled
@@ -5152,7 +5186,7 @@ export default function ChatScreen() {
                 speakMessage(
                   id, text, gender, lang,
                   () => { /* 🔴 clear BOTH: a terminal path that never fired onStart (no device voice for this language, a failed fetch) would otherwise leave the speaker spinning forever. */ setPreparingSpeechId(null); setSpeakingMessageId(null); },
-                  ttsRate, ttsPitch, guestAccessToken,
+                  ttsRate, ttsPitch, await guestTokenNow(),
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
                   VOICE_QUALITY_IS_TIER_BLIND,
                   () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },
@@ -5809,7 +5843,7 @@ export default function ChatScreen() {
                 setInput(prevUserText);
               }}
               onCopy={handleCopyMessage}
-              onSpeak={(id, text) => {
+              onSpeak={async (id, text) => {
                 const gender = toneContext?.companion?.enabled
                   ? toneContext?.companion?.gender
                   : toneContext?.user?.gender as string | undefined;
@@ -5818,7 +5852,7 @@ export default function ChatScreen() {
                 speakMessage(
                   id, text, gender, lang,
                   () => { /* 🔴 clear BOTH: a terminal path that never fired onStart (no device voice for this language, a failed fetch) would otherwise leave the speaker spinning forever. */ setPreparingSpeechId(null); setSpeakingMessageId(null); },
-                  ttsRate, ttsPitch, guestAccessToken,
+                  ttsRate, ttsPitch, await guestTokenNow(),
                   () => { setPreparingSpeechId(null); setSpeakingMessageId(id); },
                   VOICE_QUALITY_IS_TIER_BLIND,
                   () => { setPreparingSpeechId(null); toastRef.current?.show("Voice not available for this language on your device. Either install this language in your mobile or login into Imotara account from Settings", "info"); },

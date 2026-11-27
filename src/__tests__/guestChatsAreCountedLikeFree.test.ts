@@ -11,8 +11,14 @@ import { join } from "path";
 const screen = readFileSync(join(__dirname, "..", "screens", "ChatScreen.tsx"), "utf8");
 
 describe("guest chats are sent with the guest's identity", () => {
-  it("the streamed reply", () => expect(screen).toMatch(/streamChatReply\(\s*cloudPayload,\s*guestAccessToken,/));
-  it("the non-streamed fallback", () => expect(screen).toMatch(/accessToken: guestAccessToken, \/\/ same reason as the stream above/));
+  // 27 Nov 2026: sendToken = the guest identity, made on first use if this is the first message
+  // (guestIdentityOnFirstUse.test.ts) — it is still guestAccessToken whenever that exists.
+  it("the streamed reply", () => expect(screen).toMatch(/streamChatReply\(\s*cloudPayload,\s*sendToken,/));
+  it("the non-streamed fallback", () => expect(screen).toMatch(/accessToken: sendToken, \/\/ same reason as the stream above/));
+  it("sendToken is the guest identity", () => {
+    expect(screen).toMatch(/const sendToken = wantsCloud && !isDefinitelyOffline\(\) \? await guestTokenNow\(\) : currentGuestToken\(\);/);
+    expect(screen).toMatch(/const have = currentGuestToken\(\);\n\s+if \(have\) return have;/);
+  });
   it("guestAccessToken prefers a real account's token", () =>
     expect(screen).toMatch(/const guestAccessToken = accessToken \?\? anonymousAccessToken \?\? undefined;/));
 });

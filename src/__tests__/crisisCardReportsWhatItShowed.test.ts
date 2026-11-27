@@ -98,6 +98,6 @@ describe("sending", () => {
     const block = src.slice(i, i + 1200);
     expect(block).toMatch(/crisisCardLangFor\(/);
     expect(block).toMatch(/getCrisisResourcesForCountry\(resolveCrisisCountry\(\)\)/);
-    expect(block).toMatch(/sendCrisisShownReport\(report, guestAccessToken\)/);
+    expect(block).toMatch(/sendCrisisShownReport\(report, guestAccessToken \?\? guestTokenRef\.current \?\? undefined\)/); // 27 Nov: or the guest identity made on first use
   });
 });

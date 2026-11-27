@@ -119,7 +119,7 @@ describe("the surviving checker is the careful one", () => {
 
     it("ChatScreen now reads that one", () => {
         expect(CHAT).toMatch(/const isOnline = useIsOnline\(\)/);
-        expect(CHAT).toMatch(/import \{ useIsOnline, setConnectivityCheckInterval \} from "\.\.\/lib\/network\/online"/);
+        expect(CHAT).toMatch(/import \{ useIsOnline, setConnectivityCheckInterval(, isDefinitelyOffline)? \} from "\.\.\/lib\/network\/online"/);
     });
 });
 
