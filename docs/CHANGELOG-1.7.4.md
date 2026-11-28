@@ -1,6 +1,6 @@
 # Imotara 1.7.3 → 1.7.4 — Change Log (draft)
 
-Prepared 27 Nov 2026 · iOS and Android **build 174**. Not built yet: a build needs the owner's OK.
+Prepared 27 Nov 2026 · iOS and Android **build 174**. Owner: 'start 1.7.4' (28 Nov). Version raised to 1.7.4 / 174 on the release branch; store build after the simulator test + owner OK.
 Branch `release/1.7.4`.
 
 Since 1.7.3 (`900acf4`): replies that hit the length limit end cleanly in the app, the chat tells
@@ -34,6 +34,20 @@ The server changes from the #17 audit (26–27 Nov) are already live for 1.7.3 p
 - **Offline replies in every language** (`062fdb3`). On-device replies now greet, say who they
   are and say goodbye in the person's language (several were English), and recognise goodbyes
   in 9 more languages.
+
+- **Offline crisis replies name your helpline** (`5b44759`). The on-device reply engine had no
+  crisis path; now a crisis message gets a caring line, the person's own helpline (same country
+  as the crisis card) and one question, in all 22 languages — the same words as the web.
+- **Roman Urdu and Arabizi are answered in kind** (`2ede791`; web `d02c2290`). Urdu typed in Latin
+  letters is no longer treated as Hindi, and Arabic typed in Latin letters (Arabizi) no longer
+  gets an English reply. A chosen language still wins.
+- **Paying is safer** (`c297030`, `3ef691c`; web `42c7ef07`, `ce0a3ed4`): a pending UPI/cash
+  payment on Android says "still being completed" instead of "Verification failed"; an
+  unconfirmed purchase is never finished (so it can be retried); the launch sweep and Restore
+  pick up purchases that completed later; signing in by email brings the upgrade sheet back.
+  The app tells the server the store price (for records only).
+- **A guest identity is made on first use, not at app open** (`655a067`), and Chinese 我想死你了
+  ("I miss you so much") no longer shows the crisis card (`e79b507`).
 
 ## 2. Under the hood
 
@@ -71,23 +85,27 @@ The server changes from the #17 audit (26–27 Nov) are already live for 1.7.3 p
 ## Google Play — "What's new" (≤500 characters)
 
 ```
-Help when you need it most, in your language: the crisis card now appears for far more ways of saying it, in all 22 languages.
+Help when you need it most, in your language: the crisis card appears for far more ways of saying it, in all 22 languages, and even offline replies point you to a helpline in your country.
 
-Replies always finish their last sentence, even the long ones.
+Replies always finish their last sentence.
 
-Offline replies speak your language too.
+Offline replies speak your language too, including Roman Urdu and Arabizi.
 
-Connect is only mentioned in chat when you have switched it on in Settings → Advanced.
+A payment that is still completing is no longer shown as a failure.
+
+Connect is only mentioned in chat when you switch it on in Settings → Advanced.
 ```
 
 ## App Store — "What's New in This Version"
 
 ```
-Help when you need it most, in your language: the crisis card now appears for far more ways of saying it, in all 22 languages.
+Help when you need it most, in your language: the crisis card appears for far more ways of saying it, in all 22 languages, and even offline replies point you to a helpline in your country.
 
-Replies always finish their last sentence, even the long ones.
+Replies always finish their last sentence.
 
-Offline replies speak your language too.
+Offline replies speak your language too, including Roman Urdu and Arabizi.
 
-Connect is only mentioned in chat when you have switched it on in Settings → Advanced.
+A payment that is still completing is no longer shown as a failure.
+
+Connect is only mentioned in chat when you switch it on in Settings → Advanced.
 ```
