@@ -60,9 +60,13 @@ describe("every sign-in place offers email", () => {
     expect(S).toContain("onPress={() => openEmailSignIn()}");
     expect(S).toMatch(/Continue with Apple/);
   });
-  it("Upgrade: 'Sign in with email' closes the sheet first (iOS cannot stack sheets)", () => {
+  it("Upgrade: 'Sign in with email' gets the sheet out of the way first (iOS cannot stack sheets)", () => {
+    // 27 Nov 2026: it HIDES its Modal (stays mounted, so the purchase can resume) instead of
+    // onClose(), which unmounted it — see purchaseFlowSafety.test.ts.
     const U = read("src/components/imotara/UpgradeSheet.tsx");
-    expect(U).toMatch(/text: "Sign in with email", onPress: \(\) => \{ onClose\(\); setTimeout\(\(\) => openEmailSignIn\(\), \d+\); \}/);
+    expect(U).toMatch(/text: "Sign in with email", onPress: \(\) => signInWithEmailThenResume\(onSuccess\)/);
+    expect(U).toMatch(/setHiddenForEmail\(true\);[\s\S]{0,600}setTimeout\(\(\) => openEmailSignIn\(\), \d+\);/);
+    expect(U).toMatch(/<Modal visible=\{visible && !hiddenForEmail\}/);
   });
   it("Connect: Browse, Sessions, Wallet and the companion application all offer email", () => {
     const C = read("src/screens/connect/ConnectScreen.tsx");
