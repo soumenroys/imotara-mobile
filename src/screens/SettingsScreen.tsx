@@ -2409,19 +2409,22 @@ function SettingsScreenContent() {
                     </TouchableOpacity>
                 </AppSurface>
 
-                {/* Join Imotara Movement */}
-                <AppSurface style={{ marginBottom: 16 }}>
-                    <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600", marginBottom: 4 }}>🌿 Join Imotara Movement</Text>
-                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
-                        Share your lived experience, empathy, and care to support others as a peer Wellness Companion on Imotara Connect.
-                    </Text>
-                    <TouchableOpacity
-                        onPress={() => navigation.navigate("Connect", { startRegister: true })}
-                        style={{ alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: "rgba(52,211,153,0.35)", backgroundColor: "rgba(52,211,153,0.12)" }}
-                    >
-                        <Text style={{ fontSize: 12, fontWeight: "600", color: colors.success }}>🤝 As Wellness Companion →</Text>
-                    </TouchableOpacity>
-                </AppSurface>
+                {/* Join Imotara Movement — a Connect entry point ⇒ only when Show Connect is on
+                    (#108, owner 22 Nov: nothing about Connect shows until it is switched on; 28 Nov). */}
+                {showConnect && (
+                    <AppSurface style={{ marginBottom: 16 }}>
+                        <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: "600", marginBottom: 4 }}>🌿 Join Imotara Movement</Text>
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>
+                            Share your lived experience, empathy, and care to support others as a peer Wellness Companion on Imotara Connect.
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate("Connect", { startRegister: true })}
+                            style={{ alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: "rgba(52,211,153,0.35)", backgroundColor: "rgba(52,211,153,0.12)" }}
+                        >
+                            <Text style={{ fontSize: 12, fontWeight: "600", color: colors.success }}>🤝 As Wellness Companion →</Text>
+                        </TouchableOpacity>
+                    </AppSurface>
+                )}
 
                 {/* D4: Subscription cancel/manage — visible for paid personal plans */}
                 {!orgId && licenseTier && licenseTier !== "FREE" && (
