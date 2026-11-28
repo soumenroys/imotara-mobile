@@ -49,6 +49,12 @@ The server changes from the #17 audit (26–27 Nov) are already live for 1.7.3 p
 - **A guest identity is made on first use, not at app open** (`655a067`), and Chinese 我想死你了
   ("I miss you so much") no longer shows the crisis card (`e79b507`).
 
+- **A reply is shown once** (`fix/crisis-reply-shown-once`). On Android an on-device reply could
+  appear twice — the chat list is rebuilt from saved history (which already held the reply) and
+  the send step appended it again. Replies now update in place (`lib/chat/appendOnce.ts`).
+- **Nothing about Connect until you switch it on** — the Settings card "Join Imotara Movement"
+  (a Connect entry point) now shows only with Settings → Advanced → Show Connect on (#108).
+
 ## 2. Under the hood
 
 - **Google sign-in sends the access token** (`ea1845e`). Supabase warned that it will become
@@ -59,7 +65,8 @@ The server changes from the #17 audit (26–27 Nov) are already live for 1.7.3 p
 
 ## 3. Checks
 
-- 2,369 / 2,369 tests ✓ · `tsc` ✓ on `release/1.7.4` (27 Nov, 02:2x).
+- 2,530 / 2,530 tests ✓ · `tsc` ✓ on `release/1.7.4` (28 Nov).
+- 28 Nov Release builds, fresh install: iOS 26.5 simulator + Android emulator (API 36) — consent, first cloud reply + check-in invite, Connect hidden, Settings search, Online default, on-device crisis reply (en + hi) with helpline before the question, one reply per message. ✓
 - iOS 26.5 simulator + Android emulator Release builds tested 27 Nov 00:40–00:57 (before the crisis,
   survivor and offline-engine changes): consent, Connect hidden by default, first reply, Connect
   switch, Settings search, Google native picker. ▶️ Repeat on the final build.
