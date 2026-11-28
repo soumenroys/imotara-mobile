@@ -58,6 +58,7 @@ import CheckInInviteCard from "../components/imotara/CheckInInviteCard";
 import { shouldShowWelcomeBack, welcomeBackText } from "../lib/welcome/welcomeBackTopic";
 import { noteSession, readDismissed, readLastSession, markDismissed, type PhoneLastSession } from "../lib/welcome/lastSession";
 import { keepTransientCards } from "../lib/chat/keepTransientCards";
+import { appendOnce } from "../lib/chat/appendOnce";
 import { syncDotState } from "../lib/chat/syncDot";
 import { chatSurfaceLang, moodGlimpseDisplay } from "../lib/chat/moodGlimpseText";
 import { isCheckInReminderEnabled, isSnoozed } from "../notifications/checkInReminder";
@@ -4091,7 +4092,7 @@ export default function ChatScreen() {
               });
               setTypingStatus("responding");
               haptic.receive();
-              setMessages((prev) => [...prev, safetyMsg]);
+              setMessages((prev) => appendOnce(prev, [safetyMsg]));
               smoothScrollToBottom(scrollViewRef);
             }
             return; // finally block handles cleanup
@@ -4740,7 +4741,8 @@ export default function ChatScreen() {
               ...trailing,
             ]);
           } else {
-            setMessages((prev) => [...prev, ...extraMessages, botMessage, ...trailing]);
+            // #44 (28 Nov 2026): the history rebuild may already hold this reply (same id) ⇒ never twice.
+            setMessages((prev) => appendOnce(prev, [...extraMessages, botMessage, ...trailing]));
           }
           smoothScrollToBottom(scrollViewRef);
           await speakReplyIfEnabled(botMessage, finalEmotion);
@@ -4834,7 +4836,7 @@ export default function ChatScreen() {
           // locally-generated reply was shown, no pacing purpose served.
           setTypingStatus("responding");
           haptic.receive();
-          setMessages((prev) => [...prev, botMessage]);
+          setMessages((prev) => appendOnce(prev, [botMessage]));
           smoothScrollToBottom(scrollViewRef);
           await speakReplyIfEnabled(botMessage, userEmotion);
         } finally {

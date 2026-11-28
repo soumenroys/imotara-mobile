@@ -12,7 +12,7 @@ import {
     StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
 import { useAuth } from "./AuthContext";
-import { onOpenEmailSignIn, type EmailIntent } from "./emailSignInBus";
+import { emailSignInClosed, onOpenEmailSignIn, type EmailIntent } from "./emailSignInBus";
 import { sheetTitle, type Step } from "./emailSheetSteps";
 
 const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -43,6 +43,14 @@ export default function EmailSignInSheet() {
     useEffect(() => {
         if (visible && status === "authenticated" && !awaitingPasswordRef.current && step.kind !== "set-password") setVisible(false);
     }, [status, visible, step.kind]);
+
+    // Tell whoever opened us that we are gone, however we closed (27 Nov 2026 — the upgrade
+    // sheet waits for this to come back and resume the purchase).
+    const wasVisibleRef = useRef(false);
+    useEffect(() => {
+        if (wasVisibleRef.current && !visible) emailSignInClosed();
+        wasVisibleRef.current = visible;
+    }, [visible]);
 
     const close = () => { if (!busy) { Keyboard.dismiss(); setVisible(false); } };
 

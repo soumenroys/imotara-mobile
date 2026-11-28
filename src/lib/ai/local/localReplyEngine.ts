@@ -1,4 +1,6 @@
 // src/lib/ai/local/localReplyEngine.ts
+import { localCrisisReply } from "../../safety/crisisLocalReply";
+import { resolveCrisisCountry } from "../../safety/resolveCrisisCountry";
 import { buildMicroStory } from "./storyEngine";
 import { buildMythologyStory } from "./mythologyEngine";
 import { buildOfflineQuote } from "./quotesEngine";
@@ -878,6 +880,17 @@ export function buildLocalReply(
     recentContext?: LocalRecentContext
 ): LocalReplyResult {
     const language = detectLanguage(message, recentContext);
+
+    // 🔴 #44 (27 Nov 2026): crisis FIRST — before greetings, signals, anything. This engine had
+    // no crisis path: offline, "I want to die" got the ordinary sad/anxious reply. Now the
+    // person's own helpline, in their language, before the question (same words as the web).
+    {
+        let country: string | null = null;
+        try { country = resolveCrisisCountry(); } catch { country = null; }
+        const crisis = localCrisisReply(message, language, country);
+        if (crisis) return { message: crisis };
+    }
+
     const recentSignature = buildRecentSignature(recentContext);
 
     // Use companion.relationship as tone preference regardless of enabled flag.

@@ -89,7 +89,7 @@ describe("wiring", () => {
         expect(native).toBeGreaterThan(-1);
         expect(cancel).toBeGreaterThan(native);
         expect(web).toBeGreaterThan(cancel);
-        expect(fn).toMatch(/signInWithIdToken\(\{ provider: "google"/);
+        expect(fn).toMatch(/signInWithIdToken\(\{\s*provider: "google"/);
     });
 
     it("sign-out forgets the Google account too", () => {
@@ -115,4 +115,26 @@ describe("wiring", () => {
         const iosId = [...ids][0] as string;
         expect(entry[1].iosUrlScheme).toBe("com.googleusercontent.apps." + iosId.replace(".apps.googleusercontent.com", ""));
     });
+});
+
+describe("1.7.4 (27 Nov 2026): the Google access token goes with the ID token", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const helper = fs.readFileSync(path.join(__dirname, "..", "auth", "nativeGoogle.ts"), "utf8");
+  const auth = fs.readFileSync(path.join(__dirname, "..", "auth", "AuthContext.tsx"), "utf8");
+
+  it("asks Google for it right after sign-in, best-effort", () => {
+    expect(helper).toContain("accessToken = (await GoogleSignin.getTokens()).accessToken || undefined;");
+    // a failure to get it must never stop the sign-in
+    expect(helper).toMatch(/try \{\s*accessToken = \(await GoogleSignin\.getTokens\(\)\)[\s\S]{0,80}\} catch \{\s*accessToken = undefined;\s*\}/);
+    expect(helper).toContain('return { kind: "token", idToken, accessToken };');
+  });
+
+  it("sends it to Supabase only when there is one", () => {
+    expect(auth).toContain("...(native.accessToken ? { access_token: native.accessToken } : {}),");
+  });
+
+  it("⛔ never worse than before: a refused token still falls back to the web sign-in", () => {
+    expect(auth).toContain('console.warn("[Auth] native Google token refused, using web sign-in:", error.message);');
+  });
 });

@@ -434,13 +434,41 @@ export function statedPreference(value: string | undefined | null): string | und
  * "auto" means "work it out from what I wrote", and this is where that work
  * happens.
  */
+/**
+ * 🔴 #44 (27 Nov 2026): Roman Urdu and Arabizi, for the REPLY language only — byte-for-byte
+ * the web's respondRemote.detectRomanUrduOrArabizi (same markers, same thresholds).
+ * Roman Urdu only on markers Hindi writers do not use, and only on text that is already
+ * Hindustani ("Inshallah it will be fine" stays English). Arabizi needs two signals that beat
+ * English ("web3", "b2b", "Ana is my friend" stay English). Not used for TTS or the mic.
+ */
+const ROMAN_URDU_MARKERS =
+    /\b(bohat|bohot|kyunke|ammi|ammijaan|abbu|abbujaan|inshallah|insha allah|mashallah|masha allah|alhamdulillah|subhanallah|khuda|janab|mehrbani|meharbani)\b/gi;
+const ARABIZI_WORDS =
+    /\b(ana|enta|enti|inta|inti|habibi|habibti|yalla|yallah|shu|shou|ezzay|izzay|kifak|kifik|keefak|keefik|ma3|3ala|3and|3ndi|3andi|ma3lesh|ma3lish|msh|mish|la2|aywa|aiwa|tamam|kteer|ktir|ktiir|awi|2awi|mafi|mafeesh|wallah|walla|khalas|ya3ni|yani|7abibi|7elw|helw|za3lan|za3lana|ta3ban|ta3bana|7azeen|hazeen|mabsout|mabsoot|bdi|baddi|3ayez|3ayza|3awez|leh|lesh|leish|3arif|3arfa|moshkela|mushkila)\b/gi;
+const ARABIZI_DIGIT_TOKEN = /\b[a-z]*[2379][a-z]+\b|\b[a-z]{2,}[2379]\b/gi;
+
+export function detectRomanUrduOrArabizi(text: string, romanHint: string): "ur" | "ar" | null {
+    if (!text || /[^\u0000-\u024F\s\p{P}\p{S}\d]/u.test(text)) return null; // Latin text only
+    const english = englishSignal(text);
+    const urdu = new Set((text.match(ROMAN_URDU_MARKERS) ?? []).map((w) => w.toLowerCase())).size;
+    if (romanHint === "hi" && urdu >= 1) return "ur";
+    if (romanHint === "en" && urdu >= 2 && !(english.score >= 2 && english.score > urdu)) return "ur";
+    if (romanHint !== "en") return null;
+    const words = new Set((text.match(ARABIZI_WORDS) ?? []).map((w) => w.toLowerCase())).size;
+    const digits = (text.match(ARABIZI_DIGIT_TOKEN) ?? []).length;
+    const score = words + digits;
+    if (words >= 1 && score >= 2 && english.score < score) return "ar";
+    return null;
+}
+
 export function resolveReplyLang(
     message: string,
     preferredLang: string | undefined | null,
 ): string {
     const explicit = detectExplicitLangRequest(message);
     const script = detectLangFromScript(message);
-    const detected = script !== "en" ? script : detectLangFromRomanHints(message);
+    const roman = script !== "en" ? script : detectLangFromRomanHints(message);
+    const detected = script !== "en" ? script : (detectRomanUrduOrArabizi(message, roman) ?? roman);
     const profile = statedPreference(preferredLang);
     // explicit switch request > stated preference > detection > English
     return explicit || profile || (detected !== "en" ? detected : "en");

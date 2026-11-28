@@ -106,3 +106,43 @@ export function introNote(p: StorePricing): string | undefined {
         ? `${lead} for ${when}, then ${p.regular}`
         : `${lead} to start, then ${p.regular}`;
 }
+
+/**
+ * #44 (27 Nov 2026): what this purchase charges NOW, for the server's payment RECORD only —
+ * Google Play's server API carries no price, so without this every Play payment was recorded
+ * as a false "USD 0". Never used to decide a grant (the server verifies the purchase itself).
+ *
+ * Subscriptions: the FIRST pricing phase of the same offer readStorePricing shows (an eligible
+ * free trial is honestly 0). One-time packs: the one-time offer, else the common price fields.
+ * Anything missing or malformed ⇒ null (the server then records "not reported").
+ */
+export function storePaidPrice(product: any): { paidMicros: number; paidCurrency: string } | null {
+    if (!product) return null;
+    let micros: number = NaN;
+    let currency = "";
+    const offers: any[] = product?.subscriptionOfferDetails ?? [];
+    const offer =
+        offers.find((o) => (o?.pricingPhases?.pricingPhaseList?.length ?? 0) > 1) ??
+        offers[0];
+    const phases: any[] = offer?.pricingPhases?.pricingPhaseList ?? [];
+    if (phases.length) {
+        micros = Number(phases[0]?.priceAmountMicros);
+        currency = String(phases[0]?.priceCurrencyCode ?? "");
+    } else {
+        const one = product?.oneTimePurchaseOfferDetails ?? product?.oneTimePurchaseOfferDetailsAndroid;
+        const o = Array.isArray(one) ? one[0] : one;
+        if (o?.priceAmountMicros != null) {
+            micros = Number(o.priceAmountMicros);
+            currency = String(o.priceCurrencyCode ?? "");
+        } else if (product?.priceAmountMicros != null) {
+            micros = Number(product.priceAmountMicros);
+            currency = String(product.priceCurrencyCode ?? product.currency ?? "");
+        } else if (typeof product?.price === "number") {
+            micros = Math.round(product.price * 1_000_000);
+            currency = String(product.currency ?? "");
+        }
+    }
+    currency = currency.trim().toUpperCase();
+    if (!Number.isInteger(micros) || micros < 0 || !/^[A-Z]{3}$/.test(currency)) return null;
+    return { paidMicros: micros, paidCurrency: currency };
+}
